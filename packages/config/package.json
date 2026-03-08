@@ -3,5 +3,12 @@
   "version": "0.0.1",
   "private": true,
   "main": "./src/index.ts",
-  "types": "./src/index.ts"
+  "types": "./src/index.ts",
+  "exports": {
+    "./tsconfig.next.json": "./tsconfig.next.json"
+  },
+  "files": [
+    "tsconfig.next.json",
+    "src"
+  ]
 }
