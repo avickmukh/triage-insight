@@ -63,6 +63,19 @@ enum RoadmapStatus {
   SHIPPED
 }
 
+enum IntegrationProvider {
+  ZENDESK
+  INTERCOM
+  FRESHDESK
+}
+
+enum SupportTicketStatus {
+  OPEN
+  PENDING
+  SOLVED
+  CLOSED
+}
+
 // ─── Auth Models ──────────────────────────────────────────────────────────────
 
 model User {
@@ -93,6 +106,10 @@ model Workspace {
   auditLogs              AuditLog[]
   prioritizationSettings PrioritizationSettings?
   roadmapItems           RoadmapItem[]
+  integrationConnections IntegrationConnection[]
+  supportTickets         SupportTicket[]
+  supportIssueClusters   SupportIssueCluster[]
+  issueSpikeEvents       IssueSpikeEvent[]
 }
 
 model WorkspaceMember {
@@ -196,6 +213,7 @@ model Theme {
   workspace    Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   feedbacks    ThemeFeedback[]
   roadmapItems RoadmapItem[]
+  correlations SupportIssueCluster[] @relation("ClusterTheme")
 
   @@index([workspaceId])
   @@index([status])
@@ -224,13 +242,11 @@ model RoadmapItem {
   status      RoadmapStatus @default(EXPLORING)
   isPublic    Boolean       @default(false)
 
-  // Snapshot values captured at creation time (or from prioritization)
   priorityScore      Float?
   revenueImpactValue Float?
   dealInfluenceValue Float?
   customerCount      Int?
 
-  // Optional target dates
   targetQuarter String?
   targetYear    Int?
 
@@ -267,6 +283,105 @@ model PrioritizationSettings {
   updatedAt DateTime @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+// ─── Support Intelligence Models ─────────────────────────────────────────────
+
+model IntegrationConnection {
+  id           String              @id @default(uuid())
+  workspaceId  String
+  provider     IntegrationProvider
+  accessToken  String
+  refreshToken String?
+  subdomain    String?
+  metadata     Json?
+  lastSyncedAt DateTime?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, provider])
+  @@index([workspaceId])
+}
+
+model SupportTicket {
+  id             String              @id @default(uuid())
+  workspaceId    String
+  externalId     String
+  provider       IntegrationProvider
+  subject        String
+  description    String?
+  status         SupportTicketStatus @default(OPEN)
+  customerId     String?
+  customerEmail  String?
+  tags           String[]
+  arrValue       Float?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  externalCreatedAt DateTime?
+
+  embedding Unsupported("vector(1536)")?
+
+  workspace    Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  clusterMaps  SupportIssueClusterMap[]
+
+  @@unique([workspaceId, provider, externalId])
+  @@index([workspaceId])
+  @@index([status])
+  @@index([customerId])
+  @@index([externalCreatedAt])
+}
+
+model SupportIssueCluster {
+  id          String   @id @default(uuid())
+  workspaceId String
+  title       String
+  description String?
+  themeId     String?
+  ticketCount Int      @default(0)
+  arrExposure Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace   Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  theme       Theme?                   @relation("ClusterTheme", fields: [themeId], references: [id], onDelete: SetNull)
+  ticketMaps  SupportIssueClusterMap[]
+  spikeEvents IssueSpikeEvent[]
+
+  @@index([workspaceId])
+  @@index([themeId])
+}
+
+model SupportIssueClusterMap {
+  clusterId String
+  ticketId  String
+  score     Float    @default(0)
+  createdAt DateTime @default(now())
+
+  cluster SupportIssueCluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  ticket  SupportTicket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@id([clusterId, ticketId])
+}
+
+model IssueSpikeEvent {
+  id          String   @id @default(uuid())
+  workspaceId String
+  clusterId   String
+  windowStart DateTime
+  windowEnd   DateTime
+  ticketCount Int
+  baseline    Float
+  zScore      Float
+  createdAt   DateTime @default(now())
+
+  workspace Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  cluster   SupportIssueCluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([clusterId])
+  @@index([windowStart])
 }
 
 // ─── System Models ────────────────────────────────────────────────────────────

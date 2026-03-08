@@ -12,6 +12,8 @@ import { UploadsModule } from './uploads/uploads.module';
 import { ThemeModule } from './theme/theme.module';
 import { PrioritizationModule } from './prioritization/prioritization.module';
 import { RoadmapModule } from './roadmap/roadmap.module';
+import { IntegrationsModule } from './integrations/integrations.module';
+import { SupportModule } from './support/support.module';
 import { validationSchema } from './config/validation';
 
 @Module({
@@ -31,6 +33,8 @@ import { validationSchema } from './config/validation';
     ThemeModule,
     PrioritizationModule,
     RoadmapModule,
+    IntegrationsModule,
+    SupportModule,
   ],
 })
 export class AppModule {}
