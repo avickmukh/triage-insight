@@ -3,11 +3,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
 import { UpdateFeedbackDto } from './dto/update-feedback.dto';
 import { QueryFeedbackDto } from './dto/query-feedback.dto';
-import { S3Service } from './s3/s3.service';
+import { S3Service } from '../uploads/services/s3.service';
 import { Prisma } from '@prisma/client';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
-import { AI_ANALYSIS_QUEUE } from './processors/analysis.processor';
+import { AI_ANALYSIS_QUEUE } from '../ai/processors/analysis.processor';
 
 @Injectable()
 export class FeedbackService {

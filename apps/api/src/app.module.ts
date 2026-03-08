@@ -7,6 +7,8 @@ import { QueueModule } from './queue/queue.module';
 import { AuthModule } from './auth/auth.module';
 import { WorkspaceModule } from './workspace/workspace.module';
 import { FeedbackModule } from './feedback/feedback.module';
+import { AiModule } from './ai/ai.module';
+import { UploadsModule } from './uploads/uploads.module';
 import { validationSchema } from './config/validation';
 
 @Module({
@@ -21,6 +23,8 @@ import { validationSchema } from './config/validation';
     AuthModule,
     WorkspaceModule,
     FeedbackModule,
+    AiModule,
+    UploadsModule,
   ],
 })
 export class AppModule {}

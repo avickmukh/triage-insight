@@ -1,12 +1,11 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
+  previewFeatures = ["postgresqlExtensions"]
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
+  extensions = [pgvector]
 }
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
@@ -22,6 +21,7 @@ enum FeedbackStatus {
   IN_REVIEW
   PROCESSED
   ARCHIVED
+  MERGED // New status for merged feedback
 }
 
 enum FeedbackSourceType {
@@ -31,6 +31,12 @@ enum FeedbackSourceType {
   SLACK
   CSV_IMPORT
   VOICE
+}
+
+enum AuditLogAction {
+  FEEDBACK_MERGE
+  FEEDBACK_STATUS_CHANGE
+  FEEDBACK_UPDATE
 }
 
 // ─── Auth Models ──────────────────────────────────────────────────────────────
@@ -46,6 +52,7 @@ model User {
 
   memberships   WorkspaceMember[]
   refreshTokens RefreshToken[]
+  auditLogs     AuditLog[]
 }
 
 model Workspace {
@@ -58,6 +65,7 @@ model Workspace {
 
   members   WorkspaceMember[]
   feedbacks Feedback[]
+  auditLogs AuditLog[]
 }
 
 model WorkspaceMember {
@@ -85,7 +93,7 @@ model RefreshToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-// ─── Feedback Models ──────────────────────────────────────────────────────────
+// ─── Feedback & AI Models ─────────────────────────────────────────────────────
 
 model Feedback {
   id             String             @id @default(uuid())
@@ -101,14 +109,27 @@ model Feedback {
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
 
+  // AI Features
+  embedding Unsupported("vector(1536)")? // For pgvector
+
+  // Merge Features
+  mergedIntoId   String?
+  mergedInto     Feedback?          @relation("FeedbackMerge", fields: [mergedIntoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  mergedFrom     Feedback[]         @relation("FeedbackMerge")
+
   workspace   Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   attachments FeedbackAttachment[]
+
+  duplicateSuggestionsAsSource   FeedbackDuplicateSuggestion[] @relation("SourceFeedback")
+  duplicateSuggestionsAsTarget   FeedbackDuplicateSuggestion[] @relation("TargetFeedback")
 
   @@index([workspaceId])
   @@index([status])
   @@index([sourceType])
   @@index([customerId])
   @@index([createdAt])
+  // We will create the index manually in a migration
+  // @@index([embedding], type: Ivfflat)
 }
 
 model FeedbackAttachment {
@@ -122,4 +143,29 @@ model FeedbackAttachment {
   createdAt  DateTime @default(now())
 
   feedback Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+}
+
+model FeedbackDuplicateSuggestion {
+  id             String   @id @default(uuid())
+  sourceId       String
+  targetId       String
+  similarity     Float
+  createdAt      DateTime @default(now())
+
+  sourceFeedback Feedback @relation("SourceFeedback", fields: [sourceId], references: [id], onDelete: Cascade)
+  targetFeedback Feedback @relation("TargetFeedback", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceId, targetId])
+}
+
+model AuditLog {
+  id          String         @id @default(uuid())
+  workspaceId String
+  userId      String
+  action      AuditLogAction
+  details     Json
+  createdAt   DateTime       @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
