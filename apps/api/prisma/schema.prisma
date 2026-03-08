@@ -44,6 +44,7 @@ enum AuditLogAction {
   THEME_SPLIT
   THEME_FEEDBACK_ADD
   THEME_FEEDBACK_REMOVE
+  PRIORITIZATION_SETTINGS_UPDATE
 }
 
 enum ThemeStatus {
@@ -76,10 +77,11 @@ model Workspace {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  members   WorkspaceMember[]
-  feedbacks Feedback[]
-  themes    Theme[]
-  auditLogs AuditLog[]
+  members                WorkspaceMember[]
+  feedbacks              Feedback[]
+  themes                 Theme[]
+  auditLogs              AuditLog[]
+  prioritizationSettings PrioritizationSettings? // One-to-one with Workspace
 }
 
 model WorkspaceMember {
@@ -197,6 +199,31 @@ model ThemeFeedback {
   feedback Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
 
   @@id([themeId, feedbackId])
+}
+
+// ─── Prioritization Models ────────────────────────────────────────────────────
+
+model PrioritizationSettings {
+  workspaceId String @id
+
+  // Scoring weights (0-1)
+  requestFrequencyWeight Float @default(0.2)
+  customerCountWeight    Float @default(0.2)
+  arrValueWeight         Float @default(0.2)
+  accountPriorityWeight  Float @default(0.1)
+  dealValueWeight        Float @default(0.2)
+  strategicWeight        Float @default(0.1)
+
+  // Deal stage multipliers (0-1)
+  dealStageProspecting   Float @default(0.1)
+  dealStageQualifying    Float @default(0.3)
+  dealStageProposal      Float @default(0.6)
+  dealStageNegotiation   Float @default(0.8)
+  dealStageClosedWon     Float @default(1.0)
+
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 }
 
 // ─── System Models ────────────────────────────────────────────────────────────
