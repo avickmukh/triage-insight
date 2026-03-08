@@ -11,6 +11,7 @@ import { AiModule } from './ai/ai.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { ThemeModule } from './theme/theme.module';
 import { PrioritizationModule } from './prioritization/prioritization.module';
+import { RoadmapModule } from './roadmap/roadmap.module';
 import { validationSchema } from './config/validation';
 
 @Module({
@@ -29,6 +30,7 @@ import { validationSchema } from './config/validation';
     UploadsModule,
     ThemeModule,
     PrioritizationModule,
+    RoadmapModule,
   ],
 })
 export class AppModule {}

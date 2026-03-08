@@ -45,12 +45,22 @@ enum AuditLogAction {
   THEME_FEEDBACK_ADD
   THEME_FEEDBACK_REMOVE
   PRIORITIZATION_SETTINGS_UPDATE
+  ROADMAP_ITEM_CREATE
+  ROADMAP_ITEM_UPDATE
+  ROADMAP_ITEM_STATUS_CHANGE
 }
 
 enum ThemeStatus {
   DRAFT
   PUBLISHED
   ARCHIVED
+}
+
+enum RoadmapStatus {
+  EXPLORING
+  PLANNED
+  COMMITTED
+  SHIPPED
 }
 
 // ─── Auth Models ──────────────────────────────────────────────────────────────
@@ -81,7 +91,8 @@ model Workspace {
   feedbacks              Feedback[]
   themes                 Theme[]
   auditLogs              AuditLog[]
-  prioritizationSettings PrioritizationSettings? // One-to-one with Workspace
+  prioritizationSettings PrioritizationSettings?
+  roadmapItems           RoadmapItem[]
 }
 
 model WorkspaceMember {
@@ -127,7 +138,7 @@ model Feedback {
   embedding Unsupported("vector(1536)")?
 
   mergedIntoId String?
-  mergedInto   Feedback? @relation("FeedbackMerge", fields: [mergedIntoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  mergedInto   Feedback?  @relation("FeedbackMerge", fields: [mergedIntoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   mergedFrom   Feedback[] @relation("FeedbackMerge")
 
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -182,8 +193,9 @@ model Theme {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
-  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  feedbacks ThemeFeedback[]
+  workspace    Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  feedbacks    ThemeFeedback[]
+  roadmapItems RoadmapItem[]
 
   @@index([workspaceId])
   @@index([status])
@@ -201,12 +213,44 @@ model ThemeFeedback {
   @@id([themeId, feedbackId])
 }
 
+// ─── Roadmap Models ───────────────────────────────────────────────────────────
+
+model RoadmapItem {
+  id          String        @id @default(uuid())
+  workspaceId String
+  themeId     String?
+  title       String
+  description String?
+  status      RoadmapStatus @default(EXPLORING)
+  isPublic    Boolean       @default(false)
+
+  // Snapshot values captured at creation time (or from prioritization)
+  priorityScore      Float?
+  revenueImpactValue Float?
+  dealInfluenceValue Float?
+  customerCount      Int?
+
+  // Optional target dates
+  targetQuarter String?
+  targetYear    Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  theme     Theme?    @relation(fields: [themeId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([status])
+  @@index([isPublic])
+  @@index([themeId])
+}
+
 // ─── Prioritization Models ────────────────────────────────────────────────────
 
 model PrioritizationSettings {
   workspaceId String @id
 
-  // Scoring weights (0-1)
   requestFrequencyWeight Float @default(0.2)
   customerCountWeight    Float @default(0.2)
   arrValueWeight         Float @default(0.2)
@@ -214,12 +258,11 @@ model PrioritizationSettings {
   dealValueWeight        Float @default(0.2)
   strategicWeight        Float @default(0.1)
 
-  // Deal stage multipliers (0-1)
-  dealStageProspecting   Float @default(0.1)
-  dealStageQualifying    Float @default(0.3)
-  dealStageProposal      Float @default(0.6)
-  dealStageNegotiation   Float @default(0.8)
-  dealStageClosedWon     Float @default(1.0)
+  dealStageProspecting Float @default(0.1)
+  dealStageQualifying  Float @default(0.3)
+  dealStageProposal    Float @default(0.6)
+  dealStageNegotiation Float @default(0.8)
+  dealStageClosedWon   Float @default(1.0)
 
   updatedAt DateTime @updatedAt
 
