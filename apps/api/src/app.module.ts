@@ -9,6 +9,7 @@ import { WorkspaceModule } from './workspace/workspace.module';
 import { FeedbackModule } from './feedback/feedback.module';
 import { AiModule } from './ai/ai.module';
 import { UploadsModule } from './uploads/uploads.module';
+import { ThemeModule } from './theme/theme.module';
 import { validationSchema } from './config/validation';
 
 @Module({
@@ -25,6 +26,7 @@ import { validationSchema } from './config/validation';
     FeedbackModule,
     AiModule,
     UploadsModule,
+    ThemeModule,
   ],
 })
 export class AppModule {}

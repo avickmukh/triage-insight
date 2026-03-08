@@ -1,10 +1,10 @@
 generator client {
   previewFeatures = ["postgresqlExtensions"]
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider   = "postgresql"
   extensions = [pgvector]
 }
 
@@ -21,7 +21,7 @@ enum FeedbackStatus {
   IN_REVIEW
   PROCESSED
   ARCHIVED
-  MERGED // New status for merged feedback
+  MERGED
 }
 
 enum FeedbackSourceType {
@@ -37,6 +37,19 @@ enum AuditLogAction {
   FEEDBACK_MERGE
   FEEDBACK_STATUS_CHANGE
   FEEDBACK_UPDATE
+  THEME_CREATE
+  THEME_UPDATE
+  THEME_DELETE
+  THEME_MERGE
+  THEME_SPLIT
+  THEME_FEEDBACK_ADD
+  THEME_FEEDBACK_REMOVE
+}
+
+enum ThemeStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
 }
 
 // ─── Auth Models ──────────────────────────────────────────────────────────────
@@ -65,14 +78,14 @@ model Workspace {
 
   members   WorkspaceMember[]
   feedbacks Feedback[]
+  themes    Theme[]
   auditLogs AuditLog[]
 }
 
 model WorkspaceMember {
-  id       String   @id @default(uuid())
-  role     Role     @default(VIEWER)
-  joinedAt DateTime @default(now())
-
+  id          String   @id @default(uuid())
+  role        Role     @default(VIEWER)
+  joinedAt    DateTime @default(now())
   userId      String
   workspaceId String
 
@@ -96,40 +109,37 @@ model RefreshToken {
 // ─── Feedback & AI Models ─────────────────────────────────────────────────────
 
 model Feedback {
-  id             String             @id @default(uuid())
+  id             String   @id @default(uuid())
   title          String
   description    String
   normalizedText String?
   language       String?
   summary        String?
-  status         FeedbackStatus     @default(NEW)
+  status         FeedbackStatus
   sourceType     FeedbackSourceType
   customerId     String?
   workspaceId    String
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  // AI Features
-  embedding Unsupported("vector(1536)")? // For pgvector
+  embedding Unsupported("vector(1536)")?
 
-  // Merge Features
-  mergedIntoId   String?
-  mergedInto     Feedback?          @relation("FeedbackMerge", fields: [mergedIntoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  mergedFrom     Feedback[]         @relation("FeedbackMerge")
+  mergedIntoId String?
+  mergedInto   Feedback? @relation("FeedbackMerge", fields: [mergedIntoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  mergedFrom   Feedback[] @relation("FeedbackMerge")
 
-  workspace   Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   attachments FeedbackAttachment[]
+  themes      ThemeFeedback[]
 
-  duplicateSuggestionsAsSource   FeedbackDuplicateSuggestion[] @relation("SourceFeedback")
-  duplicateSuggestionsAsTarget   FeedbackDuplicateSuggestion[] @relation("TargetFeedback")
+  duplicateSuggestionsAsSource FeedbackDuplicateSuggestion[] @relation("SourceFeedback")
+  duplicateSuggestionsAsTarget FeedbackDuplicateSuggestion[] @relation("TargetFeedback")
 
   @@index([workspaceId])
   @@index([status])
   @@index([sourceType])
   @@index([customerId])
   @@index([createdAt])
-  // We will create the index manually in a migration
-  // @@index([embedding], type: Ivfflat)
 }
 
 model FeedbackAttachment {
@@ -146,17 +156,50 @@ model FeedbackAttachment {
 }
 
 model FeedbackDuplicateSuggestion {
-  id             String   @id @default(uuid())
-  sourceId       String
-  targetId       String
-  similarity     Float
-  createdAt      DateTime @default(now())
+  id         String   @id @default(uuid())
+  sourceId   String
+  targetId   String
+  similarity Float
+  createdAt  DateTime @default(now())
 
   sourceFeedback Feedback @relation("SourceFeedback", fields: [sourceId], references: [id], onDelete: Cascade)
   targetFeedback Feedback @relation("TargetFeedback", fields: [targetId], references: [id], onDelete: Cascade)
 
   @@unique([sourceId, targetId])
 }
+
+// ─── Theme Models ─────────────────────────────────────────────────────────────
+
+model Theme {
+  id          String      @id @default(uuid())
+  workspaceId String
+  title       String
+  description String?
+  status      ThemeStatus @default(DRAFT)
+  pinned      Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  feedbacks ThemeFeedback[]
+
+  @@index([workspaceId])
+  @@index([status])
+  @@index([pinned])
+}
+
+model ThemeFeedback {
+  themeId    String
+  feedbackId String
+  assignedAt DateTime @default(now())
+
+  theme    Theme    @relation(fields: [themeId], references: [id], onDelete: Cascade)
+  feedback Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+
+  @@id([themeId, feedbackId])
+}
+
+// ─── System Models ────────────────────────────────────────────────────────────
 
 model AuditLog {
   id          String         @id @default(uuid())

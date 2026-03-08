@@ -21,6 +21,7 @@ export class FeedbackService {
     const newFeedback = await this.prisma.feedback.create({
       data: {
         ...createFeedbackDto,
+        status: createFeedbackDto.status ?? 'NEW',
         workspaceId,
       },
     });
