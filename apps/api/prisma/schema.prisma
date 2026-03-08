@@ -1,0 +1,125 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+enum FeedbackStatus {
+  NEW
+  IN_REVIEW
+  PROCESSED
+  ARCHIVED
+}
+
+enum FeedbackSourceType {
+  MANUAL
+  PUBLIC_PORTAL
+  EMAIL
+  SLACK
+  CSV_IMPORT
+  VOICE
+}
+
+// ─── Auth Models ──────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships   WorkspaceMember[]
+  refreshTokens RefreshToken[]
+}
+
+model Workspace {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members   WorkspaceMember[]
+  feedbacks Feedback[]
+}
+
+model WorkspaceMember {
+  id       String   @id @default(uuid())
+  role     Role     @default(VIEWER)
+  joinedAt DateTime @default(now())
+
+  userId      String
+  workspaceId String
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  revoked   Boolean  @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── Feedback Models ──────────────────────────────────────────────────────────
+
+model Feedback {
+  id             String             @id @default(uuid())
+  title          String
+  description    String
+  normalizedText String?
+  language       String?
+  summary        String?
+  status         FeedbackStatus     @default(NEW)
+  sourceType     FeedbackSourceType
+  customerId     String?
+  workspaceId    String
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  workspace   Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  attachments FeedbackAttachment[]
+
+  @@index([workspaceId])
+  @@index([status])
+  @@index([sourceType])
+  @@index([customerId])
+  @@index([createdAt])
+}
+
+model FeedbackAttachment {
+  id         String   @id @default(uuid())
+  feedbackId String
+  fileName   String
+  s3Key      String
+  s3Bucket   String
+  mimeType   String
+  sizeBytes  Int
+  createdAt  DateTime @default(now())
+
+  feedback Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+}
