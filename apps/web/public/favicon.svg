@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" width="1400" height="420"><svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" width="1400" height="420"><svg xmlns="http://www.w3.org/2000/svg" width="1400" height="420" viewBox="0 0 1400 420" role="img" aria-label="TriageInsight logo">
+  <defs>
+    <!-- Icon gradient -->
+    <linearGradient id="gIcon" x1="60" y1="300" x2="300" y2="80" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0A1F4A"></stop>
+      <stop offset="0.55" stop-color="#0C5FA6"></stop>
+      <stop offset="1" stop-color="#22D3C5"></stop>
+    </linearGradient>
+
+    <!-- Wordmark gradients -->
+    <linearGradient id="gInsight" x1="880" y1="210" x2="1240" y2="210" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0FA3A5"></stop>
+      <stop offset="1" stop-color="#21D3C5"></stop>
+    </linearGradient>
+
+    <!-- Soft shadow -->
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#0b1530" flood-opacity="0.18"></feDropShadow>
+    </filter>
+
+    <!-- Clip for inner chart area -->
+    <clipPath id="clipBubble">
+      <path d="M120 95
+               C120 60, 150 35, 190 35
+               L285 35
+               C330 35, 365 70, 365 115
+               L365 220
+               C365 275, 320 310, 270 310
+               L205 310
+               L165 348
+               C158 356, 145 351, 145 340
+               L145 310
+               C130 305, 120 290, 120 270
+               Z"></path>
+    </clipPath>
+  </defs>
+
+  <!-- Icon -->
+  <g transform="translate(90,35)" filter="url(#shadow)">
+    <!-- Bubble body -->
+    <path fill="url(#gIcon)" d="M120 95
+             C120 60, 150 35, 190 35
+             L285 35
+             C330 35, 365 70, 365 115
+             L365 220
+             C365 275, 320 310, 270 310
+             L205 310
+             L165 348
+             C158 356, 145 351, 145 340
+             L145 310
+             C130 305, 120 290, 120 270
+             Z"></path>
+
+    <!-- Inner white "lens" -->
+    <path fill="#ffffff" opacity="0.95" d="M170 108
+             C170 86, 188 70, 212 70
+             L284 70
+             C312 70, 332 92, 332 118
+             L332 206
+             C332 236, 309 254, 282 254
+             L220 254
+             C192 254, 170 235, 170 208
+             Z"></path>
+
+    <!-- Chart bars + curve inside (clipped) -->
+    <g clip-path="url(#clipBubble)" transform="translate(0,0)">
+      <!-- Bars -->
+      <g transform="translate(0,0)">
+        <rect x="196" y="190" width="22" height="44" rx="6" fill="#0B2B60" opacity="0.95"></rect>
+        <rect x="228" y="172" width="22" height="62" rx="6" fill="#0B2B60" opacity="0.95"></rect>
+        <rect x="260" y="150" width="22" height="84" rx="6" fill="#0B2B60" opacity="0.95"></rect>
+        <rect x="292" y="120" width="22" height="114" rx="6" fill="#0B2B60" opacity="0.95"></rect>
+      </g>
+
+      <!-- Rising curve -->
+      <path d="M190 212
+               C215 205, 240 192, 260 175
+               C285 154, 305 132, 330 112" fill="none" stroke="#22D3C5" stroke-width="10" stroke-linecap="round"></path>
+
+      <!-- Dot at top -->
+      <circle cx="332" cy="112" r="9" fill="#22D3C5"></circle>
+    </g>
+  </g>
+
+  <!-- Wordmark -->
+  <g font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial" font-weight="700">
+    <text x="520" y="235" font-size="96" fill="#0A1F4A" letter-spacing="-1">Triage</text>
+    <text x="820" y="235" font-size="96" fill="url(#gInsight)" letter-spacing="-1">Insight</text>
+  </g>
+</svg></svg><style>@media (prefers-color-scheme: light) { :root { filter: none; } }
+@media (prefers-color-scheme: dark) { :root { filter: none; } }
+</style></svg>
