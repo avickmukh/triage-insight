@@ -1,10 +1,10 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import apiClient from '@/lib/api-client';
-import { CreateRoadmapItemDto, RoadmapItem, RoadmapListResponse, UpdateRoadmapItemDto } from '@/lib/api-types';
-import { useWorkspace } from './use-workspace';
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import apiClient from "@/lib/api-client";
+import { CreateRoadmapItemDto, RoadmapItem, RoadmapListResponse, UpdateRoadmapItemDto } from "@/lib/api-types";
+import { useWorkspace } from "./use-workspace";
 
-const ROADMAP_QUERY_KEY = 'roadmap';
-const THEME_QUERY_KEY = 'themes'; // For invalidation
+const ROADMAP_QUERY_KEY = "roadmap";
+const THEME_QUERY_KEY = "themes"; // For invalidation
 
 export const useRoadmap = () => {
   const queryClient = useQueryClient();
@@ -14,8 +14,8 @@ export const useRoadmap = () => {
   const { data: roadmap, isLoading, isError, error } = useQuery<RoadmapListResponse, Error>({
     queryKey: [ROADMAP_QUERY_KEY, workspaceId],
     queryFn: () => {
-      if (!workspaceId) throw new Error('Workspace ID is not available');
-      return apiClient.getRoadmap(workspaceId);
+      if (!workspaceId) throw new Error("Workspace ID is not available");
+      return apiClient.roadmap.list(workspaceId);
     },
     enabled: !!workspaceId,
   });
@@ -26,8 +26,8 @@ export const useRoadmap = () => {
     CreateRoadmapItemDto
   >({
     mutationFn: (data) => {
-      if (!workspaceId) throw new Error('Workspace ID is not available');
-      return apiClient.createRoadmapItem(workspaceId, data);
+      if (!workspaceId) throw new Error("Workspace ID is not available");
+      return apiClient.roadmap.create(workspaceId, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [ROADMAP_QUERY_KEY, workspaceId] });
@@ -40,8 +40,8 @@ export const useRoadmap = () => {
     { itemId: string; data: UpdateRoadmapItemDto }
   >({
     mutationFn: ({ itemId, data }) => {
-      if (!workspaceId) throw new Error('Workspace ID is not available');
-      return apiClient.updateRoadmapItem(workspaceId, itemId, data);
+      if (!workspaceId) throw new Error("Workspace ID is not available");
+      return apiClient.roadmap.update(workspaceId, itemId, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [ROADMAP_QUERY_KEY, workspaceId] });
@@ -54,12 +54,12 @@ export const useRoadmap = () => {
     { themeId: string }
   >({
     mutationFn: ({ themeId }) => {
-      if (!workspaceId) throw new Error('Workspace ID is not available');
-      return apiClient.createRoadmapItemFromTheme(workspaceId, themeId);
+      if (!workspaceId) throw new Error("Workspace ID is not available");
+      return apiClient.roadmap.createFromTheme(workspaceId, themeId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [ROADMAP_QUERY_KEY, workspaceId] });
-      queryClient.invalidateQueries({ queryKey: [THEME_QUERY_KEY, workspaceId, 'list'] });
+      queryClient.invalidateQueries({ queryKey: [THEME_QUERY_KEY, workspaceId, "list"] });
     },
   });
 

@@ -6,10 +6,43 @@
 
 // --- Enums ---
 
-export enum Role {
+export enum PlatformRole {
+  SUPER_ADMIN = 'SUPER_ADMIN',
+  ADMIN = 'ADMIN',
+}
+
+export enum WorkspaceRole {
   ADMIN = 'ADMIN',
   EDITOR = 'EDITOR',
   VIEWER = 'VIEWER',
+}
+
+export enum UserStatus {
+  ACTIVE = 'ACTIVE',
+  INVITED = 'INVITED',
+  DISABLED = 'DISABLED',
+}
+
+export enum WorkspaceStatus {
+  PENDING = 'PENDING',
+  ACTIVE = 'ACTIVE',
+  SUSPENDED = 'SUSPENDED',
+  DISABLED = 'DISABLED',
+}
+
+export enum BillingPlan {
+  FREE = 'FREE',
+  STARTER = 'STARTER',
+  PRO = 'PRO',
+  ENTERPRISE = 'ENTERPRISE',
+}
+
+export enum BillingStatus {
+  TRIALING = 'TRIALING',
+  ACTIVE = 'ACTIVE',
+  PAST_DUE = 'PAST_DUE',
+  CANCELED = 'CANCELED',
+  UNPAID = 'UNPAID',
 }
 
 export enum FeedbackStatus {
@@ -27,6 +60,13 @@ export enum FeedbackSourceType {
   SLACK = 'SLACK',
   CSV_IMPORT = 'CSV_IMPORT',
   VOICE = 'VOICE',
+  API = 'API',
+}
+
+export enum ThemeStatus {
+  DRAFT = 'DRAFT',
+  ACTIVE = 'ACTIVE',
+  ARCHIVED = 'ARCHIVED',
 }
 
 export enum RoadmapStatus {
@@ -43,7 +83,10 @@ export interface User {
   email: string;
   firstName: string;
   lastName: string;
+  platformRole?: PlatformRole;
+  status: UserStatus;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface Workspace {
@@ -51,12 +94,17 @@ export interface Workspace {
   name: string;
   slug: string;
   description?: string;
+  status: WorkspaceStatus;
+  billingPlan: BillingPlan;
+  billingStatus: BillingStatus;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface WorkspaceMember {
-  id: string;
-  role: Role;
+  userId: string;
+  workspaceId: string;
+  role: WorkspaceRole;
   user: User;
   joinedAt: string;
 }
@@ -77,10 +125,14 @@ export interface Feedback {
 
 export interface Theme {
   id: string;
-  name: string;
+  title: string;
   description?: string;
+  status: ThemeStatus;
+  pinned: boolean;
   feedbackCount: number;
   customerCount: number;
+  totalArr: number;
+  totalDealValue: number;
   priorityScore: number;
   workspaceId: string;
   createdAt: string;
@@ -90,16 +142,40 @@ export interface Theme {
 export interface RoadmapItem {
   id: string;
   title: string;
-  description: string;
+  description?: string;
   status: RoadmapStatus;
-  targetQuarter: string;
-  targetYear: number;
-  feedbackCount: number;
-  customerCount: number;
-  totalArr: number;
+  isPublic: boolean;
+  targetQuarter?: string;
+  targetYear?: number;
   workspaceId: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface PortalUser {
+  id: string;
+  workspaceId: string;
+  customerId?: string;
+  email: string;
+  verified: boolean;
+  createdAt: string;
+}
+
+export interface FeedbackVote {
+  id: string;
+  feedbackId: string;
+  portalUserId?: string;
+  userId?: string;
+  createdAt: string;
+}
+
+export interface FeedbackComment {
+  id: string;
+  feedbackId: string;
+  portalUserId?: string;
+  userId?: string;
+  body: string;
+  createdAt: string;
 }
 
 // --- API Payloads & Responses ---
@@ -116,33 +192,58 @@ export interface PaginatedResponse<T> {
 }
 
 // Auth
+export interface SignUpDto extends Pick<User, 'email' | 'firstName' | 'lastName'> {
+  password: string;
+}
+
 export interface LoginRequest extends Pick<User, 'email'> {
   password: string;
 }
+
 export interface LoginResponse {
   accessToken: string;
+  refreshToken: string;
 }
 
 // Feedback
 export type FeedbackListResponse = PaginatedResponse<Feedback>;
 export interface CreateFeedbackDto extends Pick<Feedback, 'title' | 'description' | 'sourceType' | 'customerId'> {}
-export interface UpdateFeedbackDto extends Partial<Pick<Feedback, 'title' | 'description' | 'status'>> {}
+export interface UpdateFeedbackDto extends Partial<Pick<Feedback, 'title' | 'description' | 'status' | 'customerId'>> {}
+export interface PublicFeedbackDto extends Pick<Feedback, 'title' | 'description'> {
+  email?: string;
+}
 
 // Themes
 export type ThemeListResponse = PaginatedResponse<Theme>;
-export interface CreateThemeDto extends Pick<Theme, 'name' | 'description'> {}
-export interface UpdateThemeDto extends Partial<Pick<Theme, 'name' | 'description'>> {}
-export interface AddFeedbackToThemeDto {
+export interface CreateThemeDto extends Pick<Theme, 'title' | 'description'> {
+  feedbackIds?: string[];
+}
+export interface UpdateThemeDto extends Partial<Pick<Theme, 'title' | 'description' | 'status' | 'pinned'>> {}
+export interface MoveFeedbackDto {
   feedbackIds: string[];
+  sourceThemeId?: string;
+  targetThemeId?: string;
 }
 
 // Roadmap
 export type RoadmapListResponse = RoadmapItem[];
-export interface CreateRoadmapItemDto extends Pick<RoadmapItem, 'title' | 'description' | 'targetQuarter' | 'targetYear'> {}
+export interface CreateRoadmapItemDto extends Pick<RoadmapItem, 'title' | 'description' | 'targetQuarter' | 'targetYear' | 'isPublic'> {}
 export interface UpdateRoadmapItemDto extends Partial<CreateRoadmapItemDto & { status: RoadmapStatus }> {}
 
 // Workspace
 export interface UpdateWorkspaceDto extends Partial<Pick<Workspace, 'name' | 'description'>> {}
+
+// Support
+export interface SupportTicket {
+  id: string;
+  title: string;
+  description: string;
+  status: string;
+  priority: string;
+  createdAt: string;
+  source: string;
+}
+export type SupportTicketListResponse = PaginatedResponse<SupportTicket>;
 
 // A generic type for API errors
 export interface ApiError {
