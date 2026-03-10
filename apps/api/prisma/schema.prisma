@@ -5,8 +5,7 @@ generator client {
 
 datasource db {
   provider   = "postgresql"
-  url        = env("DATABASE_URL")
-  extensions = [pgvector]
+  extensions = [vector(map: "vector")]
 }
 
 //
@@ -278,6 +277,9 @@ model Workspace {
   customers             Customer[]
   deals                 Deal[]
   feedbacks             Feedback[]
+  feedbackAttachments   FeedbackAttachment[]
+  feedbackVotes         FeedbackVote[]
+  feedbackComments      FeedbackComment[]
   themes                Theme[]
   roadmapItems          RoadmapItem[]
   supportTickets        SupportTicket[]
@@ -293,6 +295,7 @@ model Workspace {
   usageMetrics          UsageMetric[]
   churnScores           CustomerChurnScore[]
   portalUsers           PortalUser[]
+  customerSignals       CustomerSignal[]
 }
 
 model WorkspaceMember {
