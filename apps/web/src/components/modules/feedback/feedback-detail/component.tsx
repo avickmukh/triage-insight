@@ -24,24 +24,28 @@ export function FeedbackDetail({ data }: FeedbackDetailProps) {
           <p className="text-muted-foreground">{data.description}</p>
           <Separator />
           <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <p className="font-medium">Customer</p>
-              <p>{data.customer.name}</p>
-            </div>
-            <div>
-              <p className="font-medium">ARR</p>
-              <p>${data.customer.arr.toLocaleString()}</p>
-            </div>
+            {data.customer && (
+              <>
+                <div>
+                  <p className="font-medium">Customer</p>
+                  <p>{data.customer.name}</p>
+                </div>
+                <div>
+                  <p className="font-medium">ARR</p>
+                  <p>${data.customer.arr.toLocaleString()}</p>
+                </div>
+              </>
+            )}
             <div>
               <p className="font-medium">Source</p>
-              <p>{data.source}</p>
+              <p>{data.sourceType}</p>
             </div>
             <div>
               <p className="font-medium">Received</p>
               <p>{new Date(data.createdAt).toLocaleDateString()}</p>
             </div>
           </div>
-          {data.attachments.length > 0 && (
+          {data.attachments && data.attachments.length > 0 && (
             <>
               <Separator />
               <div>

@@ -5,13 +5,17 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/shared/ui/input";
 import { Textarea } from "@/components/shared/ui/textarea";
 import { Button } from "@/components/shared/ui/button";
+import { useFeedback } from "@/hooks/use-feedback";
+import { CreateFeedbackDto, FeedbackSourceType } from "@/lib/api-types";
 
 const formSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters"),
-  description: z.string().min(10, "Description must be at least 10 characters"),
+  description: z.string().optional(),
 });
 
 export function FeedbackForm() {
+  const { createFeedback, isCreating } = useFeedback();
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -21,12 +25,16 @@ export function FeedbackForm() {
   });
 
   function onSubmit(values: z.infer<typeof formSchema>) {
-    console.log(values);
+    const feedbackData: CreateFeedbackDto = {
+      ...values,
+      sourceType: FeedbackSourceType.MANUAL,
+    };
+    createFeedback(feedbackData);
   }
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <FormField
           control={form.control}
           name="title"
@@ -34,7 +42,7 @@ export function FeedbackForm() {
             <FormItem>
               <FormLabel>Title</FormLabel>
               <FormControl>
-                <Input placeholder="Short, descriptive title" {...field} />
+                <Input placeholder="Feedback title" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -53,7 +61,9 @@ export function FeedbackForm() {
             </FormItem>
           )}
         />
-        <Button type="submit">Submit Feedback</Button>
+        <Button type="submit" disabled={isCreating}>
+          {isCreating ? "Submitting..." : "Submit Feedback"}
+        </Button>
       </form>
     </Form>
   );

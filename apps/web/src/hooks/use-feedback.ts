@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import apiClient from "@/lib/api-client";
-import { CreateFeedbackDto, Feedback, FeedbackListResponse, UpdateFeedbackDto } from "@/lib/api-types";
+import { CreateFeedbackDto, Feedback, FeedbackComment, FeedbackListResponse, UpdateFeedbackDto } from "@/lib/api-types";
 import { useWorkspace } from "./use-workspace";
 
 const FEEDBACK_QUERY_KEY = "feedback";
@@ -66,6 +66,16 @@ export const useFeedback = (feedbackId?: string) => {
     },
   });
 
+  const addComment = useMutation<FeedbackComment, Error, { content: string }>({
+    mutationFn: (data) => {
+      if (!workspaceId || !feedbackId) throw new Error('Workspace or Feedback ID is not available');
+      return apiClient.feedback.addComment(workspaceId, feedbackId, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [FEEDBACK_QUERY_KEY, workspaceId, feedbackId] });
+    },
+  });
+
   return {
     useFeedbackList,
     feedback,
@@ -76,5 +86,6 @@ export const useFeedback = (feedbackId?: string) => {
     isCreating,
     updateFeedback,
     isUpdating,
+    addComment,
   };
 };

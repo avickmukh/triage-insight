@@ -6,22 +6,26 @@ import { Input } from "@/components/shared/ui/input";
 import { Textarea } from "@/components/shared/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/shared/ui/select";
 import { Button } from "@/components/shared/ui/button";
+import { useRoadmap } from "@/hooks/use-roadmap";
+import { CreateRoadmapItemDto, RoadmapStatus } from "@/lib/api-types";
 
 const formSchema = z.object({
   title: z.string().min(3),
   description: z.string().optional(),
-  status: z.enum(["EXPLORING", "PLANNED", "COMMITTED", "SHIPPED"]),
-  targetQuarter: z.string().regex(/Q[1-4]/, "Must be Q1, Q2, Q3, or Q4"),
-  targetYear: z.coerce.number().int().min(new Date().getFullYear()),
+  status: z.nativeEnum(RoadmapStatus),
+  targetQuarter: z.string().regex(/Q[1-4]/, "Must be Q1, Q2, Q3, or Q4").optional(),
+  targetYear: z.coerce.number().int().min(new Date().getFullYear()).optional(),
 });
 
 export function RoadmapForm() {
+  const { createRoadmapItem, isCreating } = useRoadmap();
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
   });
 
   function onSubmit(values: z.infer<typeof formSchema>) {
-    console.log(values);
+    createRoadmapItem(values as unknown as CreateRoadmapItemDto);
   }
 
   return (
@@ -67,10 +71,9 @@ export function RoadmapForm() {
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="EXPLORING">Exploring</SelectItem>
-                    <SelectItem value="PLANNED">Planned</SelectItem>
-                    <SelectItem value="COMMITTED">Committed</SelectItem>
-                    <SelectItem value="SHIPPED">Shipped</SelectItem>
+                    {Object.values(RoadmapStatus).map(status => (
+                      <SelectItem key={status} value={status}>{status}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -107,14 +110,16 @@ export function RoadmapForm() {
               <FormItem>
                 <FormLabel>Target Year</FormLabel>
                 <FormControl>
-                  <Input type="number" placeholder="e.g., 2024" {...field} />
+                  <Input type="number" placeholder="e.g., 2024" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10))}/>
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
         </div>
-        <Button type="submit">Save Item</Button>
+        <Button type="submit" disabled={isCreating}>
+          {isCreating ? "Saving..." : "Save Item"}
+        </Button>
       </form>
     </Form>
   );

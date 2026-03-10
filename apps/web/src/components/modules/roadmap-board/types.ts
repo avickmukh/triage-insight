@@ -1,13 +1,8 @@
-export type RoadmapStatus = "EXPLORING" | "PLANNED" | "COMMITTED" | "SHIPPED";
+import { RoadmapItem as ApiRoadmapItem, RoadmapStatus } from "@/lib/api-types";
 
-export interface RoadmapItem {
-  id: string;
-  title: string;
-  description: string;
-  status: RoadmapStatus;
-  targetQuarter: string;
-  targetYear: number;
-  feedbackCount: number;
-}
+// Extend the API type if you need additional client-side properties
+export interface RoadmapItem extends ApiRoadmapItem {}
+
+export { RoadmapStatus }; // Re-export the enum for use in components
 
 export type RoadmapBoardData = Record<RoadmapStatus, RoadmapItem[]>;

@@ -1,5 +1,5 @@
 import { RoadmapBoardData, RoadmapItem, RoadmapStatus } from "./types";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/shared/ui/card";
+import { Card, CardContent } from "@/components/shared/ui/card";
 
 interface RoadmapColumnProps {
   title: string;
@@ -11,7 +11,7 @@ function RoadmapCard({ item }: { item: RoadmapItem }) {
     <Card className="mb-4">
       <CardContent className="p-4">
         <h4 className="font-semibold">{item.title}</h4>
-        <p className="text-sm text-muted-foreground mt-1">{item.description}</p>
+        {item.description && <p className="text-sm text-muted-foreground mt-1">{item.description}</p>}
         <div className="flex items-center justify-between mt-4 text-xs text-muted-foreground">
           <span>{item.targetQuarter} {item.targetYear}</span>
           <span>{item.feedbackCount} pieces</span>
@@ -37,10 +37,11 @@ interface RoadmapBoardProps {
 }
 
 const STATUS_MAP: Record<RoadmapStatus, string> = {
-  EXPLORING: "Exploring",
-  PLANNED: "Planned",
-  COMMITTED: "Committed",
-  SHIPPED: "Shipped",
+  [RoadmapStatus.EXPLORING]: "Exploring",
+  [RoadmapStatus.PLANNED]: "Planned",
+  [RoadmapStatus.COMMITTED]: "Committed",
+  [RoadmapStatus.SHIPPED]: "Shipped",
+  [RoadmapStatus.BACKLOG]: "Backlog",
 };
 
 export function RoadmapBoard({ data }: RoadmapBoardProps) {

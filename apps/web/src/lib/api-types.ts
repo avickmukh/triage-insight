@@ -70,6 +70,7 @@ export enum ThemeStatus {
 }
 
 export enum RoadmapStatus {
+  BACKLOG = 'BACKLOG',
   EXPLORING = 'EXPLORING',
   PLANNED = 'PLANNED',
   COMMITTED = 'COMMITTED',
@@ -121,6 +122,7 @@ export interface Feedback {
   createdAt: string;
   updatedAt: string;
   mergedIntoId?: string;
+  comments?: FeedbackComment[];
 }
 
 export interface Theme {
@@ -147,6 +149,7 @@ export interface RoadmapItem {
   isPublic: boolean;
   targetQuarter?: string;
   targetYear?: number;
+  feedbackCount: number;
   workspaceId: string;
   createdAt: string;
   updatedAt: string;
@@ -176,6 +179,7 @@ export interface FeedbackComment {
   userId?: string;
   body: string;
   createdAt: string;
+  author?: { firstName: string; lastName: string };
 }
 
 // --- API Payloads & Responses ---
@@ -207,7 +211,7 @@ export interface LoginResponse {
 
 // Feedback
 export type FeedbackListResponse = PaginatedResponse<Feedback>;
-export interface CreateFeedbackDto extends Pick<Feedback, 'title' | 'description' | 'sourceType' | 'customerId'> {}
+export interface CreateFeedbackDto extends Pick<Feedback, 'title' | 'sourceType' | 'customerId'> { description?: string; }
 export interface UpdateFeedbackDto extends Partial<Pick<Feedback, 'title' | 'description' | 'status' | 'customerId'>> {}
 export interface PublicFeedbackDto extends Pick<Feedback, 'title' | 'description'> {
   email?: string;
@@ -227,7 +231,7 @@ export interface MoveFeedbackDto {
 
 // Roadmap
 export type RoadmapListResponse = RoadmapItem[];
-export interface CreateRoadmapItemDto extends Pick<RoadmapItem, 'title' | 'description' | 'targetQuarter' | 'targetYear' | 'isPublic'> {}
+export interface CreateRoadmapItemDto extends Pick<RoadmapItem, 'title' | 'description' | 'targetQuarter' | 'targetYear'> { isPublic?: boolean; }
 export interface UpdateRoadmapItemDto extends Partial<CreateRoadmapItemDto & { status: RoadmapStatus }> {}
 
 // Workspace

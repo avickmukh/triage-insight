@@ -6,6 +6,7 @@ import {
   CreateRoadmapItemDto,
   CreateThemeDto,
   Feedback,
+  FeedbackComment,
   FeedbackListResponse,
   LoginRequest,
   LoginResponse,
@@ -92,6 +93,14 @@ const apiClient = {
     ): Promise<Feedback> =>
       api
         .patch(`/workspaces/${workspaceId}/feedback/${feedbackId}`, data)
+        .then(handleResponse),
+    addComment: (
+      workspaceId: string,
+      feedbackId: string,
+      data: { content: string }
+    ): Promise<FeedbackComment> =>
+      api
+        .post(`/workspaces/${workspaceId}/feedback/${feedbackId}/comments`, data)
         .then(handleResponse),
   },
 

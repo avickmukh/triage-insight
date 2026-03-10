@@ -38,8 +38,8 @@ export function InboxList({ items, selectedItemId, onSelectItem }: InboxListProp
                     </p>
                   </div>
                   <p className="font-medium">{item.title}</p>
-                  <p className="text-sm text-muted-foreground truncate">{item.summary}</p>
-                  <Badge variant="outline" className="mt-2">{item.source}</Badge>
+                  <p className="text-sm text-muted-foreground truncate">{item.description}</p>
+                  <Badge variant="outline" className="mt-2">{item.sourceType}</Badge>
                 </div>
               </div>
             </button>
