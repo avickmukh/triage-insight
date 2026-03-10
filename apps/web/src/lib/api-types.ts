@@ -231,7 +231,7 @@ export interface MoveFeedbackDto {
 
 // Roadmap
 export type RoadmapListResponse = RoadmapItem[];
-export interface CreateRoadmapItemDto extends Pick<RoadmapItem, 'title' | 'description' | 'targetQuarter' | 'targetYear'> { isPublic?: boolean; }
+export interface CreateRoadmapItemDto extends Pick<RoadmapItem, 'title' | 'description' | 'targetQuarter' | 'targetYear'> { isPublic?: boolean; status?: RoadmapStatus; }
 export interface UpdateRoadmapItemDto extends Partial<CreateRoadmapItemDto & { status: RoadmapStatus }> {}
 
 // Workspace
