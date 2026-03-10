@@ -6,7 +6,7 @@ import { QueryRoadmapDto } from "./dto/query-roadmap.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../workspace/guards/roles.guard";
 import { Roles } from "../workspace/decorators/roles.decorator";
-import { Role } from "@prisma/client";
+import { WorkspaceRole } from "@prisma/client";
 
 interface AuthenticatedRequest {
   user: { sub: string; email: string };
@@ -18,13 +18,13 @@ export class RoadmapController {
   constructor(private readonly roadmapService: RoadmapService) {}
 
   @Post()
-  @Roles(Role.ADMIN, Role.EDITOR)
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
   create(@Param("workspaceId") workspaceId: string, @Req() req: AuthenticatedRequest, @Body() dto: CreateRoadmapItemDto) {
     return this.roadmapService.create(workspaceId, req.user.sub, dto);
   }
 
   @Post("from-theme/:themeId")
-  @Roles(Role.ADMIN, Role.EDITOR)
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
   createFromTheme(
     @Param("workspaceId") workspaceId: string,
     @Req() req: AuthenticatedRequest,
@@ -34,19 +34,19 @@ export class RoadmapController {
   }
 
   @Get()
-  @Roles(Role.ADMIN, Role.EDITOR, Role.VIEWER)
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
   findAll(@Param("workspaceId") workspaceId: string, @Query() query: QueryRoadmapDto) {
     return this.roadmapService.findAll(workspaceId, query);
   }
 
   @Get(":id")
-  @Roles(Role.ADMIN, Role.EDITOR, Role.VIEWER)
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
   findOne(@Param("workspaceId") workspaceId: string, @Param("id") id: string) {
     return this.roadmapService.findOne(workspaceId, id);
   }
 
   @Patch(":id")
-  @Roles(Role.ADMIN, Role.EDITOR)
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
   update(
     @Param("workspaceId") workspaceId: string,
     @Req() req: AuthenticatedRequest,

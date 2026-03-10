@@ -20,7 +20,7 @@ export class PrioritizationService {
     const { page = 1, limit = 20 } = query;
 
     const themes = await this.prisma.theme.findMany({
-      where: { workspaceId, status: ThemeStatus.PUBLISHED },
+      where: { workspaceId, status: ThemeStatus.ACTIVE },
       orderBy: { createdAt: "desc" },
     });
 

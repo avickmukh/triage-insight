@@ -6,7 +6,7 @@ import { AuditLogAction } from '@prisma/client';
 export class AuditService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async logAction(workspaceId: string, userId: string, action: AuditLogAction, details: any) {
+  async logAction(workspaceId: string, userId: string | null, action: AuditLogAction, details: any) {
     return this.prisma.auditLog.create({
       data: {
         workspaceId,

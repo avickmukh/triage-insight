@@ -98,6 +98,7 @@ export class FeedbackService {
     return this.prisma.feedbackAttachment.create({
       data: {
         feedbackId,
+        workspaceId,
         s3Key: key,
         s3Bucket: this.s3.getBucketName(),
         fileName,

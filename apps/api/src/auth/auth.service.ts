@@ -11,6 +11,7 @@ import * as bcrypt from 'bcrypt';
 import { SignUpDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { v4 as uuidv4 } from 'uuid';
+import { WorkspaceRole } from '@prisma/client';
 
 @Injectable()
 export class AuthService {
@@ -42,7 +43,7 @@ export class AuthService {
         members: {
           create: {
             userId: user.id,
-            role: 'ADMIN',
+            role: WorkspaceRole.ADMIN,
           },
         },
       },

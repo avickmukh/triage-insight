@@ -2,7 +2,7 @@ import { Controller, Post, Body, Param, UseGuards, Req } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../workspace/guards/roles.guard";
 import { Roles } from "../workspace/decorators/roles.decorator";
-import { Role, IntegrationProvider } from "@prisma/client";
+import { WorkspaceRole, IntegrationProvider } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { ConnectZendeskDto } from "./dto/connect-zendesk.dto";
 import { ConnectIntercomDto } from "./dto/connect-intercom.dto";
@@ -18,7 +18,7 @@ export class IntegrationsController {
   ) {}
 
   @Post("zendesk/connect")
-  @Roles(Role.ADMIN)
+  @Roles(WorkspaceRole.ADMIN)
   async connectZendesk(
     @Param("workspaceId") workspaceId: string,
     @Body() dto: ConnectZendeskDto
@@ -31,7 +31,7 @@ export class IntegrationsController {
   }
 
   @Post("intercom/connect")
-  @Roles(Role.ADMIN)
+  @Roles(WorkspaceRole.ADMIN)
   async connectIntercom(
     @Param("workspaceId") workspaceId: string,
     @Body() dto: ConnectIntercomDto
@@ -44,7 +44,7 @@ export class IntegrationsController {
   }
 
   @Post("sync")
-  @Roles(Role.ADMIN, Role.EDITOR)
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
   async sync(@Param("workspaceId") workspaceId: string) {
     const connections = await this.prisma.integrationConnection.findMany({ where: { workspaceId } });
     for (const conn of connections) {

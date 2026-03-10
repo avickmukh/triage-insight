@@ -4,7 +4,7 @@ import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { Roles } from './decorators/roles.decorator';
-import { Role } from '@prisma/client';
+import { WorkspaceRole } from '@prisma/client';
 
 interface AuthenticatedRequest {
   user: { sub: string; email: string };
@@ -33,7 +33,7 @@ export class WorkspaceController {
 
   @Get(':id/members')
   @UseGuards(RolesGuard)
-  @Roles(Role.ADMIN, Role.EDITOR, Role.VIEWER)
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
   getWorkspaceMembers(@Param('id') id: string) {
     return this.workspaceService.getWorkspaceMembers(id);
   }

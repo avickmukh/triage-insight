@@ -2,13 +2,13 @@ import { Controller, Get, Query, Param, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../workspace/guards/roles.guard";
 import { Roles } from "../workspace/decorators/roles.decorator";
-import { Role } from "@prisma/client";
+import { WorkspaceRole } from "@prisma/client";
 import { TicketService } from "./services/ticket.service";
 import { PrismaService } from "../prisma/prisma.service";
 
 @Controller("workspaces/:workspaceId/support")
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMIN, Role.EDITOR, Role.VIEWER)
+@Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
 export class SupportController {
   constructor(
     private readonly ticketService: TicketService,

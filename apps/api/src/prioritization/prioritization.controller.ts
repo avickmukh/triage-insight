@@ -5,7 +5,7 @@ import { QueryPrioritizationDto } from "./dto/query-prioritization.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../workspace/guards/roles.guard";
 import { Roles } from "../workspace/decorators/roles.decorator";
-import { Role } from "@prisma/client";
+import { WorkspaceRole } from "@prisma/client";
 
 interface AuthenticatedRequest {
   user: { sub: string; email: string };
@@ -17,7 +17,7 @@ export class PrioritizationController {
   constructor(private readonly prioritizationService: PrioritizationService) {}
 
   @Get("themes")
-  @Roles(Role.ADMIN, Role.EDITOR, Role.VIEWER)
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
   getPrioritizedThemes(
     @Param("workspaceId") workspaceId: string,
     @Query() query: QueryPrioritizationDto
@@ -26,7 +26,7 @@ export class PrioritizationController {
   }
 
   @Get("themes/:themeId/explanation")
-  @Roles(Role.ADMIN, Role.EDITOR, Role.VIEWER)
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
   getThemeScoreExplanation(
     @Param("workspaceId") workspaceId: string,
     @Param("themeId") themeId: string
@@ -35,13 +35,13 @@ export class PrioritizationController {
   }
 
   @Get("settings")
-  @Roles(Role.ADMIN, Role.EDITOR)
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
   getSettings(@Param("workspaceId") workspaceId: string) {
     return this.prioritizationService.getSettings(workspaceId);
   }
 
   @Patch("settings")
-  @Roles(Role.ADMIN)
+  @Roles(WorkspaceRole.ADMIN)
   updateSettings(
     @Param("workspaceId") workspaceId: string,
     @Req() req: AuthenticatedRequest,

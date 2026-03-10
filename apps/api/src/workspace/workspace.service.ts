@@ -1,6 +1,7 @@
 
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { WorkspaceRole } from '@prisma/client';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 
 @Injectable()
@@ -27,7 +28,7 @@ export class WorkspaceService {
       where: { userId_workspaceId: { userId, workspaceId: currentWorkspace.id } },
     });
 
-    if (!membership || (membership.role !== 'ADMIN' && membership.role !== 'EDITOR')) {
+    if (!membership || (membership.role !== WorkspaceRole.ADMIN && membership.role !== WorkspaceRole.EDITOR)) {
       throw new ForbiddenException('You do not have permission to update this workspace.');
     }
 

@@ -25,7 +25,7 @@ import { PublicFeedbackDto } from './dto/public-feedback.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../workspace/guards/roles.guard';
 import { Roles } from '../workspace/decorators/roles.decorator';
-import { Role } from '@prisma/client';
+import { WorkspaceRole } from '@prisma/client';
 import { PublicPortalService } from './ingestion/public-portal.service';
 import { CsvImportService } from './ingestion/csv-import.service';
 
@@ -56,7 +56,7 @@ export class FeedbackController {
   ) {}
 
   @Post()
-  @Roles(Role.ADMIN, Role.EDITOR)
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
   create(
     @Param('workspaceId') workspaceId: string,
     @Body() createFeedbackDto: CreateFeedbackDto,
@@ -65,7 +65,7 @@ export class FeedbackController {
   }
 
   @Get()
-  @Roles(Role.ADMIN, Role.EDITOR, Role.VIEWER)
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
   findAll(
     @Param('workspaceId') workspaceId: string,
     @Query() query: QueryFeedbackDto,
@@ -74,13 +74,13 @@ export class FeedbackController {
   }
 
   @Get(':id')
-  @Roles(Role.ADMIN, Role.EDITOR, Role.VIEWER)
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
   findOne(@Param('workspaceId') workspaceId: string, @Param('id') id: string) {
     return this.feedbackService.findOne(workspaceId, id);
   }
 
   @Patch(':id')
-  @Roles(Role.ADMIN, Role.EDITOR)
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
   update(
     @Param('workspaceId') workspaceId: string,
     @Param('id') id: string,
@@ -90,7 +90,7 @@ export class FeedbackController {
   }
 
   @Delete(':id')
-  @Roles(Role.ADMIN)
+  @Roles(WorkspaceRole.ADMIN)
   remove(@Param('workspaceId') workspaceId: string, @Param('id') id: string) {
     return this.feedbackService.remove(workspaceId, id);
   }
@@ -98,7 +98,7 @@ export class FeedbackController {
   // --- Attachments ---
 
   @Post(':id/attachments/presigned-url')
-  @Roles(Role.ADMIN, Role.EDITOR)
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
   createAttachmentPresignedUrl(
     @Param('workspaceId') workspaceId: string,
     @Param('id') id: string,
@@ -113,7 +113,7 @@ export class FeedbackController {
   }
 
   @Post(':id/attachments/confirm')
-  @Roles(Role.ADMIN, Role.EDITOR)
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
   confirmAttachment(
     @Param('workspaceId') workspaceId: string,
     @Param('id') id: string,
@@ -133,7 +133,7 @@ export class FeedbackController {
 
   @Post('import/csv')
   @UseInterceptors(FileInterceptor('file'))
-  @Roles(Role.ADMIN, Role.EDITOR)
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
   importCsv(
     @Param('workspaceId') workspaceId: string,
     @UploadedFile(
