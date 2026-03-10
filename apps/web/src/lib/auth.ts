@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import apiClient from "@/lib/api-client";
 import { LoginRequest, PlatformRole, SignUpDto, User, WorkspaceRole } from "@/lib/api-types";
 import { useWorkspace } from "@/hooks/use-workspace";
-import { useRouter } from "next/router";
+import { useRouter } from "next/navigation";
 
 const USER_QUERY_KEY = "user";
 
@@ -38,7 +38,10 @@ export const useAuth = () => {
   });
 
   const logout = () => {
-    apiClient.auth.logout();
+    const refreshToken = localStorage.getItem("refreshToken");
+    if (refreshToken) {
+      apiClient.auth.logout({ refreshToken });
+    }
     localStorage.removeItem("accessToken");
     localStorage.removeItem("refreshToken");
     queryClient.setQueryData([USER_QUERY_KEY, "me"], null);

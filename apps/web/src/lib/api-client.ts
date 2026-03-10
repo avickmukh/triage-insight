@@ -59,7 +59,10 @@ const apiClient = {
       api.post("/auth/signup", data).then(handleResponse),
     login: (data: LoginRequest): Promise<LoginResponse> =>
       api.post("/auth/login", data).then(handleResponse),
-    logout: (): Promise<void> => api.post("/auth/logout").then(handleResponse),
+    logout: (data: { refreshToken: string }): Promise<void> =>
+      api.post("/auth/logout", data).then(handleResponse),
+    refresh: (data: { refreshToken: string }): Promise<LoginResponse> =>
+      api.post("/auth/refresh", data).then(handleResponse),
     getMe: (): Promise<User> => api.get("/auth/me").then(handleResponse),
   },
 
@@ -152,6 +155,34 @@ const apiClient = {
       api.post(`/public/feedback/${workspaceSlug}`, data).then(handleResponse),
   },
 };
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+    if (error.response.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      const refreshToken = localStorage.getItem("refreshToken");
+      if (refreshToken) {
+        try {
+          const { accessToken } = await apiClient.auth.refresh({ refreshToken });
+          localStorage.setItem("accessToken", accessToken);
+          axios.defaults.headers.common["Authorization"] = `Bearer ${accessToken}`;
+          originalRequest.headers["Authorization"] = `Bearer ${accessToken}`;
+          return api(originalRequest);
+        } catch (refreshError) {
+          console.error("Token refresh failed:", refreshError);
+          localStorage.removeItem("accessToken");
+          localStorage.removeItem("refreshToken");
+          if (typeof window !== "undefined") {
+            window.location.href = "/login";
+          }
+        }
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 export default apiClient;
 

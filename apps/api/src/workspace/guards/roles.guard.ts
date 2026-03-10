@@ -28,7 +28,7 @@ export class RolesGuard implements CanActivate {
     }
 
     const { user, params } = context.switchToHttp().getRequest();
-    const workspaceId = params.workspaceId;
+    const workspaceId = params.workspaceId || params.id;
 
     if (!user || !workspaceId) {
       return false;
