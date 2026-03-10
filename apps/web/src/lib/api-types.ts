@@ -213,7 +213,10 @@ export interface LoginResponse {
 export type FeedbackListResponse = PaginatedResponse<Feedback>;
 export interface CreateFeedbackDto extends Pick<Feedback, 'title' | 'sourceType' | 'customerId'> { description?: string; }
 export interface UpdateFeedbackDto extends Partial<Pick<Feedback, 'title' | 'description' | 'status' | 'customerId'>> {}
-export interface PublicFeedbackDto extends Pick<Feedback, 'title' | 'description'> {
+export interface PublicFeedbackDto {
+  title: string;
+  description?: string;
+  submitterEmail?: string;
   email?: string;
 }
 
