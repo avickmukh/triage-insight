@@ -23,7 +23,7 @@ export const useAuth = () => {
       localStorage.setItem("accessToken", data.accessToken);
       localStorage.setItem("refreshToken", data.refreshToken);
       queryClient.invalidateQueries({ queryKey: [USER_QUERY_KEY] });
-      router.push("/");
+      router.push("/admin/feedback");
     },
   });
 
@@ -33,7 +33,7 @@ export const useAuth = () => {
       localStorage.setItem("accessToken", data.accessToken);
       localStorage.setItem("refreshToken", data.refreshToken);
       queryClient.invalidateQueries({ queryKey: [USER_QUERY_KEY] });
-      router.push("/");
+      router.push("/admin/feedback");
     },
   });
 
@@ -51,29 +51,4 @@ export const useAuth = () => {
   return { user, isLoading, isError, signUp, login, logout };
 };
 
-export const usePermissions = () => {
-  const { user } = useAuth();
-  const { workspace, useWorkspaceMembers } = useWorkspace();
-  const { data: members } = useWorkspaceMembers();
 
-  if (!user || !workspace || !members) {
-    return {
-      isSuperAdmin: false,
-      isWorkspaceAdmin: false,
-      isWorkspaceEditor: false,
-      isWorkspaceViewer: false,
-    };
-  }
-
-  const isSuperAdmin = user.platformRole === PlatformRole.SUPER_ADMIN;
-
-  const currentUserMembership = members.find((m) => m.userId === user.id);
-  const workspaceRole = currentUserMembership?.role;
-
-  return {
-    isSuperAdmin,
-    isWorkspaceAdmin: workspaceRole === WorkspaceRole.ADMIN || isSuperAdmin,
-    isWorkspaceEditor: workspaceRole === WorkspaceRole.EDITOR,
-    isWorkspaceViewer: workspaceRole === WorkspaceRole.VIEWER,
-  };
-};
