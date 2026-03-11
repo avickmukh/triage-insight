@@ -252,6 +252,84 @@ export interface SupportTicket {
 }
 export type SupportTicketListResponse = PaginatedResponse<SupportTicket>;
 
+// Public Portal
+
+/** A single feedback item as returned by the public portal list endpoint */
+export interface PublicFeedbackItem {
+  id: string;
+  title: string;
+  description: string;
+  status: FeedbackStatus;
+  voteCount: number;
+  commentCount: number;
+  createdAt: string;
+}
+
+/** A single comment as returned by the public portal detail endpoint */
+export interface PublicComment {
+  id: string;
+  body: string;
+  authorName: string | null;
+  createdAt: string;
+}
+
+/** Full detail response for a single public feedback item */
+export interface PublicFeedbackDetail {
+  id: string;
+  title: string;
+  description: string;
+  status: FeedbackStatus;
+  voteCount: number;
+  createdAt: string;
+  comments: PublicComment[];
+}
+
+export interface PublicFeedbackListResponse {
+  data: PublicFeedbackItem[];
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+}
+
+/** A single public roadmap item */
+export interface PublicRoadmapItem {
+  id: string;
+  title: string;
+  description?: string;
+  status: RoadmapStatus;
+  targetQuarter?: string;
+  targetYear?: number;
+  customerCount?: number;
+  createdAt: string;
+}
+
+export interface PublicRoadmapResponse {
+  data: PublicRoadmapItem[];
+}
+
+export interface PublicVoteDto {
+  anonymousId?: string;
+  email?: string;
+  name?: string;
+}
+
+export interface PublicVoteResponse {
+  id: string;
+  feedbackId: string;
+  voteCount: number;
+  createdAt: string;
+}
+
+export interface PublicCommentDto {
+  body: string;
+  email?: string;
+  name?: string;
+  anonymousId?: string;
+}
+
 // A generic type for API errors
 export interface ApiError {
   statusCode: number;

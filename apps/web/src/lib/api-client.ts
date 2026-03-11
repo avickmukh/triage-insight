@@ -11,7 +11,13 @@ import {
   LoginRequest,
   LoginResponse,
   MoveFeedbackDto,
+  PublicCommentDto,
+  PublicFeedbackDetail,
   PublicFeedbackDto,
+  PublicFeedbackListResponse,
+  PublicRoadmapResponse,
+  PublicVoteDto,
+  PublicVoteResponse,
   RoadmapItem,
   RoadmapListResponse,
   SignUpDto,
@@ -148,11 +154,54 @@ const apiClient = {
   },
 
   public: {
+    /** Legacy submit endpoint — POST /public/feedback/:workspaceSlug */
     submitFeedback: (
       workspaceSlug: string,
       data: PublicFeedbackDto
     ): Promise<Feedback> =>
       api.post(`/public/feedback/${workspaceSlug}`, data).then(handleResponse),
+
+    /** GET /public/:workspaceSlug/feedback */
+    listFeedback: (
+      workspaceSlug: string,
+      params?: { page?: number; limit?: number; search?: string }
+    ): Promise<PublicFeedbackListResponse> =>
+      api
+        .get(`/public/${workspaceSlug}/feedback`, { params })
+        .then(handleResponse),
+
+    /** GET /public/:workspaceSlug/feedback/:id */
+    getFeedbackDetail: (
+      workspaceSlug: string,
+      feedbackId: string
+    ): Promise<PublicFeedbackDetail> =>
+      api
+        .get(`/public/${workspaceSlug}/feedback/${feedbackId}`)
+        .then(handleResponse),
+
+    /** GET /public/:workspaceSlug/roadmap */
+    listRoadmap: (workspaceSlug: string): Promise<PublicRoadmapResponse> =>
+      api.get(`/public/${workspaceSlug}/roadmap`).then(handleResponse),
+
+    /** POST /public/:workspaceSlug/feedback/:id/vote */
+    vote: (
+      workspaceSlug: string,
+      feedbackId: string,
+      data: PublicVoteDto
+    ): Promise<PublicVoteResponse> =>
+      api
+        .post(`/public/${workspaceSlug}/feedback/${feedbackId}/vote`, data)
+        .then(handleResponse),
+
+    /** POST /public/:workspaceSlug/feedback/:id/comments */
+    addComment: (
+      workspaceSlug: string,
+      feedbackId: string,
+      data: PublicCommentDto
+    ): Promise<{ id: string; feedbackId: string; body: string; authorName: string | null; createdAt: string }> =>
+      api
+        .post(`/public/${workspaceSlug}/feedback/${feedbackId}/comments`, data)
+        .then(handleResponse),
   },
 };
 
