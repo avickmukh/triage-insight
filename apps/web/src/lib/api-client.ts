@@ -223,9 +223,19 @@ api.interceptors.response.use(
           console.error("Token refresh failed:", refreshError);
           localStorage.removeItem("accessToken");
           localStorage.removeItem("refreshToken");
-          if (typeof window !== "undefined") {
-            window.location.href = "/login";
-          }
+         if (typeof window !== "undefined") {
+            const path = window.location.pathname;
+
+            const protectedRoutes = ["/admin", "/dashboard", "/settings"];
+
+            const isProtected = protectedRoutes.some((route) =>
+              path.startsWith(route)
+            );
+
+            if (isProtected) {
+              window.location.href = "/login";
+            }
+         }
         }
       }
     }

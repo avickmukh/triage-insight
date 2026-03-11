@@ -29,10 +29,14 @@ export const useAuth = () => {
 
   const { mutate: login } = useMutation({
     mutationFn: (data: LoginRequest) => apiClient.auth.login(data),
-    onSuccess: (data) => {
+   onSuccess: async (data) => {
       localStorage.setItem("accessToken", data.accessToken);
       localStorage.setItem("refreshToken", data.refreshToken);
-      queryClient.invalidateQueries({ queryKey: [USER_QUERY_KEY] });
+
+      // Fetch the user immediately
+      const user = await apiClient.auth.getMe();
+
+      queryClient.setQueryData([USER_QUERY_KEY, "me"], user);
       router.push("/admin/feedback");
     },
   });

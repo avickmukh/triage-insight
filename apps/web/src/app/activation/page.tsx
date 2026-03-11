@@ -51,7 +51,7 @@ export default function ActivationPage() {
           <p className="text-sm text-gray-600 mb-4">
             If you believe this is an error, please reach out to our support team.
           </p>
-          <Button onClick={() => window.location.href = 'mailto:support@triage-insight.com'}>
+          <Button onClick={() => window.location.href = 'mailto:support@triageinsight.com'}>
             Contact Support
           </Button>
         </CardContent>
