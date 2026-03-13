@@ -1,3 +1,6 @@
+'use client';
+
+import { useParams } from "next/navigation";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/shared/ui/sheet";
 import { Button } from "@/components/shared/ui/button";
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/shared/ui/breadcrumb";
@@ -5,8 +8,16 @@ import { Input } from "@/components/shared/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/shared/ui/dropdown-menu";
 import { PanelLeft, Package2, Search } from "lucide-react";
 import Link from "next/link";
+import { appRoutes, orgAdminRoutes } from "@/lib/routes";
+import { useAuth } from "@/lib/auth";
 
-export function Topbar() {
+export function Topbar({ orgSlug: orgSlugProp }: { orgSlug?: string }) {
+  const params = useParams();
+  const slug = orgSlugProp ?? (Array.isArray(params.orgSlug) ? params.orgSlug[0] : params.orgSlug) ?? '';
+  const r = appRoutes(slug);
+  const adminR = orgAdminRoutes(slug);
+  const { logout } = useAuth();
+
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
       <Sheet>
@@ -19,25 +30,28 @@ export function Topbar() {
         <SheetContent side="left" className="sm:max-w-xs">
           <nav className="grid gap-6 text-lg font-medium">
             <Link
-              href="#"
+              href={r.dashboard}
               className="group flex h-10 w-10 shrink-0 items-center justify-center gap-2 rounded-full bg-primary text-lg font-semibold text-primary-foreground md:text-base"
             >
               <Package2 className="h-5 w-5 transition-all group-hover:scale-110" />
               <span className="sr-only">TriageInsight</span>
             </Link>
-            <Link href="/admin" className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground">
+            <Link href={r.dashboard} className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground">
               Dashboard
             </Link>
-            <Link href="/admin/inbox" className="flex items-center gap-4 px-2.5 text-foreground">
+            <Link href={r.inbox} className="flex items-center gap-4 px-2.5 text-foreground">
               Inbox
             </Link>
-            <Link href="/admin/themes" className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground">
+            <Link href={r.themes} className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground">
               Themes
             </Link>
-            <Link href="/admin/roadmap" className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground">
+            <Link href={r.roadmap} className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground">
               Roadmap
             </Link>
-            <Link href="/admin/settings" className="mt-auto flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground">
+            <Link href={r.support.tickets} className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground">
+              Support
+            </Link>
+            <Link href={adminR.settings} className="mt-auto flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground">
               Settings
             </Link>
           </nav>
@@ -47,18 +61,12 @@ export function Topbar() {
         <BreadcrumbList>
           <BreadcrumbItem>
             <BreadcrumbLink asChild>
-              <Link href="#">Dashboard</Link>
+              <Link href={r.dashboard}>Dashboard</Link>
             </BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
-            <BreadcrumbLink asChild>
-              <Link href="#">Products</Link>
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbPage>All Products</BreadcrumbPage>
+            <BreadcrumbPage>{slug}</BreadcrumbPage>
           </BreadcrumbItem>
         </BreadcrumbList>
       </Breadcrumb>
@@ -89,10 +97,13 @@ export function Topbar() {
         <DropdownMenuContent align="end">
           <DropdownMenuLabel>My Account</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem>Settings</DropdownMenuItem>
-          <DropdownMenuItem>Support</DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href={adminR.settings}>Settings</Link>
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem>Logout</DropdownMenuItem>
+          <DropdownMenuItem onClick={logout} className="cursor-pointer">
+            Logout
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </header>

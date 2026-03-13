@@ -1,22 +1,31 @@
+'use client';
+
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/shared/ui/tooltip";
-import { Home, Settings, Package, Package2, Users2, LineChart, PanelLeft } from "lucide-react";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/shared/ui/sheet";
-import { Button } from "@/components/shared/ui/button";
+import { Home, Settings, Package, Package2, Users2, LineChart, Headphones } from "lucide-react";
+import { appRoutes, orgAdminRoutes } from "@/lib/routes";
 
-const navItems = [
-  { href: "/admin", icon: Home, label: "Dashboard" },
-  { href: "/admin/inbox", icon: Package, label: "Inbox" },
-  { href: "/admin/themes", icon: Users2, label: "Themes" },
-  { href: "/admin/roadmap", icon: LineChart, label: "Roadmap" },
-];
+export function Sidebar({ orgSlug: orgSlugProp }: { orgSlug?: string }) {
+  const params = useParams();
+  const slug = orgSlugProp ?? (Array.isArray(params.orgSlug) ? params.orgSlug[0] : params.orgSlug) ?? '';
 
-export function Sidebar() {
+  const r = appRoutes(slug);
+  const adminR = orgAdminRoutes(slug);
+
+  const navItems = [
+    { href: r.dashboard,       icon: Home,       label: "Dashboard" },
+    { href: r.inbox,           icon: Package,    label: "Inbox" },
+    { href: r.themes,          icon: Users2,     label: "Themes" },
+    { href: r.roadmap,         icon: LineChart,  label: "Roadmap" },
+    { href: r.support.tickets, icon: Headphones, label: "Support" },
+  ];
+
   return (
     <aside className="fixed inset-y-0 left-0 z-10 hidden w-14 flex-col border-r bg-background sm:flex">
       <nav className="flex flex-col items-center gap-4 px-2 sm:py-5">
         <Link
-          href="#"
+          href={r.dashboard}
           className="group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full bg-primary text-lg font-semibold text-primary-foreground md:h-8 md:w-8 md:text-base"
         >
           <Package2 className="h-4 w-4 transition-all group-hover:scale-110" />
@@ -44,7 +53,7 @@ export function Sidebar() {
           <Tooltip>
             <TooltipTrigger asChild>
               <Link
-                href="/admin/settings"
+                href={adminR.settings}
                 className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8"
               >
                 <Settings className="h-5 w-5" />

@@ -1,6 +1,4 @@
-
 'use client';
-
 import { useWorkspace } from '@/hooks/use-workspace';
 import { WorkspaceStatus } from '@/lib/api-types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/shared/ui/card";
@@ -8,21 +6,21 @@ import { Button } from '@/components/shared/ui/button';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { LoadingSpinner } from '@/components/shared/common/loading-spinner';
+import { appRoutes } from '@/lib/routes';
 
 export default function ActivationPage() {
   const { workspace, isLoading, isError } = useWorkspace();
   const router = useRouter();
 
   useEffect(() => {
-    if (!isLoading && workspace?.status === WorkspaceStatus.ACTIVE) {
-      router.push('/admin/feedback');
+    if (!isLoading && workspace?.status === WorkspaceStatus.ACTIVE && workspace?.slug) {
+      router.push(appRoutes(workspace.slug).dashboard);
     }
   }, [workspace, isLoading, router]);
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-screen"><LoadingSpinner /></div>;
   }
-
   if (isError || !workspace) {
     return <div className="flex items-center justify-center h-screen">Error loading workspace information.</div>;
   }

@@ -1,10 +1,24 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import apiClient from "@/lib/api-client";
-import { LoginRequest, PlatformRole, SignUpDto, User, WorkspaceRole } from "@/lib/api-types";
-import { useWorkspace } from "@/hooks/use-workspace";
+import { LoginRequest, SignUpDto, User } from "@/lib/api-types";
 import { useRouter } from "next/navigation";
 
 const USER_QUERY_KEY = "user";
+
+/**
+ * After login/signup we redirect to /:orgSlug/app (the workspace dashboard).
+ * The orgSlug comes from the workspace returned by GET /workspace/current.
+ * If the slug is not yet available we fall back to /activation.
+ */
+async function resolvePostLoginRedirect(): Promise<string> {
+  try {
+    const ws = await apiClient.workspace.getCurrent();
+    if (ws?.slug) return `/${ws.slug}/app`;
+  } catch {
+    // workspace not yet available
+  }
+  return '/activation';
+}
 
 export const useAuth = () => {
   const queryClient = useQueryClient();
@@ -13,27 +27,29 @@ export const useAuth = () => {
   const { data: user, isLoading, isError } = useQuery<User, Error>({
     queryKey: [USER_QUERY_KEY, "me"],
     queryFn: apiClient.auth.getMe,
-    staleTime: 1000 * 60 * 5, // 5 minutes
-    retry: 1, // Don't retry endlessly if unauthenticated
+    staleTime: 1000 * 60 * 5,
+    retry: 1,
   });
 
   const { mutate: signUp } = useMutation({
     mutationFn: (data: SignUpDto) => apiClient.auth.signUp(data),
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       localStorage.setItem("accessToken", data.accessToken);
       localStorage.setItem("refreshToken", data.refreshToken);
       queryClient.invalidateQueries({ queryKey: [USER_QUERY_KEY] });
-      router.push("/admin/feedback");
+      const dest = await resolvePostLoginRedirect();
+      router.push(dest);
     },
   });
 
   const { mutate: login } = useMutation({
     mutationFn: (data: LoginRequest) => apiClient.auth.login(data),
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       localStorage.setItem("accessToken", data.accessToken);
       localStorage.setItem("refreshToken", data.refreshToken);
       queryClient.invalidateQueries({ queryKey: [USER_QUERY_KEY] });
-      router.push("/admin/feedback");
+      const dest = await resolvePostLoginRedirect();
+      router.push(dest);
     },
   });
 
@@ -50,5 +66,3 @@ export const useAuth = () => {
 
   return { user, isLoading, isError, signUp, login, logout };
 };
-
-
