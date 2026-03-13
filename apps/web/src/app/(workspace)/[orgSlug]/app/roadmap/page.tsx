@@ -27,7 +27,7 @@ export default function RoadmapPage() {
 
   const { roadmap, isLoading, createRoadmapItem, isCreating } = useRoadmap();
 
-  const roadmapItems = (roadmap as RoadmapItem[] | undefined) ?? [];
+ const roadmapItems = Array.isArray(roadmap) ? roadmap : [];
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,7 +83,7 @@ export default function RoadmapPage() {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', alignItems: 'start' }}>
           {COLUMNS.map((col) => {
-            const items = roadmapItems.filter((r) => r.status === col.status);
+            const items = roadmapItems?.filter((r) => r.status === col.status);
             return (
               <div key={col.status} style={{ background: '#F8F9FA', borderRadius: '0.875rem', padding: '1rem', border: '1px solid #e9ecef' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.875rem' }}>

@@ -39,9 +39,9 @@ export default function AdminDashboardPage() {
 
   // Roadmap
   const { roadmap, isLoading: rmLoading } = useRoadmap();
-  const roadmapItems = (roadmap as { id: string; status: RoadmapStatus }[] | undefined) ?? [];
-  const committedCount = roadmapItems.filter((r) => r.status === RoadmapStatus.COMMITTED).length;
-  const shippedCount = roadmapItems.filter((r) => r.status === RoadmapStatus.SHIPPED).length;
+  const roadmapItems = Array.isArray(roadmap) ? roadmap : [];
+  const committedCount = roadmapItems?.filter((r) => r.status === RoadmapStatus.COMMITTED).length;
+  const shippedCount = roadmapItems?.filter((r) => r.status === RoadmapStatus.SHIPPED).length;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>

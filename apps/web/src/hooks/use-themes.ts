@@ -18,8 +18,8 @@ export const useThemes = (themeId?: string) => {
         return apiClient.themes.list(workspaceId, { ...params, page: pageParam });
       },
       getNextPageParam: (lastPage) => {
-        if (lastPage.meta.page < lastPage.meta.totalPages) {
-          return lastPage.meta.page + 1;
+        if (lastPage?.meta?.page < lastPage?.meta?.totalPages) {
+          return lastPage?.meta?.page + 1;
         }
         return undefined;
       },

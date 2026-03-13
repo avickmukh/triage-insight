@@ -96,6 +96,7 @@ function VoteButton({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function PublicFeedbackListPage() {
+  console.log("Rendering PublicFeedbackListPage");
   const params = useParams();
   const orgSlug = (Array.isArray(params.orgSlug) ? params.orgSlug[0] : params.orgSlug) ?? "";
 
