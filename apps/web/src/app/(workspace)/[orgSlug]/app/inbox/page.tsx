@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useFeedback } from '@/hooks/use-feedback';
 import { Feedback, FeedbackStatus } from '@/lib/api-types';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { appRoutes } from '@/lib/routes';
 
 const CARD: React.CSSProperties = {
   background: '#fff',
@@ -30,6 +32,9 @@ const TABS: { label: string; value: FeedbackStatus | undefined }[] = [
 ];
 
 export default function InboxPage() {
+  const params = useParams();
+  const slug = (Array.isArray(params.orgSlug) ? params.orgSlug[0] : params.orgSlug) ?? '';
+  const r = appRoutes(slug);
   const [activeStatus, setActiveStatus] = useState<FeedbackStatus | undefined>(undefined);
   const { useFeedbackList } = useFeedback();
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useFeedbackList({
@@ -83,7 +88,7 @@ export default function InboxPage() {
               return (
                 <Link
                   key={fb.id}
-                  href={`/admin/inbox/${fb.id}`}
+                  href={r.inboxItem(fb.id)}
                   style={{
                     textDecoration: 'none',
                     display: 'flex',

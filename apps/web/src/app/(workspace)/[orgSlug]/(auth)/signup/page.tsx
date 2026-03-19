@@ -5,6 +5,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useAuth } from "@/lib/auth";
+import { useParams } from "next/navigation";
+import { workspaceAuthRoutes } from "@/lib/routes";
 
 const signupSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
@@ -40,6 +42,9 @@ const labelStyle: React.CSSProperties = {
 
 export default function SignupPage() {
   const { signUp } = useAuth();
+  const params = useParams();
+  const slug = (Array.isArray(params.orgSlug) ? params.orgSlug[0] : params.orgSlug) ?? '';
+  const wa = workspaceAuthRoutes(slug);
   const {
     register,
     handleSubmit,
@@ -195,7 +200,7 @@ export default function SignupPage() {
             }}
           >
             Already have an account?{" "}
-            <Link href="/login" style={{ color: "#20A4A4", textDecoration: "none", fontWeight: 600 }}>
+            <Link href={wa.login} style={{ color: "#20A4A4", textDecoration: "none", fontWeight: 600 }}>
               Sign in
             </Link>
           </p>

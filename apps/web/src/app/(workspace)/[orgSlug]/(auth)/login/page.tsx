@@ -5,6 +5,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useAuth } from "@/lib/auth";
+import { useParams } from "next/navigation";
+import { workspaceAuthRoutes } from "@/lib/routes";
 
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email"),
@@ -15,6 +17,9 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const { login } = useAuth();
+  const params = useParams();
+  const slug = (Array.isArray(params.orgSlug) ? params.orgSlug[0] : params.orgSlug) ?? '';
+  const wa = workspaceAuthRoutes(slug);
   const {
     register,
     handleSubmit,
@@ -139,7 +144,7 @@ export default function LoginPage() {
                   Password
                 </label>
                 <Link
-                  href="/reset-password"
+                  href={wa.resetPassword}
                   style={{ fontSize: "0.78rem", color: "#20A4A4", textDecoration: "none" }}
                 >
                   Forgot password?
@@ -198,7 +203,7 @@ export default function LoginPage() {
             }}
           >
             No account?{" "}
-            <Link href="/signup" style={{ color: "#20A4A4", textDecoration: "none", fontWeight: 600 }}>
+            <Link href={wa.signup} style={{ color: "#20A4A4", textDecoration: "none", fontWeight: 600 }}>
               Create one free
             </Link>
           </p>

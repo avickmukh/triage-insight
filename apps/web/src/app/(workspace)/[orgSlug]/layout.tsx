@@ -3,9 +3,10 @@
 import { useEffect } from "react";
 import { useWorkspace } from "@/hooks/use-workspace";
 import { useAuth } from "@/lib/auth";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { WorkspaceStatus } from "@/lib/api-types";
 import Link from "next/link";
+import { appRoutes, orgAdminRoutes } from "@/lib/routes";
 
 export default function AppLayout({
   children,
@@ -15,6 +16,10 @@ export default function AppLayout({
   const { workspace, isLoading } = useWorkspace();
   const { logout } = useAuth();
   const router = useRouter();
+  const params = useParams();
+  const slug = (Array.isArray(params.orgSlug) ? params.orgSlug[0] : params.orgSlug) ?? '';
+  const r = appRoutes(slug);
+  const ra = orgAdminRoutes(slug);
 
   useEffect(() => {
     if (!isLoading && workspace && workspace.status !== WorkspaceStatus.ACTIVE) {
@@ -59,7 +64,7 @@ export default function AppLayout({
         >
           {/* Logo */}
           <Link
-            href="/admin"
+            href={r.dashboard}
             style={{
               color: "#fff",
               fontWeight: 700,
@@ -72,10 +77,11 @@ export default function AppLayout({
 
           {/* Menu */}
           <nav style={{ display: "flex", gap: "1.5rem", alignItems: "center" }}>
-            <Link href="/admin/inbox" style={navStyle}>Inbox</Link>
-            <Link href="/admin/themes" style={navStyle}>Themes</Link>
-            <Link href="/admin/roadmap" style={navStyle}>Roadmap</Link>
-            <Link href="/admin" style={navStyle}>Dashboard</Link>
+            <Link href={r.inbox} style={navStyle}>Inbox</Link>
+            <Link href={r.themes} style={navStyle}>Themes</Link>
+            <Link href={r.roadmap} style={navStyle}>Roadmap</Link>
+            <Link href={r.dashboard} style={navStyle}>Dashboard</Link>
+            <Link href={ra.settings} style={navStyle}>Settings</Link>
 
             <button
               onClick={logout}

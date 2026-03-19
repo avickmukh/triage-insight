@@ -226,14 +226,16 @@ api.interceptors.response.use(
          if (typeof window !== "undefined") {
             const path = window.location.pathname;
 
-            const protectedRoutes = ["/admin", "/dashboard", "/settings"];
-
-            const isProtected = protectedRoutes.some((route) =>
-              path.startsWith(route)
-            );
+            // Match /:orgSlug/app/* and /:orgSlug/admin/* (workspace-scoped protected routes)
+            const isProtected =
+              /^\/[^/]+\/app(\/|$)/.test(path) ||
+              /^\/[^/]+\/admin(\/|$)/.test(path);
 
             if (isProtected) {
-              window.location.href = "/login";
+              // Redirect to workspace login if we can extract the slug, else global login
+              const slugMatch = path.match(/^\/([^/]+)\//); 
+              const slug = slugMatch ? slugMatch[1] : null;
+              window.location.href = slug ? `/${slug}/login` : '/login';
             }
          }
         }

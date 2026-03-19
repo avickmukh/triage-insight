@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useThemes } from '@/hooks/use-themes';
 import { Theme, ThemeStatus, CreateThemeDto } from '@/lib/api-types';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { appRoutes } from '@/lib/routes';
 
 const CARD: React.CSSProperties = {
   background: '#fff',
@@ -20,6 +22,9 @@ const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
 };
 
 export default function ThemesPage() {
+  const params = useParams();
+  const slug = (Array.isArray(params.orgSlug) ? params.orgSlug[0] : params.orgSlug) ?? '';
+  const r = appRoutes(slug);
   const [showForm, setShowForm] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
@@ -86,7 +91,7 @@ export default function ThemesPage() {
             {allThemes.map((theme) => {
               const sc = STATUS_COLORS[theme.status] ?? { bg: '#f0f4f8', color: '#6C757D' };
               return (
-                <Link key={theme.id} href={`/admin/themes/${theme.id}`} style={{ textDecoration: 'none', display: 'block', padding: '1.25rem', background: '#F8F9FA', borderRadius: '0.75rem', border: '1px solid #e9ecef' }}>
+                <Link key={theme.id} href={r.themeItem(theme.id)} style={{ textDecoration: 'none', display: 'block', padding: '1.25rem', background: '#F8F9FA', borderRadius: '0.75rem', border: '1px solid #e9ecef' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
                     <p style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0A2540' }}>{theme.title}</p>
                     <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '999px', background: sc.bg, color: sc.color, flexShrink: 0, marginLeft: '0.5rem' }}>{theme.status}</span>

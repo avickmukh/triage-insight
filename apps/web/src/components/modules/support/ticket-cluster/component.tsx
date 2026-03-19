@@ -3,12 +3,15 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from "@/components/shared/ui/button";
 import { Badge } from "@/components/shared/ui/badge";
 import Link from "next/link";
+import { appRoutes } from "@/lib/routes";
 
 interface TicketClusterProps {
   cluster: TicketClusterData;
+  orgSlug: string;
 }
 
-export function TicketCluster({ cluster }: TicketClusterProps) {
+export function TicketCluster({ cluster, orgSlug }: TicketClusterProps) {
+  const r = appRoutes(orgSlug);
   return (
     <Card>
       <CardHeader>
@@ -21,7 +24,7 @@ export function TicketCluster({ cluster }: TicketClusterProps) {
         {cluster.correlatedThemeId ? (
           <div className="flex items-center gap-2">
             <span className="text-sm">Correlated Theme:</span>
-            <Link href={`/admin/themes/${cluster.correlatedThemeId}`}>
+            <Link href={r.themeItem(cluster.correlatedThemeId!)}>
               <Badge variant="secondary">{cluster.correlatedThemeTitle}</Badge>
             </Link>
           </div>

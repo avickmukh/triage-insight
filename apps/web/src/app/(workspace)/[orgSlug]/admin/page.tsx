@@ -5,6 +5,8 @@ import { useThemes } from '@/hooks/use-themes';
 import { useRoadmap } from '@/hooks/use-roadmap';
 import { FeedbackStatus, RoadmapStatus, ThemeStatus } from '@/lib/api-types';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { appRoutes } from '@/lib/routes';
 
 const CARD: React.CSSProperties = {
   background: '#fff',
@@ -25,6 +27,9 @@ function StatCard({ label, value, sub, accent }: { label: string; value: string 
 }
 
 export default function AdminDashboardPage() {
+  const params = useParams();
+  const slug = (Array.isArray(params.orgSlug) ? params.orgSlug[0] : params.orgSlug) ?? '';
+  const r = appRoutes(slug);
   // Feedback
   const { useFeedbackList } = useFeedback();
   const feedbackQuery = useFeedbackList({});
@@ -60,7 +65,7 @@ export default function AdminDashboardPage() {
       <div style={CARD}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
           <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#0A2540' }}>Recent Feedback</h2>
-          <Link href="/admin/inbox" style={{ fontSize: '0.82rem', color: '#20A4A4', textDecoration: 'none', fontWeight: 600 }}>View all →</Link>
+          <Link href={r.inbox} style={{ fontSize: '0.82rem', color: '#20A4A4', textDecoration: 'none', fontWeight: 600 }}>View all →</Link>
         </div>
         {feedbackQuery.isLoading ? (
           <p style={{ color: '#6C757D', fontSize: '0.9rem' }}>Loading…</p>
@@ -69,7 +74,7 @@ export default function AdminDashboardPage() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {recentFeedback.map((fb) => (
-              <Link key={fb.id} href={`/admin/inbox/${fb.id}`} style={{ textDecoration: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '0.875rem 1rem', background: '#F8F9FA', borderRadius: '0.6rem', border: '1px solid #e9ecef' }}>
+              <Link key={fb.id} href={r.inboxItem(fb.id)} style={{ textDecoration: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '0.875rem 1rem', background: '#F8F9FA', borderRadius: '0.6rem', border: '1px solid #e9ecef' }}>
                 <div>
                   <p style={{ fontSize: '0.9rem', fontWeight: 600, color: '#0A2540', marginBottom: '0.2rem' }}>{fb.title}</p>
                   {fb.description && <p style={{ fontSize: '0.8rem', color: '#6C757D', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 400 }}>{fb.description}</p>}
@@ -85,10 +90,10 @@ export default function AdminDashboardPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
         {[
-          { href: '/admin/themes', label: 'Manage Themes', desc: 'Cluster and organise feedback' },
-          { href: '/admin/roadmap', label: 'View Roadmap', desc: 'Track planned and shipped work' },
-          { href: '/admin/voice', label: 'Voice Feedback', desc: 'Upload and triage call recordings' },
-          { href: '/admin/digest', label: 'Weekly Digest', desc: 'AI-generated feedback summary' },
+          { href: r.themes,  label: 'Manage Themes',  desc: 'Cluster and organise feedback' },
+          { href: r.roadmap, label: 'View Roadmap',   desc: 'Track planned and shipped work' },
+          { href: r.voice,   label: 'Voice Feedback', desc: 'Upload and triage call recordings' },
+          { href: r.digest,  label: 'Weekly Digest',  desc: 'AI-generated feedback summary' },
         ].map((q) => (
           <Link key={q.href} href={q.href} style={{ ...CARD, textDecoration: 'none', display: 'block', borderLeft: '3px solid #20A4A4' }}>
             <p style={{ fontSize: '0.9rem', fontWeight: 700, color: '#0A2540', marginBottom: '0.25rem' }}>{q.label}</p>
