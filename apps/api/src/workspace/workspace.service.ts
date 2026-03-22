@@ -6,10 +6,11 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { WorkspaceRole } from '@prisma/client';
+import { DomainVerificationStatus, WorkspaceRole } from '@prisma/client';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 import { InviteMemberDto } from './dto/invite-member.dto';
 import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
+import { SetDomainDto } from './dto/set-domain.dto';
 import * as crypto from 'crypto';
 
 /** SHA-256 hash of a raw token string (hex). */
@@ -195,5 +196,148 @@ export class WorkspaceService {
     if (!invite) throw new NotFoundException('Invite not found.');
     await this.prisma.workspaceInvite.delete({ where: { id: inviteId } });
     return { message: 'Invite revoked.' };
+  }
+
+  // ── Domain management ────────────────────────────────────────────────────────
+
+  /**
+   * Returns the domain settings for the calling user's workspace.
+   * Readable by all authenticated members.
+   */
+  async getDomainSettings(userId: string) {
+    const workspace = await this.getCurrentWorkspace(userId);
+    return {
+      customDomain: workspace.customDomain ?? null,
+      domainVerificationStatus: workspace.domainVerificationStatus,
+      domainVerificationToken: workspace.domainVerificationToken ?? null,
+      domainLastCheckedAt: workspace.domainLastCheckedAt ?? null,
+      defaultDomain: `${workspace.slug}.triageinsight.com`,
+    };
+  }
+
+  /**
+   * Sets or updates the custom domain for the calling user's workspace.
+   *
+   * - Normalises the hostname to lowercase.
+   * - Rejects domains already claimed by another workspace.
+   * - Generates a fresh TXT verification token and resets status to PENDING.
+   * - Does NOT perform live DNS lookup (that is triggered by verifyDomain).
+   */
+  async setDomain(adminUserId: string, dto: SetDomainDto) {
+    const workspace = await this.getCurrentWorkspace(adminUserId);
+    const normalised = dto.customDomain.toLowerCase().trim();
+
+    // Prevent cross-workspace domain hijacking
+    const existing = await this.prisma.workspace.findUnique({
+      where: { customDomain: normalised },
+    });
+    if (existing && existing.id !== workspace.id) {
+      throw new ConflictException(
+        'This domain is already associated with another workspace.',
+      );
+    }
+
+    // Generate a fresh verification token (TXT record value)
+    const verificationToken = `triage-verify=${crypto.randomUUID()}`;
+
+    const updated = await this.prisma.workspace.update({
+      where: { id: workspace.id },
+      data: {
+        customDomain: normalised,
+        domainVerificationStatus: DomainVerificationStatus.PENDING,
+        domainVerificationToken: verificationToken,
+        domainLastCheckedAt: null,
+      },
+    });
+
+    return {
+      customDomain: updated.customDomain,
+      domainVerificationStatus: updated.domainVerificationStatus,
+      domainVerificationToken: updated.domainVerificationToken,
+      domainLastCheckedAt: updated.domainLastCheckedAt,
+      defaultDomain: `${workspace.slug}.triageinsight.com`,
+    };
+  }
+
+  /**
+   * Triggers a domain verification check.
+   *
+   * MVP implementation: marks the attempt timestamp and returns the current
+   * state. Full DNS TXT lookup can be wired in here once a DNS resolver
+   * library is added (e.g. `dns.promises.resolveTxt`).
+   *
+   * The caller should poll this endpoint after adding the TXT record to DNS.
+   */
+  async verifyDomain(adminUserId: string) {
+    const workspace = await this.getCurrentWorkspace(adminUserId);
+
+    if (!workspace.customDomain || !workspace.domainVerificationToken) {
+      throw new BadRequestException(
+        'No custom domain is configured. Set a domain before verifying.',
+      );
+    }
+
+    const now = new Date();
+
+    /*
+     * TODO: Replace this stub with a real DNS TXT lookup:
+     *
+     *   import { promises as dns } from 'dns';
+     *   const records = await dns.resolveTxt(workspace.customDomain).catch(() => []);
+     *   const flat = records.flat();
+     *   const verified = flat.includes(workspace.domainVerificationToken);
+     *
+     * Then set status to VERIFIED or FAILED accordingly.
+     */
+    const verified = false; // stub — always PENDING until DNS lookup is wired
+
+    const newStatus = verified
+      ? DomainVerificationStatus.VERIFIED
+      : DomainVerificationStatus.PENDING;
+
+    const updated = await this.prisma.workspace.update({
+      where: { id: workspace.id },
+      data: {
+        domainVerificationStatus: newStatus,
+        domainLastCheckedAt: now,
+      },
+    });
+
+    return {
+      customDomain: updated.customDomain,
+      domainVerificationStatus: updated.domainVerificationStatus,
+      domainVerificationToken: updated.domainVerificationToken,
+      domainLastCheckedAt: updated.domainLastCheckedAt,
+      defaultDomain: `${workspace.slug}.triageinsight.com`,
+    };
+  }
+
+  /**
+   * Removes the custom domain from the workspace and resets all domain fields.
+   */
+  async removeDomain(adminUserId: string) {
+    const workspace = await this.getCurrentWorkspace(adminUserId);
+
+    if (!workspace.customDomain) {
+      throw new BadRequestException('No custom domain is currently configured.');
+    }
+
+    const updated = await this.prisma.workspace.update({
+      where: { id: workspace.id },
+      data: {
+        customDomain: null,
+        domainVerificationStatus: DomainVerificationStatus.UNVERIFIED,
+        domainVerificationToken: null,
+        domainLastCheckedAt: null,
+      },
+    });
+
+    return {
+      customDomain: updated.customDomain,
+      domainVerificationStatus: updated.domainVerificationStatus,
+      domainVerificationToken: updated.domainVerificationToken,
+      domainLastCheckedAt: updated.domainLastCheckedAt,
+      defaultDomain: `${workspace.slug}.triageinsight.com`,
+    };
   }
 }

@@ -542,6 +542,35 @@ export interface UpdateBillingEmailDto {
   billingEmail: string;
 }
 
+// --- Domain Management ---
+export enum DomainVerificationStatus {
+  UNVERIFIED = 'UNVERIFIED',
+  PENDING = 'PENDING',
+  VERIFIED = 'VERIFIED',
+  FAILED = 'FAILED',
+}
+
+/**
+ * Returned by GET/PUT/POST/DELETE /workspace/current/domain.
+ * Contains the full domain state for the calling user's workspace.
+ */
+export interface DomainSettings {
+  /** The default slug-based domain, e.g. "acme.triageinsight.com" */
+  defaultDomain: string;
+  /** Custom domain set by the admin, or null if not configured */
+  customDomain: string | null;
+  domainVerificationStatus: DomainVerificationStatus;
+  /** TXT record value the admin must add to their DNS zone */
+  domainVerificationToken: string | null;
+  /** ISO timestamp of the last verification attempt, or null */
+  domainLastCheckedAt: string | null;
+}
+
+export interface SetDomainDto {
+  /** Bare hostname, no protocol or trailing slash, e.g. "feedback.acme.com" */
+  customDomain: string;
+}
+
 // --- API Error ---
 export interface ApiError {
   statusCode: number;

@@ -210,6 +210,13 @@ enum PublicPortalVisibility {
   PRIVATE
 }
 
+enum DomainVerificationStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  FAILED
+}
+
 //
 // PLATFORM / AUTH
 //
@@ -271,6 +278,15 @@ model Workspace {
   trialEndsAt           DateTime?
   currentPeriodStart    DateTime?
   currentPeriodEnd      DateTime?
+
+  /// Custom domain set by the workspace admin (e.g. "feedback.acme.com")
+  customDomain             String?                      @unique
+  /// Current DNS verification state
+  domainVerificationStatus DomainVerificationStatus     @default(UNVERIFIED)
+  /// TXT record challenge value the admin must add to their DNS
+  domainVerificationToken  String?
+  /// Timestamp of the last verification attempt
+  domainLastCheckedAt      DateTime?
 
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt

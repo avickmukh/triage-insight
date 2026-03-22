@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Patch,
   Delete,
   Body,
@@ -13,6 +14,7 @@ import { WorkspaceService } from './workspace.service';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 import { InviteMemberDto } from './dto/invite-member.dto';
 import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
+import { SetDomainDto } from './dto/set-domain.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { Roles } from './decorators/roles.decorator';
@@ -128,5 +130,55 @@ export class WorkspaceController {
     @Body() dto: UpdateMemberRoleDto,
   ) {
     return this.workspaceService.updateMemberRole(req.user.sub, userId, dto);
+  }
+
+  // ── Domain management ────────────────────────────────────────────────────────
+
+  /**
+   * GET /workspace/current/domain
+   * Returns domain settings for the calling user's workspace.
+   * Accessible to all authenticated members (ADMIN, EDITOR, VIEWER).
+   */
+  @Get('current/domain')
+  getDomainSettings(@Req() req: AuthenticatedRequest) {
+    return this.workspaceService.getDomainSettings(req.user.sub);
+  }
+
+  /**
+   * PUT /workspace/current/domain
+   * Sets or replaces the custom domain. ADMIN only.
+   * Generates a fresh TXT verification token and resets status to PENDING.
+   */
+  @Put('current/domain')
+  @UseGuards(RolesGuard)
+  @Roles(WorkspaceRole.ADMIN)
+  setDomain(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: SetDomainDto,
+  ) {
+    return this.workspaceService.setDomain(req.user.sub, dto);
+  }
+
+  /**
+   * POST /workspace/current/domain/verify
+   * Triggers a verification check against DNS. ADMIN only.
+   * MVP: records the attempt timestamp; full DNS lookup is a TODO stub.
+   */
+  @Post('current/domain/verify')
+  @UseGuards(RolesGuard)
+  @Roles(WorkspaceRole.ADMIN)
+  verifyDomain(@Req() req: AuthenticatedRequest) {
+    return this.workspaceService.verifyDomain(req.user.sub);
+  }
+
+  /**
+   * DELETE /workspace/current/domain
+   * Removes the custom domain and resets all domain fields. ADMIN only.
+   */
+  @Delete('current/domain')
+  @UseGuards(RolesGuard)
+  @Roles(WorkspaceRole.ADMIN)
+  removeDomain(@Req() req: AuthenticatedRequest) {
+    return this.workspaceService.removeDomain(req.user.sub);
   }
 }

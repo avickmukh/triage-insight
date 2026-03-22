@@ -47,6 +47,8 @@ import {
   User,
   Workspace,
   WorkspaceMember,
+  DomainSettings,
+  SetDomainDto,
 } from "@/lib/api-types";
 
 const getApiBaseUrl = () => {
@@ -459,13 +461,44 @@ const apiClient = {
      */
     getStatus: (): Promise<BillingStatusResponse> =>
       api.get('/billing/status').then(handleResponse),
-
     /**
      * PATCH /billing/email
      * Updates the billing contact email. ADMIN only.
      */
     updateEmail: (data: UpdateBillingEmailDto): Promise<{ billingEmail: string | null }> =>
       api.patch('/billing/email', data).then(handleResponse),
+  },
+
+  domain: {
+    /**
+     * GET /workspace/current/domain
+     * Returns domain settings for the calling user's workspace.
+     * Accessible to all authenticated members.
+     */
+    getSettings: (): Promise<DomainSettings> =>
+      api.get('/workspace/current/domain').then(handleResponse),
+
+    /**
+     * PUT /workspace/current/domain
+     * Sets or replaces the custom domain. ADMIN only.
+     * Returns updated DomainSettings with a fresh verification token.
+     */
+    setDomain: (data: SetDomainDto): Promise<DomainSettings> =>
+      api.put('/workspace/current/domain', data).then(handleResponse),
+
+    /**
+     * POST /workspace/current/domain/verify
+     * Triggers a verification check. ADMIN only.
+     */
+    verify: (): Promise<DomainSettings> =>
+      api.post('/workspace/current/domain/verify').then(handleResponse),
+
+    /**
+     * DELETE /workspace/current/domain
+     * Removes the custom domain and resets all domain fields. ADMIN only.
+     */
+    remove: (): Promise<DomainSettings> =>
+      api.delete('/workspace/current/domain').then(handleResponse),
   },
 };
 
