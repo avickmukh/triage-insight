@@ -1,7 +1,10 @@
 'use client';
 import React from 'react';
+import { useParams } from 'next/navigation';
 import { useFeatureFlag } from '@/hooks/use-feature-flag';
-import { PlanConfig, BillingPlan } from '@/lib/api-types';
+import { useCurrentMemberRole } from '@/hooks/use-workspace';
+import { PlanConfig, WorkspaceRole } from '@/lib/api-types';
+import { appRoutes, orgAdminRoutes } from '@/lib/routes';
 
 type BooleanFeatureKey = keyof Pick<
   PlanConfig,
@@ -25,7 +28,7 @@ interface PlanGateProps {
   feature: BooleanFeatureKey;
   /** Required plan name shown in the upgrade prompt */
   requiredPlan?: string;
-  /** Upgrade link — defaults to the billing admin page */
+  /** Override the upgrade link (optional — auto-resolved by role if omitted) */
   upgradeHref?: string;
   children: React.ReactNode;
 }
@@ -36,13 +39,23 @@ interface PlanGateProps {
  * Wraps a page or section that requires a specific plan feature.
  * Shows an upgrade prompt when the feature is not enabled on the current plan.
  *
+ * Role-aware upgrade link:
+ *   ADMIN        → /:orgSlug/admin/billing   (direct billing management)
+ *   EDITOR/VIEWER → /:orgSlug/app/upgrade    (plan comparison + request page)
+ *
  * Usage:
  *   <PlanGate feature="weeklyDigest" requiredPlan="Business">
  *     <DigestContent />
  *   </PlanGate>
  */
 export function PlanGate({ feature, requiredPlan, upgradeHref, children }: PlanGateProps) {
-  const { enabled, isLoading, plan } = useFeatureFlag(feature);
+  const { enabled, isLoading: flagLoading, plan } = useFeatureFlag(feature);
+  const { role, isLoading: roleLoading } = useCurrentMemberRole();
+  const params = useParams();
+  const slug =
+    (Array.isArray(params.orgSlug) ? params.orgSlug[0] : params.orgSlug) ?? '';
+
+  const isLoading = flagLoading || roleLoading;
 
   if (isLoading) {
     return (
@@ -53,12 +66,20 @@ export function PlanGate({ feature, requiredPlan, upgradeHref, children }: PlanG
   }
 
   if (!enabled) {
+    // Resolve upgrade destination based on role
+    const resolvedHref =
+      upgradeHref ??
+      (role === WorkspaceRole.ADMIN
+        ? orgAdminRoutes(slug).billing
+        : appRoutes(slug).upgrade);
+
     return (
       <UpgradePrompt
         currentPlan={plan}
         requiredPlan={requiredPlan}
         feature={feature}
-        upgradeHref={upgradeHref}
+        upgradeHref={resolvedHref}
+        isAdmin={role === WorkspaceRole.ADMIN}
       />
     );
   }
@@ -71,11 +92,13 @@ function UpgradePrompt({
   requiredPlan,
   feature,
   upgradeHref,
+  isAdmin,
 }: {
   currentPlan: string | null;
   requiredPlan?: string;
   feature: string;
-  upgradeHref?: string;
+  upgradeHref: string;
+  isAdmin: boolean;
 }) {
   const featureLabels: Record<string, string> = {
     weeklyDigest: 'Weekly AI Digest',
@@ -91,7 +114,6 @@ function UpgradePrompt({
   };
 
   const label = featureLabels[feature] ?? feature;
-  const href = upgradeHref ?? 'admin/billing';
 
   return (
     <div
@@ -126,7 +148,7 @@ function UpgradePrompt({
         {label} is not available on your plan
       </h2>
 
-      <p style={{ color: '#6C757D', maxWidth: 420, lineHeight: 1.6, marginBottom: '1.75rem' }}>
+      <p style={{ color: '#6C757D', maxWidth: 440, lineHeight: 1.6, marginBottom: '0.75rem' }}>
         {currentPlan
           ? `Your current plan is ${currentPlan}.`
           : 'Your current plan does not include this feature.'}{' '}
@@ -135,20 +157,28 @@ function UpgradePrompt({
           : `Upgrade your plan to unlock ${label}.`}
       </p>
 
+      {/* Role-specific sub-message */}
+      {!isAdmin && (
+        <p style={{ color: '#9CA3AF', fontSize: '0.85rem', maxWidth: 380, marginBottom: '1.5rem' }}>
+          Contact your workspace admin to upgrade, or view plan options below.
+        </p>
+      )}
+
       <a
-        href={href}
+        href={upgradeHref}
         style={{
           display: 'inline-block',
           padding: '0.65rem 1.75rem',
-          background: '#0A2540',
+          background: '#20A4A4',
           color: '#fff',
           borderRadius: '0.5rem',
           fontWeight: 600,
           fontSize: '0.95rem',
           textDecoration: 'none',
+          marginTop: isAdmin ? '1rem' : 0,
         }}
       >
-        View upgrade options
+        {isAdmin ? 'Manage billing' : 'View upgrade options'}
       </a>
     </div>
   );

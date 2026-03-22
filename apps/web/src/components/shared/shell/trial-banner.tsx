@@ -12,7 +12,7 @@ import { BillingStatus, TrialStatus } from '@/lib/api-types';
  *
  * Rendered inside the workspace app shell layout.
  */
-export function TrialBanner({ orgSlug }: { orgSlug: string }) {
+export function TrialBanner({ orgSlug, isAdmin }: { orgSlug: string; isAdmin?: boolean }) {
   const { billing, isLoading } = useBilling();
 
   if (isLoading || !billing) return null;
@@ -56,7 +56,7 @@ export function TrialBanner({ orgSlug }: { orgSlug: string }) {
           : `Your ${planName} trial ends in ${daysLeft} day${daysLeft === 1 ? '' : 's'}.`}
       </span>
       <a
-        href={`/${orgSlug}/admin/billing`}
+        href={isAdmin ? `/${orgSlug}/admin/billing` : `/${orgSlug}/app/upgrade`}
         style={{
           padding: '0.3rem 0.9rem',
           background: trialExpired ? '#c53030' : '#1e40af',

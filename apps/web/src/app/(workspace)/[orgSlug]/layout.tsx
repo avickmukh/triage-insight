@@ -1,99 +1,209 @@
 'use client';
+import { useEffect } from 'react';
+import { usePathname, useRouter, useParams } from 'next/navigation';
+import Link from 'next/link';
+import { useWorkspace, useCurrentMemberRole } from '@/hooks/use-workspace';
+import { useAuth } from '@/lib/auth';
+import { WorkspaceStatus, WorkspaceRole } from '@/lib/api-types';
+import { appRoutes, orgAdminRoutes } from '@/lib/routes';
 
-import { useEffect } from "react";
-import { useWorkspace } from "@/hooks/use-workspace";
-import { useAuth } from "@/lib/auth";
-import { useRouter, useParams } from "next/navigation";
-import { WorkspaceStatus } from "@/lib/api-types";
-import Link from "next/link";
-import { appRoutes, orgAdminRoutes } from "@/lib/routes";
-
-export default function AppLayout({
+/**
+ * /:orgSlug/* — Root workspace layout
+ *
+ * Renders the workspace top-nav for all authenticated workspace pages.
+ * Auth pages (login, signup, etc.) are nested under /:orgSlug/(auth)/ which
+ * has its own layout that overrides this one — so this header is only shown
+ * for authenticated app and admin pages.
+ *
+ * Role-aware nav:
+ *   ADMIN  → Inbox · Themes · Roadmap · Dashboard | Members · Billing · Settings · Logout
+ *   EDITOR/VIEWER → Inbox · Themes · Roadmap · Dashboard | Profile · Logout
+ *
+ * Portal pages (/:orgSlug/feedback, /:orgSlug/roadmap) have their own layout
+ * and do not render this header.
+ */
+export default function OrgSlugLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { workspace, isLoading } = useWorkspace();
+  const { workspace, isLoading: wsLoading } = useWorkspace();
+  const { role, isLoading: roleLoading } = useCurrentMemberRole();
   const { logout } = useAuth();
   const router = useRouter();
   const params = useParams();
-  const slug = (Array.isArray(params.orgSlug) ? params.orgSlug[0] : params.orgSlug) ?? '';
+  const pathname = usePathname();
+
+  const slug =
+    (Array.isArray(params.orgSlug) ? params.orgSlug[0] : params.orgSlug) ?? '';
+
   const r = appRoutes(slug);
   const ra = orgAdminRoutes(slug);
 
-  useEffect(() => {
-    if (!isLoading && workspace && workspace.status !== WorkspaceStatus.ACTIVE) {
-      router.push("/activation");
-    }
-  }, [workspace, isLoading, router]);
+  // ── Auth route detection ───────────────────────────────────────────────────
+  // Auth pages have their own layout that overrides this one. As a safety net,
+  // suppress the nav if we're on an auth path.
+  const isAuthRoute =
+    pathname.endsWith('/login') ||
+    pathname.endsWith('/signup') ||
+    pathname.includes('/reset-password') ||
+    pathname.includes('/verify');
 
-  if (isLoading) {
+  // ── Portal route detection ─────────────────────────────────────────────────
+  // Portal pages have their own layout under /:orgSlug/portal/
+  const isPortalRoute =
+    pathname.includes('/feedback') || pathname.includes('/roadmap');
+
+  // ── Workspace status redirect ──────────────────────────────────────────────
+  useEffect(() => {
+    if (!wsLoading && workspace && workspace.status !== WorkspaceStatus.ACTIVE) {
+      router.push('/activation');
+    }
+  }, [workspace, wsLoading, router]);
+
+  // ── Suppress header for auth / portal routes ───────────────────────────────
+  if (isAuthRoute || isPortalRoute) {
+    return <>{children}</>;
+  }
+
+  // ── Loading state ──────────────────────────────────────────────────────────
+  if (wsLoading || roleLoading) {
     return (
-      <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        Loading...
+      <div
+        style={{
+          height: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontFamily: "Inter, 'Helvetica Neue', Arial, sans-serif",
+          color: '#6C757D',
+        }}
+      >
+        Loading…
       </div>
     );
   }
 
+  const isAdmin = role === WorkspaceRole.ADMIN;
+
   return (
     <div
       style={{
-        minHeight: "100vh",
-        background: "#F8F9FA",
+        minHeight: '100vh',
+        background: '#F8F9FA',
         fontFamily: "Inter, 'Helvetica Neue', Arial, sans-serif",
-        color: "#0A2540",
+        color: '#0A2540',
       }}
     >
-      {/* Top Navigation */}
+      {/* ── Top Navigation ─────────────────────────────────────────────── */}
       <header
         style={{
-          background: "#0A2540",
-          borderBottom: "1px solid rgba(255,255,255,0.08)",
-          padding: "0 1.5rem",
+          background: '#0A2540',
+          borderBottom: '1px solid rgba(255,255,255,0.08)',
+          padding: '0 1.5rem',
+          position: 'sticky',
+          top: 0,
+          zIndex: 100,
         }}
       >
         <div
           style={{
             maxWidth: 1200,
-            margin: "0 auto",
+            margin: '0 auto',
             height: 64,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
           }}
         >
           {/* Logo */}
           <Link
             href={r.dashboard}
             style={{
-              color: "#fff",
-              fontWeight: 700,
-              fontSize: "1rem",
-              textDecoration: "none",
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              textDecoration: 'none',
             }}
           >
-            TriageInsight
+            <div
+              style={{
+                width: 28,
+                height: 28,
+                background: 'linear-gradient(135deg, #20A4A4 0%, #1a8f8f 100%)',
+                borderRadius: 6,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path
+                  d="M3 4h10M3 8h7M3 12h5"
+                  stroke="white"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </div>
+            <span
+              style={{
+                color: '#fff',
+                fontWeight: 700,
+                fontSize: '1rem',
+                letterSpacing: '-0.01em',
+              }}
+            >
+              Triage<span style={{ color: '#20A4A4' }}>Insight</span>
+            </span>
           </Link>
 
-          {/* Menu */}
-          <nav style={{ display: "flex", gap: "1.5rem", alignItems: "center" }}>
-            <Link href={r.inbox} style={navStyle}>Inbox</Link>
-            <Link href={r.themes} style={navStyle}>Themes</Link>
-            <Link href={r.roadmap} style={navStyle}>Roadmap</Link>
-            <Link href={r.dashboard} style={navStyle}>Dashboard</Link>
-            <Link href={ra.settings} style={navStyle}>Settings</Link>
+          {/* ── Navigation links ─────────────────────────────────────── */}
+          <nav
+            style={{
+              display: 'flex',
+              gap: '0.25rem',
+              alignItems: 'center',
+            }}
+          >
+            {/* ── App nav (all roles) ── */}
+            <NavLink href={r.inbox} pathname={pathname}>Inbox</NavLink>
+            <NavLink href={r.themes} pathname={pathname}>Themes</NavLink>
+            <NavLink href={r.roadmap} pathname={pathname}>Roadmap</NavLink>
+            <NavLink href={r.dashboard} pathname={pathname}>Dashboard</NavLink>
 
+            {/* ── Admin-only separator + links ── */}
+            {isAdmin && (
+              <>
+                <Divider />
+                <NavLink href={ra.members} pathname={pathname}>Members</NavLink>
+                <NavLink href={ra.billing} pathname={pathname}>Billing</NavLink>
+                <NavLink href={ra.settings} pathname={pathname}>Settings</NavLink>
+              </>
+            )}
+
+            {/* ── Non-admin: profile link ── */}
+            {!isAdmin && role !== undefined && (
+              <>
+                <Divider />
+                <NavLink href={r.profile} pathname={pathname}>Profile</NavLink>
+              </>
+            )}
+
+            {/* ── Logout ── */}
             <button
               onClick={logout}
               style={{
-                background: "#20A4A4",
-                border: "none",
-                color: "#fff",
-                padding: "6px 12px",
+                background: '#20A4A4',
+                border: 'none',
+                color: '#fff',
+                padding: '6px 14px',
                 borderRadius: 6,
-                cursor: "pointer",
-                fontSize: "0.85rem",
+                cursor: 'pointer',
+                fontSize: '0.85rem',
                 fontWeight: 600,
+                marginLeft: '0.75rem',
               }}
             >
               Logout
@@ -102,12 +212,12 @@ export default function AppLayout({
         </div>
       </header>
 
-      {/* Main Content */}
+      {/* ── Main Content ───────────────────────────────────────────────── */}
       <main
         style={{
           maxWidth: 1200,
-          margin: "0 auto",
-          padding: "2rem 1.5rem",
+          margin: '0 auto',
+          padding: '2rem 1.5rem',
         }}
       >
         {children}
@@ -116,9 +226,45 @@ export default function AppLayout({
   );
 }
 
-const navStyle: React.CSSProperties = {
-  color: "rgba(255,255,255,0.75)",
-  textDecoration: "none",
-  fontSize: "0.9rem",
-  fontWeight: 500,
-};
+/** Active-aware nav link */
+function NavLink({
+  href,
+  pathname,
+  children,
+}: {
+  href: string;
+  pathname: string;
+  children: React.ReactNode;
+}) {
+  const isActive = pathname === href || pathname.startsWith(href + '/');
+  return (
+    <Link
+      href={href}
+      style={{
+        color: isActive ? '#fff' : 'rgba(255,255,255,0.65)',
+        textDecoration: 'none',
+        fontSize: '0.875rem',
+        fontWeight: isActive ? 600 : 500,
+        padding: '6px 10px',
+        borderRadius: 6,
+        background: isActive ? 'rgba(255,255,255,0.1)' : 'transparent',
+      }}
+    >
+      {children}
+    </Link>
+  );
+}
+
+/** Visual separator between nav groups */
+function Divider() {
+  return (
+    <div
+      style={{
+        width: 1,
+        height: 20,
+        background: 'rgba(255,255,255,0.15)',
+        margin: '0 0.5rem',
+      }}
+    />
+  );
+}
