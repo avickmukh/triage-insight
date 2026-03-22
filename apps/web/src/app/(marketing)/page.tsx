@@ -168,17 +168,17 @@ export default function HomePage() {
     <div className="section-header fade-up">
       <span className="section-label">How It Works</span>
       <h2 className="section-headline">
-        TriageInsight brings order to chaos.
-        <span className="teal"> Automatically.</span>
+        From raw signal to product decision.
+        <span className="teal"> In five steps.</span>
       </h2>
-      <p className="section-subtext">Four steps from noise to clarity.</p>
+      <p className="section-subtext">Every feedback signal moves through a structured lifecycle — from ingestion to roadmap action.</p>
     </div>
 
     <div className="steps-grid">
 
       <div className="step-card fade-up fade-up-delay-1" style={{ position: 'relative' }}>
         <span className="step-number-bg">01</span>
-        <span className="section-label">Capture</span>
+        <span className="section-label">Ingest</span>
         <div className="step-icon">
           <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
             <rect x="3" y="5" width="22" height="18" rx="3" stroke="#20A4A4" strokeWidth="2"/>
@@ -186,8 +186,8 @@ export default function HomePage() {
             <path d="M14 23v3M11 26h6" stroke="#20A4A4" strokeWidth="2" strokeLinecap="round"/>
           </svg>
         </div>
-        <h3 className="step-title">Capture</h3>
-        <p className="step-desc">Collect feedback from your public portal, Slack, Zendesk, Intercom, CSV upload, or API. One unified inbox.</p>
+        <h3 className="step-title">Ingest from Every Channel</h3>
+        <p className="step-desc">Collect signals from your public portal, Slack, Zendesk, Intercom, CSV upload, voice recordings, or API push. Source, timestamp, and customer identity are captured automatically.</p>
         <div className="step-connector" style={{ right: '-1.25rem' }}>
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
             <path d="M2 7h10M8 3l4 4-4 4" stroke="#20A4A4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -197,7 +197,26 @@ export default function HomePage() {
 
       <div className="step-card fade-up fade-up-delay-2" style={{ position: 'relative' }}>
         <span className="step-number-bg">02</span>
-        <span className="section-label">AI Triage</span>
+        <span className="section-label">Enrich</span>
+        <div className="step-icon">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+            <circle cx="14" cy="14" r="10" stroke="#20A4A4" strokeWidth="2"/>
+            <path d="M10 14l3 3 5-6" stroke="#20A4A4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M14 4v3M14 21v3M4 14h3M21 14h3" stroke="#20A4A4" strokeWidth="1.5" strokeLinecap="round" opacity="0.5"/>
+          </svg>
+        </div>
+        <h3 className="step-title">Enrich with Customer Context</h3>
+        <p className="step-desc">CIQ links each signal to the submitting account&apos;s ARR, lifecycle stage, and deal history. Raw text is cleaned, sentiment scored, and an embedding vector generated for AI clustering.</p>
+        <div className="step-connector" style={{ right: '-1.25rem' }}>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M2 7h10M8 3l4 4-4 4" stroke="#20A4A4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </div>
+      </div>
+
+      <div className="step-card fade-up fade-up-delay-3" style={{ position: 'relative' }}>
+        <span className="step-number-bg">03</span>
+        <span className="section-label">Cluster</span>
         <div className="step-icon">
           <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
             <circle cx="9"  cy="9"  r="5" stroke="#20A4A4" strokeWidth="2"/>
@@ -207,8 +226,27 @@ export default function HomePage() {
             <path d="M7 20c0-3.9 3.1-7 7-7s7 3.1 7 7" stroke="#20A4A4" strokeWidth="2" strokeLinecap="round"/>
           </svg>
         </div>
-        <h3 className="step-title">AI Triage</h3>
-        <p className="step-desc">AI automatically detects duplicates, clusters themes, and generates summaries. You approve the merges.</p>
+        <h3 className="step-title">AI Deduplication &amp; Clustering</h3>
+        <p className="step-desc">AI detects duplicate signals using embedding similarity and groups related feedback into themes. CIQ calculates a priority score based on revenue impact, frequency, sentiment, and strategic tags.</p>
+        <div className="step-connector" style={{ right: '-1.25rem' }}>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M2 7h10M8 3l4 4-4 4" stroke="#20A4A4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </div>
+      </div>
+
+      <div className="step-card fade-up fade-up-delay-3" style={{ position: 'relative' }}>
+        <span className="step-number-bg">04</span>
+        <span className="section-label">Review</span>
+        <div className="step-icon">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+            <rect x="3" y="3" width="22" height="22" rx="3" stroke="#20A4A4" strokeWidth="2"/>
+            <path d="M9 14l3.5 3.5L19 10" stroke="#20A4A4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M9 7h10M9 21h6" stroke="#20A4A4" strokeWidth="2" strokeLinecap="round" opacity="0.4"/>
+          </svg>
+        </div>
+        <h3 className="step-title">Triage, Merge &amp; Prioritise</h3>
+        <p className="step-desc">Editors review AI suggestions, merge duplicates, reclassify themes, and apply manual overrides. Every action feeds back into CIQ to improve future scoring accuracy.</p>
         <div className="step-connector" style={{ right: '-1.25rem' }}>
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
             <path d="M2 7h10M8 3l4 4-4 4" stroke="#20A4A4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -217,17 +255,17 @@ export default function HomePage() {
       </div>
 
       <div className="step-card fade-up fade-up-delay-3">
-        <span className="step-number-bg">03</span>
-        <span className="section-label">Prioritize</span>
+        <span className="step-number-bg">05</span>
+        <span className="section-label">Act</span>
         <div className="step-icon">
           <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
-            <rect x="3" y="3" width="22" height="22" rx="3" stroke="#20A4A4" strokeWidth="2"/>
-            <path d="M9 14l3.5 3.5L19 10" stroke="#20A4A4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M9 7h10M9 21h6" stroke="#20A4A4" strokeWidth="2" strokeLinecap="round" opacity="0.4"/>
+            <path d="M5 14h18M19 8l6 6-6 6" stroke="#20A4A4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <circle cx="8" cy="8" r="3" stroke="#20A4A4" strokeWidth="1.5" opacity="0.5"/>
+            <circle cx="8" cy="20" r="3" stroke="#20A4A4" strokeWidth="1.5" opacity="0.5"/>
           </svg>
         </div>
-        <h3 className="step-title">Prioritize &amp; Close the Loop</h3>
-        <p className="step-desc">Revenue-weighted scoring surfaces what matters most. Link themes to roadmap items and move them through your pipeline. When a feature ships, portal voters are notified automatically.</p>
+        <h3 className="step-title">Ship &amp; Close the Loop</h3>
+        <p className="step-desc">Themes map to roadmap items. When a feature ships, portal voters are notified automatically. ROI is measured by linking shipped features back to the original signals that drove them.</p>
       </div>
 
     </div>
@@ -237,12 +275,13 @@ export default function HomePage() {
   <div className="container">
     <div className="section-header fade-up">
       <span className="section-label">Features</span>
-      <h2 className="section-headline">Everything your team needs to close the loop</h2>
-      <p className="section-subtext">Built for product managers who are tired of guessing.</p>
+      <h2 className="section-headline">One platform. Every signal. Total clarity.</h2>
+      <p className="section-subtext">Built for product managers, support leads, and founders who are tired of guessing what to build next.</p>
     </div>
 
     <div className="features-grid">
 
+      {/* 1 — Feedback Intelligence */}
       <div className="feature-card fade-up fade-up-delay-1">
         <div className="feature-icon">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -254,39 +293,116 @@ export default function HomePage() {
           </svg>
         </div>
         <div>
-          <h3 className="feature-title">AI-Powered Deduplication</h3>
-          <p className="feature-desc">Our AI automatically suggests duplicates, so you merge once instead of reading the same request 20 times.</p>
+          <h3 className="feature-title">AI Deduplication &amp; Theme Clustering</h3>
+          <p className="feature-desc">Embedding-based similarity detection merges duplicate requests automatically. Related feedback is grouped into themes with AI-generated summaries — see the forest, not just the trees.</p>
         </div>
       </div>
 
+      {/* 2 — Revenue-Weighted Prioritisation */}
       <div className="feature-card fade-up fade-up-delay-2">
-        <div className="feature-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <rect x="3"  y="3"  width="8" height="8" rx="2" stroke="#20A4A4" strokeWidth="2"/>
-            <rect x="13" y="3"  width="8" height="8" rx="2" stroke="#20A4A4" strokeWidth="2"/>
-            <rect x="3"  y="13" width="8" height="8" rx="2" stroke="#20A4A4" strokeWidth="2"/>
-            <rect x="13" y="13" width="8" height="8" rx="2" stroke="#20A4A4" strokeWidth="2"/>
-          </svg>
-        </div>
-        <div>
-          <h3 className="feature-title">Smart Theme Clustering</h3>
-          <p className="feature-desc">Related feedback is grouped into themes with AI-generated summaries. See the forest, not just the trees.</p>
-        </div>
-      </div>
-
-      <div className="feature-card fade-up fade-up-delay-1">
         <div className="feature-icon">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" stroke="#20A4A4" strokeWidth="2" strokeLinejoin="round"/>
           </svg>
         </div>
         <div>
-          <h3 className="feature-title">Revenue-Weighted Prioritization</h3>
-          <p className="feature-desc">Not all customers are equal. Weight feedback by customer value and see what impacts your bottom line.</p>
+          <h3 className="feature-title">Revenue-Weighted Prioritisation</h3>
+          <p className="feature-desc">CIQ scores every theme by ARR impact, frequency, sentiment, and strategic tags. Not all customers are equal — weight feedback by deal value and see exactly what moves your bottom line.</p>
         </div>
       </div>
 
+      {/* 3 — Roadmap Intelligence */}
+      <div className="feature-card fade-up fade-up-delay-1">
+        <div className="feature-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M3 12h18M3 6h18M3 18h12" stroke="#20A4A4" strokeWidth="2" strokeLinecap="round"/>
+            <circle cx="20" cy="18" r="3" stroke="#20A4A4" strokeWidth="2"/>
+            <path d="M18.5 18l1 1 2-2" stroke="#20A4A4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </div>
+        <div>
+          <h3 className="feature-title">Roadmap Intelligence &amp; Voter Notifications</h3>
+          <p className="feature-desc">Map themes to roadmap items, track progress from Planned to Shipped, and publish a public roadmap. When a feature ships, portal voters are notified automatically — no manual updates needed.</p>
+        </div>
+      </div>
+
+      {/* 4 — Public Portal */}
       <div className="feature-card fade-up fade-up-delay-2">
+        <div className="feature-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" stroke="#20A4A4" strokeWidth="2"/>
+            <path d="M12 3c-2.5 3-4 5.5-4 9s1.5 6 4 9" stroke="#20A4A4" strokeWidth="1.5" strokeLinecap="round"/>
+            <path d="M12 3c2.5 3 4 5.5 4 9s-1.5 6-4 9" stroke="#20A4A4" strokeWidth="1.5" strokeLinecap="round"/>
+            <path d="M3 12h18" stroke="#20A4A4" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+        </div>
+        <div>
+          <h3 className="feature-title">Customer-Facing Public Portal</h3>
+          <p className="feature-desc">Give customers a branded portal to submit feedback, vote on ideas, comment, and view your public roadmap. Supports anonymous visitors via cookie and identified portal users via email.</p>
+        </div>
+      </div>
+
+      {/* 5 — Customer Intelligence / CRM */}
+      <div className="feature-card fade-up fade-up-delay-1">
+        <div className="feature-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect x="2" y="7" width="20" height="14" rx="2" stroke="#20A4A4" strokeWidth="2"/>
+            <path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2" stroke="#20A4A4" strokeWidth="2"/>
+            <path d="M12 12v4M10 14h4" stroke="#20A4A4" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+        </div>
+        <div>
+          <h3 className="feature-title">Customer Intelligence Layer</h3>
+          <p className="feature-desc">Track ARR, MRR, deal influence, lifecycle stage, and feature request mapping per account. Connect revenue data to feedback so every prioritisation decision is grounded in business impact.</p>
+        </div>
+      </div>
+
+      {/* 6 — Voice Feedback */}
+      <div className="feature-card fade-up fade-up-delay-2">
+        <div className="feature-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect x="9" y="2" width="6" height="11" rx="3" stroke="#20A4A4" strokeWidth="2"/>
+            <path d="M5 10a7 7 0 0014 0" stroke="#20A4A4" strokeWidth="2" strokeLinecap="round"/>
+            <path d="M12 17v4M9 21h6" stroke="#20A4A4" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+        </div>
+        <div>
+          <h3 className="feature-title">Voice Feedback Intelligence</h3>
+          <p className="feature-desc">Upload call recordings in MP3 or WAV format. TriageInsight transcribes the audio, extracts pain points and feature requests, and automatically links them to existing themes.</p>
+        </div>
+      </div>
+
+      {/* 7 — Integrations */}
+      <div className="feature-card fade-up fade-up-delay-1">
+        <div className="feature-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="#20A4A4" strokeWidth="2" strokeLinejoin="round"/>
+            <path d="M9 12l2 2 4-4" stroke="#20A4A4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </div>
+        <div>
+          <h3 className="feature-title">Integrations: Slack, Zendesk &amp; More</h3>
+          <p className="feature-desc">Pull feedback directly from Slack channels, Zendesk tickets, and Intercom conversations into your unified inbox. CSV import and API ingestion available for any other source.</p>
+        </div>
+      </div>
+
+      {/* 8 — CIQ Explainability */}
+      <div className="feature-card fade-up fade-up-delay-2">
+        <div className="feature-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" stroke="#20A4A4" strokeWidth="2"/>
+            <path d="M12 8v4l3 3" stroke="#20A4A4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <circle cx="12" cy="8" r="1" fill="#20A4A4"/>
+          </svg>
+        </div>
+        <div>
+          <h3 className="feature-title">Explainable AI Scoring (CIQ)</h3>
+          <p className="feature-desc">Every priority score shows its contributing factors — revenue impact, frequency, sentiment, and strategic weight. Editors can override scores and recluster; manual inputs retrain the model over time.</p>
+        </div>
+      </div>
+
+      {/* 9 — Weekly Digest */}
+      <div className="feature-card fade-up fade-up-delay-1">
         <div className="feature-icon">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <rect x="3" y="4" width="18" height="16" rx="2" stroke="#20A4A4" strokeWidth="2"/>
@@ -297,34 +413,7 @@ export default function HomePage() {
         </div>
         <div>
           <h3 className="feature-title">Automated Weekly Digest</h3>
-          <p className="feature-desc">Every Monday, receive a digest of top themes, rising requests, and suggested roadmap priorities — no manual reporting required.</p>
-        </div>
-      </div>
-
-      <div className="feature-card fade-up fade-up-delay-1">
-        <div className="feature-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M3 12h18M3 6h18M3 18h12" stroke="#20A4A4" strokeWidth="2" strokeLinecap="round"/>
-            <circle cx="20" cy="18" r="3" stroke="#20A4A4" strokeWidth="2"/>
-            <path d="M18.5 18l1 1 2-2" stroke="#20A4A4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </div>
-        <div>
-          <h3 className="feature-title">Public Roadmap + Voter Notifications</h3>
-          <p className="feature-desc">Show customers what's coming. Link themes to roadmap items, move them through your pipeline, and automatically notify voters when a feature ships.</p>
-        </div>
-      </div>
-
-      <div className="feature-card fade-up fade-up-delay-2">
-        <div className="feature-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="#20A4A4" strokeWidth="2" strokeLinejoin="round"/>
-            <path d="M9 12l2 2 4-4" stroke="#20A4A4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </div>
-        <div>
-          <h3 className="feature-title">Integrations That Meet You Where You Are</h3>
-          <p className="feature-desc">Connect Slack, Zendesk, and Intercom to pull feedback directly into your inbox. No copy-paste, no lost context.</p>
+          <p className="feature-desc">Every week, stakeholders receive a digest of top themes, rising requests, and AI-suggested roadmap priorities. No manual reporting, no missed signals, no spreadsheets.</p>
         </div>
       </div>
 
