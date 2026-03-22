@@ -106,6 +106,8 @@ export interface WorkspaceMember {
   userId: string;
   workspaceId: string;
   role: WorkspaceRole;
+  /** Job title / position within the workspace */
+  position?: string | null;
   user: User;
   joinedAt: string;
 }
@@ -227,8 +229,35 @@ export interface PaginatedResponse<T> {
 }
 
 // Auth
-export interface SignUpDto extends Pick<User, 'email' | 'firstName' | 'lastName'> {
+export interface SignUpDto {
+  firstName: string;
+  lastName: string;
+  /** Human-readable organization name. Derives the workspace slug. */
+  organizationName: string;
+  email: string;
   password: string;
+}
+
+export interface InviteMemberDto {
+  email: string;
+  role: WorkspaceRole;
+  /** Pre-filled first name for the invitee */
+  firstName?: string;
+  /** Pre-filled last name for the invitee */
+  lastName?: string;
+  /** Job title / position for the invitee */
+  position?: string;
+}
+
+/** Shape returned by GET /auth/invite?token=... */
+export interface InviteInfo {
+  email: string;
+  role: WorkspaceRole;
+  firstName: string | null;
+  lastName: string | null;
+  position: string | null;
+  workspaceName: string;
+  workspaceSlug: string;
 }
 
 export interface LoginRequest extends Pick<User, 'email'> {

@@ -303,6 +303,8 @@ model Workspace {
 model WorkspaceMember {
   id          String        @id @default(uuid())
   role        WorkspaceRole @default(VIEWER)
+  /// Job title / position of this member within the workspace (e.g. "Support Lead")
+  position    String?
   joinedAt    DateTime      @default(now())
   userId      String
   workspaceId String
@@ -894,6 +896,12 @@ model WorkspaceInvite {
   id          String        @id @default(uuid())
   workspaceId String
   email       String
+  /// Pre-filled first name for the invitee — used to populate User.firstName on accept
+  firstName   String?
+  /// Pre-filled last name for the invitee — used to populate User.lastName on accept
+  lastName    String?
+  /// Job title / position for the invitee — stored on WorkspaceMember on accept
+  position    String?
   role        WorkspaceRole @default(VIEWER)
   token       String        @unique @default(uuid())
   invitedById String

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from "next/link";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -9,9 +10,13 @@ import { useParams } from "next/navigation";
 import { workspaceAuthRoutes } from "@/lib/routes";
 
 const signupSchema = z.object({
-  firstName: z.string().min(1, "First name is required"),
-  lastName: z.string().min(1, "Last name is required"),
-  email: z.string().email("Please enter a valid email"),
+  firstName: z.string().min(1, "First name is required").max(100),
+  lastName: z.string().min(1, "Last name is required").max(100),
+  organizationName: z
+    .string()
+    .min(2, "Organization name must be at least 2 characters")
+    .max(100, "Organization name must be 100 characters or fewer"),
+  email: z.string().email("Please enter a valid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
 });
 
@@ -40,19 +45,41 @@ const labelStyle: React.CSSProperties = {
   textTransform: "uppercase",
 };
 
+const errorStyle: React.CSSProperties = {
+  fontSize: "0.75rem",
+  color: "#e74c3c",
+  marginTop: "0.3rem",
+};
+
 export default function SignupPage() {
   const { signUp } = useAuth();
   const params = useParams();
   const slug = (Array.isArray(params.orgSlug) ? params.orgSlug[0] : params.orgSlug) ?? '';
   const wa = workspaceAuthRoutes(slug);
+  const [serverError, setServerError] = useState<string | null>(null);
+
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<SignupFormValues>({ resolver: zodResolver(signupSchema) });
 
-  const onSubmit = (data: SignupFormValues) => {
-    signUp(data);
+  const onSubmit = async (data: SignupFormValues) => {
+    setServerError(null);
+    try {
+      await signUp(data);
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string | string[] } } })
+          ?.response?.data?.message;
+      if (Array.isArray(msg)) {
+        setServerError(msg[0]);
+      } else if (typeof msg === "string") {
+        setServerError(msg);
+      } else {
+        setServerError("Something went wrong. Please try again.");
+      }
+    }
   };
 
   return (
@@ -79,7 +106,7 @@ export default function SignupPage() {
         }}
       />
 
-      <div style={{ position: "relative", zIndex: 2, width: "100%", maxWidth: 460 }}>
+      <div style={{ position: "relative", zIndex: 2, width: "100%", maxWidth: 480 }}>
         <div style={{ textAlign: "center", marginBottom: "2rem" }}>
           <Link href="/" style={{ textDecoration: "none" }}>
             <span style={{ fontSize: "1.5rem", fontWeight: 900, color: "#fff", letterSpacing: "-0.03em" }}>
@@ -104,71 +131,96 @@ export default function SignupPage() {
             Create your TriageInsight workspace in 30 seconds
           </p>
 
+          {serverError && (
+            <div
+              style={{
+                background: "rgba(231,76,60,0.12)",
+                border: "1px solid rgba(231,76,60,0.35)",
+                borderRadius: "0.6rem",
+                padding: "0.75rem 1rem",
+                marginBottom: "1.5rem",
+                fontSize: "0.875rem",
+                color: "#ff6b6b",
+              }}
+            >
+              {serverError}
+            </div>
+          )}
+
           <form
             onSubmit={handleSubmit(onSubmit)}
             style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}
           >
+            {/* Name row */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
               <div>
                 <label htmlFor="firstName" style={labelStyle}>First name</label>
                 <input
                   id="firstName"
                   placeholder="Ada"
+                  autoComplete="given-name"
                   {...register("firstName")}
                   style={inputStyle(!!errors.firstName)}
                 />
-                {errors.firstName && (
-                  <p style={{ fontSize: "0.75rem", color: "#e74c3c", marginTop: "0.3rem" }}>
-                    {errors.firstName.message}
-                  </p>
-                )}
+                {errors.firstName && <p style={errorStyle}>{errors.firstName.message}</p>}
               </div>
               <div>
                 <label htmlFor="lastName" style={labelStyle}>Last name</label>
                 <input
                   id="lastName"
                   placeholder="Lovelace"
+                  autoComplete="family-name"
                   {...register("lastName")}
                   style={inputStyle(!!errors.lastName)}
                 />
-                {errors.lastName && (
-                  <p style={{ fontSize: "0.75rem", color: "#e74c3c", marginTop: "0.3rem" }}>
-                    {errors.lastName.message}
-                  </p>
-                )}
+                {errors.lastName && <p style={errorStyle}>{errors.lastName.message}</p>}
               </div>
             </div>
 
+            {/* Organization name */}
+            <div>
+              <label htmlFor="organizationName" style={labelStyle}>Organization name</label>
+              <input
+                id="organizationName"
+                placeholder="Acme Corp"
+                autoComplete="organization"
+                {...register("organizationName")}
+                style={inputStyle(!!errors.organizationName)}
+              />
+              {errors.organizationName && (
+                <p style={errorStyle}>{errors.organizationName.message}</p>
+              )}
+              <p style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.3)", marginTop: "0.35rem" }}>
+                This becomes your workspace name and URL slug.
+              </p>
+            </div>
+
+            {/* Work email */}
             <div>
               <label htmlFor="email" style={labelStyle}>Work email</label>
               <input
                 id="email"
                 type="email"
                 placeholder="ada@company.com"
+                autoComplete="email"
                 {...register("email")}
                 style={inputStyle(!!errors.email)}
               />
-              {errors.email && (
-                <p style={{ fontSize: "0.75rem", color: "#e74c3c", marginTop: "0.3rem" }}>
-                  {errors.email.message}
-                </p>
-              )}
+              {errors.email && <p style={errorStyle}>{errors.email.message}</p>}
             </div>
 
+            {/* Password */}
             <div>
               <label htmlFor="password" style={labelStyle}>Password</label>
               <input
                 id="password"
                 type="password"
                 placeholder="Min. 8 characters"
+                autoComplete="new-password"
                 {...register("password")}
                 style={inputStyle(!!errors.password)}
               />
-              {errors.password && (
-                <p style={{ fontSize: "0.75rem", color: "#e74c3c", marginTop: "0.3rem" }}>
-                  {errors.password.message}
-                </p>
-              )}
+              {errors.password && <p style={errorStyle}>{errors.password.message}</p>}
             </div>
 
             <button
@@ -185,6 +237,7 @@ export default function SignupPage() {
                 fontSize: "0.95rem",
                 cursor: isSubmitting ? "not-allowed" : "pointer",
                 transition: "background 0.2s",
+                marginTop: "0.25rem",
               }}
             >
               {isSubmitting ? "Creating workspace…" : "Create free account"}

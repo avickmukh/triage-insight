@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/lib/api-client';
 import { useWorkspace } from '@/hooks/use-workspace';
-import { WorkspaceRole } from '@/lib/api-types';
+import { InviteMemberDto, WorkspaceRole } from '@/lib/api-types';
 
 const CARD: React.CSSProperties = {
   background: '#fff',
@@ -84,7 +84,11 @@ export default function MembersPage() {
   const qc = useQueryClient();
   const { workspace } = useWorkspace();
 
+  // Invite form state
   const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteFirstName, setInviteFirstName] = useState('');
+  const [inviteLastName, setInviteLastName] = useState('');
+  const [invitePosition, setInvitePosition] = useState('');
   const [inviteRole, setInviteRole] = useState<WorkspaceRole>(WorkspaceRole.VIEWER);
   const [inviteError, setInviteError] = useState('');
   const [inviteLink, setInviteLink] = useState('');
@@ -105,17 +109,23 @@ export default function MembersPage() {
 
   // Invite mutation
   const inviteMutation = useMutation({
-    mutationFn: (data: { email: string; role: string }) =>
-      apiClient.workspace.inviteMember(data),
+    mutationFn: (data: InviteMemberDto) => apiClient.workspace.inviteMember(data),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['workspace-invites'] });
       setInviteEmail('');
+      setInviteFirstName('');
+      setInviteLastName('');
+      setInvitePosition('');
       setInviteError('');
       const link = `${window.location.origin}/accept-invite?token=${res.inviteToken}`;
       setInviteLink(link);
     },
-    onError: (err: any) => {
-      setInviteError(err?.response?.data?.message ?? 'Failed to send invite.');
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string | string[] } } })
+        ?.response?.data?.message;
+      setInviteError(
+        Array.isArray(msg) ? msg[0] : typeof msg === 'string' ? msg : 'Failed to send invite.'
+      );
     },
   });
 
@@ -142,7 +152,14 @@ export default function MembersPage() {
     e.preventDefault();
     if (!inviteEmail.trim()) return;
     setInviteLink('');
-    inviteMutation.mutate({ email: inviteEmail.trim(), role: inviteRole });
+    const dto: InviteMemberDto = {
+      email: inviteEmail.trim(),
+      role: inviteRole,
+      ...(inviteFirstName.trim() && { firstName: inviteFirstName.trim() }),
+      ...(inviteLastName.trim() && { lastName: inviteLastName.trim() }),
+      ...(invitePosition.trim() && { position: invitePosition.trim() }),
+    };
+    inviteMutation.mutate(dto);
   };
 
   const copyLink = () => {
@@ -171,33 +188,73 @@ export default function MembersPage() {
         <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#0A2540', marginBottom: '1.25rem' }}>
           Invite a team member
         </h2>
-        <form onSubmit={handleInvite} style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <div style={{ flex: '1 1 220px' }}>
-            <label style={LABEL}>Email address</label>
-            <input
-              type="email"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              placeholder="colleague@company.com"
-              required
-              style={INPUT}
-            />
+        <form onSubmit={handleInvite} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {/* Row 1: Name + Email */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.5fr', gap: '0.75rem' }}>
+            <div>
+              <label style={LABEL}>First name</label>
+              <input
+                type="text"
+                value={inviteFirstName}
+                onChange={(e) => setInviteFirstName(e.target.value)}
+                placeholder="Ada"
+                maxLength={100}
+                style={INPUT}
+              />
+            </div>
+            <div>
+              <label style={LABEL}>Last name</label>
+              <input
+                type="text"
+                value={inviteLastName}
+                onChange={(e) => setInviteLastName(e.target.value)}
+                placeholder="Lovelace"
+                maxLength={100}
+                style={INPUT}
+              />
+            </div>
+            <div>
+              <label style={LABEL}>Email address <span style={{ color: '#e74c3c' }}>*</span></label>
+              <input
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="ada@company.com"
+                required
+                style={INPUT}
+              />
+            </div>
           </div>
-          <div style={{ flex: '0 0 140px' }}>
-            <label style={LABEL}>Role</label>
-            <select
-              value={inviteRole}
-              onChange={(e) => setInviteRole(e.target.value as WorkspaceRole)}
-              style={{ ...INPUT }}
-            >
-              <option value={WorkspaceRole.VIEWER}>Viewer</option>
-              <option value={WorkspaceRole.EDITOR}>Editor</option>
-              <option value={WorkspaceRole.ADMIN}>Admin</option>
-            </select>
+
+          {/* Row 2: Position + Role + Submit */}
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div style={{ flex: '1 1 200px' }}>
+              <label style={LABEL}>Position / title</label>
+              <input
+                type="text"
+                value={invitePosition}
+                onChange={(e) => setInvitePosition(e.target.value)}
+                placeholder="e.g. Support Lead"
+                maxLength={200}
+                style={INPUT}
+              />
+            </div>
+            <div style={{ flex: '0 0 140px' }}>
+              <label style={LABEL}>Role</label>
+              <select
+                value={inviteRole}
+                onChange={(e) => setInviteRole(e.target.value as WorkspaceRole)}
+                style={{ ...INPUT }}
+              >
+                <option value={WorkspaceRole.VIEWER}>Viewer</option>
+                <option value={WorkspaceRole.EDITOR}>Editor</option>
+                <option value={WorkspaceRole.ADMIN}>Admin</option>
+              </select>
+            </div>
+            <button type="submit" disabled={inviteMutation.isPending} style={BTN_PRIMARY}>
+              {inviteMutation.isPending ? 'Sending…' : 'Send invite'}
+            </button>
           </div>
-          <button type="submit" disabled={inviteMutation.isPending} style={BTN_PRIMARY}>
-            {inviteMutation.isPending ? 'Sending…' : 'Send invite'}
-          </button>
         </form>
 
         {inviteError && (
@@ -242,7 +299,7 @@ export default function MembersPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
               <thead>
                 <tr style={{ borderBottom: '2px solid #e9ecef' }}>
-                  {['Name', 'Email', 'Role', 'Joined', ''].map((h) => (
+                  {['Name', 'Email', 'Position', 'Role', 'Joined', ''].map((h) => (
                     <th
                       key={h}
                       style={{
@@ -261,7 +318,7 @@ export default function MembersPage() {
                 </tr>
               </thead>
               <tbody>
-                {members.map((m: any) => (
+                {members.map((m) => (
                   <tr key={m.userId} style={{ borderBottom: '1px solid #f0f4f8' }}>
                     <td style={{ padding: '0.75rem' }}>
                       <span style={{ fontWeight: 600, color: '#0A2540' }}>
@@ -271,6 +328,9 @@ export default function MembersPage() {
                       </span>
                     </td>
                     <td style={{ padding: '0.75rem', color: '#495057' }}>{m.user?.email}</td>
+                    <td style={{ padding: '0.75rem', color: '#6C757D', fontSize: '0.82rem' }}>
+                      {m.position ?? <span style={{ opacity: 0.4 }}>—</span>}
+                    </td>
                     <td style={{ padding: '0.75rem' }}>
                       <select
                         value={m.role}
@@ -324,7 +384,7 @@ export default function MembersPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
               <thead>
                 <tr style={{ borderBottom: '2px solid #e9ecef' }}>
-                  {['Email', 'Role', 'Expires', ''].map((h) => (
+                  {['Email', 'Name', 'Position', 'Role', 'Expires', ''].map((h) => (
                     <th
                       key={h}
                       style={{
@@ -343,9 +403,18 @@ export default function MembersPage() {
                 </tr>
               </thead>
               <tbody>
-                {invites.map((inv: any) => (
+                {invites.map((inv) => (
                   <tr key={inv.id} style={{ borderBottom: '1px solid #f0f4f8' }}>
                     <td style={{ padding: '0.75rem', color: '#495057' }}>{inv.email}</td>
+                    <td style={{ padding: '0.75rem', color: '#0A2540', fontSize: '0.82rem' }}>
+                      {(inv as { firstName?: string; lastName?: string }).firstName ||
+                      (inv as { firstName?: string; lastName?: string }).lastName
+                        ? `${(inv as { firstName?: string }).firstName ?? ''} ${(inv as { lastName?: string }).lastName ?? ''}`.trim()
+                        : <span style={{ opacity: 0.4 }}>—</span>}
+                    </td>
+                    <td style={{ padding: '0.75rem', color: '#6C757D', fontSize: '0.82rem' }}>
+                      {(inv as { position?: string }).position ?? <span style={{ opacity: 0.4 }}>—</span>}
+                    </td>
                     <td style={{ padding: '0.75rem' }}>
                       <span style={roleBadge(inv.role)}>{inv.role}</span>
                     </td>

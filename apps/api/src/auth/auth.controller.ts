@@ -19,7 +19,7 @@ export class AuthController {
   // ─── Workspace User Auth ──────────────────────────────────────────────────
 
   @Post('signup')
-  signUp(@Body() signUpDto: SignUpDto & { orgName?: string; orgSlug?: string }) {
+  signUp(@Body() signUpDto: SignUpDto) {
     return this.authService.signUp(signUpDto);
   }
 

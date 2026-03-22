@@ -55,6 +55,7 @@ export class WorkspaceService {
         },
       },
       orderBy: { joinedAt: 'asc' },
+      // position is now a first-class field on WorkspaceMember — returned automatically
     });
   }
 
@@ -95,12 +96,18 @@ export class WorkspaceService {
       create: {
         workspaceId: workspace.id,
         email: dto.email,
+        firstName: dto.firstName ?? null,
+        lastName: dto.lastName ?? null,
+        position: dto.position ?? null,
         role: dto.role,
         invitedById: userId,
         expiresAt,
         token: tokenHash,
       },
       update: {
+        firstName: dto.firstName ?? null,
+        lastName: dto.lastName ?? null,
+        position: dto.position ?? null,
         role: dto.role,
         invitedById: userId,
         expiresAt,

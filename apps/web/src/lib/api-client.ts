@@ -9,6 +9,8 @@ import {
   Feedback,
   FeedbackComment,
   FeedbackListResponse,
+  InviteMemberDto,
+  InviteInfo,
   LoginRequest,
   LoginResponse,
   MoveFeedbackDto,
@@ -75,7 +77,7 @@ const apiClient = {
       api.patch("/auth/me", data).then(handleResponse),
     changePassword: (data: { currentPassword: string; newPassword: string }): Promise<{ message: string }> =>
       api.patch("/auth/me/password", data).then(handleResponse),
-    getInviteInfo: (token: string): Promise<{ email: string; role: string; workspaceName: string; workspaceSlug: string }> =>
+    getInviteInfo: (token: string): Promise<InviteInfo> =>
       api.get("/auth/invite", { params: { token } }).then(handleResponse),
     setupPassword: (data: { token: string; password: string }): Promise<LoginResponse> =>
       api.post("/auth/setup-password", data).then(handleResponse),
@@ -98,7 +100,7 @@ const apiClient = {
       api.patch("/workspace/current", data).then(handleResponse),
     getMembers: (workspaceId: string): Promise<WorkspaceMember[]> =>
       api.get(`/workspace/${workspaceId}/members`).then(handleResponse),
-    inviteMember: (data: { email: string; role: string }): Promise<{ inviteToken: string; email: string; role: string; expiresAt: string }> =>
+    inviteMember: (data: InviteMemberDto): Promise<{ inviteToken: string; email: string; role: string; expiresAt: string }> =>
       api.post("/workspace/current/invite", data).then(handleResponse),
     getPendingInvites: (): Promise<Array<{ id: string; email: string; role: string; expiresAt: string; createdAt: string }>> =>
       api.get("/workspace/current/invites").then(handleResponse),

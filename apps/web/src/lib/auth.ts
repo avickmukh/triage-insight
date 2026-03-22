@@ -32,7 +32,7 @@ export const useAuth = () => {
     retry: 1,
   });
 
-  const { mutate: signUp } = useMutation({
+  const signUpMutation = useMutation({
     mutationFn: (data: SignUpDto) => apiClient.auth.signUp(data),
     onSuccess: async (data) => {
       // Write to both localStorage (Axios interceptor) and cookie (middleware)
@@ -42,6 +42,8 @@ export const useAuth = () => {
       router.push(dest);
     },
   });
+  // Expose as an async function so callers can await and catch server errors
+  const signUp = (data: SignUpDto) => signUpMutation.mutateAsync(data);
 
   const { mutate: login } = useMutation({
     mutationFn: (data: LoginRequest) => apiClient.auth.login(data),

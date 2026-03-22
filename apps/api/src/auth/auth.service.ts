@@ -38,28 +38,39 @@ export class AuthService {
    * Rejects if the org name or slug already exists.
    * Only the initial org admin can self-register; all other users must be invited.
    */
-  async signUp(signUpDto: SignUpDto & { orgName?: string; orgSlug?: string }) {
-    const { email, password, firstName, lastName, orgName, orgSlug } = signUpDto;
+  async signUp(signUpDto: SignUpDto) {
+    const { email, password, firstName, lastName, organizationName } = signUpDto;
 
+    // ── Email uniqueness ──────────────────────────────────────────────────────
     const existingUser = await this.prisma.user.findUnique({ where: { email } });
     if (existingUser) {
-      throw new ConflictException('A user with this email already exists.');
+      throw new ConflictException('This email is already registered.');
     }
 
-    const workspaceName = orgName?.trim() || `${firstName}'s Workspace`;
-    const rawSlug = orgSlug?.trim()
-      ? orgSlug.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-')
-      : workspaceName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    // ── Normalize organization name → workspace slug ───────────────────────
+    const workspaceName = organizationName.trim();
+    const rawSlug = workspaceName
+      .toLowerCase()
+      .normalize('NFD')                        // decompose accented chars
+      .replace(/[\u0300-\u036f]/g, '')          // strip diacritics
+      .replace(/[^a-z0-9]+/g, '-')             // non-alphanumeric → hyphen
+      .replace(/^-+|-+$/g, '');                // trim leading/trailing hyphens
 
+    if (!rawSlug) {
+      throw new BadRequestException('Organization name could not be converted to a valid URL slug.');
+    }
+
+    // ── Organization uniqueness (name + slug) ─────────────────────────────
     const [nameConflict, slugConflict] = await Promise.all([
-      this.prisma.workspace.findFirst({ where: { name: workspaceName } }),
+      this.prisma.workspace.findFirst({
+        where: { name: { equals: workspaceName, mode: 'insensitive' } },
+      }),
       this.prisma.workspace.findFirst({ where: { slug: rawSlug } }),
     ]);
-    if (nameConflict) {
-      throw new ConflictException('An organisation with this name already exists.');
-    }
-    if (slugConflict) {
-      throw new ConflictException('An organisation with this URL slug already exists.');
+    if (nameConflict || slugConflict) {
+      throw new ConflictException(
+        'This organization already exists. Please check with your admin.',
+      );
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
@@ -147,17 +158,24 @@ export class AuthService {
     let user = await this.prisma.user.findUnique({ where: { email: invite.email } });
 
     if (user) {
+      // Existing user: update password and backfill name if still blank
       user = await this.prisma.user.update({
         where: { id: user.id },
-        data: { passwordHash, status: 'ACTIVE' },
+        data: {
+          passwordHash,
+          status: 'ACTIVE',
+          ...(invite.firstName && !user.firstName && { firstName: invite.firstName }),
+          ...(invite.lastName && !user.lastName && { lastName: invite.lastName }),
+        },
       });
     } else {
+      // New user: create with pre-filled name from invite (or empty string fallback)
       user = await this.prisma.user.create({
         data: {
           email: invite.email,
           passwordHash,
-          firstName: '',
-          lastName: '',
+          firstName: invite.firstName ?? '',
+          lastName: invite.lastName ?? '',
           status: 'ACTIVE',
         },
       });
@@ -165,8 +183,17 @@ export class AuthService {
 
     await this.prisma.workspaceMember.upsert({
       where: { userId_workspaceId: { userId: user.id, workspaceId: invite.workspaceId } },
-      create: { userId: user.id, workspaceId: invite.workspaceId, role: invite.role },
-      update: { role: invite.role },
+      create: {
+        userId: user.id,
+        workspaceId: invite.workspaceId,
+        role: invite.role,
+        position: invite.position ?? null,
+      },
+      update: {
+        role: invite.role,
+        // Only set position if the invite carries one and the member has none yet
+        ...(invite.position && { position: invite.position }),
+      },
     });
 
     await this.prisma.workspaceInvite.update({
@@ -243,6 +270,9 @@ export class AuthService {
     return {
       email: invite.email,
       role: invite.role,
+      firstName: invite.firstName ?? null,
+      lastName: invite.lastName ?? null,
+      position: invite.position ?? null,
       workspaceName: invite.workspace.name,
       workspaceSlug: invite.workspace.slug,
     };

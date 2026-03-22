@@ -1,20 +1,32 @@
-import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class SignUpDto {
-  @IsNotEmpty()
-  @IsEmail()
-  email: string;
-
-  @IsNotEmpty()
+  @IsNotEmpty({ message: 'First name is required.' })
   @IsString()
-  @MinLength(8)
-  password: string;
-
-  @IsNotEmpty()
-  @IsString()
+  @MaxLength(100)
   firstName: string;
 
-  @IsNotEmpty()
+  @IsNotEmpty({ message: 'Last name is required.' })
   @IsString()
+  @MaxLength(100)
   lastName: string;
+
+  /**
+   * The human-readable organization name.
+   * Must be globally unique — used to derive the workspace slug/subdomain.
+   * Example: "Acme Health" → slug "acme-health"
+   */
+  @IsNotEmpty({ message: 'Organization name is required.' })
+  @IsString()
+  @MaxLength(200)
+  organizationName: string;
+
+  @IsNotEmpty({ message: 'Email is required.' })
+  @IsEmail({}, { message: 'Please enter a valid email address.' })
+  email: string;
+
+  @IsNotEmpty({ message: 'Password is required.' })
+  @IsString()
+  @MinLength(8, { message: 'Password must be at least 8 characters.' })
+  password: string;
 }
