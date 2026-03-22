@@ -4,6 +4,18 @@ import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import apiClient from "@/lib/api-client";
 
+/** Retrieve or create a stable anonymous ID stored in localStorage. */
+function getOrCreateAnonymousId(): string {
+  if (typeof window === "undefined") return "";
+  const key = "triage_anon_id";
+  let id = localStorage.getItem(key);
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem(key, id);
+  }
+  return id;
+}
+
 export default function PublicFeedbackNewPage() {
   const params = useParams();
   const router = useRouter();
@@ -22,10 +34,12 @@ export default function PublicFeedbackNewPage() {
     setSubmitting(true);
     setError(null);
     try {
-      await apiClient.public.submitFeedback(orgSlug, {
+      const anonymousId = getOrCreateAnonymousId();
+      await apiClient.portal.createFeedback(orgSlug, {
         title: title.trim(),
         description: description.trim() || undefined,
-        submitterEmail: submitterEmail.trim() || undefined,
+        email: submitterEmail.trim() || undefined,
+        anonymousId: anonymousId || undefined,
       });
       setSuccess(true);
     } catch (err: unknown) {

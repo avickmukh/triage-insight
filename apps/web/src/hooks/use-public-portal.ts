@@ -1,8 +1,9 @@
 /**
  * React Query hooks for the unauthenticated public portal.
  *
- * These hooks are safe to use in client components under (public)/ routes
+ * These hooks are safe to use in client components under (workspace)/ routes
  * because they do NOT require workspace context or an access token.
+ * All requests are scoped to the workspace identified by orgSlug.
  */
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import apiClient from "@/lib/api-client";
@@ -17,26 +18,26 @@ import {
 
 // ─── Query Keys ───────────────────────────────────────────────────────────────
 
-const PUBLIC_KEYS = {
-  feedbackList: (slug: string, page: number, search: string) =>
-    ["public", slug, "feedback", "list", page, search] as const,
-  feedbackDetail: (slug: string, id: string) =>
-    ["public", slug, "feedback", id] as const,
-  roadmap: (slug: string) => ["public", slug, "roadmap"] as const,
+const PORTAL_KEYS = {
+  feedbackList: (orgSlug: string, page: number, search: string) =>
+    ["portal", orgSlug, "feedback", "list", page, search] as const,
+  feedbackDetail: (orgSlug: string, id: string) =>
+    ["portal", orgSlug, "feedback", id] as const,
+  roadmap: (orgSlug: string) => ["portal", orgSlug, "roadmap"] as const,
 };
 
 // ─── Feedback List ────────────────────────────────────────────────────────────
 
 export function usePublicFeedbackList(
-  workspaceSlug: string,
+  orgSlug: string,
   page = 1,
   search = ""
 ) {
   return useQuery<PublicFeedbackListResponse, Error>({
-    queryKey: PUBLIC_KEYS.feedbackList(workspaceSlug, page, search),
+    queryKey: PORTAL_KEYS.feedbackList(orgSlug, page, search),
     queryFn: () =>
-      apiClient.public.listFeedback(workspaceSlug, { page, limit: 20, search: search || undefined }),
-    enabled: !!workspaceSlug,
+      apiClient.portal.listFeedback(orgSlug, { page, limit: 20, search: search || undefined }),
+    enabled: !!orgSlug,
     staleTime: 30_000,
   });
 }
@@ -44,44 +45,44 @@ export function usePublicFeedbackList(
 // ─── Feedback Detail ──────────────────────────────────────────────────────────
 
 export function usePublicFeedbackDetail(
-  workspaceSlug: string,
+  orgSlug: string,
   feedbackId: string
 ) {
   return useQuery<PublicFeedbackDetail, Error>({
-    queryKey: PUBLIC_KEYS.feedbackDetail(workspaceSlug, feedbackId),
-    queryFn: () => apiClient.public.getFeedbackDetail(workspaceSlug, feedbackId),
-    enabled: !!workspaceSlug && !!feedbackId,
+    queryKey: PORTAL_KEYS.feedbackDetail(orgSlug, feedbackId),
+    queryFn: () => apiClient.portal.getFeedbackDetail(orgSlug, feedbackId),
+    enabled: !!orgSlug && !!feedbackId,
     staleTime: 15_000,
   });
 }
 
 // ─── Roadmap ──────────────────────────────────────────────────────────────────
 
-export function usePublicRoadmap(workspaceSlug: string) {
+export function usePublicRoadmap(orgSlug: string) {
   return useQuery<PublicRoadmapResponse, Error>({
-    queryKey: PUBLIC_KEYS.roadmap(workspaceSlug),
-    queryFn: () => apiClient.public.listRoadmap(workspaceSlug),
-    enabled: !!workspaceSlug,
+    queryKey: PORTAL_KEYS.roadmap(orgSlug),
+    queryFn: () => apiClient.portal.listRoadmap(orgSlug),
+    enabled: !!orgSlug,
     staleTime: 60_000,
   });
 }
 
 // ─── Vote ─────────────────────────────────────────────────────────────────────
 
-export function usePublicVote(workspaceSlug: string, feedbackId: string) {
+export function usePublicVote(orgSlug: string, feedbackId: string) {
   const queryClient = useQueryClient();
 
   return useMutation<PublicVoteResponse, Error, PublicVoteDto>({
-    mutationFn: (dto) => apiClient.public.vote(workspaceSlug, feedbackId, dto),
+    mutationFn: (dto) => apiClient.portal.vote(orgSlug, feedbackId, dto),
     onSuccess: (result) => {
       // Optimistically update the detail cache with the new vote count
       queryClient.setQueryData<PublicFeedbackDetail>(
-        PUBLIC_KEYS.feedbackDetail(workspaceSlug, feedbackId),
+        PORTAL_KEYS.feedbackDetail(orgSlug, feedbackId),
         (prev) => (prev ? { ...prev, voteCount: result.voteCount } : prev)
       );
       // Invalidate the list so the vote count refreshes on next visit
       queryClient.invalidateQueries({
-        queryKey: ["public", workspaceSlug, "feedback", "list"],
+        queryKey: ["portal", orgSlug, "feedback", "list"],
       });
     },
   });
@@ -89,7 +90,7 @@ export function usePublicVote(workspaceSlug: string, feedbackId: string) {
 
 // ─── Comment ──────────────────────────────────────────────────────────────────
 
-export function usePublicAddComment(workspaceSlug: string, feedbackId: string) {
+export function usePublicAddComment(orgSlug: string, feedbackId: string) {
   const queryClient = useQueryClient();
 
   return useMutation<
@@ -98,11 +99,11 @@ export function usePublicAddComment(workspaceSlug: string, feedbackId: string) {
     PublicCommentDto
   >({
     mutationFn: (dto) =>
-      apiClient.public.addComment(workspaceSlug, feedbackId, dto),
+      apiClient.portal.addComment(orgSlug, feedbackId, dto),
     onSuccess: () => {
       // Refetch the detail so the new comment appears immediately
       queryClient.invalidateQueries({
-        queryKey: PUBLIC_KEYS.feedbackDetail(workspaceSlug, feedbackId),
+        queryKey: PORTAL_KEYS.feedbackDetail(orgSlug, feedbackId),
       });
     },
   });

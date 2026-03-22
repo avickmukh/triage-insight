@@ -12,6 +12,8 @@ import {
   LoginRequest,
   LoginResponse,
   MoveFeedbackDto,
+  PortalCreateFeedbackDto,
+  PortalCreateFeedbackResponse,
   PublicCommentDto,
   PublicFeedbackDetail,
   PublicFeedbackDto,
@@ -228,6 +230,57 @@ const apiClient = {
     ): Promise<{ id: string; feedbackId: string; body: string; authorName: string | null; createdAt: string }> =>
       api
         .post(`/public/${workspaceSlug}/feedback/${feedbackId}/comments`, data)
+        .then(handleResponse),
+  },
+
+  portal: {
+    /** GET /portal/:orgSlug/feedback */
+    listFeedback: (
+      orgSlug: string,
+      params?: { page?: number; limit?: number; search?: string }
+    ): Promise<PublicFeedbackListResponse> =>
+      api
+        .get(`/portal/${orgSlug}/feedback`, { params })
+        .then(handleResponse),
+
+    /** GET /portal/:orgSlug/feedback/:id */
+    getFeedbackDetail: (
+      orgSlug: string,
+      feedbackId: string
+    ): Promise<PublicFeedbackDetail> =>
+      api
+        .get(`/portal/${orgSlug}/feedback/${feedbackId}`)
+        .then(handleResponse),
+
+    /** POST /portal/:orgSlug/feedback */
+    createFeedback: (
+      orgSlug: string,
+      data: PortalCreateFeedbackDto
+    ): Promise<PortalCreateFeedbackResponse> =>
+      api.post(`/portal/${orgSlug}/feedback`, data).then(handleResponse),
+
+    /** GET /portal/:orgSlug/roadmap */
+    listRoadmap: (orgSlug: string): Promise<PublicRoadmapResponse> =>
+      api.get(`/portal/${orgSlug}/roadmap`).then(handleResponse),
+
+    /** POST /portal/:orgSlug/feedback/:id/vote */
+    vote: (
+      orgSlug: string,
+      feedbackId: string,
+      data: PublicVoteDto
+    ): Promise<PublicVoteResponse> =>
+      api
+        .post(`/portal/${orgSlug}/feedback/${feedbackId}/vote`, data)
+        .then(handleResponse),
+
+    /** POST /portal/:orgSlug/feedback/:id/comments */
+    addComment: (
+      orgSlug: string,
+      feedbackId: string,
+      data: PublicCommentDto
+    ): Promise<{ id: string; feedbackId: string; body: string; authorName: string | null; createdAt: string }> =>
+      api
+        .post(`/portal/${orgSlug}/feedback/${feedbackId}/comments`, data)
         .then(handleResponse),
   },
 };

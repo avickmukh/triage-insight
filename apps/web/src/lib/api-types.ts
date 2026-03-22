@@ -330,6 +330,26 @@ export interface PublicCommentDto {
   anonymousId?: string;
 }
 
+/** DTO for POST /portal/:orgSlug/feedback */
+export interface PortalCreateFeedbackDto {
+  title: string;
+  description?: string;
+  email?: string;
+  name?: string;
+  anonymousId?: string;
+}
+
+/** Response from POST /portal/:orgSlug/feedback */
+export interface PortalCreateFeedbackResponse {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  sourceType: string;
+  createdAt: string;
+  portalUserId: string | null;
+}
+
 // A generic type for API errors
 export interface ApiError {
   statusCode: number;
