@@ -56,8 +56,12 @@ export class AiAnalysisProcessor {
       WHERE id = ${feedbackId};
     `;
 
-    // 4. Find Duplicates
-    await this.duplicateDetectionService.findDuplicates(feedback.workspaceId, feedbackId, embedding);
+    // 4. Generate duplicate suggestions (embedding-based; heuristic fallback handled inside)
+    await this.duplicateDetectionService.generateSuggestions(
+      feedback.workspaceId,
+      feedbackId,
+      embedding,
+    );
 
     console.log(`Successfully analyzed feedback ${feedbackId}`);
   }
