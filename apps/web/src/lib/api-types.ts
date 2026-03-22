@@ -460,8 +460,52 @@ export interface UpdateRoadmapItemDto {
   themeId?: string | null;
 }
 
-// --- API Error ---
+// --- Integrations ---
 
+/**
+ * Mirrors the Prisma IntegrationProvider enum.
+ * Keep in sync with apps/api/prisma/schema.prisma.
+ */
+export enum IntegrationProvider {
+  ZENDESK    = 'ZENDESK',
+  INTERCOM   = 'INTERCOM',
+  FRESHDESK  = 'FRESHDESK',
+  SLACK      = 'SLACK',
+  EMAIL      = 'EMAIL',
+  HUBSPOT    = 'HUBSPOT',
+  SALESFORCE = 'SALESFORCE',
+  STRIPE     = 'STRIPE',
+}
+
+/**
+ * Returned by GET /workspaces/:id/integrations
+ * Every known provider is always present (connected: false when not wired).
+ */
+export interface IntegrationStatus {
+  provider: IntegrationProvider;
+  connected: boolean;
+  lastSyncedAt: string | null;
+  /** Non-sensitive display metadata (e.g. Slack team name, Zendesk subdomain). */
+  metadata: Record<string, string> | null;
+  createdAt: string | null;
+}
+
+export interface ConnectZendeskDto {
+  subdomain: string;
+  accessToken: string;
+}
+
+export interface ConnectIntercomDto {
+  accessToken: string;
+}
+
+export interface ConnectSlackDto {
+  accessToken: string;
+  teamId?: string;
+  teamName?: string;
+}
+
+// --- API Error ---
 export interface ApiError {
   statusCode: number;
   message: string | string[];

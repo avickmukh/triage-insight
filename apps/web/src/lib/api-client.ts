@@ -3,6 +3,9 @@ import axios from "axios";
 import { getAccessToken, getRefreshToken, setAccessToken, clearTokens } from "@/lib/token-storage";
 import {
   ApiError,
+  ConnectIntercomDto,
+  ConnectSlackDto,
+  ConnectZendeskDto,
   CreateFeedbackDto,
   CreateRoadmapItemDto,
   CreateThemeDto,
@@ -13,6 +16,7 @@ import {
   Feedback,
   FeedbackComment,
   FeedbackListResponse,
+  IntegrationStatus,
   InviteMemberDto,
   InviteInfo,
   LoginRequest,
@@ -341,6 +345,48 @@ const apiClient = {
       api
         .post(`/portal/${orgSlug}/feedback/${feedbackId}/comments`, data)
         .then(handleResponse),
+  },
+
+  integrations: {
+    /**
+     * GET /workspaces/:id/integrations
+     * Returns connection status for every known provider.
+     * Accessible to ADMIN, EDITOR, and VIEWER.
+     */
+    list: (workspaceId: string): Promise<IntegrationStatus[]> =>
+      api.get(`/workspaces/${workspaceId}/integrations`).then(handleResponse),
+
+    /**
+     * POST /workspaces/:id/integrations/zendesk/connect
+     */
+    connectZendesk: (workspaceId: string, data: ConnectZendeskDto): Promise<IntegrationStatus> =>
+      api.post(`/workspaces/${workspaceId}/integrations/zendesk/connect`, data).then(handleResponse),
+
+    /**
+     * POST /workspaces/:id/integrations/intercom/connect
+     */
+    connectIntercom: (workspaceId: string, data: ConnectIntercomDto): Promise<IntegrationStatus> =>
+      api.post(`/workspaces/${workspaceId}/integrations/intercom/connect`, data).then(handleResponse),
+
+    /**
+     * POST /workspaces/:id/integrations/slack/connect
+     */
+    connectSlack: (workspaceId: string, data: ConnectSlackDto): Promise<IntegrationStatus> =>
+      api.post(`/workspaces/${workspaceId}/integrations/slack/connect`, data).then(handleResponse),
+
+    /**
+     * DELETE /workspaces/:id/integrations/:provider
+     * Disconnects (removes) an integration. Returns 204 No Content.
+     */
+    disconnect: (workspaceId: string, provider: string): Promise<void> =>
+      api.delete(`/workspaces/${workspaceId}/integrations/${provider.toLowerCase()}`).then(handleResponse),
+
+    /**
+     * POST /workspaces/:id/integrations/sync
+     * Triggers a background sync job for all connected integrations.
+     */
+    sync: (workspaceId: string): Promise<{ message: string }> =>
+      api.post(`/workspaces/${workspaceId}/integrations/sync`).then(handleResponse),
   },
 
   duplicates: {
