@@ -1,5 +1,6 @@
 import { AxiosError, AxiosInstance, AxiosResponse } from "axios";
 import axios from "axios";
+import { getAccessToken, getRefreshToken, setAccessToken, clearTokens } from "@/lib/token-storage";
 import {
   ApiError,
   CreateFeedbackDto,
@@ -46,11 +47,9 @@ const api: AxiosInstance = axios.create({
 
 api.interceptors.request.use(
   (config) => {
-    if (typeof window !== "undefined") {
-      const token = localStorage.getItem("accessToken");
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
+    const token = getAccessToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
@@ -211,33 +210,32 @@ api.interceptors.response.use(
     const originalRequest = error.config;
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
-      const refreshToken = localStorage.getItem("refreshToken");
+      const refreshToken = getRefreshToken();
       if (refreshToken) {
         try {
           const { accessToken } = await apiClient.auth.refresh({ refreshToken });
-          localStorage.setItem("accessToken", accessToken);
+          // Update both localStorage and the middleware cookie
+          setAccessToken(accessToken);
           axios.defaults.headers.common["Authorization"] = `Bearer ${accessToken}`;
           originalRequest.headers["Authorization"] = `Bearer ${accessToken}`;
           return api(originalRequest);
         } catch (refreshError) {
           console.error("Token refresh failed:", refreshError);
-          localStorage.removeItem("accessToken");
-          localStorage.removeItem("refreshToken");
-         if (typeof window !== "undefined") {
+          // Clear both localStorage and the middleware cookie
+          clearTokens();
+          if (typeof window !== "undefined") {
             const path = window.location.pathname;
-
             // Match /:orgSlug/app/* and /:orgSlug/admin/* (workspace-scoped protected routes)
             const isProtected =
               /^\/[^/]+\/app(\/|$)/.test(path) ||
               /^\/[^/]+\/admin(\/|$)/.test(path);
-
             if (isProtected) {
               // Redirect to workspace login if we can extract the slug, else global login
               const slugMatch = path.match(/^\/([^/]+)\//); 
               const slug = slugMatch ? slugMatch[1] : null;
-              window.location.href = slug ? `/${slug}/login` : '/login';
+              window.location.href = slug ? `/${slug}/login` : "/login";
             }
-         }
+          }
         }
       }
     }

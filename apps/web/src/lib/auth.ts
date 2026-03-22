@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import apiClient from "@/lib/api-client";
 import { LoginRequest, SignUpDto, User } from "@/lib/api-types";
 import { useRouter } from "next/navigation";
+import { setTokens, clearTokens } from "@/lib/token-storage";
 
 const USER_QUERY_KEY = "user";
 
@@ -34,8 +35,8 @@ export const useAuth = () => {
   const { mutate: signUp } = useMutation({
     mutationFn: (data: SignUpDto) => apiClient.auth.signUp(data),
     onSuccess: async (data) => {
-      localStorage.setItem("accessToken", data.accessToken);
-      localStorage.setItem("refreshToken", data.refreshToken);
+      // Write to both localStorage (Axios interceptor) and cookie (middleware)
+      setTokens(data.accessToken, data.refreshToken);
       queryClient.invalidateQueries({ queryKey: [USER_QUERY_KEY] });
       const dest = await resolvePostLoginRedirect();
       router.push(dest);
@@ -45,8 +46,8 @@ export const useAuth = () => {
   const { mutate: login } = useMutation({
     mutationFn: (data: LoginRequest) => apiClient.auth.login(data),
     onSuccess: async (data) => {
-      localStorage.setItem("accessToken", data.accessToken);
-      localStorage.setItem("refreshToken", data.refreshToken);
+      // Write to both localStorage (Axios interceptor) and cookie (middleware)
+      setTokens(data.accessToken, data.refreshToken);
       queryClient.invalidateQueries({ queryKey: [USER_QUERY_KEY] });
       const dest = await resolvePostLoginRedirect();
       router.push(dest);
@@ -58,8 +59,8 @@ export const useAuth = () => {
     if (refreshToken) {
       apiClient.auth.logout({ refreshToken });
     }
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("refreshToken");
+    // Clear both localStorage and the cookie
+    clearTokens();
     queryClient.setQueryData([USER_QUERY_KEY, "me"], null);
     router.push("/login");
   };
