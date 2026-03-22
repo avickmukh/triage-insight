@@ -7,6 +7,8 @@ import apiClient from '@/lib/api-client';
 import { useWorkspace } from '@/hooks/use-workspace';
 import { InviteMemberDto, WorkspaceRole } from '@/lib/api-types';
 
+// ── Design tokens ─────────────────────────────────────────────────────────────
+
 const CARD: React.CSSProperties = {
   background: '#fff',
   border: '1px solid #e9ecef',
@@ -64,13 +66,19 @@ const BTN_DANGER: React.CSSProperties = {
   color: '#e74c3c',
 };
 
+const BTN_DISABLED: React.CSSProperties = {
+  ...BTN_DANGER,
+  opacity: 0.4,
+  cursor: 'not-allowed',
+};
+
 const ROLE_BADGE: Record<string, React.CSSProperties> = {
-  ADMIN: { background: '#e8f7f7', color: '#20A4A4', fontWeight: 700 },
+  ADMIN:  { background: '#e8f7f7', color: '#20A4A4', fontWeight: 700 },
   EDITOR: { background: '#fff3cd', color: '#856404', fontWeight: 700 },
   VIEWER: { background: '#f0f4f8', color: '#6C757D', fontWeight: 600 },
 };
 
-const roleBadge = (role: string) => ({
+const roleBadge = (role: string): React.CSSProperties => ({
   display: 'inline-block',
   padding: '0.2rem 0.6rem',
   borderRadius: '999px',
@@ -78,13 +86,22 @@ const roleBadge = (role: string) => ({
   ...(ROLE_BADGE[role] ?? ROLE_BADGE.VIEWER),
 });
 
+// ── Page ──────────────────────────────────────────────────────────────────────
+
 export default function MembersPage() {
   const params = useParams();
   const slug = (Array.isArray(params.orgSlug) ? params.orgSlug[0] : params.orgSlug) ?? '';
   const qc = useQueryClient();
   const { workspace } = useWorkspace();
 
-  // Invite form state
+  // Resolve the current user's id so we can prevent self-removal / self-role-change
+  const { data: me } = useQuery({
+    queryKey: ['user', 'me'],
+    queryFn: apiClient.auth.getMe,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  // ── Invite form state ──────────────────────────────────────────────────────
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteFirstName, setInviteFirstName] = useState('');
   const [inviteLastName, setInviteLastName] = useState('');
@@ -94,20 +111,21 @@ export default function MembersPage() {
   const [inviteLink, setInviteLink] = useState('');
   const [copyLabel, setCopyLabel] = useState('Copy link');
 
-  // Members list
+  // ── Queries ────────────────────────────────────────────────────────────────
+
   const membersQuery = useQuery({
     queryKey: ['workspace-members', workspace?.id],
     queryFn: () => apiClient.workspace.getMembers(workspace!.id),
     enabled: !!workspace?.id,
   });
 
-  // Pending invites
   const invitesQuery = useQuery({
     queryKey: ['workspace-invites'],
     queryFn: () => apiClient.workspace.getPendingInvites(),
   });
 
-  // Invite mutation
+  // ── Mutations ──────────────────────────────────────────────────────────────
+
   const inviteMutation = useMutation({
     mutationFn: (data: InviteMemberDto) => apiClient.workspace.inviteMember(data),
     onSuccess: (res) => {
@@ -124,29 +142,43 @@ export default function MembersPage() {
       const msg = (err as { response?: { data?: { message?: string | string[] } } })
         ?.response?.data?.message;
       setInviteError(
-        Array.isArray(msg) ? msg[0] : typeof msg === 'string' ? msg : 'Failed to send invite.'
+        Array.isArray(msg) ? msg[0] : typeof msg === 'string' ? msg : 'Failed to send invite.',
       );
     },
   });
 
-  // Remove member mutation
   const removeMutation = useMutation({
     mutationFn: (userId: string) => apiClient.workspace.removeMember(userId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['workspace-members', workspace?.id] }),
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string | string[] } } })
+        ?.response?.data?.message;
+      alert(Array.isArray(msg) ? msg[0] : typeof msg === 'string' ? msg : 'Failed to remove member.');
+    },
   });
 
-  // Role change mutation
   const roleMutation = useMutation({
     mutationFn: ({ userId, role }: { userId: string; role: string }) =>
       apiClient.workspace.updateMemberRole(userId, role),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['workspace-members', workspace?.id] }),
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string | string[] } } })
+        ?.response?.data?.message;
+      alert(Array.isArray(msg) ? msg[0] : typeof msg === 'string' ? msg : 'Failed to update role.');
+    },
   });
 
-  // Revoke invite mutation
   const revokeMutation = useMutation({
     mutationFn: (inviteId: string) => apiClient.workspace.revokeInvite(inviteId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['workspace-invites'] }),
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string | string[] } } })
+        ?.response?.data?.message;
+      alert(Array.isArray(msg) ? msg[0] : typeof msg === 'string' ? msg : 'Failed to revoke invite.');
+    },
   });
+
+  // ── Handlers ───────────────────────────────────────────────────────────────
 
   const handleInvite = (e: React.FormEvent) => {
     e.preventDefault();
@@ -168,8 +200,30 @@ export default function MembersPage() {
     setTimeout(() => setCopyLabel('Copy link'), 2000);
   };
 
+  const handleRemove = (userId: string, email: string) => {
+    if (userId === me?.id) {
+      alert('You cannot remove yourself from the workspace.');
+      return;
+    }
+    if (confirm(`Remove ${email} from this workspace?`)) {
+      removeMutation.mutate(userId);
+    }
+  };
+
+  const handleRoleChange = (userId: string, newRole: string) => {
+    if (userId === me?.id) {
+      alert('You cannot change your own role.');
+      return;
+    }
+    roleMutation.mutate({ userId, role: newRole });
+  };
+
+  // ── Derived data ───────────────────────────────────────────────────────────
+
   const members = membersQuery.data ?? [];
   const invites = invitesQuery.data ?? [];
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -183,7 +237,7 @@ export default function MembersPage() {
         </p>
       </div>
 
-      {/* Invite form */}
+      {/* ── Invite form ── */}
       <div style={CARD}>
         <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#0A2540', marginBottom: '1.25rem' }}>
           Invite a team member
@@ -214,7 +268,9 @@ export default function MembersPage() {
               />
             </div>
             <div>
-              <label style={LABEL}>Email address <span style={{ color: '#e74c3c' }}>*</span></label>
+              <label style={LABEL}>
+                Email address <span style={{ color: '#e74c3c' }}>*</span>
+              </label>
               <input
                 type="email"
                 value={inviteEmail}
@@ -251,7 +307,11 @@ export default function MembersPage() {
                 <option value={WorkspaceRole.ADMIN}>Admin</option>
               </select>
             </div>
-            <button type="submit" disabled={inviteMutation.isPending} style={BTN_PRIMARY}>
+            <button
+              type="submit"
+              disabled={inviteMutation.isPending}
+              style={inviteMutation.isPending ? { ...BTN_PRIMARY, opacity: 0.5, cursor: 'not-allowed' } : BTN_PRIMARY}
+            >
               {inviteMutation.isPending ? 'Sending…' : 'Send invite'}
             </button>
           </div>
@@ -278,20 +338,26 @@ export default function MembersPage() {
             <span style={{ fontSize: '0.82rem', color: '#0A2540', flex: 1, wordBreak: 'break-all' }}>
               {inviteLink}
             </span>
-            <button onClick={copyLink} style={{ ...BTN_GHOST, borderColor: '#20A4A4', color: '#20A4A4' }}>
+            <button
+              onClick={copyLink}
+              style={{ ...BTN_GHOST, borderColor: '#20A4A4', color: '#20A4A4' }}
+            >
               {copyLabel}
             </button>
           </div>
         )}
       </div>
 
-      {/* Members table */}
+      {/* ── Members table ── */}
       <div style={CARD}>
         <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#0A2540', marginBottom: '1.25rem' }}>
           Current members
         </h2>
+
         {membersQuery.isLoading ? (
           <p style={{ color: '#6C757D', fontSize: '0.9rem' }}>Loading…</p>
+        ) : membersQuery.isError ? (
+          <p style={{ color: '#e74c3c', fontSize: '0.9rem' }}>Failed to load members.</p>
         ) : members.length === 0 ? (
           <p style={{ color: '#6C757D', fontSize: '0.9rem' }}>No members found.</p>
         ) : (
@@ -318,122 +384,173 @@ export default function MembersPage() {
                 </tr>
               </thead>
               <tbody>
-                {members.map((m) => (
-                  <tr key={m.userId} style={{ borderBottom: '1px solid #f0f4f8' }}>
-                    <td style={{ padding: '0.75rem' }}>
-                      <span style={{ fontWeight: 600, color: '#0A2540' }}>
-                        {m.user?.firstName || m.user?.lastName
-                          ? `${m.user.firstName ?? ''} ${m.user.lastName ?? ''}`.trim()
-                          : '—'}
-                      </span>
-                    </td>
-                    <td style={{ padding: '0.75rem', color: '#495057' }}>{m.user?.email}</td>
-                    <td style={{ padding: '0.75rem', color: '#6C757D', fontSize: '0.82rem' }}>
-                      {m.position ?? <span style={{ opacity: 0.4 }}>—</span>}
-                    </td>
-                    <td style={{ padding: '0.75rem' }}>
-                      <select
-                        value={m.role}
-                        onChange={(e) => roleMutation.mutate({ userId: m.userId, role: e.target.value })}
-                        style={{
-                          padding: '0.3rem 0.6rem',
-                          borderRadius: '0.4rem',
-                          border: '1px solid #dee2e6',
-                          fontSize: '0.82rem',
-                          fontWeight: 600,
-                          color: '#0A2540',
-                          background: '#fff',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <option value={WorkspaceRole.VIEWER}>Viewer</option>
-                        <option value={WorkspaceRole.EDITOR}>Editor</option>
-                        <option value={WorkspaceRole.ADMIN}>Admin</option>
-                      </select>
-                    </td>
-                    <td style={{ padding: '0.75rem', color: '#6C757D', fontSize: '0.82rem' }}>
-                      {m.joinedAt ? new Date(m.joinedAt).toLocaleDateString() : '—'}
-                    </td>
-                    <td style={{ padding: '0.75rem', textAlign: 'right' }}>
-                      <button
-                        onClick={() => {
-                          if (confirm(`Remove ${m.user?.email} from this workspace?`)) {
-                            removeMutation.mutate(m.userId);
-                          }
-                        }}
-                        style={BTN_DANGER}
-                      >
-                        Remove
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {members.map((m) => {
+                  const isSelf = m.userId === me?.id;
+                  const isChangingRole = roleMutation.isPending &&
+                    (roleMutation.variables as { userId: string } | undefined)?.userId === m.userId;
+                  const isRemoving = removeMutation.isPending &&
+                    removeMutation.variables === m.userId;
+
+                  return (
+                    <tr key={m.userId} style={{ borderBottom: '1px solid #f0f4f8' }}>
+                      <td style={{ padding: '0.75rem' }}>
+                        <span style={{ fontWeight: 600, color: '#0A2540' }}>
+                          {m.user?.firstName || m.user?.lastName
+                            ? `${m.user.firstName ?? ''} ${m.user.lastName ?? ''}`.trim()
+                            : '—'}
+                        </span>
+                        {isSelf && (
+                          <span
+                            style={{
+                              marginLeft: '0.5rem',
+                              fontSize: '0.7rem',
+                              fontWeight: 700,
+                              color: '#20A4A4',
+                              background: '#e8f7f7',
+                              padding: '0.1rem 0.45rem',
+                              borderRadius: '999px',
+                            }}
+                          >
+                            You
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: '0.75rem', color: '#495057' }}>{m.user?.email}</td>
+                      <td style={{ padding: '0.75rem', color: '#6C757D', fontSize: '0.82rem' }}>
+                        {m.position ?? <span style={{ opacity: 0.4 }}>—</span>}
+                      </td>
+                      <td style={{ padding: '0.75rem' }}>
+                        {isSelf ? (
+                          /* Self: show badge only — cannot change own role */
+                          <span style={roleBadge(m.role)}>{m.role}</span>
+                        ) : (
+                          <select
+                            value={m.role}
+                            disabled={isChangingRole}
+                            onChange={(e) => handleRoleChange(m.userId, e.target.value)}
+                            style={{
+                              padding: '0.3rem 0.6rem',
+                              borderRadius: '0.4rem',
+                              border: '1px solid #dee2e6',
+                              fontSize: '0.82rem',
+                              fontWeight: 600,
+                              color: '#0A2540',
+                              background: '#fff',
+                              cursor: isChangingRole ? 'wait' : 'pointer',
+                              opacity: isChangingRole ? 0.5 : 1,
+                            }}
+                          >
+                            <option value={WorkspaceRole.VIEWER}>Viewer</option>
+                            <option value={WorkspaceRole.EDITOR}>Editor</option>
+                            <option value={WorkspaceRole.ADMIN}>Admin</option>
+                          </select>
+                        )}
+                      </td>
+                      <td style={{ padding: '0.75rem', color: '#6C757D', fontSize: '0.82rem' }}>
+                        {m.joinedAt ? new Date(m.joinedAt).toLocaleDateString() : '—'}
+                      </td>
+                      <td style={{ padding: '0.75rem', textAlign: 'right' }}>
+                        {isSelf ? (
+                          /* Cannot remove yourself */
+                          <button disabled style={BTN_DISABLED} title="You cannot remove yourself">
+                            Remove
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleRemove(m.userId, m.user?.email ?? m.userId)}
+                            disabled={isRemoving}
+                            style={isRemoving ? BTN_DISABLED : BTN_DANGER}
+                          >
+                            {isRemoving ? 'Removing…' : 'Remove'}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </div>
 
-      {/* Pending invites */}
-      {invites.length > 0 && (
+      {/* ── Pending invites ── */}
+      {(invitesQuery.isLoading || invites.length > 0) && (
         <div style={CARD}>
           <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#0A2540', marginBottom: '1.25rem' }}>
             Pending invites
           </h2>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
-              <thead>
-                <tr style={{ borderBottom: '2px solid #e9ecef' }}>
-                  {['Email', 'Name', 'Position', 'Role', 'Expires', ''].map((h) => (
-                    <th
-                      key={h}
-                      style={{
-                        textAlign: 'left',
-                        padding: '0.5rem 0.75rem',
-                        fontWeight: 700,
-                        color: '#6C757D',
-                        fontSize: '0.75rem',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em',
-                      }}
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {invites.map((inv) => (
-                  <tr key={inv.id} style={{ borderBottom: '1px solid #f0f4f8' }}>
-                    <td style={{ padding: '0.75rem', color: '#495057' }}>{inv.email}</td>
-                    <td style={{ padding: '0.75rem', color: '#0A2540', fontSize: '0.82rem' }}>
-                      {(inv as { firstName?: string; lastName?: string }).firstName ||
-                      (inv as { firstName?: string; lastName?: string }).lastName
-                        ? `${(inv as { firstName?: string }).firstName ?? ''} ${(inv as { lastName?: string }).lastName ?? ''}`.trim()
-                        : <span style={{ opacity: 0.4 }}>—</span>}
-                    </td>
-                    <td style={{ padding: '0.75rem', color: '#6C757D', fontSize: '0.82rem' }}>
-                      {(inv as { position?: string }).position ?? <span style={{ opacity: 0.4 }}>—</span>}
-                    </td>
-                    <td style={{ padding: '0.75rem' }}>
-                      <span style={roleBadge(inv.role)}>{inv.role}</span>
-                    </td>
-                    <td style={{ padding: '0.75rem', color: '#6C757D', fontSize: '0.82rem' }}>
-                      {new Date(inv.expiresAt).toLocaleDateString()}
-                    </td>
-                    <td style={{ padding: '0.75rem', textAlign: 'right' }}>
-                      <button
-                        onClick={() => revokeMutation.mutate(inv.id)}
-                        style={BTN_DANGER}
+
+          {invitesQuery.isLoading ? (
+            <p style={{ color: '#6C757D', fontSize: '0.9rem' }}>Loading…</p>
+          ) : invites.length === 0 ? null : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid #e9ecef' }}>
+                    {['Email', 'Name', 'Position', 'Role', 'Expires', ''].map((h) => (
+                      <th
+                        key={h}
+                        style={{
+                          textAlign: 'left',
+                          padding: '0.5rem 0.75rem',
+                          fontWeight: 700,
+                          color: '#6C757D',
+                          fontSize: '0.75rem',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.05em',
+                        }}
                       >
-                        Revoke
-                      </button>
-                    </td>
+                        {h}
+                      </th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {invites.map((inv) => {
+                    const isRevoking = revokeMutation.isPending && revokeMutation.variables === inv.id;
+                    const invExt = inv as {
+                      id: string;
+                      email: string;
+                      role: string;
+                      expiresAt: string;
+                      firstName?: string;
+                      lastName?: string;
+                      position?: string;
+                    };
+                    return (
+                      <tr key={invExt.id} style={{ borderBottom: '1px solid #f0f4f8' }}>
+                        <td style={{ padding: '0.75rem', color: '#495057' }}>{invExt.email}</td>
+                        <td style={{ padding: '0.75rem', color: '#0A2540', fontSize: '0.82rem' }}>
+                          {invExt.firstName || invExt.lastName
+                            ? `${invExt.firstName ?? ''} ${invExt.lastName ?? ''}`.trim()
+                            : <span style={{ opacity: 0.4 }}>—</span>}
+                        </td>
+                        <td style={{ padding: '0.75rem', color: '#6C757D', fontSize: '0.82rem' }}>
+                          {invExt.position ?? <span style={{ opacity: 0.4 }}>—</span>}
+                        </td>
+                        <td style={{ padding: '0.75rem' }}>
+                          <span style={roleBadge(invExt.role)}>{invExt.role}</span>
+                        </td>
+                        <td style={{ padding: '0.75rem', color: '#6C757D', fontSize: '0.82rem' }}>
+                          {new Date(invExt.expiresAt).toLocaleDateString()}
+                        </td>
+                        <td style={{ padding: '0.75rem', textAlign: 'right' }}>
+                          <button
+                            onClick={() => revokeMutation.mutate(invExt.id)}
+                            disabled={isRevoking}
+                            style={isRevoking ? BTN_DISABLED : BTN_DANGER}
+                          >
+                            {isRevoking ? 'Revoking…' : 'Revoke'}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * This file contains all the TypeScript types for the API client.
  * It is based on the Prisma schema and the NestJS DTOs.
@@ -77,6 +76,11 @@ export enum RoadmapStatus {
   SHIPPED = 'SHIPPED',
 }
 
+export enum PublicPortalVisibility {
+  PUBLIC = 'PUBLIC',
+  PRIVATE = 'PRIVATE',
+}
+
 // --- Models ---
 
 export interface User {
@@ -96,8 +100,18 @@ export interface Workspace {
   slug: string;
   description?: string;
   status: WorkspaceStatus;
+  /** IANA timezone string, e.g. "America/New_York" */
+  timezone: string;
+  /** BCP-47 locale tag, e.g. "en" */
+  defaultLocale: string;
+  /** ISO 4217 currency code, e.g. "USD" */
+  defaultCurrency: string;
+  /** Whether the public portal is visible to unauthenticated visitors */
+  portalVisibility: PublicPortalVisibility;
   billingPlan: BillingPlan;
   billingStatus: BillingStatus;
+  billingEmail?: string | null;
+  trialEndsAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -118,10 +132,10 @@ export interface FeedbackAttachment {
   feedbackId: string;
   workspaceId: string;
   fileName: string;
-  s3Key: string;
-  s3Bucket: string;
   mimeType: string;
   sizeBytes: number;
+  s3Key: string;
+  s3Bucket: string;
   createdAt: string;
 }
 
@@ -129,13 +143,11 @@ export interface Feedback {
   id: string;
   workspaceId: string;
   customerId?: string | null;
-  /** PortalUser FK — set for PUBLIC_PORTAL submissions */
   portalUserId?: string | null;
   sourceType: FeedbackSourceType;
   sourceRef?: string | null;
   title: string;
   description: string;
-  /** Original unmodified text before normalization */
   rawText?: string | null;
   normalizedText?: string | null;
   language?: string | null;
@@ -143,390 +155,106 @@ export interface Feedback {
   status: FeedbackStatus;
   sentiment?: number | null;
   impactScore?: number | null;
-  /** Arbitrary source metadata (Slack channel, CSV row, etc.) */
   metadata?: Record<string, unknown> | null;
+  mergedIntoId?: string | null;
   createdAt: string;
   updatedAt: string;
   submittedAt: string;
-  mergedIntoId?: string | null;
-  /** Included by findAll and findOne (include: { attachments: true }) */
   attachments?: FeedbackAttachment[];
-  /**
-   * Workspace-scoped comments — not yet returned by the backend.
-   * Field is reserved for when the backend adds the route.
-   */
-  comments?: FeedbackComment[];
+  themes?: ThemeFeedback[];
 }
 
-/**
- * A single linked feedback item as returned inside Theme.linkedFeedback[]
- * (only present on GET /workspaces/:id/themes/:themeId — not on the list).
- */
-export interface ThemeLinkedFeedback {
-  id: string;
-  title: string;
-  description: string;
-  status: FeedbackStatus;
-  sourceType: FeedbackSourceType;
-  sentiment: number | null;
-  impactScore: number | null;
-  createdAt: string;
-  submittedAt: string | null;
-  customerId: string | null;
-  portalUserId: string | null;
-  /** Metadata from the ThemeFeedback join row */
-  assignedAt: string;
-  assignedBy: 'manual' | 'ai';
-  confidence: number | null;
-}
-
-export interface Theme {
-  id: string;
-  title: string;
-  description?: string | null;
-  status: ThemeStatus;
-  pinned: boolean;
-  /** Present on list (from _count.feedbacks) and detail */
-  feedbackCount: number;
-  /**
-   * Mean impactScore of linked feedback.
-   * Only present on GET /themes/:id (detail), null if no scores available.
-   */
-  aggregatedPriorityScore?: number | null;
-  /**
-   * Linked feedback items — only present on GET /themes/:id (detail).
-   * Not included in the list response.
-   */
-  linkedFeedback?: ThemeLinkedFeedback[];
-  workspaceId: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-/** Minimal theme summary embedded inside a RoadmapItem */
-export interface RoadmapThemeSummary {
-  id: string;
-  title: string;
-  status: ThemeStatus;
-}
-
-export interface RoadmapItem {
-  id: string;
-  title: string;
-  description?: string | null;
-  status: RoadmapStatus;
-  isPublic: boolean;
-  targetQuarter?: string | null;
-  targetYear?: number | null;
-  /** Derived from ThemeFeedback count on the linked theme */
-  feedbackCount: number;
-  priorityScore?: number | null;
-  revenueImpactValue?: number | null;
-  dealInfluenceValue?: number | null;
-  customerCount?: number | null;
-  themeId?: string | null;
-  /** Linked theme summary — present when themeId is set */
-  theme?: RoadmapThemeSummary | null;
-  workspaceId: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface PortalUser {
-  id: string;
-  workspaceId: string;
-  customerId?: string;
-  email: string;
-  verified: boolean;
-  createdAt: string;
-}
-
-export interface FeedbackVote {
-  id: string;
+export interface ThemeFeedback {
+  themeId: string;
   feedbackId: string;
-  portalUserId?: string;
-  userId?: string;
-  createdAt: string;
+  theme?: Theme;
 }
 
-export interface FeedbackComment {
-  id: string;
-  feedbackId: string;
-  portalUserId?: string;
-  userId?: string;
-  body: string;
-  createdAt: string;
-  author?: { firstName: string; lastName: string };
-}
-
-// --- API Payloads & Responses ---
-
-// Generic Paginated Response
-export interface PaginatedResponse<T> {
-  data: T[];
-  meta: {
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-  };
-}
-
-// Auth
-export interface SignUpDto {
-  firstName: string;
-  lastName: string;
-  /** Human-readable organization name. Derives the workspace slug. */
-  organizationName: string;
-  email: string;
-  password: string;
-}
-
-export interface InviteMemberDto {
-  email: string;
-  role: WorkspaceRole;
-  /** Pre-filled first name for the invitee */
-  firstName?: string;
-  /** Pre-filled last name for the invitee */
-  lastName?: string;
-  /** Job title / position for the invitee */
-  position?: string;
-}
-
-/** Shape returned by GET /auth/invite?token=... */
-export interface InviteInfo {
-  email: string;
-  role: WorkspaceRole;
-  firstName: string | null;
-  lastName: string | null;
-  position: string | null;
-  workspaceName: string;
-  workspaceSlug: string;
-}
-
-export interface LoginRequest extends Pick<User, 'email'> {
-  password: string;
-}
-
-export interface LoginResponse {
-  accessToken: string;
-  refreshToken: string;
-}
-
-// Feedback
-/**
- * Backend returns flat pagination: { data, total, page, limit }
- * NOT wrapped in a `meta` object like PaginatedResponse.
- */
 export interface FeedbackListResponse {
   data: Feedback[];
   total: number;
   page: number;
   limit: number;
 }
-export interface CreateFeedbackDto {
-  title: string;
-  description?: string;
-  sourceType: FeedbackSourceType;
-  customerId?: string;
-}
-export interface UpdateFeedbackDto {
-  title?: string;
-  description?: string;
-  status?: FeedbackStatus;
-  customerId?: string;
-}
-export interface PublicFeedbackDto {
-  title: string;
-  description?: string;
-  submitterEmail?: string;
-  email?: string;
+
+export interface FeedbackComment {
+  id: string;
+  feedbackId: string;
+  workspaceId: string;
+  content: string;
+  authorId?: string | null;
+  portalUserId?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
-// Themes
-/**
- * Backend returns flat pagination: { data, total, page, limit }
- * NOT wrapped in a `meta` object like PaginatedResponse.
- */
+export interface Theme {
+  id: string;
+  workspaceId: string;
+  name: string;
+  description?: string | null;
+  status: ThemeStatus;
+  pinned: boolean;
+  aggregatedPriorityScore?: number | null;
+  linkedFeedback?: ThemeFeedback[];
+  feedbackCount?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ThemeListResponse {
   data: Theme[];
   total: number;
   page: number;
   limit: number;
 }
-export interface CreateThemeDto {
-  title: string;
-  description?: string | null;
-  feedbackIds?: string[];
-}
-export interface UpdateThemeDto {
-  title?: string;
-  description?: string | null;
-  status?: ThemeStatus;
-  pinned?: boolean;
-}
 
-/** Response from POST /workspaces/:id/themes/recluster */
-export interface ThemeReclusterResponse {
-  message: string;
-  jobId: string | number;
-}
-
-/** Paginated linked-feedback response from GET /workspaces/:id/themes/:themeId/feedback */
 export interface ThemeLinkedFeedbackResponse {
-  data: ThemeLinkedFeedback[];
+  data: Feedback[];
   total: number;
   page: number;
   limit: number;
 }
-export interface MoveFeedbackDto {
-  feedbackIds: string[];
-  sourceThemeId?: string;
-  targetThemeId?: string;
+
+export interface ThemeReclusterResponse {
+  jobId: string;
+  message: string;
 }
 
-// Roadmap
-/**
- * Backend returns kanban-grouped columns:
- * { BACKLOG: RoadmapItem[], EXPLORING: RoadmapItem[], PLANNED: RoadmapItem[], COMMITTED: RoadmapItem[], SHIPPED: RoadmapItem[] }
- */
-export type RoadmapBoardResponse = Record<RoadmapStatus, RoadmapItem[]>;
-/** Legacy flat array alias — kept for portal/public use */
-export type RoadmapListResponse = RoadmapItem[];
-export interface CreateRoadmapItemDto {
-  title: string;
-  description?: string;
-  status?: RoadmapStatus;
-  isPublic?: boolean;
-  themeId?: string;
-  targetQuarter?: string;
-  targetYear?: number;
-}
-export interface UpdateRoadmapItemDto extends Partial<CreateRoadmapItemDto> {}
-
-// Workspace
-export interface UpdateWorkspaceDto extends Partial<Pick<Workspace, 'name' | 'description'>> {}
-
-// Support
-export interface SupportTicket {
+export interface RoadmapItem {
   id: string;
-  title: string;
-  description: string;
-  status: string;
-  priority: string;
-  createdAt: string;
-  source: string;
-}
-export type SupportTicketListResponse = PaginatedResponse<SupportTicket>;
-
-// Public Portal
-
-/** A single feedback item as returned by the public portal list endpoint */
-export interface PublicFeedbackItem {
-  id: string;
-  title: string;
-  description: string;
-  status: FeedbackStatus;
-  voteCount: number;
-  commentCount: number;
-  createdAt: string;
-}
-
-/** A single comment as returned by the public portal detail endpoint */
-export interface PublicComment {
-  id: string;
-  body: string;
-  authorName: string | null;
-  createdAt: string;
-}
-
-/** Full detail response for a single public feedback item */
-export interface PublicFeedbackDetail {
-  id: string;
-  title: string;
-  description: string;
-  status: FeedbackStatus;
-  voteCount: number;
-  createdAt: string;
-  comments: PublicComment[];
-}
-
-export interface PublicFeedbackListResponse {
-  data: PublicFeedbackItem[];
-  meta: {
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-  };
-}
-
-/** A single public roadmap item */
-export interface PublicRoadmapItem {
-  id: string;
+  workspaceId: string;
   title: string;
   description?: string | null;
   status: RoadmapStatus;
-  targetQuarter?: string | null;
-  targetYear?: number | null;
-  customerCount?: number | null;
-  priorityScore?: number | null;
-  theme?: { id: string; title: string } | null;
+  isPublic: boolean;
+  themeId?: string | null;
+  theme?: Theme | null;
+  feedbackCount?: number;
   createdAt: string;
+  updatedAt: string;
 }
 
-export interface PublicRoadmapResponse {
-  data: PublicRoadmapItem[];
+export interface RoadmapListResponse {
+  data: RoadmapItem[];
+  total: number;
 }
 
-export interface PublicVoteDto {
-  anonymousId?: string;
-  email?: string;
-  name?: string;
+export interface RoadmapBoardResponse {
+  [status: string]: RoadmapItem[];
 }
 
-export interface PublicVoteResponse {
+export interface DuplicateSuggestion {
   id: string;
-  feedbackId: string;
-  voteCount: number;
+  sourceFeedbackId: string;
+  targetFeedbackId: string;
+  similarityScore: number;
+  status: DuplicateSuggestionStatus;
   createdAt: string;
+  updatedAt: string;
+  sourceFeedback?: Feedback;
+  targetFeedback?: Feedback;
 }
-
-export interface PublicCommentDto {
-  body: string;
-  email?: string;
-  name?: string;
-  anonymousId?: string;
-}
-
-/** DTO for POST /portal/:orgSlug/feedback */
-export interface PortalCreateFeedbackDto {
-  title: string;
-  description?: string;
-  email?: string;
-  name?: string;
-  anonymousId?: string;
-}
-
-/** Response from POST /portal/:orgSlug/feedback */
-export interface PortalCreateFeedbackResponse {
-  id: string;
-  title: string;
-  description: string | null;
-  status: string;
-  sourceType: string;
-  createdAt: string;
-  portalUserId: string | null;
-}
-
-// A generic type for API errors
-export interface ApiError {
-  statusCode: number;
-  message: string | string[];
-  error: string;
-}
-
-// ─── Duplicate Suggestions ────────────────────────────────────────────────────
 
 export enum DuplicateSuggestionStatus {
   PENDING = 'PENDING',
@@ -534,28 +262,205 @@ export enum DuplicateSuggestionStatus {
   REJECTED = 'REJECTED',
 }
 
-/** Minimal feedback summary embedded inside a duplicate suggestion row */
-export interface DuplicateSuggestionFeedbackSummary {
+export interface SupportTicket {
+  id: string;
+  workspaceId: string;
+  customerId?: string | null;
+  externalId?: string | null;
+  subject: string;
+  body?: string | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SupportTicketListResponse {
+  data: SupportTicket[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+// --- Public Portal ---
+
+export interface PublicFeedbackDto {
+  title: string;
+  description: string;
+  email?: string;
+  name?: string;
+}
+
+export interface PortalCreateFeedbackDto {
+  title: string;
+  description: string;
+}
+
+export interface PortalCreateFeedbackResponse {
   id: string;
   title: string;
+  description: string;
   status: FeedbackStatus;
-  sourceType: FeedbackSourceType;
+  createdAt: string;
+}
+
+export interface PublicFeedbackDetail {
+  id: string;
+  title: string;
+  description: string;
+  status: FeedbackStatus;
+  voteCount: number;
+  commentCount: number;
+  createdAt: string;
+  userVoted?: boolean;
+}
+
+export interface PublicFeedbackListResponse {
+  data: PublicFeedbackDetail[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface PublicVoteDto {
+  value: 1 | -1;
+}
+
+export interface PublicVoteResponse {
+  voteCount: number;
+  userVoted: boolean;
+}
+
+export interface PublicCommentDto {
+  content: string;
+}
+
+export interface PublicRoadmapResponse {
+  data: RoadmapItem[];
+}
+
+// --- Auth ---
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  accessToken: string;
+  refreshToken: string;
+  user: User;
+}
+
+export interface SignUpDto {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  organizationName: string;
+}
+
+export interface InviteInfo {
+  email: string;
+  role: WorkspaceRole;
+  workspaceName: string;
+  workspaceSlug: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  position?: string | null;
+  expiresAt: string;
+}
+
+/** Alias kept for backward compatibility with components that import ThemeLinkedFeedback */
+export type ThemeLinkedFeedback = Feedback;
+
+// --- DTOs ---
+
+export interface CreateFeedbackDto {
+  title: string;
+  description: string;
+  sourceType?: FeedbackSourceType;
+  sourceRef?: string;
+  customerId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface UpdateFeedbackDto {
+  title?: string;
+  description?: string;
+  status?: FeedbackStatus;
+  sourceType?: FeedbackSourceType;
+  sourceRef?: string;
+  customerId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface InviteMemberDto {
+  email: string;
+  role: WorkspaceRole;
+  firstName?: string;
+  lastName?: string;
+  position?: string;
 }
 
 /**
- * A single duplicate suggestion row as returned by:
- *   GET /workspaces/:id/duplicate-suggestions
- *   GET /workspaces/:id/feedback/:feedbackId/duplicate-suggestions
+ * Fields an ADMIN may update on the workspace.
+ * Mirrors UpdateWorkspaceDto on the backend.
  */
-export interface DuplicateSuggestion {
-  id: string;
-  sourceId: string;
-  targetId: string;
-  /** Cosine similarity (0–1) or keyword-overlap score (0–1) */
-  similarity: number;
-  status: DuplicateSuggestionStatus;
-  createdAt: string;
-  updatedAt: string;
-  sourceFeedback: DuplicateSuggestionFeedbackSummary;
-  targetFeedback: DuplicateSuggestionFeedbackSummary;
+export interface UpdateWorkspaceDto {
+  name?: string;
+  description?: string;
+  /** IANA timezone string, e.g. "America/New_York" */
+  timezone?: string;
+  /** BCP-47 locale tag, e.g. "en" */
+  defaultLocale?: string;
+  /** ISO 4217 currency code, e.g. "USD" */
+  defaultCurrency?: string;
+  /** Whether the public portal is visible to unauthenticated visitors */
+  portalVisibility?: PublicPortalVisibility;
+  /** Billing contact email */
+  billingEmail?: string;
+}
+
+export interface CreateThemeDto {
+  name: string;
+  description?: string;
+  status?: ThemeStatus;
+  pinned?: boolean;
+}
+
+export interface UpdateThemeDto {
+  name?: string;
+  description?: string;
+  status?: ThemeStatus;
+  pinned?: boolean;
+}
+
+export interface MoveFeedbackDto {
+  feedbackIds: string[];
+  targetThemeId: string;
+  sourceThemeId?: string;
+}
+
+export interface CreateRoadmapItemDto {
+  title: string;
+  description?: string;
+  status?: RoadmapStatus;
+  isPublic?: boolean;
+  themeId?: string;
+}
+
+export interface UpdateRoadmapItemDto {
+  title?: string;
+  description?: string;
+  status?: RoadmapStatus;
+  isPublic?: boolean;
+  themeId?: string | null;
+}
+
+// --- API Error ---
+
+export interface ApiError {
+  statusCode: number;
+  message: string | string[];
+  error?: string;
 }
