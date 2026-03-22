@@ -2,6 +2,8 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  Logger,
+  OnModuleInit,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { BillingPlan, BillingStatus, TrialStatus, WorkspaceRole } from '@prisma/client';
@@ -21,8 +23,88 @@ import { UpdateBillingEmailDto } from './dto/update-billing-email.dto';
  *   - handleStripeWebhook — placeholder for incoming Stripe webhook events
  */
 @Injectable()
-export class BillingService {
+export class BillingService implements OnModuleInit {
+  private readonly logger = new Logger(BillingService.name);
+
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Auto-seed default Plan rows on startup so the app works on a fresh DB
+   * without requiring a manual seed call.
+   */
+  async onModuleInit() {
+    const DEFAULT_PLANS = [
+      {
+        planType: BillingPlan.FREE,
+        displayName: 'Free',
+        description: 'Forever free for small teams',
+        trialDays: 0,
+        seatLimit: 3,
+        aiUsageLimit: 0,
+        feedbackLimit: 200,
+        aiInsights: false,
+        integrations: false,
+        publicPortal: true,
+        churnIntelligence: false,
+        sso: false,
+        isDefault: true,
+      },
+      {
+        planType: BillingPlan.STARTER,
+        displayName: 'Starter',
+        description: '14-day trial, then $29/mo',
+        trialDays: 14,
+        seatLimit: 5,
+        aiUsageLimit: 500,
+        feedbackLimit: 1000,
+        aiInsights: true,
+        integrations: false,
+        publicPortal: true,
+        churnIntelligence: false,
+        sso: false,
+        isDefault: false,
+      },
+      {
+        planType: BillingPlan.GROWTH,
+        displayName: 'Growth',
+        description: '14-day trial, then $79/mo',
+        trialDays: 14,
+        seatLimit: 15,
+        aiUsageLimit: 2000,
+        feedbackLimit: null,
+        aiInsights: true,
+        integrations: true,
+        publicPortal: true,
+        churnIntelligence: false,
+        sso: false,
+        isDefault: false,
+      },
+      {
+        planType: BillingPlan.ENTERPRISE,
+        displayName: 'Enterprise',
+        description: 'Custom pricing for large teams',
+        trialDays: 0,
+        seatLimit: null,
+        aiUsageLimit: null,
+        feedbackLimit: null,
+        aiInsights: true,
+        integrations: true,
+        publicPortal: true,
+        churnIntelligence: true,
+        sso: true,
+        isDefault: false,
+      },
+    ];
+
+    for (const plan of DEFAULT_PLANS) {
+      await this.prisma.plan.upsert({
+        where: { planType: plan.planType },
+        update: {},
+        create: plan,
+      });
+    }
+    this.logger.log('Default plans seeded/verified.');
+  }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 

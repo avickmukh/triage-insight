@@ -24,7 +24,7 @@ export default function IntegrationsPage() {
           <p style={{ fontSize: "1.15rem", color: "rgba(255,255,255,0.7)", maxWidth: 560, margin: "0 auto 2.5rem" }}>
             Connect your existing tools in minutes. No engineering required.
           </p>
-          <a href="/signup" className="btn btn-yellow">Start free trial</a>
+          <a href="/signup?plan=FREE" className="btn btn-yellow">Start free trial</a>
         </div>
       </section>
 
@@ -49,7 +49,7 @@ export default function IntegrationsPage() {
         <div className="container">
           <h2 style={{ fontSize: "clamp(1.75rem,3vw,2.5rem)", fontWeight: 800, color: "#fff", marginBottom: "1rem" }}>Don&apos;t see your tool?</h2>
           <p style={{ fontSize: "1.1rem", color: "rgba(255,255,255,0.65)", marginBottom: "2rem" }}>Use our REST API or Zapier to connect anything. Or contact us — we add integrations fast.</p>
-          <a href="/signup" className="btn btn-yellow">Start free trial</a>
+          <a href="/signup?plan=FREE" className="btn btn-yellow">Start free trial</a>
         </div>
       </section>
     </main>

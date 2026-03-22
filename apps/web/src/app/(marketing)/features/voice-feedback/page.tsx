@@ -14,7 +14,7 @@ export default function Page() {
           <p style={{ fontSize: "1.15rem", color: "rgba(255,255,255,0.7)", maxWidth: 600, margin: "0 auto 2.5rem" }}>
             Upload call recordings or connect your support platform. TriageInsight transcribes, extracts feedback, and triages it automatically.
           </p>
-          <a href="/signup" className="btn btn-yellow">Start free trial</a>
+          <a href="/signup?plan=FREE" className="btn btn-yellow">Start free trial</a>
         </div>
       </section>
 
@@ -53,7 +53,7 @@ export default function Page() {
         <div className="container">
           <h2 style={{ fontSize: "clamp(1.75rem,3vw,2.5rem)", fontWeight: 800, color: "#fff", marginBottom: "1rem" }}>Ready to bring clarity to your feedback?</h2>
           <p style={{ fontSize: "1.1rem", color: "rgba(255,255,255,0.65)", marginBottom: "2rem" }}>Join 200+ SaaS teams already using TriageInsight.</p>
-          <a href="/signup" className="btn btn-yellow">Start free trial</a>
+          <a href="/signup?plan=FREE" className="btn btn-yellow">Start free trial</a>
         </div>
       </section>
     </main>
