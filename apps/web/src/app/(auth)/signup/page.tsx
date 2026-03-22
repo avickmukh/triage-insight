@@ -35,10 +35,8 @@ function parsePlanParam(raw: string | null): BillingPlan {
 
 const PLAN_LABELS: Record<BillingPlan, string> = {
   [BillingPlan.FREE]: 'Free',
-  [BillingPlan.STARTER]: 'Starter',
-  [BillingPlan.GROWTH]: 'Growth',
   [BillingPlan.PRO]: 'Pro',
-  [BillingPlan.ENTERPRISE]: 'Enterprise',
+  [BillingPlan.BUSINESS]: 'Business',
 };
 
 // ── Styles ────────────────────────────────────────────────────────────────────

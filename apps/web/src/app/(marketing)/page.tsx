@@ -580,9 +580,10 @@ export default function HomePage() {
     <div className="section-header fade-up">
       <span className="section-label">Pricing</span>
       <h2 className="section-headline">Simple, transparent pricing</h2>
-      <p className="section-subtext">Start free. Upgrade when you're ready.</p>
+      <p className="section-subtext">Start free. Upgrade when you&apos;re ready.</p>
     </div>
     <div className="pricing-grid">
+
       {/* Free */}
       <div className="pricing-card fade-up fade-up-delay-1">
         <p className="pricing-tier">Free</p>
@@ -597,49 +598,43 @@ export default function HomePage() {
               <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
               <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            1 workspace · up to 3 seats
+            1 admin &middot; up to 3 staff
           </li>
           <li className="pricing-feature">
             <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
               <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            Up to 500 feedback items
+            100 feedback items / month
           </li>
           <li className="pricing-feature">
             <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
               <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            AI deduplication (50 checks/mo)
+            Basic portal (submit + public roadmap)
           </li>
           <li className="pricing-feature">
             <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
               <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            Manual theme clustering
+            Basic AI deduplication (limited)
           </li>
           <li className="pricing-feature">
             <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
               <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            Public customer portal
-          </li>
-          <li className="pricing-feature">
-            <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
-              <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            Public roadmap
+            CSV import only
           </li>
         </ul>
         <a href="/signup?plan=FREE" className="btn btn-outline-teal" style={{ justifyContent: 'center' }}>Get started free</a>
       </div>
-      {/* Starter */}
+
+      {/* Pro */}
       <div className="pricing-card fade-up fade-up-delay-2">
-        <p className="pricing-tier">Starter</p>
+        <p className="pricing-tier">Pro</p>
         <div className="pricing-price">
           <span className="pricing-amount">$29</span>
           <span className="pricing-period">/month</span>
@@ -651,45 +646,67 @@ export default function HomePage() {
               <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
               <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            Public feedback portal
+            1 admin &middot; up to 5 staff
           </li>
           <li className="pricing-feature">
             <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
               <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            AI deduplication (up to 500 items/month)
+            1,000 feedback items / month
           </li>
           <li className="pricing-feature">
             <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
               <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            Theme clustering
+            Full portal (vote, comment, notifications)
           </li>
           <li className="pricing-feature">
             <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
               <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            Public roadmap
+            Full AI deduplication &amp; theme clustering
           </li>
           <li className="pricing-feature">
             <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
               <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            Email notifications
+            CIQ prioritization &amp; explainable AI scores
+          </li>
+          <li className="pricing-feature">
+            <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
+              <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Voice feedback (100 uploads / month)
+          </li>
+          <li className="pricing-feature">
+            <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
+              <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Survey (300 responses / month)
+          </li>
+          <li className="pricing-feature">
+            <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
+              <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Integrations: Slack + API
           </li>
         </ul>
-        <a href="/signup?plan=STARTER" className="btn btn-outline-teal" style={{ justifyContent: 'center' }}>Start 14-day trial</a>
+        <a href="/signup?plan=PRO" className="btn btn-outline-teal" style={{ justifyContent: 'center' }}>Start 14-day trial</a>
       </div>
-      {/* Growth - featured */}
+
+      {/* Business */}
       <div className="pricing-card featured fade-up fade-up-delay-3">
         <span className="pricing-badge">Most Popular</span>
-        <p className="pricing-tier">Growth</p>
+        <p className="pricing-tier">Business</p>
         <div className="pricing-price">
-          <span className="pricing-amount">$79</span>
+          <span className="pricing-amount">$49</span>
           <span className="pricing-period">/month</span>
         </div>
         <p className="pricing-desc">For teams that need integrations and deeper insights</p>
@@ -699,98 +716,52 @@ export default function HomePage() {
               <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
               <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            Everything in Starter
+            Up to 3 admins &middot; up to 15 staff
           </li>
           <li className="pricing-feature">
             <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
               <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            Up to 15 seats
+            Unlimited feedback items
           </li>
           <li className="pricing-feature">
             <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
               <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            Slack, Zendesk &amp; Intercom integrations
+            Full AI features + weekly AI digest
           </li>
           <li className="pricing-feature">
             <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
               <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            Revenue-weighted prioritisation
+            Voice feedback unlimited
           </li>
           <li className="pricing-feature">
             <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
               <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            Custom domain for portal
+            Survey unlimited
           </li>
           <li className="pricing-feature">
             <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
               <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            Priority support
+            Integrations: Slack, Zendesk, Intercom, HubSpot, API
+          </li>
+          <li className="pricing-feature">
+            <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
+              <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Executive reporting
           </li>
         </ul>
-        <a href="/signup?plan=GROWTH" className="btn btn-teal" style={{ justifyContent: 'center' }}>Start 14-day trial</a>
-      </div>
-      {/* Enterprise */}
-      <div className="pricing-card fade-up fade-up-delay-4">
-        <p className="pricing-tier">Enterprise</p>
-        <div className="pricing-price">
-          <span className="pricing-amount">Custom</span>
-        </div>
-        <p className="pricing-desc">For large teams needing SSO, advanced reporting, and dedicated support</p>
-        <ul className="pricing-features">
-          <li className="pricing-feature">
-            <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
-              <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            Everything in Growth
-          </li>
-          <li className="pricing-feature">
-            <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
-              <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            Unlimited seats
-          </li>
-          <li className="pricing-feature">
-            <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
-              <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            SSO / SAML
-          </li>
-          <li className="pricing-feature">
-            <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
-              <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            Advanced enterprise reporting
-          </li>
-          <li className="pricing-feature">
-            <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
-              <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            HubSpot &amp; Salesforce integrations
-          </li>
-          <li className="pricing-feature">
-            <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
-              <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            Dedicated success manager
-          </li>
-        </ul>
-        <a href="/signup?plan=ENTERPRISE" className="btn btn-outline-teal" style={{ justifyContent: 'center' }}>Contact sales</a>
+        <a href="/signup?plan=BUSINESS" className="btn btn-teal" style={{ justifyContent: 'center' }}>Start 14-day trial</a>
       </div>
 
     </div>

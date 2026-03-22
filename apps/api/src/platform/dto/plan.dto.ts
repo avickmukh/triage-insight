@@ -22,30 +22,78 @@ export class CreatePlanDto {
   @MaxLength(500)
   description?: string;
 
-  /** Trial duration in days. 0 = no trial. Only meaningful for STARTER/GROWTH. */
+  /** Monthly price in USD cents (0 = free). */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  priceMonthly?: number;
+
+  /** Trial duration in days. 0 = no trial. Only meaningful for PRO/BUSINESS. */
   @IsOptional()
   @IsInt()
   @Min(0)
   trialDays?: number;
 
+  /** Max number of ADMIN-role members (null = unlimited). */
   @IsOptional()
   @IsInt()
   @Min(1)
-  seatLimit?: number;
+  adminLimit?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  seatLimit?: number | null;
 
   @IsOptional()
   @IsInt()
   @Min(0)
-  aiUsageLimit?: number;
+  aiUsageLimit?: number | null;
 
   @IsOptional()
   @IsInt()
   @Min(0)
-  feedbackLimit?: number;
+  feedbackLimit?: number | null;
+
+  /** Monthly voice upload slots (0 = disabled, null = unlimited). */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  voiceUploadLimit?: number | null;
+
+  /** Monthly survey response slots (0 = disabled, null = unlimited). */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  surveyResponseLimit?: number | null;
 
   @IsOptional()
   @IsBoolean()
   aiInsights?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  aiThemeClustering?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  ciqPrioritization?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  explainableAi?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  weeklyDigest?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  voiceFeedback?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  survey?: boolean;
 
   @IsOptional()
   @IsBoolean()
@@ -57,11 +105,20 @@ export class CreatePlanDto {
 
   @IsOptional()
   @IsBoolean()
-  churnIntelligence?: boolean;
+  csvImport?: boolean;
 
   @IsOptional()
   @IsBoolean()
-  sso?: boolean;
+  apiAccess?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  executiveReporting?: boolean;
+
+  /** Custom domain — coming soon; always false for now. */
+  @IsOptional()
+  @IsBoolean()
+  customDomain?: boolean;
 
   @IsOptional()
   @IsBoolean()
@@ -86,7 +143,17 @@ export class UpdatePlanDto {
   @IsOptional()
   @IsInt()
   @Min(0)
+  priceMonthly?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
   trialDays?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  adminLimit?: number | null;
 
   @IsOptional()
   @IsInt()
@@ -104,8 +171,42 @@ export class UpdatePlanDto {
   feedbackLimit?: number | null;
 
   @IsOptional()
+  @IsInt()
+  @Min(0)
+  voiceUploadLimit?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  surveyResponseLimit?: number | null;
+
+  @IsOptional()
   @IsBoolean()
   aiInsights?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  aiThemeClustering?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  ciqPrioritization?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  explainableAi?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  weeklyDigest?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  voiceFeedback?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  survey?: boolean;
 
   @IsOptional()
   @IsBoolean()
@@ -117,11 +218,19 @@ export class UpdatePlanDto {
 
   @IsOptional()
   @IsBoolean()
-  churnIntelligence?: boolean;
+  csvImport?: boolean;
 
   @IsOptional()
   @IsBoolean()
-  sso?: boolean;
+  apiAccess?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  executiveReporting?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  customDomain?: boolean;
 
   @IsOptional()
   @IsBoolean()

@@ -18,9 +18,8 @@ export class PlatformService {
   async listPlans() {
     const ORDER: BillingPlan[] = [
       BillingPlan.FREE,
-      BillingPlan.STARTER,
-      BillingPlan.GROWTH,
-      BillingPlan.ENTERPRISE,
+      BillingPlan.PRO,
+      BillingPlan.BUSINESS,
     ];
     const plans = await this.prisma.plan.findMany();
     return plans.sort(
@@ -92,7 +91,7 @@ export class PlatformService {
 
   /**
    * Convenience endpoint: update only the trial duration for a given plan.
-   * Validates that trials only apply to STARTER and GROWTH.
+   * Validates that trials only apply to PRO and BUSINESS.
    */
   async updateTrialDuration(planType: BillingPlan, trialDays: number) {
     if (trialDays < 0) {
@@ -100,11 +99,11 @@ export class PlatformService {
     }
     if (
       trialDays > 0 &&
-      planType !== BillingPlan.STARTER &&
-      planType !== BillingPlan.GROWTH
+      planType !== BillingPlan.PRO &&
+      planType !== BillingPlan.BUSINESS
     ) {
       throw new BadRequestException(
-        'Trials are only supported for STARTER and GROWTH plans.',
+        'Trials are only supported for PRO and BUSINESS plans.',
       );
     }
     await this.getPlan(planType);

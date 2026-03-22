@@ -43,7 +43,7 @@ export class SignUpDto {
    * The plan the user selected on the pricing page.
    * Defaults to FREE if omitted.
    * Trial lifecycle (trialStartedAt, trialEndsAt) is applied automatically
-   * for STARTER and GROWTH based on the Plan config trialDays value.
+   * for PRO and BUSINESS based on the Plan config trialDays value.
    */
   @IsOptional()
   @IsEnum(BillingPlan, { message: 'Invalid plan type.' })

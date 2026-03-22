@@ -38,9 +38,8 @@ enum WorkspaceStatus {
 
 enum BillingPlan {
   FREE
-  STARTER
-  GROWTH
-  ENTERPRISE
+  PRO
+  BUSINESS
 }
 
 enum TrialStatus {
@@ -962,27 +961,46 @@ model WorkspaceInvite {
 
 /// ── Plan Configuration ────────────────────────────────────────────────────
 /// Managed exclusively by SUPER_ADMIN via /platform/plans endpoints.
-/// Each row defines the limits and trial rules for one BillingPlan tier.
+/// Each row defines the limits and feature flags for one BillingPlan tier.
+///
+/// Plans: FREE | PRO ($29/mo) | BUSINESS ($49/mo)
 model Plan {
   id                  String      @id @default(uuid())
   /// Matches the BillingPlan enum value (unique — one config row per plan)
   planType            BillingPlan @unique
   displayName         String
   description         String?
-  /// Trial duration in days (0 = no trial; only used for STARTER and GROWTH)
+  /// Monthly price in USD cents (0 = free)
+  priceMonthly        Int         @default(0)
+  /// Trial duration in days (0 = no trial)
   trialDays           Int         @default(0)
-  /// Seat limit (null = unlimited)
+  /// Max number of ADMIN-role members allowed (null = unlimited)
+  adminLimit          Int?        @default(1)
+  /// Total staff seat limit including admins (null = unlimited)
   seatLimit           Int?
   /// Monthly AI inference calls allowed (null = unlimited)
   aiUsageLimit        Int?
   /// Monthly feedback items allowed (null = unlimited)
   feedbackLimit       Int?
+  /// Monthly voice upload slots (0 = disabled, null = unlimited)
+  voiceUploadLimit    Int         @default(0)
+  /// Monthly survey response slots (0 = disabled, null = unlimited)
+  surveyResponseLimit Int         @default(0)
   /// Feature flags
   aiInsights          Boolean     @default(false)
+  aiThemeClustering   Boolean     @default(false)
+  ciqPrioritization   Boolean     @default(false)
+  explainableAi       Boolean     @default(false)
+  weeklyDigest        Boolean     @default(false)
+  voiceFeedback       Boolean     @default(false)
+  survey              Boolean     @default(false)
   integrations        Boolean     @default(false)
   publicPortal        Boolean     @default(true)
-  churnIntelligence   Boolean     @default(false)
-  sso                 Boolean     @default(false)
+  csvImport           Boolean     @default(true)
+  apiAccess           Boolean     @default(false)
+  executiveReporting  Boolean     @default(false)
+  /// Custom domain — coming soon; always false for now
+  customDomain        Boolean     @default(false)
   /// Whether this plan is offered to new signups
   isActive            Boolean     @default(true)
   /// Whether this is the default plan assigned on signup when no plan is chosen

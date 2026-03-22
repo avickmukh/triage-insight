@@ -84,7 +84,7 @@ export class AuthService {
     const trialDays = planConfig?.trialDays ?? 0;
     const trialApplies =
       trialDays > 0 &&
-      (selectedPlan === BillingPlan.STARTER || selectedPlan === BillingPlan.GROWTH);
+      (selectedPlan === BillingPlan.PRO || selectedPlan === BillingPlan.BUSINESS);
     const now = new Date();
     const trialEndsAt = trialApplies
       ? new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000)

@@ -80,10 +80,8 @@ const HINT: React.CSSProperties = {
 // ── Plan metadata ─────────────────────────────────────────────────────────────
 const PLAN_PRICES: Record<string, string> = {
   [BillingPlan.FREE]: '$0 / month',
-  [BillingPlan.STARTER]: '$29 / month',
-  [BillingPlan.GROWTH]: '$79 / month',
-  [BillingPlan.PRO]: '$149 / month',
-  [BillingPlan.ENTERPRISE]: 'Custom pricing',
+  [BillingPlan.PRO]: '$29 / month',
+  [BillingPlan.BUSINESS]: '$49 / month',
 };
 
 const STATUS_BADGE: Record<BillingStatus, { label: string; bg: string; color: string }> = {
@@ -127,14 +125,25 @@ function Skeleton({ width = '60%', height = '1rem' }: { width?: string; height?:
 // ── Plan features table (DB-driven) ──────────────────────────────────────────
 function PlanFeaturesTable({ planConfig }: { planConfig: PlanConfig | Omit<PlanConfig, 'planType' | 'isActive' | 'isDefault'> }) {
   const rows: Array<{ label: string; value: number | null | boolean | undefined }> = [
-    { label: 'Workspace seats', value: planConfig.seatLimit },
-    { label: 'Feedback limit', value: planConfig.feedbackLimit },
+    { label: 'Admin limit', value: planConfig.adminLimit },
+    { label: 'Staff seats', value: planConfig.seatLimit },
+    { label: 'Feedback limit / month', value: planConfig.feedbackLimit },
     { label: 'AI usage limit', value: planConfig.aiUsageLimit },
+    { label: 'Voice uploads / month', value: planConfig.voiceUploadLimit },
+    { label: 'Survey responses / month', value: planConfig.surveyResponseLimit },
     { label: 'AI insights', value: planConfig.aiInsights },
+    { label: 'AI theme clustering', value: planConfig.aiThemeClustering },
+    { label: 'CIQ prioritization', value: planConfig.ciqPrioritization },
+    { label: 'Explainable AI scores', value: planConfig.explainableAi },
+    { label: 'Weekly AI digest', value: planConfig.weeklyDigest },
+    { label: 'Voice feedback', value: planConfig.voiceFeedback },
+    { label: 'Survey', value: planConfig.survey },
     { label: 'Integrations', value: planConfig.integrations },
     { label: 'Public portal', value: planConfig.publicPortal },
-    { label: 'Churn intelligence', value: planConfig.churnIntelligence },
-    { label: 'SSO', value: planConfig.sso },
+    { label: 'CSV import', value: planConfig.csvImport },
+    { label: 'API access', value: planConfig.apiAccess },
+    { label: 'Executive reporting', value: planConfig.executiveReporting },
+    { label: 'Custom domain', value: planConfig.customDomain },
   ];
 
   return (
@@ -166,13 +175,19 @@ function PlanComparisonTable({
   isPending: boolean;
 }) {
   const featureRows: Array<{ key: keyof PlanConfig; label: string }> = [
-    { key: 'seatLimit', label: 'Seats' },
-    { key: 'feedbackLimit', label: 'Feedback limit' },
+    { key: 'adminLimit', label: 'Admins' },
+    { key: 'seatLimit', label: 'Staff seats' },
+    { key: 'feedbackLimit', label: 'Feedback / month' },
+    { key: 'voiceUploadLimit', label: 'Voice uploads / month' },
+    { key: 'surveyResponseLimit', label: 'Survey responses / month' },
     { key: 'aiInsights', label: 'AI insights' },
+    { key: 'aiThemeClustering', label: 'AI theme clustering' },
+    { key: 'ciqPrioritization', label: 'CIQ prioritization' },
+    { key: 'weeklyDigest', label: 'Weekly AI digest' },
+    { key: 'voiceFeedback', label: 'Voice feedback' },
+    { key: 'survey', label: 'Survey' },
     { key: 'integrations', label: 'Integrations' },
-    { key: 'publicPortal', label: 'Public portal' },
-    { key: 'churnIntelligence', label: 'Churn intelligence' },
-    { key: 'sso', label: 'SSO' },
+    { key: 'executiveReporting', label: 'Executive reporting' },
   ];
 
   return (
@@ -231,18 +246,6 @@ function PlanComparisonTable({
                   <span style={{ fontSize: '0.78rem', color: '#10b981', fontWeight: 600 }}>
                     Current plan
                   </span>
-                ) : p.planType === BillingPlan.ENTERPRISE ? (
-                  <a
-                    href="mailto:sales@triageinsight.com"
-                    style={{
-                      fontSize: '0.78rem',
-                      color: '#0A2540',
-                      fontWeight: 600,
-                      textDecoration: 'underline',
-                    }}
-                  >
-                    Contact sales
-                  </a>
                 ) : (
                   <button
                     style={isPending ? BTN_DISABLED : BTN_PRIMARY}
@@ -581,7 +584,7 @@ export default function BillingPage() {
 
         {/* Upgrade / manage CTAs */}
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-          {billing.billingPlan !== BillingPlan.ENTERPRISE && (
+          {billing.billingPlan !== BillingPlan.BUSINESS && (
             <button
               style={BTN_PRIMARY}
               onClick={() => setShowComparison((v) => !v)}

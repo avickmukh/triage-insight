@@ -31,10 +31,8 @@ export enum WorkspaceStatus {
 
 export enum BillingPlan {
   FREE = 'FREE',
-  STARTER = 'STARTER',
-  GROWTH = 'GROWTH',
   PRO = 'PRO',
-  ENTERPRISE = 'ENTERPRISE',
+  BUSINESS = 'BUSINESS',
 }
 
 export enum TrialStatus {
@@ -525,20 +523,39 @@ export interface ConnectSlackDto {
 /**
  * A single row from the Plan config table (managed by SUPER_ADMIN).
  * Returned by GET /billing/plans.
+ *
+ * Plans: FREE | PRO ($29/mo) | BUSINESS ($49/mo)
  */
 export interface PlanConfig {
   planType: BillingPlan;
   displayName: string;
   description: string | null;
+  /** Monthly price in USD cents (0 = free) */
+  priceMonthly: number;
   trialDays: number;
+  /** Max ADMIN-role members allowed (null = unlimited) */
+  adminLimit: number | null;
   seatLimit: number | null;
   aiUsageLimit: number | null;
   feedbackLimit: number | null;
+  /** Monthly voice upload slots (0 = disabled, null = unlimited) */
+  voiceUploadLimit: number | null;
+  /** Monthly survey response slots (0 = disabled, null = unlimited) */
+  surveyResponseLimit: number | null;
   aiInsights: boolean;
+  aiThemeClustering: boolean;
+  ciqPrioritization: boolean;
+  explainableAi: boolean;
+  weeklyDigest: boolean;
+  voiceFeedback: boolean;
+  survey: boolean;
   integrations: boolean;
   publicPortal: boolean;
-  churnIntelligence: boolean;
-  sso: boolean;
+  csvImport: boolean;
+  apiAccess: boolean;
+  executiveReporting: boolean;
+  /** Custom domain — coming soon; always false for now */
+  customDomain: boolean;
   isActive: boolean;
   isDefault: boolean;
 }

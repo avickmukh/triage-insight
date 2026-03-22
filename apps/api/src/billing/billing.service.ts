@@ -13,11 +13,14 @@ import { UpdateBillingEmailDto } from './dto/update-billing-email.dto';
  * BillingService
  *
  * Owns all billing-related reads and writes against the Workspace model.
- * Plan limits are now read from the Plan config table (managed by SUPER_ADMIN
+ * Plan limits are read from the Plan config table (managed by SUPER_ADMIN
  * via /platform/plans) rather than being hard-coded.
+ *
+ * Plans: FREE | PRO ($29/mo) | BUSINESS ($49/mo)
  *
  * Current capabilities:
  *   - getStatus          — returns the full billing snapshot for a workspace
+ *   - listPlans          — returns all active Plan config rows
  *   - requestPlanChange  — records a plan-change request (mock; no Stripe yet)
  *   - updateBillingEmail — ADMIN-only update of the billing contact email
  *   - handleStripeWebhook — placeholder for incoming Stripe webhook events
@@ -34,64 +37,88 @@ export class BillingService implements OnModuleInit {
    */
   async onModuleInit() {
     const DEFAULT_PLANS = [
+      // ── FREE ──────────────────────────────────────────────────────────────
       {
         planType: BillingPlan.FREE,
         displayName: 'Free',
-        description: 'Forever free for small teams',
+        description: 'Forever free for solo PMs and small teams',
+        priceMonthly: 0,
         trialDays: 0,
+        adminLimit: 1,
         seatLimit: 3,
         aiUsageLimit: 0,
-        feedbackLimit: 200,
+        feedbackLimit: 100,
+        voiceUploadLimit: 0,
+        surveyResponseLimit: 0,
         aiInsights: false,
+        aiThemeClustering: false,
+        ciqPrioritization: false,
+        explainableAi: false,
+        weeklyDigest: false,
+        voiceFeedback: false,
+        survey: false,
         integrations: false,
         publicPortal: true,
-        churnIntelligence: false,
-        sso: false,
+        csvImport: true,
+        apiAccess: false,
+        executiveReporting: false,
+        customDomain: false,
         isDefault: true,
       },
+      // ── PRO ($29/mo) ───────────────────────────────────────────────────────
       {
-        planType: BillingPlan.STARTER,
-        displayName: 'Starter',
-        description: '14-day trial, then $29/mo',
+        planType: BillingPlan.PRO,
+        displayName: 'Pro',
+        description: 'For growing teams ready to close the feedback loop',
+        priceMonthly: 2900,
         trialDays: 14,
+        adminLimit: 1,
         seatLimit: 5,
         aiUsageLimit: 500,
         feedbackLimit: 1000,
+        voiceUploadLimit: 100,
+        surveyResponseLimit: 300,
         aiInsights: true,
-        integrations: false,
-        publicPortal: true,
-        churnIntelligence: false,
-        sso: false,
-        isDefault: false,
-      },
-      {
-        planType: BillingPlan.GROWTH,
-        displayName: 'Growth',
-        description: '14-day trial, then $79/mo',
-        trialDays: 14,
-        seatLimit: 15,
-        aiUsageLimit: 2000,
-        feedbackLimit: null,
-        aiInsights: true,
+        aiThemeClustering: true,
+        ciqPrioritization: true,
+        explainableAi: true,
+        weeklyDigest: false,
+        voiceFeedback: true,
+        survey: true,
         integrations: true,
         publicPortal: true,
-        churnIntelligence: false,
-        sso: false,
+        csvImport: true,
+        apiAccess: true,
+        executiveReporting: false,
+        customDomain: false,
         isDefault: false,
       },
+      // ── BUSINESS ($49/mo) ─────────────────────────────────────────────────
       {
-        planType: BillingPlan.ENTERPRISE,
-        displayName: 'Enterprise',
-        description: 'Custom pricing for large teams',
-        trialDays: 0,
-        seatLimit: null,
+        planType: BillingPlan.BUSINESS,
+        displayName: 'Business',
+        description: 'For teams that need integrations and deeper insights',
+        priceMonthly: 4900,
+        trialDays: 14,
+        adminLimit: 3,
+        seatLimit: 15,
         aiUsageLimit: null,
         feedbackLimit: null,
+        voiceUploadLimit: -1,  // -1 = unlimited (column is NOT NULL)
+        surveyResponseLimit: -1, // -1 = unlimited (column is NOT NULL)
         aiInsights: true,
+        aiThemeClustering: true,
+        ciqPrioritization: true,
+        explainableAi: true,
+        weeklyDigest: true,
+        voiceFeedback: true,
+        survey: true,
         integrations: true,
         publicPortal: true,
-        churnIntelligence: true,
-        sso: true,
+        csvImport: true,
+        apiAccess: true,
+        executiveReporting: true,
+        customDomain: false, // coming soon
         isDefault: false,
       },
     ];
@@ -99,11 +126,37 @@ export class BillingService implements OnModuleInit {
     for (const plan of DEFAULT_PLANS) {
       await this.prisma.plan.upsert({
         where: { planType: plan.planType },
-        update: {},
+        update: {
+          // Update all fields on every restart so config stays in sync
+          displayName: plan.displayName,
+          description: plan.description,
+          priceMonthly: plan.priceMonthly,
+          trialDays: plan.trialDays,
+          adminLimit: plan.adminLimit,
+          seatLimit: plan.seatLimit,
+          aiUsageLimit: plan.aiUsageLimit,
+          feedbackLimit: plan.feedbackLimit,
+          voiceUploadLimit: plan.voiceUploadLimit,
+          surveyResponseLimit: plan.surveyResponseLimit,
+          aiInsights: plan.aiInsights,
+          aiThemeClustering: plan.aiThemeClustering,
+          ciqPrioritization: plan.ciqPrioritization,
+          explainableAi: plan.explainableAi,
+          weeklyDigest: plan.weeklyDigest,
+          voiceFeedback: plan.voiceFeedback,
+          survey: plan.survey,
+          integrations: plan.integrations,
+          publicPortal: plan.publicPortal,
+          csvImport: plan.csvImport,
+          apiAccess: plan.apiAccess,
+          executiveReporting: plan.executiveReporting,
+          customDomain: plan.customDomain,
+          isDefault: plan.isDefault,
+        },
         create: plan,
       });
     }
-    this.logger.log('Default plans seeded/verified.');
+    this.logger.log('Default plans (FREE / PRO / BUSINESS) seeded/verified.');
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
@@ -144,15 +197,27 @@ export class BillingService implements OnModuleInit {
       planType,
       displayName: planType,
       description: null,
+      priceMonthly: 0,
       trialDays: 0,
+      adminLimit: 1,
       seatLimit: planType === BillingPlan.FREE ? 3 : null,
       aiUsageLimit: 0,
-      feedbackLimit: planType === BillingPlan.FREE ? 200 : null,
+      feedbackLimit: planType === BillingPlan.FREE ? 100 : null,
+      voiceUploadLimit: 0,
+      surveyResponseLimit: 0,
       aiInsights: planType !== BillingPlan.FREE,
-      integrations: planType === BillingPlan.ENTERPRISE,
+      aiThemeClustering: planType !== BillingPlan.FREE,
+      ciqPrioritization: planType !== BillingPlan.FREE,
+      explainableAi: planType !== BillingPlan.FREE,
+      weeklyDigest: planType === BillingPlan.BUSINESS,
+      voiceFeedback: planType !== BillingPlan.FREE,
+      survey: planType !== BillingPlan.FREE,
+      integrations: planType !== BillingPlan.FREE,
       publicPortal: true,
-      churnIntelligence: planType === BillingPlan.ENTERPRISE,
-      sso: planType === BillingPlan.ENTERPRISE,
+      csvImport: true,
+      apiAccess: planType !== BillingPlan.FREE,
+      executiveReporting: planType === BillingPlan.BUSINESS,
+      customDomain: false,
       isActive: true,
       isDefault: planType === BillingPlan.FREE,
     };
@@ -215,15 +280,27 @@ export class BillingService implements OnModuleInit {
       planConfig: {
         displayName: planConfig.displayName,
         description: planConfig.description,
+        priceMonthly: planConfig.priceMonthly,
         trialDays: planConfig.trialDays,
+        adminLimit: planConfig.adminLimit,
         seatLimit: planConfig.seatLimit,
         aiUsageLimit: planConfig.aiUsageLimit,
         feedbackLimit: planConfig.feedbackLimit,
+        voiceUploadLimit: planConfig.voiceUploadLimit,
+        surveyResponseLimit: planConfig.surveyResponseLimit,
         aiInsights: planConfig.aiInsights,
+        aiThemeClustering: planConfig.aiThemeClustering,
+        ciqPrioritization: planConfig.ciqPrioritization,
+        explainableAi: planConfig.explainableAi,
+        weeklyDigest: planConfig.weeklyDigest,
+        voiceFeedback: planConfig.voiceFeedback,
+        survey: planConfig.survey,
         integrations: planConfig.integrations,
         publicPortal: planConfig.publicPortal,
-        churnIntelligence: planConfig.churnIntelligence,
-        sso: planConfig.sso,
+        csvImport: planConfig.csvImport,
+        apiAccess: planConfig.apiAccess,
+        executiveReporting: planConfig.executiveReporting,
+        customDomain: planConfig.customDomain,
       },
     };
   }
@@ -238,9 +315,8 @@ export class BillingService implements OnModuleInit {
   async listPlans() {
     const ORDER: BillingPlan[] = [
       BillingPlan.FREE,
-      BillingPlan.STARTER,
-      BillingPlan.GROWTH,
-      BillingPlan.ENTERPRISE,
+      BillingPlan.PRO,
+      BillingPlan.BUSINESS,
     ];
     const plans = await this.prisma.plan.findMany({ where: { isActive: true } });
     return plans.sort(
@@ -294,22 +370,12 @@ export class BillingService implements OnModuleInit {
    *
    * Stripe webhook receiver.  The raw request body must be forwarded here
    * without JSON parsing so the Stripe SDK can verify the signature.
-   *
-   * Current implementation: logs the event type and returns 200.
-   * Production implementation should:
-   *   1. Verify the Stripe-Signature header with stripe.webhooks.constructEvent()
-   *   2. Handle checkout.session.completed → activate subscription, set billingPlan
-   *   3. Handle invoice.payment_succeeded → update currentPeriodStart/End
-   *   4. Handle invoice.payment_failed    → set billingStatus = PAST_DUE
-   *   5. Handle customer.subscription.deleted → set billingStatus = CANCELED, planStatus = CANCELLED
-   *   6. Handle customer.subscription.trial_will_end → notify workspace admin
    */
   async handleStripeWebhook(
     rawBody: Buffer,
     stripeSignature: string | undefined,
   ): Promise<{ received: boolean }> {
-    // TODO: const event = stripe.webhooks.constructEvent(rawBody, stripeSignature, process.env.STRIPE_WEBHOOK_SECRET);
-    // TODO: switch (event.type) { ... }
+    // TODO: verify signature and handle event types
     console.log(
       '[BillingService] Stripe webhook received. Signature header present:',
       !!stripeSignature,
