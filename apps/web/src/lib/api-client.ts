@@ -7,6 +7,8 @@ import {
   CreateRoadmapItemDto,
   CreateThemeDto,
   DuplicateSuggestion,
+  ThemeLinkedFeedbackResponse,
+  ThemeReclusterResponse,
   DuplicateSuggestionStatus,
   Feedback,
   FeedbackComment,
@@ -165,16 +167,40 @@ const apiClient = {
   },
 
   themes: {
-    list: (workspaceId: string, params?: any): Promise<ThemeListResponse> =>
+    /** GET /workspaces/:id/themes — flat pagination { data, total, page, limit } */
+    list: (
+      workspaceId: string,
+      params?: { page?: number; limit?: number; search?: string; status?: string; pinned?: boolean }
+    ): Promise<ThemeListResponse> =>
       api.get(`/workspaces/${workspaceId}/themes`, { params }).then(handleResponse),
+    /** GET /workspaces/:id/themes/:themeId — includes linkedFeedback[] and aggregatedPriorityScore */
     getById: (workspaceId: string, themeId: string): Promise<Theme> =>
       api.get(`/workspaces/${workspaceId}/themes/${themeId}`).then(handleResponse),
+    /** POST /workspaces/:id/themes */
     create: (workspaceId: string, data: CreateThemeDto): Promise<Theme> =>
       api.post(`/workspaces/${workspaceId}/themes`, data).then(handleResponse),
+    /** PATCH /workspaces/:id/themes/:themeId */
     update: (workspaceId: string, themeId: string, data: UpdateThemeDto): Promise<Theme> =>
       api.patch(`/workspaces/${workspaceId}/themes/${themeId}`, data).then(handleResponse),
+    /** GET /workspaces/:id/themes/:themeId/feedback — paginated linked feedback */
+    listLinkedFeedback: (
+      workspaceId: string,
+      themeId: string,
+      params?: { page?: number; limit?: number }
+    ): Promise<ThemeLinkedFeedbackResponse> =>
+      api.get(`/workspaces/${workspaceId}/themes/${themeId}/feedback`, { params }).then(handleResponse),
+    /** POST /workspaces/:id/themes/:themeId/feedback/:feedbackId — manually link feedback */
+    addFeedback: (workspaceId: string, themeId: string, feedbackId: string): Promise<void> =>
+      api.post(`/workspaces/${workspaceId}/themes/${themeId}/feedback/${feedbackId}`).then(handleResponse),
+    /** DELETE /workspaces/:id/themes/:themeId/feedback/:feedbackId — unlink feedback */
+    removeFeedback: (workspaceId: string, themeId: string, feedbackId: string): Promise<void> =>
+      api.delete(`/workspaces/${workspaceId}/themes/${themeId}/feedback/${feedbackId}`).then(handleResponse),
+    /** POST /workspaces/:id/themes/feedback — bulk move feedback between themes */
     moveFeedback: (workspaceId: string, data: MoveFeedbackDto): Promise<void> =>
       api.post(`/workspaces/${workspaceId}/themes/feedback`, data).then(handleResponse),
+    /** POST /workspaces/:id/themes/recluster — trigger workspace-wide reclustering job */
+    triggerRecluster: (workspaceId: string): Promise<ThemeReclusterResponse> =>
+      api.post(`/workspaces/${workspaceId}/themes/recluster`).then(handleResponse),
   },
 
   roadmap: {

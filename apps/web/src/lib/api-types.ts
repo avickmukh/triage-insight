@@ -158,17 +158,46 @@ export interface Feedback {
   comments?: FeedbackComment[];
 }
 
+/**
+ * A single linked feedback item as returned inside Theme.linkedFeedback[]
+ * (only present on GET /workspaces/:id/themes/:themeId — not on the list).
+ */
+export interface ThemeLinkedFeedback {
+  id: string;
+  title: string;
+  description: string;
+  status: FeedbackStatus;
+  sourceType: FeedbackSourceType;
+  sentiment: number | null;
+  impactScore: number | null;
+  createdAt: string;
+  submittedAt: string | null;
+  customerId: string | null;
+  portalUserId: string | null;
+  /** Metadata from the ThemeFeedback join row */
+  assignedAt: string;
+  assignedBy: 'manual' | 'ai';
+  confidence: number | null;
+}
+
 export interface Theme {
   id: string;
   title: string;
-  description?: string;
+  description?: string | null;
   status: ThemeStatus;
   pinned: boolean;
+  /** Present on list (from _count.feedbacks) and detail */
   feedbackCount: number;
-  customerCount: number;
-  totalArr: number;
-  totalDealValue: number;
-  priorityScore: number;
+  /**
+   * Mean impactScore of linked feedback.
+   * Only present on GET /themes/:id (detail), null if no scores available.
+   */
+  aggregatedPriorityScore?: number | null;
+  /**
+   * Linked feedback items — only present on GET /themes/:id (detail).
+   * Not included in the list response.
+   */
+  linkedFeedback?: ThemeLinkedFeedback[];
   workspaceId: string;
   createdAt: string;
   updatedAt: string;
@@ -300,11 +329,41 @@ export interface PublicFeedbackDto {
 }
 
 // Themes
-export type ThemeListResponse = PaginatedResponse<Theme>;
-export interface CreateThemeDto extends Pick<Theme, 'title' | 'description'> {
+/**
+ * Backend returns flat pagination: { data, total, page, limit }
+ * NOT wrapped in a `meta` object like PaginatedResponse.
+ */
+export interface ThemeListResponse {
+  data: Theme[];
+  total: number;
+  page: number;
+  limit: number;
+}
+export interface CreateThemeDto {
+  title: string;
+  description?: string | null;
   feedbackIds?: string[];
 }
-export interface UpdateThemeDto extends Partial<Pick<Theme, 'title' | 'description' | 'status' | 'pinned'>> {}
+export interface UpdateThemeDto {
+  title?: string;
+  description?: string | null;
+  status?: ThemeStatus;
+  pinned?: boolean;
+}
+
+/** Response from POST /workspaces/:id/themes/recluster */
+export interface ThemeReclusterResponse {
+  message: string;
+  jobId: string | number;
+}
+
+/** Paginated linked-feedback response from GET /workspaces/:id/themes/:themeId/feedback */
+export interface ThemeLinkedFeedbackResponse {
+  data: ThemeLinkedFeedback[];
+  total: number;
+  page: number;
+  limit: number;
+}
 export interface MoveFeedbackDto {
   feedbackIds: string[];
   sourceThemeId?: string;
