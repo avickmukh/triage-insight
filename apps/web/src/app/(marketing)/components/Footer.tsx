@@ -54,7 +54,7 @@ export default function Footer() {
           <li><a href="/#features">Features</a></li>
           <li><a href="/#pricing">Pricing</a></li>
           <li><a href="/#how-it-works">How it works</a></li>
-          <li><a href="/signup">Get started</a></li>
+          <li><a href="/signup?plan=FREE">Get started</a></li>
         </ul>
       </div>
 
@@ -63,7 +63,7 @@ export default function Footer() {
         <ul className="footer-links">
           <li><a href="/blog">Blog</a></li>
           <li><a href="/login">Sign in</a></li>
-          <li><a href="/signup">Sign up</a></li>
+          <li><a href="/signup?plan=FREE">Sign up</a></li>
           <li><a href="mailto:hello@triageinsight.com">Contact</a></li>
         </ul>
       </div>

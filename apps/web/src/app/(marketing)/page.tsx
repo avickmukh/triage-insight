@@ -24,7 +24,7 @@ export default function HomePage() {
       </p>
 
       <div className="hero-buttons fade-up fade-up-delay-3">
-        <a href="/signup" className="btn btn-yellow">
+        <a href="/signup?plan=FREE" className="btn btn-yellow">
           Start your free trial
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -808,7 +808,7 @@ export default function HomePage() {
       Join 200+ SaaS teams who've found clarity with TriageInsight.
     </p>
     <div className="cta-buttons fade-up fade-up-delay-3">
-      <a href="/signup" className="btn btn-yellow">
+      <a href="/signup?plan=FREE" className="btn btn-yellow">
         Start your free trial
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
           <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>

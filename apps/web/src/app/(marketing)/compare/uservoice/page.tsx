@@ -13,7 +13,7 @@ export default function Page() {
           <p style={{ fontSize: "1.15rem", color: "rgba(255,255,255,0.7)", maxWidth: 600, margin: "0 auto 2.5rem" }}>
             UserVoice is enterprise-heavy and expensive. TriageInsight gives you more AI power at a fraction of the cost.
           </p>
-          <a href="/signup" className="btn btn-yellow">Try TriageInsight free</a>
+          <a href="/signup?plan=FREE" className="btn btn-yellow">Try TriageInsight free</a>
         </div>
       </section>
 
@@ -93,7 +93,7 @@ export default function Page() {
         <div className="container">
           <h2 style={{ fontSize: "clamp(1.75rem,3vw,2.5rem)", fontWeight: 800, color: "#fff", marginBottom: "1rem" }}>Ready to make the switch?</h2>
           <p style={{ fontSize: "1.1rem", color: "rgba(255,255,255,0.65)", marginBottom: "2rem" }}>Free migration support included on all paid plans.</p>
-          <a href="/signup" className="btn btn-yellow">Start free trial</a>
+          <a href="/signup?plan=FREE" className="btn btn-yellow">Start free trial</a>
         </div>
       </section>
     </main>

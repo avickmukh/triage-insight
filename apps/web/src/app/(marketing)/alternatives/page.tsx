@@ -40,7 +40,7 @@ export default function AlternativesPage() {
         <div className="container">
           <h2 style={{ fontSize: "clamp(1.75rem,3vw,2.5rem)", fontWeight: 800, color: "#fff", marginBottom: "1rem" }}>Ready to make the switch?</h2>
           <p style={{ fontSize: "1.1rem", color: "rgba(255,255,255,0.65)", marginBottom: "2rem" }}>Free migration support included on all paid plans.</p>
-          <a href="/signup" className="btn btn-yellow">Start free trial</a>
+          <a href="/signup?plan=FREE" className="btn btn-yellow">Start free trial</a>
         </div>
       </section>
     </main>

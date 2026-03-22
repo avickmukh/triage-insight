@@ -26,13 +26,15 @@ type SignupFormValues = z.infer<typeof signupSchema>;
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const VALID_PLANS = new Set<string>(Object.values(BillingPlan));
 
-function parsePlanParam(raw: string | null): BillingPlan | undefined {
-  if (!raw) return undefined;
+/** Always returns a valid BillingPlan — defaults to FREE when param is absent or invalid. */
+function parsePlanParam(raw: string | null): BillingPlan {
+  if (!raw) return BillingPlan.FREE;
   const upper = raw.toUpperCase();
-  return VALID_PLANS.has(upper) ? (upper as BillingPlan) : undefined;
+  return VALID_PLANS.has(upper) ? (upper as BillingPlan) : BillingPlan.FREE;
 }
 
-const PLAN_LABELS: Partial<Record<BillingPlan, string>> = {
+const PLAN_LABELS: Record<BillingPlan, string> = {
+  [BillingPlan.FREE]: 'Free',
   [BillingPlan.STARTER]: 'Starter',
   [BillingPlan.GROWTH]: 'Growth',
   [BillingPlan.PRO]: 'Pro',
@@ -75,9 +77,10 @@ export default function SignupPage() {
   const [serverError, setServerError] = useState<string | null>(null);
   const searchParams = useSearchParams();
 
-  // Read optional ?plan=STARTER|GROWTH|PRO|ENTERPRISE from URL (set by pricing page CTAs)
+  // Always resolves to a valid plan — defaults to FREE when no ?plan= param is present.
   const planParam = parsePlanParam(searchParams.get("plan"));
-  const planLabel = planParam ? PLAN_LABELS[planParam] : null;
+  const planLabel = PLAN_LABELS[planParam];
+  const isFree = planParam === BillingPlan.FREE;
 
   const {
     register,
@@ -88,9 +91,9 @@ export default function SignupPage() {
   const onSubmit = async (data: SignupFormValues) => {
     setServerError(null);
     try {
-      // Pass planType only when a valid plan was selected on the pricing page.
-      // The backend defaults to FREE when planType is omitted.
-      await signUp({ ...data, ...(planParam ? { planType: planParam } : {}) });
+      // Always pass planType so the backend knows which plan to assign.
+      // Defaults to FREE when no ?plan= param was in the URL.
+      await signUp({ ...data, planType: planParam });
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { message?: string | string[] } } })
@@ -148,44 +151,43 @@ export default function SignupPage() {
           }}
         >
           <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#fff", marginBottom: "0.375rem" }}>
-            {planLabel ? `Start your ${planLabel} trial` : "Start for free"}
+            {isFree ? "Start for free" : `Start your ${planLabel} trial`}
           </h1>
           <p style={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.55)", marginBottom: "2rem" }}>
-            {planLabel
-              ? `Create your TriageInsight workspace and start your ${planLabel} trial.`
-              : "Create your TriageInsight workspace in 30 seconds"}
+            {isFree
+              ? "Create your TriageInsight workspace in 30 seconds. No credit card required."
+              : `Create your TriageInsight workspace and start your 14-day ${planLabel} trial.`}
           </p>
 
-          {/* Selected plan badge */}
-          {planLabel && (
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.4rem",
-                background: "rgba(32,164,164,0.15)",
-                border: "1px solid rgba(32,164,164,0.35)",
-                borderRadius: "999px",
-                padding: "0.3rem 0.9rem",
-                fontSize: "0.78rem",
-                fontWeight: 700,
-                color: "#20A4A4",
-                marginBottom: "1.5rem",
-              }}
+          {/* Selected plan badge — shown for all plans including FREE */}
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.4rem",
+              background: "rgba(32,164,164,0.15)",
+              border: "1px solid rgba(32,164,164,0.35)",
+              borderRadius: "999px",
+              padding: "0.3rem 0.9rem",
+              fontSize: "0.78rem",
+              fontWeight: 700,
+              color: "#20A4A4",
+              marginBottom: "1.5rem",
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <circle cx="6" cy="6" r="5" fill="#20A4A4" fillOpacity="0.25" />
+              <path d="M3.5 6l1.5 1.5 3.5-3.5" stroke="#20A4A4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            {planLabel} plan selected
+            {/* Link to /pricing so user can choose a different plan */}
+            <Link
+              href="/pricing"
+              style={{ color: "rgba(32,164,164,0.7)", fontSize: "0.7rem", marginLeft: "0.25rem", textDecoration: "underline" }}
             >
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                <circle cx="6" cy="6" r="5" fill="#20A4A4" fillOpacity="0.25" />
-                <path d="M3.5 6l1.5 1.5 3.5-3.5" stroke="#20A4A4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              {planLabel} plan selected
-              <Link
-                href="/signup"
-                style={{ color: "rgba(32,164,164,0.7)", fontSize: "0.7rem", marginLeft: "0.25rem", textDecoration: "underline" }}
-              >
-                change
-              </Link>
-            </div>
-          )}
+              change
+            </Link>
+          </div>
 
           {serverError && (
             <div
@@ -298,9 +300,9 @@ export default function SignupPage() {
             >
               {isSubmitting
                 ? "Creating workspace…"
-                : planLabel
-                ? `Start ${planLabel} trial`
-                : "Create free account"}
+                : isFree
+                ? "Create free account"
+                : `Start ${planLabel} trial`}
             </button>
           </form>
 
