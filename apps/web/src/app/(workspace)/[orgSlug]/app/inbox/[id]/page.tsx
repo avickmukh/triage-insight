@@ -8,6 +8,7 @@ import { useCurrentMemberRole } from '@/hooks/use-workspace';
 import { FeedbackStatus, FeedbackSourceType, WorkspaceRole } from '@/lib/api-types';
 import { appRoutes } from '@/lib/routes';
 import { CommentSection } from '@/components/modules/feedback/comment-section/component';
+import { DuplicateSuggestionsPanel } from '@/components/modules/feedback/duplicate-suggestions/component';
 
 // ─── Design tokens (matching TriageInsight shell) ────────────────────────────────────────────
 
@@ -349,6 +350,11 @@ export default function InboxItemPage({
           </div>
         )}
       </div>
+
+      {/* Duplicate suggestions panel — only shown for non-merged feedback */}
+      {feedback.status !== FeedbackStatus.MERGED && (
+        <DuplicateSuggestionsPanel feedbackId={feedback.id} />
+      )}
 
       {/* Comments section — wired but will 404 until backend adds route */}
       <div style={CARD}>

@@ -284,6 +284,23 @@ export default function InboxPage() {
                     >
                       {fb.status.replace('_', '\u00a0')}
                     </span>
+                    {/* Merged-away indicator: this item was merged into another */}
+                    {fb.mergedIntoId && (
+                      <span
+                        title={`Merged into ${fb.mergedIntoId}`}
+                        style={{
+                          fontSize: '0.68rem',
+                          fontWeight: 700,
+                          padding: '0.15rem 0.45rem',
+                          borderRadius: '999px',
+                          background: '#fce8ff',
+                          color: '#7c3aed',
+                          border: '1px solid #e9d5ff',
+                        }}
+                      >
+                        Merged
+                      </span>
+                    )}
                     <span style={{ fontSize: '0.78rem', color: '#adb5bd' }}>
                       {new Date(fb.createdAt).toLocaleDateString()}
                     </span>

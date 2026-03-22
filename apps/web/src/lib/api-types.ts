@@ -435,3 +435,37 @@ export interface ApiError {
   message: string | string[];
   error: string;
 }
+
+// ─── Duplicate Suggestions ────────────────────────────────────────────────────
+
+export enum DuplicateSuggestionStatus {
+  PENDING = 'PENDING',
+  ACCEPTED = 'ACCEPTED',
+  REJECTED = 'REJECTED',
+}
+
+/** Minimal feedback summary embedded inside a duplicate suggestion row */
+export interface DuplicateSuggestionFeedbackSummary {
+  id: string;
+  title: string;
+  status: FeedbackStatus;
+  sourceType: FeedbackSourceType;
+}
+
+/**
+ * A single duplicate suggestion row as returned by:
+ *   GET /workspaces/:id/duplicate-suggestions
+ *   GET /workspaces/:id/feedback/:feedbackId/duplicate-suggestions
+ */
+export interface DuplicateSuggestion {
+  id: string;
+  sourceId: string;
+  targetId: string;
+  /** Cosine similarity (0–1) or keyword-overlap score (0–1) */
+  similarity: number;
+  status: DuplicateSuggestionStatus;
+  createdAt: string;
+  updatedAt: string;
+  sourceFeedback: DuplicateSuggestionFeedbackSummary;
+  targetFeedback: DuplicateSuggestionFeedbackSummary;
+}

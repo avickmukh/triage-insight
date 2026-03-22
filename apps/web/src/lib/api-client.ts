@@ -6,6 +6,8 @@ import {
   CreateFeedbackDto,
   CreateRoadmapItemDto,
   CreateThemeDto,
+  DuplicateSuggestion,
+  DuplicateSuggestionStatus,
   Feedback,
   FeedbackComment,
   FeedbackListResponse,
@@ -301,6 +303,66 @@ const apiClient = {
     ): Promise<{ id: string; feedbackId: string; body: string; authorName: string | null; createdAt: string }> =>
       api
         .post(`/portal/${orgSlug}/feedback/${feedbackId}/comments`, data)
+        .then(handleResponse),
+  },
+
+  duplicates: {
+    /**
+     * GET /workspaces/:id/duplicate-suggestions
+     * List all suggestions for the workspace (default: PENDING).
+     */
+    listForWorkspace: (
+      workspaceId: string,
+      status?: DuplicateSuggestionStatus
+    ): Promise<DuplicateSuggestion[]> =>
+      api
+        .get(`/workspaces/${workspaceId}/duplicate-suggestions`, {
+          params: status ? { status } : undefined,
+        })
+        .then(handleResponse),
+
+    /**
+     * GET /workspaces/:id/feedback/:feedbackId/duplicate-suggestions
+     * List suggestions for a specific feedback item (as source or target).
+     */
+    listForFeedback: (
+      workspaceId: string,
+      feedbackId: string,
+      status?: DuplicateSuggestionStatus
+    ): Promise<DuplicateSuggestion[]> =>
+      api
+        .get(
+          `/workspaces/${workspaceId}/feedback/${feedbackId}/duplicate-suggestions`,
+          { params: status ? { status } : undefined }
+        )
+        .then(handleResponse),
+
+    /**
+     * POST /workspaces/:id/duplicate-suggestions/:suggestionId/accept
+     * Accept a suggestion — triggers merge of source into target.
+     */
+    accept: (
+      workspaceId: string,
+      suggestionId: string
+    ): Promise<DuplicateSuggestion> =>
+      api
+        .post(
+          `/workspaces/${workspaceId}/duplicate-suggestions/${suggestionId}/accept`
+        )
+        .then(handleResponse),
+
+    /**
+     * POST /workspaces/:id/duplicate-suggestions/:suggestionId/reject
+     * Reject a suggestion — marks it REJECTED, no merge.
+     */
+    reject: (
+      workspaceId: string,
+      suggestionId: string
+    ): Promise<DuplicateSuggestion> =>
+      api
+        .post(
+          `/workspaces/${workspaceId}/duplicate-suggestions/${suggestionId}/reject`
+        )
         .then(handleResponse),
   },
 };
