@@ -1,10 +1,10 @@
 'use client';
-
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/lib/api-client';
 import { useWorkspace } from '@/hooks/use-workspace';
+import { useWorkspaceLimits } from '@/hooks/use-workspace-limits';
 import { InviteMemberDto, WorkspaceRole } from '@/lib/api-types';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -223,6 +223,13 @@ export default function MembersPage() {
   const members = membersQuery.data ?? [];
   const invites = invitesQuery.data ?? [];
 
+  // ── Plan limits ────────────────────────────────────────────────────────────
+  const { limits } = useWorkspaceLimits();
+  const seatUsed = limits?.seats.used ?? members.length;
+  const seatMax = limits?.seats.limit;
+  const adminUsed = limits?.admins.used ?? members.filter((m) => m.role === WorkspaceRole.ADMIN).length;
+  const adminMax = limits?.admins.limit;
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -235,6 +242,17 @@ export default function MembersPage() {
         <p style={{ fontSize: '0.9rem', color: '#6C757D' }}>
           Manage who has access to the <strong>{workspace?.name ?? slug}</strong> workspace.
         </p>
+        {/* Seat / admin limit badges */}
+        {limits && (
+          <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.8rem', fontWeight: 600, padding: '0.2rem 0.75rem', borderRadius: '999px', background: seatMax !== null && seatUsed >= seatMax ? '#fff5f5' : '#f1f3f5', color: seatMax !== null && seatUsed >= seatMax ? '#c53030' : '#0A2540' }}>
+              {seatMax === null ? `${seatUsed} seats used (unlimited)` : `${seatUsed} / ${seatMax} seats used`}
+            </span>
+            <span style={{ fontSize: '0.8rem', fontWeight: 600, padding: '0.2rem 0.75rem', borderRadius: '999px', background: adminMax !== null && adminUsed >= adminMax ? '#fff5f5' : '#f1f3f5', color: adminMax !== null && adminUsed >= adminMax ? '#c53030' : '#0A2540' }}>
+              {adminMax === null ? `${adminUsed} admins (unlimited)` : `${adminUsed} / ${adminMax} admins`}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* ── Invite form ── */}

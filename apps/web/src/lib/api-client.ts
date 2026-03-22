@@ -52,6 +52,7 @@ import {
   WorkspaceMember,
   DomainSettings,
   SetDomainDto,
+  WorkspaceLimitSummary,
 } from "@/lib/api-types";
 
 const getApiBaseUrl = () => {
@@ -126,6 +127,8 @@ const apiClient = {
       api.delete(`/workspace/current/members/${userId}`).then(handleResponse),
     updateMemberRole: (userId: string, role: string): Promise<WorkspaceMember> =>
       api.patch(`/workspace/current/members/${userId}/role`, { role }).then(handleResponse),
+    getLimits: (): Promise<WorkspaceLimitSummary> =>
+      api.get('/workspace/current/limits').then(handleResponse),
   },
 
   feedback: {

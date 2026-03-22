@@ -9,6 +9,7 @@ import {
   useSyncIntegrations,
 } from '@/hooks/use-integrations';
 import { IntegrationProvider, IntegrationStatus } from '@/lib/api-types';
+import { PlanGate } from '@/components/shared/plan-gate';
 
 // ── Design tokens (matches existing admin design system) ──────────────────
 const CARD: React.CSSProperties = {
@@ -426,6 +427,7 @@ export default function IntegrationsPage() {
   const connectedCount = integrations.filter((s) => s.connected).length;
 
   return (
+    <PlanGate feature="integrations" requiredPlan="Pro">
     <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', marginBottom: '2rem' }}>
         <div>
@@ -478,5 +480,6 @@ export default function IntegrationsPage() {
         })
       )}
     </div>
+    </PlanGate>
   );
 }

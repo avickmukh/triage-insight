@@ -6,6 +6,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { PlanLimitService } from '../billing/plan-limit.service';
 import { DomainVerificationStatus, WorkspaceRole } from '@prisma/client';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 import { InviteMemberDto } from './dto/invite-member.dto';
@@ -20,7 +21,10 @@ function hashToken(raw: string): string {
 
 @Injectable()
 export class WorkspaceService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly planLimit: PlanLimitService,
+  ) {}
 
   async getCurrentWorkspace(userId: string) {
     const membership = await this.prisma.workspaceMember.findFirst({
@@ -75,6 +79,9 @@ export class WorkspaceService {
     if (!membership || membership.role !== WorkspaceRole.ADMIN) {
       throw new ForbiddenException('Only workspace admins can invite members.');
     }
+
+    // ── Plan limit: check seat and admin limits before issuing invite ─────────
+    await this.planLimit.assertCanAddMember(workspace.id, dto.role);
 
     // Check if user is already a member
     const existingUser = await this.prisma.user.findUnique({ where: { email: dto.email } });
@@ -172,6 +179,16 @@ export class WorkspaceService {
       data: { role: dto.role },
       include: { user: { select: { id: true, email: true, firstName: true, lastName: true } } },
     });
+  }
+
+  /**
+   * GET /workspace/current/limits
+   * Returns current usage vs plan limits for the calling user's workspace.
+   * Accessible to all authenticated members.
+   */
+  async getLimitSummary(userId: string) {
+    const workspace = await this.getCurrentWorkspace(userId);
+    return this.planLimit.getLimitSummary(workspace.id);
   }
 
   async getPendingInvites(userId: string) {

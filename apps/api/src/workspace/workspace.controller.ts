@@ -46,6 +46,16 @@ export class WorkspaceController {
   }
 
   /**
+   * GET /workspace/current/limits
+   * Returns current usage vs plan limits (seats, feedback, voice, survey).
+   * Accessible to all authenticated members.
+   */
+  @Get('current/limits')
+  getLimitSummary(@Req() req: AuthenticatedRequest) {
+    return this.workspaceService.getLimitSummary(req.user.sub);
+  }
+
+  /**
    * GET /workspace/:id/members — accessible to ADMIN, EDITOR, and VIEWER.
    * RolesGuard resolves the workspace from the :id param.
    */

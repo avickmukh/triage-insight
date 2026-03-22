@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { WorkspaceStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PlanLimitService } from '../billing/plan-limit.service';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
 import { UpdateFeedbackDto } from './dto/update-feedback.dto';
 import { QueryFeedbackDto } from './dto/query-feedback.dto';
@@ -16,6 +17,7 @@ export class FeedbackService {
     private readonly prisma: PrismaService,
     private readonly s3: S3Service,
     @InjectQueue(AI_ANALYSIS_QUEUE) private readonly analysisQueue: Queue,
+    private readonly planLimit: PlanLimitService,
   ) {}
 
   async create(workspaceId: string, createFeedbackDto: CreateFeedbackDto) {
@@ -32,6 +34,9 @@ export class FeedbackService {
         'Feedback cannot be submitted to an inactive workspace.',
       );
     }
+
+    // Guard: enforce monthly feedback limit for the workspace's plan
+    await this.planLimit.assertCanAddFeedback(workspaceId);
 
     // Synchronous normalization: trim and store raw text before any mutation
     const rawTitle = createFeedbackDto.title.trim();

@@ -640,3 +640,28 @@ export interface ApiError {
   message: string | string[];
   error?: string;
 }
+
+// --- Plan Limit Summary ---
+export interface LimitSlot {
+  used: number;
+  /** null means unlimited */
+  limit: number | null;
+  unlimited: boolean;
+}
+
+/**
+ * Returned by GET /workspace/current/limits.
+ * Shows current usage vs plan limits for the workspace.
+ */
+export interface WorkspaceLimitSummary {
+  seats: LimitSlot;
+  admins: LimitSlot;
+  feedbackThisMonth: LimitSlot;
+  voiceThisMonth: LimitSlot;
+  surveyResponsesThisMonth: LimitSlot;
+  plan: {
+    planType: BillingPlan;
+    displayName: string;
+    priceMonthly: number;
+  };
+}

@@ -99,11 +99,14 @@ function formatDate(iso: string | null | undefined): string {
 }
 
 function FeatureValue({ value }: { value: number | null | boolean | undefined }) {
-  if (value === null || value === undefined)
+  // null, undefined, or -1 all mean "unlimited"
+  if (value === null || value === undefined || value === -1)
     return <span style={{ color: '#10b981', fontWeight: 600 }}>∞ Unlimited</span>;
   if (value === true)
     return <span style={{ color: '#10b981', fontWeight: 600 }}>✓ Included</span>;
   if (value === false)
+    return <span style={{ color: '#adb5bd' }}>– Not included</span>;
+  if (value === 0)
     return <span style={{ color: '#adb5bd' }}>– Not included</span>;
   return <span style={{ fontWeight: 600 }}>{(value as number).toLocaleString()}</span>;
 }

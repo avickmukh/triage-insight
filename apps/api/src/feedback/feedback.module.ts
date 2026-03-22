@@ -10,6 +10,7 @@ import { EmailIngestionService } from './ingestion/email.service';
 import { SlackIngestionService } from './ingestion/slack.service';
 import { VoiceIngestionService } from './ingestion/voice.service';
 import { AI_ANALYSIS_QUEUE } from '../ai/processors/analysis.processor';
+import { PlanLimitService } from '../billing/plan-limit.service';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { AI_ANALYSIS_QUEUE } from '../ai/processors/analysis.processor';
     EmailIngestionService,
     SlackIngestionService,
     VoiceIngestionService,
+    PlanLimitService,
   ],
 })
 export class FeedbackModule {}

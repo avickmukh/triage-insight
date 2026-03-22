@@ -8,7 +8,11 @@ import { BillingService } from './billing.service';
  * BillingModule
  *
  * Registers the BillingController and BillingService.
- * Imports WorkspaceModule to access the exported RolesGuard.
+ * Imports WorkspaceModule to access the exported RolesGuard and PlanLimitService.
+ *
+ * Note: PlanLimitService is defined in billing/plan-limit.service.ts but
+ * registered in WorkspaceModule (to avoid a circular dependency since
+ * BillingModule already imports WorkspaceModule).
  */
 @Module({
   imports: [PrismaModule, WorkspaceModule],
