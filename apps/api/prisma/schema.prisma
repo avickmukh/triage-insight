@@ -412,6 +412,7 @@ model PortalUser {
   customerId       String?
   email           String?
   name            String?
+  passwordHash    String?
   verified        Boolean   @default(false)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt

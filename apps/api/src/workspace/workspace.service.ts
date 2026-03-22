@@ -10,6 +10,12 @@ import { WorkspaceRole } from '@prisma/client';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 import { InviteMemberDto } from './dto/invite-member.dto';
 import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
+import * as crypto from 'crypto';
+
+/** SHA-256 hash of a raw token string (hex). */
+function hashToken(raw: string): string {
+  return crypto.createHash('sha256').update(raw).digest('hex');
+}
 
 @Injectable()
 export class WorkspaceService {
@@ -54,8 +60,10 @@ export class WorkspaceService {
 
   /**
    * Create a WorkspaceInvite record.
-   * In production this would also send an email; here we return the token so the
-   * frontend can construct the invite link (e.g. for display / copy-to-clipboard).
+   * Generates a random raw token, stores only its SHA-256 hash in the DB,
+   * and returns the raw token to the caller so the frontend can build the invite URL.
+   * In production, the raw token would be emailed directly; here it is returned
+   * in the API response for copy-to-clipboard use.
    */
   async inviteMember(userId: string, dto: InviteMemberDto) {
     const workspace = await this.getCurrentWorkspace(userId);
@@ -77,9 +85,12 @@ export class WorkspaceService {
       }
     }
 
-    // Upsert invite (re-invite resets the token and expiry)
+    // Generate raw token — only the hash is persisted
+    const rawToken = crypto.randomUUID();
+    const tokenHash = hashToken(rawToken);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
-    const invite = await this.prisma.workspaceInvite.upsert({
+
+    await this.prisma.workspaceInvite.upsert({
       where: { workspaceId_email: { workspaceId: workspace.id, email: dto.email } },
       create: {
         workspaceId: workspace.id,
@@ -87,20 +98,24 @@ export class WorkspaceService {
         role: dto.role,
         invitedById: userId,
         expiresAt,
+        token: tokenHash,
       },
       update: {
         role: dto.role,
         invitedById: userId,
         expiresAt,
         usedAt: null,
+        token: tokenHash,
       },
     });
 
     return {
-      inviteToken: invite.token,
-      email: invite.email,
-      role: invite.role,
-      expiresAt: invite.expiresAt,
+      // Raw token returned so the frontend can construct the accept-invite URL.
+      // The hash is stored in the DB; the raw token is never persisted.
+      inviteToken: rawToken,
+      email: dto.email,
+      role: dto.role,
+      expiresAt,
     };
   }
 

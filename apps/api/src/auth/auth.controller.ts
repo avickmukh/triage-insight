@@ -1,4 +1,4 @@
-import { Controller, Post, Patch, Body, Get, UseGuards, Req, Query } from '@nestjs/common';
+import { Controller, Post, Patch, Body, Get, UseGuards, Req, Query, Param } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SignUpDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
@@ -15,6 +15,8 @@ interface AuthenticatedRequest {
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  // ─── Workspace User Auth ──────────────────────────────────────────────────
 
   @Post('signup')
   signUp(@Body() signUpDto: SignUpDto & { orgName?: string; orgSlug?: string }) {
@@ -66,5 +68,25 @@ export class AuthController {
   @Post('setup-password')
   setupPassword(@Body() dto: SetupPasswordDto) {
     return this.authService.setupPassword(dto);
+  }
+
+  // ─── Portal User Auth ─────────────────────────────────────────────────────
+
+  /** Public — register a portal user for a specific workspace */
+  @Post('portal/:workspaceSlug/signup')
+  portalSignUp(
+    @Param('workspaceSlug') workspaceSlug: string,
+    @Body() dto: { email: string; name?: string; password: string },
+  ) {
+    return this.authService.portalSignUp(workspaceSlug, dto);
+  }
+
+  /** Public — log in a portal user for a specific workspace */
+  @Post('portal/:workspaceSlug/login')
+  portalLogin(
+    @Param('workspaceSlug') workspaceSlug: string,
+    @Body() dto: { email: string; password: string },
+  ) {
+    return this.authService.portalLogin(workspaceSlug, dto);
   }
 }

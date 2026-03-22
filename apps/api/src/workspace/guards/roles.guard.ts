@@ -28,16 +28,26 @@ export class RolesGuard implements CanActivate {
     }
 
     const { user, params } = context.switchToHttp().getRequest();
-    const workspaceId = params.workspaceId || params.id;
+    if (!user) return false;
 
-    if (!user || !workspaceId) {
-      return false;
+    let workspaceId: string | undefined = params.workspaceId || params.id;
+
+    // For "current workspace" routes (e.g. GET /workspace/current) there is no
+    // workspaceId in the URL params — resolve it from the user's first membership.
+    if (!workspaceId) {
+      const firstMembership = await this.prisma.workspaceMember.findFirst({
+        where: { userId: user.sub },
+        select: { workspaceId: true },
+      });
+      workspaceId = firstMembership?.workspaceId;
+    }
+
+    if (!workspaceId) {
+      throw new ForbiddenException('Unable to determine workspace context.');
     }
 
     const membership = await this.prisma.workspaceMember.findUnique({
-      where: {
-        userId_workspaceId: { userId: user.sub, workspaceId },
-      },
+      where: { userId_workspaceId: { userId: user.sub, workspaceId } },
     });
 
     if (!membership) {

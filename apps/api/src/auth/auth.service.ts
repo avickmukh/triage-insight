@@ -10,12 +10,18 @@ import { PrismaService } from '../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { SignUpDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { SetupPasswordDto } from './dto/setup-password.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
-import { WorkspaceRole } from '@prisma/client';
+import { WorkspaceRole, WorkspaceStatus } from '@prisma/client';
+
+/** SHA-256 hash of a raw token string (hex). Used for invite token storage. */
+function hashToken(raw: string): string {
+  return crypto.createHash('sha256').update(raw).digest('hex');
+}
 
 @Injectable()
 export class AuthService {
@@ -24,6 +30,8 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {}
+
+  // ─── Workspace User Auth ──────────────────────────────────────────────────
 
   /**
    * Register a new org admin and create their workspace.
@@ -63,7 +71,7 @@ export class AuthService {
         data: {
           name: workspaceName,
           slug: rawSlug,
-          status: 'ACTIVE',
+          status: WorkspaceStatus.ACTIVE,
           members: {
             create: { userId: user.id, role: WorkspaceRole.ADMIN },
           },
@@ -77,7 +85,8 @@ export class AuthService {
 
   /**
    * Workspace-scoped login: verifies the user is a member of the workspace
-   * identified by orgSlug. Falls back to global login when orgSlug is absent.
+   * identified by orgSlug, and that the workspace is ACTIVE.
+   * Falls back to global login when orgSlug is absent.
    */
   async login(loginDto: LoginDto & { orgSlug?: string }) {
     const { email, password, orgSlug } = loginDto;
@@ -98,6 +107,16 @@ export class AuthService {
       if (!workspace) {
         throw new NotFoundException(`Workspace '${orgSlug}' not found.`);
       }
+      // Gate on workspace lifecycle status
+      if (workspace.status === WorkspaceStatus.SUSPENDED) {
+        throw new ForbiddenException('This workspace has been suspended. Please contact support.');
+      }
+      if (workspace.status === WorkspaceStatus.DISABLED) {
+        throw new ForbiddenException('This workspace has been disabled.');
+      }
+      if (workspace.status === WorkspaceStatus.PENDING) {
+        throw new ForbiddenException('This workspace is not yet active.');
+      }
       const membership = await this.prisma.workspaceMember.findUnique({
         where: { userId_workspaceId: { userId: user.id, workspaceId: workspace.id } },
       });
@@ -110,11 +129,13 @@ export class AuthService {
   }
 
   /**
-   * Accepts an invite token, sets the user's password, and activates their account.
+   * Accepts an invite token (raw), hashes it, looks up the invite,
+   * sets the user's password, and activates their account.
    */
   async setupPassword(dto: SetupPasswordDto) {
+    const tokenHash = hashToken(dto.token);
     const invite = await this.prisma.workspaceInvite.findUnique({
-      where: { token: dto.token },
+      where: { token: tokenHash },
       include: { workspace: { select: { name: true, slug: true } } },
     });
 
@@ -164,6 +185,7 @@ export class AuthService {
     if (!user || !rt || rt.expiresAt < new Date()) {
       throw new UnauthorizedException('Invalid or expired refresh token.');
     }
+    // Rotate: revoke old token before issuing new one (prevents reuse)
     await this.prisma.refreshToken.update({ where: { id: rt.id }, data: { revoked: true } });
     return this.generateTokens(user.id, user.email);
   }
@@ -205,9 +227,14 @@ export class AuthService {
     return { message: 'Password changed successfully.' };
   }
 
-  async getInviteInfo(token: string) {
+  /**
+   * Validate an invite token (raw) before the user fills in their password.
+   * The raw token is hashed before lookup.
+   */
+  async getInviteInfo(rawToken: string) {
+    const tokenHash = hashToken(rawToken);
     const invite = await this.prisma.workspaceInvite.findUnique({
-      where: { token },
+      where: { token: tokenHash },
       include: { workspace: { select: { name: true, slug: true } } },
     });
     if (!invite) throw new NotFoundException('Invite token not found.');
@@ -220,6 +247,62 @@ export class AuthService {
       workspaceSlug: invite.workspace.slug,
     };
   }
+
+  // ─── Portal User Auth ─────────────────────────────────────────────────────
+
+  /**
+   * Register a portal user (public-facing identity) for a specific workspace.
+   * Email must be unique within the workspace.
+   */
+  async portalSignUp(workspaceSlug: string, dto: { email: string; name?: string; password: string }) {
+    const workspace = await this.prisma.workspace.findUnique({ where: { slug: workspaceSlug } });
+    if (!workspace) throw new NotFoundException('Workspace not found.');
+    if (workspace.status !== WorkspaceStatus.ACTIVE) {
+      throw new ForbiddenException('This portal is not currently available.');
+    }
+
+    const existing = await this.prisma.portalUser.findUnique({
+      where: { workspaceId_email: { workspaceId: workspace.id, email: dto.email } },
+    });
+    if (existing) throw new ConflictException('An account with this email already exists for this portal.');
+
+    const passwordHash = await bcrypt.hash(dto.password, 10);
+    const portalUser = await this.prisma.portalUser.create({
+      data: {
+        workspaceId: workspace.id,
+        email: dto.email,
+        name: dto.name ?? null,
+        passwordHash,
+        verified: false,
+      },
+    });
+
+    return this.generatePortalTokens(portalUser.id, portalUser.email!, workspace.id);
+  }
+
+  /**
+   * Log in a portal user for a specific workspace.
+   */
+  async portalLogin(workspaceSlug: string, dto: { email: string; password: string }) {
+    const workspace = await this.prisma.workspace.findUnique({ where: { slug: workspaceSlug } });
+    if (!workspace) throw new NotFoundException('Workspace not found.');
+    if (workspace.status !== WorkspaceStatus.ACTIVE) {
+      throw new ForbiddenException('This portal is not currently available.');
+    }
+
+    const portalUser = await this.prisma.portalUser.findUnique({
+      where: { workspaceId_email: { workspaceId: workspace.id, email: dto.email } },
+    });
+    if (!portalUser || !portalUser.passwordHash) {
+      throw new UnauthorizedException('Invalid credentials.');
+    }
+    const valid = await bcrypt.compare(dto.password, portalUser.passwordHash);
+    if (!valid) throw new UnauthorizedException('Invalid credentials.');
+
+    return this.generatePortalTokens(portalUser.id, portalUser.email!, workspace.id);
+  }
+
+  // ─── Helpers ──────────────────────────────────────────────────────────────
 
   decodeToken(token: string): { sub: string; email: string } {
     return this.jwtService.decode(token) as { sub: string; email: string };
@@ -238,5 +321,16 @@ export class AuthService {
       },
     });
     return { accessToken, refreshToken };
+  }
+
+  /**
+   * Portal tokens use a separate `type: 'portal'` claim so they cannot be used
+   * to access workspace-internal APIs protected by JwtAuthGuard.
+   */
+  private generatePortalTokens(portalUserId: string, email: string, workspaceId: string) {
+    const payload = { sub: portalUserId, email, workspaceId, type: 'portal' };
+    const jwtSecret = this.configService.get<string>('JWT_SECRET');
+    const accessToken = this.jwtService.sign(payload, { secret: jwtSecret, expiresIn: '24h' });
+    return { accessToken, portalUserId, email };
   }
 }

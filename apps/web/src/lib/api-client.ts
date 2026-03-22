@@ -77,6 +77,16 @@ const apiClient = {
       api.get("/auth/invite", { params: { token } }).then(handleResponse),
     setupPassword: (data: { token: string; password: string }): Promise<LoginResponse> =>
       api.post("/auth/setup-password", data).then(handleResponse),
+    portalSignUp: (
+      workspaceSlug: string,
+      data: { email: string; name?: string; password: string },
+    ): Promise<{ portalUser: { id: string; email: string; name: string | null }; accessToken: string }> =>
+      api.post(`/auth/portal/${workspaceSlug}/signup`, data).then(handleResponse),
+    portalLogin: (
+      workspaceSlug: string,
+      data: { email: string; password: string },
+    ): Promise<{ portalUser: { id: string; email: string; name: string | null }; accessToken: string }> =>
+      api.post(`/auth/portal/${workspaceSlug}/login`, data).then(handleResponse),
   },
 
   workspace: {
