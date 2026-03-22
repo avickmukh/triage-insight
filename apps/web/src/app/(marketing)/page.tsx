@@ -20,12 +20,12 @@ export default function HomePage() {
       </h1>
 
       <p className="hero-subtext fade-up fade-up-delay-2">
-        AI-powered triage that automatically deduplicates, clusters, and prioritizes customer feedback so you know exactly what to build next.
+        TriageInsight automatically deduplicates, clusters, and prioritises customer feedback from every channel — so your team always knows what to build next.
       </p>
 
       <div className="hero-buttons fade-up fade-up-delay-3">
-        <a href="#pricing" className="btn btn-yellow">
-          Start free trial
+        <a href="/signup" className="btn btn-yellow">
+          Start your free trial
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
@@ -65,7 +65,7 @@ export default function HomePage() {
 </section>
 <section id="logo-cloud">
   <div className="container">
-    <p className="logo-cloud-label">Trusted by founders who've had enough of feedback chaos</p>
+    <p className="logo-cloud-label">Trusted by product teams who've had enough of feedback chaos</p>
     <div className="logo-cloud-grid fade-up">
       <div className="logo-item">
         <div className="logo-avatar" style={{ background: '#4A90D9' }}>SF</div>
@@ -171,7 +171,7 @@ export default function HomePage() {
         TriageInsight brings order to chaos.
         <span className="teal"> Automatically.</span>
       </h2>
-      <p className="section-subtext">Three steps from noise to clarity.</p>
+      <p className="section-subtext">Four steps from noise to clarity.</p>
     </div>
 
     <div className="steps-grid">
@@ -187,7 +187,7 @@ export default function HomePage() {
           </svg>
         </div>
         <h3 className="step-title">Capture</h3>
-        <p className="step-desc">Collect feedback from your portal, email, Slack, or CSV. One unified inbox.</p>
+        <p className="step-desc">Collect feedback from your public portal, Slack, Zendesk, Intercom, CSV upload, or API. One unified inbox.</p>
         <div className="step-connector" style={{ right: '-1.25rem' }}>
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
             <path d="M2 7h10M8 3l4 4-4 4" stroke="#20A4A4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -227,7 +227,7 @@ export default function HomePage() {
           </svg>
         </div>
         <h3 className="step-title">Prioritize &amp; Close the Loop</h3>
-        <p className="step-desc">See what matters most. Update your public roadmap. Customers get notified when their feature ships.</p>
+        <p className="step-desc">Revenue-weighted scoring surfaces what matters most. Link themes to roadmap items and move them through your pipeline. When a feature ships, portal voters are notified automatically.</p>
       </div>
 
     </div>
@@ -237,8 +237,8 @@ export default function HomePage() {
   <div className="container">
     <div className="section-header fade-up">
       <span className="section-label">Features</span>
-      <h2 className="section-headline">Everything you need to master feedback</h2>
-      <p className="section-subtext">Stop guessing. Start building what matters.</p>
+      <h2 className="section-headline">Everything your team needs to close the loop</h2>
+      <p className="section-subtext">Built for product managers who are tired of guessing.</p>
     </div>
 
     <div className="features-grid">
@@ -297,7 +297,7 @@ export default function HomePage() {
         </div>
         <div>
           <h3 className="feature-title">Automated Weekly Digest</h3>
-          <p className="feature-desc">Every Monday, get an email with top themes, rising requests, and suggested roadmap priorities.</p>
+          <p className="feature-desc">Every Monday, receive a digest of top themes, rising requests, and suggested roadmap priorities — no manual reporting required.</p>
         </div>
       </div>
 
@@ -310,8 +310,8 @@ export default function HomePage() {
           </svg>
         </div>
         <div>
-          <h3 className="feature-title">Public Roadmap + Customer Notifications</h3>
-          <p className="feature-desc">Show customers what's coming. When a feature ships, voters get notified automatically. Close the loop.</p>
+          <h3 className="feature-title">Public Roadmap + Voter Notifications</h3>
+          <p className="feature-desc">Show customers what's coming. Link themes to roadmap items, move them through your pipeline, and automatically notify voters when a feature ships.</p>
         </div>
       </div>
 
@@ -323,8 +323,8 @@ export default function HomePage() {
           </svg>
         </div>
         <div>
-          <h3 className="feature-title">Zero-Storage Architecture</h3>
-          <p className="feature-desc">Your customer data never leaves your control. Enterprise-grade security by design.</p>
+          <h3 className="feature-title">Integrations That Meet You Where You Are</h3>
+          <p className="feature-desc">Connect Slack, Zendesk, and Intercom to pull feedback directly into your inbox. No copy-paste, no lost context.</p>
         </div>
       </div>
 
@@ -491,19 +491,71 @@ export default function HomePage() {
     <div className="section-header fade-up">
       <span className="section-label">Pricing</span>
       <h2 className="section-headline">Simple, transparent pricing</h2>
-      <p className="section-subtext">Start free. Upgrade when you grow.</p>
+      <p className="section-subtext">Start free. Upgrade when you're ready.</p>
     </div>
-
     <div className="pricing-grid">
-
-      {/* Starter */}
+      {/* Free */}
       <div className="pricing-card fade-up fade-up-delay-1">
+        <p className="pricing-tier">Free</p>
+        <div className="pricing-price">
+          <span className="pricing-amount">$0</span>
+          <span className="pricing-period">/month</span>
+        </div>
+        <p className="pricing-desc">For solo PMs and small teams getting started</p>
+        <ul className="pricing-features">
+          <li className="pricing-feature">
+            <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
+              <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            1 workspace · up to 3 seats
+          </li>
+          <li className="pricing-feature">
+            <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
+              <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Up to 500 feedback items
+          </li>
+          <li className="pricing-feature">
+            <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
+              <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            AI deduplication (50 checks/mo)
+          </li>
+          <li className="pricing-feature">
+            <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
+              <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Manual theme clustering
+          </li>
+          <li className="pricing-feature">
+            <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
+              <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Public customer portal
+          </li>
+          <li className="pricing-feature">
+            <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
+              <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Public roadmap
+          </li>
+        </ul>
+        <a href="/signup?plan=FREE" className="btn btn-outline-teal" style={{ justifyContent: 'center' }}>Get started free</a>
+      </div>
+      {/* Starter */}
+      <div className="pricing-card fade-up fade-up-delay-2">
         <p className="pricing-tier">Starter</p>
         <div className="pricing-price">
           <span className="pricing-amount">$29</span>
           <span className="pricing-period">/month</span>
         </div>
-        <p className="pricing-desc">Best for early-stage SaaS, 1–3 users</p>
+        <p className="pricing-desc">For growing teams ready to close the feedback loop</p>
         <ul className="pricing-features">
           <li className="pricing-feature">
             <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -541,16 +593,17 @@ export default function HomePage() {
             Email notifications
           </li>
         </ul>
-        <a href="#" className="btn btn-outline-teal" style={{ justifyContent: 'center' }}>Start free trial</a>
+        <a href="/signup?plan=STARTER" className="btn btn-outline-teal" style={{ justifyContent: 'center' }}>Start 14-day trial</a>
       </div>
-      <div className="pricing-card featured fade-up fade-up-delay-2">
+      {/* Growth - featured */}
+      <div className="pricing-card featured fade-up fade-up-delay-3">
         <span className="pricing-badge">Most Popular</span>
-        <p className="pricing-tier">Pro</p>
+        <p className="pricing-tier">Growth</p>
         <div className="pricing-price">
           <span className="pricing-amount">$79</span>
           <span className="pricing-period">/month</span>
         </div>
-        <p className="pricing-desc">Best for growing teams, 3–10 users</p>
+        <p className="pricing-desc">For teams that need integrations and deeper insights</p>
         <ul className="pricing-features">
           <li className="pricing-feature">
             <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -564,28 +617,28 @@ export default function HomePage() {
               <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
               <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            AI deduplication (unlimited)
+            Up to 15 seats
           </li>
           <li className="pricing-feature">
             <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
               <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            Weekly digest email
+            Slack, Zendesk &amp; Intercom integrations
           </li>
           <li className="pricing-feature">
             <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
               <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            CSV import/export
+            Revenue-weighted prioritisation
           </li>
           <li className="pricing-feature">
             <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
               <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            Slack / email integration
+            Custom domain for portal
           </li>
           <li className="pricing-feature">
             <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -595,16 +648,68 @@ export default function HomePage() {
             Priority support
           </li>
         </ul>
-        <a href="#" className="btn btn-teal" style={{ justifyContent: 'center' }}>Start free trial</a>
+        <a href="/signup?plan=GROWTH" className="btn btn-teal" style={{ justifyContent: 'center' }}>Start 14-day trial</a>
+      </div>
+      {/* Enterprise */}
+      <div className="pricing-card fade-up fade-up-delay-4">
+        <p className="pricing-tier">Enterprise</p>
+        <div className="pricing-price">
+          <span className="pricing-amount">Custom</span>
+        </div>
+        <p className="pricing-desc">For large teams needing SSO, advanced reporting, and dedicated support</p>
+        <ul className="pricing-features">
+          <li className="pricing-feature">
+            <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
+              <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Everything in Growth
+          </li>
+          <li className="pricing-feature">
+            <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
+              <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Unlimited seats
+          </li>
+          <li className="pricing-feature">
+            <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
+              <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            SSO / SAML
+          </li>
+          <li className="pricing-feature">
+            <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
+              <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Advanced enterprise reporting
+          </li>
+          <li className="pricing-feature">
+            <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
+              <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            HubSpot &amp; Salesforce integrations
+          </li>
+          <li className="pricing-feature">
+            <svg className="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="8" cy="8" r="7" fill="#20A4A4" fillOpacity="0.12"/>
+              <path d="M5 8l2.5 2.5L11 5.5" stroke="#20A4A4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Dedicated success manager
+          </li>
+        </ul>
+        <a href="/signup?plan=ENTERPRISE" className="btn btn-outline-teal" style={{ justifyContent: 'center' }}>Contact sales</a>
       </div>
 
     </div>
     <p className="pricing-note">
-      All plans include a <strong>14-day free trial</strong>. No credit card required for trial.
+      Paid plans include a <strong>14-day free trial</strong>. No credit card required to start.
     </p>
   </div>
 </section>
-
 <section id="cta">
   <div className="cta-glow"></div>
   <div className="container cta-content">
@@ -614,7 +719,7 @@ export default function HomePage() {
       Join 200+ SaaS teams who've found clarity with TriageInsight.
     </p>
     <div className="cta-buttons fade-up fade-up-delay-3">
-      <a href="#pricing" className="btn btn-yellow">
+      <a href="/signup" className="btn btn-yellow">
         Start your free trial
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
           <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>

@@ -95,7 +95,7 @@ export default function Navbar() {
             <Link href="/login" className="nav-signin">
               Sign in
             </Link>
-            <a href="/#pricing" className="btn btn-yellow btn-sm">
+            <a href="/signup" className="btn btn-yellow btn-sm">
               Start free trial
             </a>
           </div>
@@ -141,7 +141,7 @@ export default function Navbar() {
             <Link href="/login" className="btn btn-outline-teal btn-sm" onClick={closeMobile}>
               Sign in
             </Link>
-            <a href="/#pricing" className="btn btn-yellow btn-sm" onClick={closeMobile}>
+            <a href="/signup" className="btn btn-yellow btn-sm" onClick={closeMobile}>
               Start free trial
             </a>
           </div>

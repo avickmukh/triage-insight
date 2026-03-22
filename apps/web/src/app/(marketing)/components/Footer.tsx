@@ -7,7 +7,7 @@ export default function Footer() {
     <div className="footer-grid">
 
       <div className="footer-brand">
-        <a href="#" className="footer-logo" aria-label="TriageInsight home">
+        <a href="/" className="footer-logo" aria-label="TriageInsight home">
           <svg xmlns="http://www.w3.org/2000/svg" width="200" height="44" viewBox="0 0 1400 420" aria-label="Triage Insight logo" role="img">
           <defs>
             <linearGradient id="gIcon" x1="0" y1="0" x2="1" y2="1">
@@ -51,20 +51,20 @@ export default function Footer() {
       <div>
         <p className="footer-col-title">Product</p>
         <ul className="footer-links">
-          <li><a href="#features">Features</a></li>
-          <li><a href="#pricing">Pricing</a></li>
-          <li><a href="#">Roadmap</a></li>
-          <li><a href="#">Changelog</a></li>
+          <li><a href="/#features">Features</a></li>
+          <li><a href="/#pricing">Pricing</a></li>
+          <li><a href="/#how-it-works">How it works</a></li>
+          <li><a href="/signup">Get started</a></li>
         </ul>
       </div>
 
       <div>
         <p className="footer-col-title">Resources</p>
         <ul className="footer-links">
-          <li><a href="#">Blog</a></li>
-          <li><a href="#">Documentation</a></li>
-          <li><a href="#">Support</a></li>
-          <li><a href="#">Contact</a></li>
+          <li><a href="/blog">Blog</a></li>
+          <li><a href="/login">Sign in</a></li>
+          <li><a href="/signup">Sign up</a></li>
+          <li><a href="mailto:hello@triageinsight.com">Contact</a></li>
         </ul>
       </div>
 
