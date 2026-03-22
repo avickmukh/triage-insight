@@ -203,15 +203,30 @@ export interface Theme {
   updatedAt: string;
 }
 
+/** Minimal theme summary embedded inside a RoadmapItem */
+export interface RoadmapThemeSummary {
+  id: string;
+  title: string;
+  status: ThemeStatus;
+}
+
 export interface RoadmapItem {
   id: string;
   title: string;
-  description?: string;
+  description?: string | null;
   status: RoadmapStatus;
   isPublic: boolean;
-  targetQuarter?: string;
-  targetYear?: number;
+  targetQuarter?: string | null;
+  targetYear?: number | null;
+  /** Derived from ThemeFeedback count on the linked theme */
   feedbackCount: number;
+  priorityScore?: number | null;
+  revenueImpactValue?: number | null;
+  dealInfluenceValue?: number | null;
+  customerCount?: number | null;
+  themeId?: string | null;
+  /** Linked theme summary — present when themeId is set */
+  theme?: RoadmapThemeSummary | null;
   workspaceId: string;
   createdAt: string;
   updatedAt: string;
@@ -371,9 +386,23 @@ export interface MoveFeedbackDto {
 }
 
 // Roadmap
+/**
+ * Backend returns kanban-grouped columns:
+ * { BACKLOG: RoadmapItem[], EXPLORING: RoadmapItem[], PLANNED: RoadmapItem[], COMMITTED: RoadmapItem[], SHIPPED: RoadmapItem[] }
+ */
+export type RoadmapBoardResponse = Record<RoadmapStatus, RoadmapItem[]>;
+/** Legacy flat array alias — kept for portal/public use */
 export type RoadmapListResponse = RoadmapItem[];
-export interface CreateRoadmapItemDto extends Pick<RoadmapItem, 'title' | 'description' | 'targetQuarter' | 'targetYear'> { isPublic?: boolean; status?: RoadmapStatus; }
-export interface UpdateRoadmapItemDto extends Partial<CreateRoadmapItemDto & { status: RoadmapStatus }> {}
+export interface CreateRoadmapItemDto {
+  title: string;
+  description?: string;
+  status?: RoadmapStatus;
+  isPublic?: boolean;
+  themeId?: string;
+  targetQuarter?: string;
+  targetYear?: number;
+}
+export interface UpdateRoadmapItemDto extends Partial<CreateRoadmapItemDto> {}
 
 // Workspace
 export interface UpdateWorkspaceDto extends Partial<Pick<Workspace, 'name' | 'description'>> {}
@@ -436,11 +465,13 @@ export interface PublicFeedbackListResponse {
 export interface PublicRoadmapItem {
   id: string;
   title: string;
-  description?: string;
+  description?: string | null;
   status: RoadmapStatus;
-  targetQuarter?: string;
-  targetYear?: number;
-  customerCount?: number;
+  targetQuarter?: string | null;
+  targetYear?: number | null;
+  customerCount?: number | null;
+  priorityScore?: number | null;
+  theme?: { id: string; title: string } | null;
   createdAt: string;
 }
 

@@ -27,6 +27,7 @@ import {
   PublicRoadmapResponse,
   PublicVoteDto,
   PublicVoteResponse,
+  RoadmapBoardResponse,
   RoadmapItem,
   RoadmapListResponse,
   SignUpDto,
@@ -204,16 +205,26 @@ const apiClient = {
   },
 
   roadmap: {
-    list: (workspaceId: string): Promise<RoadmapListResponse> =>
-      api.get(`/workspaces/${workspaceId}/roadmap`).then(handleResponse),
+    /** GET /workspaces/:id/roadmap — returns kanban-grouped columns */
+    list: (workspaceId: string, params?: { search?: string; isPublic?: boolean }): Promise<RoadmapBoardResponse> =>
+      api.get(`/workspaces/${workspaceId}/roadmap`, { params }).then(handleResponse),
+    /** GET /workspaces/:id/roadmap/:itemId */
+    getById: (workspaceId: string, itemId: string): Promise<RoadmapItem> =>
+      api.get(`/workspaces/${workspaceId}/roadmap/${itemId}`).then(handleResponse),
+    /** POST /workspaces/:id/roadmap */
     create: (workspaceId: string, data: CreateRoadmapItemDto): Promise<RoadmapItem> =>
       api.post(`/workspaces/${workspaceId}/roadmap`, data).then(handleResponse),
+    /** PATCH /workspaces/:id/roadmap/:itemId */
     update: (
       workspaceId: string,
       itemId: string,
       data: UpdateRoadmapItemDto
     ): Promise<RoadmapItem> =>
       api.patch(`/workspaces/${workspaceId}/roadmap/${itemId}`, data).then(handleResponse),
+    /** DELETE /workspaces/:id/roadmap/:itemId */
+    remove: (workspaceId: string, itemId: string): Promise<void> =>
+      api.delete(`/workspaces/${workspaceId}/roadmap/${itemId}`).then(handleResponse),
+    /** POST /workspaces/:id/roadmap/from-theme/:themeId */
     createFromTheme: (workspaceId: string, themeId: string): Promise<RoadmapItem> =>
       api
         .post(`/workspaces/${workspaceId}/roadmap/from-theme/${themeId}`)

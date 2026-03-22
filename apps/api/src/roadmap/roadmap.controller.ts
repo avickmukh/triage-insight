@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Query, UseGuards, Req } from "@nestjs/common";
+import { Controller, Delete, Get, Post, Body, Patch, Param, Query, UseGuards, Req, HttpCode, HttpStatus } from "@nestjs/common";
 import { RoadmapService } from "./services/roadmap.service";
 import { CreateRoadmapItemDto } from "./dto/create-roadmap-item.dto";
 import { UpdateRoadmapItemDto } from "./dto/update-roadmap-item.dto";
@@ -54,5 +54,16 @@ export class RoadmapController {
     @Body() dto: UpdateRoadmapItemDto
   ) {
     return this.roadmapService.update(workspaceId, req.user.sub, id, dto);
+  }
+
+  @Delete(":id")
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  remove(
+    @Param("workspaceId") workspaceId: string,
+    @Req() req: AuthenticatedRequest,
+    @Param("id") id: string
+  ) {
+    return this.roadmapService.remove(workspaceId, req.user.sub, id);
   }
 }

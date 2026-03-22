@@ -82,6 +82,7 @@ enum ThemeStatus {
 }
 
 enum RoadmapStatus {
+  BACKLOG
   EXPLORING
   PLANNED
   COMMITTED

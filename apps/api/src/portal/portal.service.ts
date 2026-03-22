@@ -240,7 +240,9 @@ export class PortalService {
         targetQuarter: true,
         targetYear: true,
         customerCount: true,
+        priorityScore: true,
         createdAt: true,
+        theme: { select: { id: true, title: true } },
       },
     });
 
