@@ -11,11 +11,34 @@ import {
   Theme,
   ThemeListResponse,
   ThemeLinkedFeedbackResponse,
+  ThemeStatus,
   UpdateThemeDto,
 } from '@/lib/api-types';
 import { useWorkspace } from './use-workspace';
 
 const THEME_QUERY_KEY = 'themes';
+
+// ─── Lightweight count hook ───────────────────────────────────────────────────
+/**
+ * Returns the total count of themes matching the given status filter.
+ * Uses limit=1 so only one row is fetched; the backend still returns the
+ * accurate `total` count in the response envelope.
+ */
+export const useThemeCount = (status?: ThemeStatus) => {
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id;
+
+  return useQuery<ThemeListResponse, Error, number>({
+    queryKey: [THEME_QUERY_KEY, workspaceId, 'count', status],
+    queryFn: () => {
+      if (!workspaceId) throw new Error('Workspace ID is not available');
+      return apiClient.themes.list(workspaceId, { status, limit: 1, page: 1 });
+    },
+    select: (res) => res.total,
+    enabled: !!workspaceId,
+    staleTime: 1000 * 30,
+  });
+};
 
 // ─── Theme List ──────────────────────────────────────────────────────────────
 

@@ -13,6 +13,48 @@ import { useWorkspace } from "./use-workspace";
 
 const FEEDBACK_QUERY_KEY = "feedback";
 
+// ─── Lightweight count hook ───────────────────────────────────────────────────
+/**
+ * Returns the total count of feedback items matching the given status filter.
+ * Uses limit=1 so only one row is fetched; the backend still returns the
+ * accurate `total` count in the response envelope.
+ */
+export const useFeedbackCount = (status?: FeedbackStatus) => {
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id;
+
+  return useQuery<FeedbackListResponse, Error, number>({
+    queryKey: [FEEDBACK_QUERY_KEY, workspaceId, 'count', status],
+    queryFn: () => {
+      if (!workspaceId) throw new Error('Workspace ID is not available');
+      return apiClient.feedback.list(workspaceId, { status, limit: 1, page: 1 });
+    },
+    select: (res) => res.total,
+    enabled: !!workspaceId,
+    staleTime: 1000 * 30, // 30 s — dashboard counts can be slightly stale
+  });
+};
+
+// ─── Recent feedback hook (for dashboard) ────────────────────────────────────────────
+/**
+ * Fetches the N most recent feedback items (ordered by createdAt desc).
+ * Returns a plain useQuery result (not infinite) for simple dashboard use.
+ */
+export const useRecentFeedback = (limit = 5) => {
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id;
+
+  return useQuery<FeedbackListResponse, Error>({
+    queryKey: [FEEDBACK_QUERY_KEY, workspaceId, 'recent', limit],
+    queryFn: () => {
+      if (!workspaceId) throw new Error('Workspace ID is not available');
+      return apiClient.feedback.list(workspaceId, { limit, page: 1 });
+    },
+    enabled: !!workspaceId,
+    staleTime: 1000 * 30,
+  });
+};
+
 export interface FeedbackListParams {
   status?: FeedbackStatus;
   sourceType?: FeedbackSourceType;

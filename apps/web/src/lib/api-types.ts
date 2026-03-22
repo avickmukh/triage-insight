@@ -191,13 +191,17 @@ export interface FeedbackComment {
 export interface Theme {
   id: string;
   workspaceId: string;
-  name: string;
+  /** Matches the Prisma `title` field on the Theme model */
+  title: string;
   description?: string | null;
   status: ThemeStatus;
   pinned: boolean;
   aggregatedPriorityScore?: number | null;
   linkedFeedback?: ThemeFeedback[];
+  /** Present on detail endpoint (findOne) */
   feedbackCount?: number;
+  /** Present on list endpoint (findMany) — Prisma _count include */
+  _count?: { feedbacks: number };
   createdAt: string;
   updatedAt: string;
 }
@@ -422,14 +426,13 @@ export interface UpdateWorkspaceDto {
 }
 
 export interface CreateThemeDto {
-  name: string;
+  title: string;
   description?: string;
   status?: ThemeStatus;
   pinned?: boolean;
 }
-
 export interface UpdateThemeDto {
-  name?: string;
+  title?: string;
   description?: string;
   status?: ThemeStatus;
   pinned?: boolean;

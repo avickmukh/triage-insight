@@ -239,7 +239,7 @@ function ThemeCard({ theme, href }: { theme: Theme; href: string }) {
           <div>
             <span style={{ fontSize: '0.75rem', color: '#adb5bd', display: 'block' }}>Signals</span>
             <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0a2540' }}>
-              {theme.feedbackCount ?? 0}
+              {theme._count?.feedbacks ?? theme.feedbackCount ?? 0}
             </span>
           </div>
           <div style={{ flex: 1, minWidth: '8rem' }}>

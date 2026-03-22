@@ -100,7 +100,7 @@ export default function ThemesPage() {
                     <p style={{ fontSize: '0.82rem', color: '#6C757D', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{theme.description}</p>
                   )}
                   <div style={{ display: 'flex', gap: '1rem', marginTop: '0.75rem' }}>
-                    <span style={{ fontSize: '0.78rem', color: '#adb5bd' }}>{theme.feedbackCount ?? 0} feedback items</span>
+                    <span style={{ fontSize: '0.78rem', color: '#adb5bd' }}>{theme._count?.feedbacks ?? theme.feedbackCount ?? 0} feedback items</span>
                     {theme.pinned && <span style={{ fontSize: '0.78rem', color: '#FFC832', fontWeight: 600 }}>📌 Pinned</span>}
                   </div>
                 </Link>
