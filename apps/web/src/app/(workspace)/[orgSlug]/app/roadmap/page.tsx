@@ -16,7 +16,7 @@ import {
   UpdateRoadmapItemDto,
   WorkspaceRole,
 } from '@/lib/api-types';
-import { publicRoutes } from '@/lib/routes';
+import { publicRoutes, appRoutes } from '@/lib/routes';
 import { useParams } from 'next/navigation';
 
 // ─── Design tokens ─────────────────────────────────────────────────────────────
@@ -56,6 +56,7 @@ interface ItemCardProps {
 
 function ItemCard({ item, canEdit, onEdit, onMove }: ItemCardProps) {
   const [showMoveMenu, setShowMoveMenu] = useState(false);
+  const { orgSlug } = useParams<{ orgSlug: string }>();
 
   return (
     <div
@@ -66,13 +67,23 @@ function ItemCard({ item, canEdit, onEdit, onMove }: ItemCardProps) {
         border: '1px solid #e9ecef',
         boxShadow: '0 1px 3px rgba(10,37,64,0.04)',
         position: 'relative',
-        cursor: canEdit ? 'pointer' : 'default',
       }}
-      onClick={() => canEdit && onEdit(item)}
     >
-      <p style={{ fontSize: '0.88rem', fontWeight: 600, color: '#0A2540', marginBottom: '0.25rem', lineHeight: 1.4 }}>
-        {item.title}
-      </p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+        <p
+          style={{ fontSize: '0.88rem', fontWeight: 600, color: '#0A2540', marginBottom: '0.25rem', lineHeight: 1.4, flex: 1, cursor: 'pointer' }}
+          onClick={() => canEdit && onEdit(item)}
+        >
+          {item.title}
+        </p>
+        <Link
+          href={appRoutes(orgSlug).roadmapItem(item.id)}
+          style={{ fontSize: '0.68rem', color: '#1a56db', textDecoration: 'none', flexShrink: 0, marginTop: '0.1rem' }}
+          title="View detail"
+        >
+          Detail →
+        </Link>
+      </div>
 
       {item.description && (
         <p style={{
@@ -95,14 +106,24 @@ function ItemCard({ item, canEdit, onEdit, onMove }: ItemCardProps) {
             {item.theme.title}
           </span>
         )}
-        {item.feedbackCount > 0 && (
+        {(item.feedbackCount ?? 0) > 0 && (
           <span style={{ fontSize: '0.68rem', color: '#adb5bd' }}>
-            {item.feedbackCount} signal{item.feedbackCount !== 1 ? 's' : ''}
+            {item.feedbackCount} fb
+          </span>
+        )}
+        {(item.signalCount ?? 0) > 0 && (
+          <span style={{ fontSize: '0.68rem', color: '#6C757D', background: '#f8f9fa', padding: '0.1rem 0.45rem', borderRadius: '999px' }}>
+            {item.signalCount} sig
           </span>
         )}
         {item.priorityScore != null && (
-          <span style={{ fontSize: '0.68rem', color: '#b8860b', background: '#fffdf0', padding: '0.1rem 0.45rem', borderRadius: '999px' }}>
-            P: {item.priorityScore.toFixed(0)}
+          <span style={{ fontSize: '0.68rem', color: '#b8860b', background: '#fffdf0', padding: '0.1rem 0.45rem', borderRadius: '999px' }} title="AI Priority Score">
+            P {item.priorityScore.toFixed(0)}
+          </span>
+        )}
+        {item.confidenceScore != null && (
+          <span style={{ fontSize: '0.68rem', color: '#20A4A4', background: '#e8f7f7', padding: '0.1rem 0.45rem', borderRadius: '999px' }} title="Confidence Score">
+            C {(item.confidenceScore * 100).toFixed(0)}%
           </span>
         )}
         {item.targetQuarter && item.targetYear && (

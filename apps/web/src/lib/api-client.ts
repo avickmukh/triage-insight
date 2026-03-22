@@ -38,6 +38,7 @@ import {
   PublicVoteResponse,
   RoadmapBoardResponse,
   RoadmapItem,
+  RoadmapItemDetail,
   RoadmapListResponse,
   SignUpDto,
   SupportTicketListResponse,
@@ -222,9 +223,12 @@ const apiClient = {
     /** GET /workspaces/:id/roadmap — returns kanban-grouped columns */
     list: (workspaceId: string, params?: { search?: string; isPublic?: boolean }): Promise<RoadmapBoardResponse> =>
       api.get(`/workspaces/${workspaceId}/roadmap`, { params }).then(handleResponse),
-    /** GET /workspaces/:id/roadmap/:itemId */
-    getById: (workspaceId: string, itemId: string): Promise<RoadmapItem> =>
+    /** GET /workspaces/:id/roadmap/:itemId — full detail with linkedFeedback + signalSummary */
+    getById: (workspaceId: string, itemId: string): Promise<RoadmapItemDetail> =>
       api.get(`/workspaces/${workspaceId}/roadmap/${itemId}`).then(handleResponse),
+    /** POST /workspaces/:id/roadmap/:itemId/refresh-intelligence */
+    refreshIntelligence: (workspaceId: string, itemId: string): Promise<RoadmapItem> =>
+      api.post(`/workspaces/${workspaceId}/roadmap/${itemId}/refresh-intelligence`).then(handleResponse),
     /** POST /workspaces/:id/roadmap */
     create: (workspaceId: string, data: CreateRoadmapItemDto): Promise<RoadmapItem> =>
       api.post(`/workspaces/${workspaceId}/roadmap`, data).then(handleResponse),

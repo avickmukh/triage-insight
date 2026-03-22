@@ -9,6 +9,21 @@ import { AuditLogAction, Prisma, RoadmapStatus } from "@prisma/client";
 
 type RoadmapOrderByField = 'createdAt' | 'updatedAt' | 'priorityScore';
 
+// ─── Intelligence helpers ─────────────────────────────────────────────────────
+
+/** Confidence score (0–1): min(1, feedbackCount*0.05 + signalCount*0.1) */
+function deriveConfidenceScore(feedbackCount: number, signalCount: number): number {
+  const raw = feedbackCount * 0.05 + signalCount * 0.1;
+  return Math.min(1, parseFloat(raw.toFixed(3)));
+}
+
+/** Normalise raw revenue impact to 0–100 using log10 scale */
+function normaliseRevenueImpact(revenueImpactValue: number): number {
+  if (!revenueImpactValue || revenueImpactValue <= 0) return 0;
+  const score = (Math.log10(revenueImpactValue + 1) / 6) * 100;
+  return Math.min(100, parseFloat(score.toFixed(1)));
+}
+
 @Injectable()
 export class RoadmapService {
   constructor(
@@ -19,14 +34,22 @@ export class RoadmapService {
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
 
-  private async deriveFeedbackCount(themeId: string | null | undefined): Promise<number> {
-    if (!themeId) return 0;
-    return this.prisma.themeFeedback.count({ where: { themeId } });
+  private async enrichItem<T extends { id: string; themeId: string | null; revenueImpactValue?: number | null }>(
+    item: T
+  ): Promise<T & { feedbackCount: number; signalCount: number; confidenceScore: number; revenueImpactScore: number }> {
+    const [feedbackCount, signalCount] = await Promise.all([
+      item.themeId ? this.prisma.themeFeedback.count({ where: { themeId: item.themeId } }) : Promise.resolve(0),
+      item.themeId ? this.prisma.customerSignal.count({ where: { themeId: item.themeId } }) : Promise.resolve(0),
+    ]);
+    const confidenceScore = deriveConfidenceScore(feedbackCount, signalCount);
+    const revenueImpactScore = normaliseRevenueImpact(item.revenueImpactValue ?? 0);
+    return { ...item, feedbackCount, signalCount, confidenceScore, revenueImpactScore };
   }
 
-  private async enrichItem<T extends { themeId: string | null }>(item: T): Promise<T & { feedbackCount: number }> {
-    const feedbackCount = await this.deriveFeedbackCount(item.themeId);
-    return { ...item, feedbackCount };
+  private persistIntelligence(id: string, confidenceScore: number, revenueImpactScore: number, signalCount: number): void {
+    this.prisma.roadmapItem
+      .update({ where: { id }, data: { confidenceScore, revenueImpactScore, signalCount } })
+      .catch(() => { /* non-critical */ });
   }
 
   // ─── Create ─────────────────────────────────────────────────────────────────
@@ -44,7 +67,9 @@ export class RoadmapService {
 
     await this.auditService.logAction(workspaceId, userId, AuditLogAction.ROADMAP_ITEM_CREATE, { id: roadmapItem.id, title: roadmapItem.title });
 
-    return this.enrichItem(roadmapItem);
+    const enriched = await this.enrichItem(roadmapItem);
+    this.persistIntelligence(roadmapItem.id, enriched.confidenceScore, enriched.revenueImpactScore, enriched.signalCount);
+    return enriched;
   }
 
   async createFromTheme(workspaceId: string, userId: string, themeId: string) {
@@ -85,7 +110,9 @@ export class RoadmapService {
       fromThemeId: themeId,
     });
 
-    return this.enrichItem(roadmapItem);
+    const enriched = await this.enrichItem(roadmapItem);
+    this.persistIntelligence(roadmapItem.id, enriched.confidenceScore, enriched.revenueImpactScore, enriched.signalCount);
+    return enriched;
   }
 
   async findAll(workspaceId: string, query: QueryRoadmapDto) {
@@ -131,14 +158,88 @@ export class RoadmapService {
   async findOne(workspaceId: string, id: string) {
     const roadmapItem = await this.prisma.roadmapItem.findUnique({
       where: { id, workspaceId },
+      include: {
+        theme: {
+          select: {
+            id: true, title: true, status: true, description: true,
+            feedbacks: {
+              take: 20,
+              orderBy: { assignedAt: "desc" },
+              select: {
+                confidence: true, assignedBy: true,
+                feedback: {
+                  select: {
+                    id: true, title: true, description: true, status: true,
+                    sentiment: true, impactScore: true, sourceType: true, createdAt: true,
+                    customer: { select: { id: true, name: true, companyName: true, arrValue: true } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!roadmapItem) throw new NotFoundException(`Roadmap item ${id} not found.`);
+
+    const signals = roadmapItem.themeId
+      ? await this.prisma.customerSignal.findMany({
+          where: { themeId: roadmapItem.themeId },
+          select: { signalType: true, strength: true, createdAt: true },
+          orderBy: { createdAt: "desc" },
+          take: 50,
+        })
+      : [];
+
+    const signalSummary = signals.reduce((acc, s) => {
+      acc[s.signalType] = (acc[s.signalType] ?? 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const enriched = await this.enrichItem(roadmapItem);
+    const linkedFeedback = roadmapItem.theme?.feedbacks.map((tf) => ({
+      ...tf.feedback,
+      assignedBy: tf.assignedBy,
+      assignmentConfidence: tf.confidence,
+    })) ?? [];
+
+    return { ...enriched, linkedFeedback, signalSummary, signalCount: signals.length };
+  }
+
+  // ─── Refresh intelligence ────────────────────────────────────────────────────
+
+  async refreshIntelligence(workspaceId: string, id: string) {
+    const item = await this.prisma.roadmapItem.findUnique({ where: { id, workspaceId } });
+    if (!item) throw new NotFoundException(`Roadmap item ${id} not found.`);
+
+    let priorityScore = item.priorityScore;
+    let revenueImpactValue = item.revenueImpactValue;
+    let dealInfluenceValue = item.dealInfluenceValue;
+
+    if (item.themeId) {
+      try {
+        const score = await this.prioritizationService.getThemeScoreExplanation(workspaceId, item.themeId);
+        priorityScore = score.priorityScore;
+        revenueImpactValue = score.revenueImpactValue;
+        dealInfluenceValue = score.dealInfluenceValue;
+      } catch { /* use existing values */ }
+    }
+
+    const [feedbackCount, signalCount] = await Promise.all([
+      item.themeId ? this.prisma.themeFeedback.count({ where: { themeId: item.themeId } }) : Promise.resolve(0),
+      item.themeId ? this.prisma.customerSignal.count({ where: { themeId: item.themeId } }) : Promise.resolve(0),
+    ]);
+
+    const confidenceScore = deriveConfidenceScore(feedbackCount, signalCount);
+    const revenueImpactScore = normaliseRevenueImpact(revenueImpactValue ?? 0);
+
+    const updated = await this.prisma.roadmapItem.update({
+      where: { id },
+      data: { priorityScore, revenueImpactValue, dealInfluenceValue, confidenceScore, revenueImpactScore, signalCount },
       include: { theme: { select: { id: true, title: true, status: true } } },
     });
 
-    if (!roadmapItem) {
-      throw new NotFoundException(`Roadmap item ${id} not found.`);
-    }
-
-    return this.enrichItem(roadmapItem);
+    return { ...updated, feedbackCount, signalCount, confidenceScore, revenueImpactScore };
   }
 
   async update(workspaceId: string, userId: string, id: string, dto: UpdateRoadmapItemDto) {
@@ -167,7 +268,9 @@ export class RoadmapService {
       await this.auditService.logAction(workspaceId, userId, AuditLogAction.ROADMAP_ITEM_UPDATE, { id, changes: dto });
     }
 
-    return this.enrichItem(updatedItem);
+    const enriched = await this.enrichItem(updatedItem);
+    this.persistIntelligence(id, enriched.confidenceScore, enriched.revenueImpactScore, enriched.signalCount);
+    return enriched;
   }
 
   // ─── Delete ──────────────────────────────────────────────────────────────────

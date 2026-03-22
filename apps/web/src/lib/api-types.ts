@@ -245,9 +245,42 @@ export interface RoadmapItem {
   isPublic: boolean;
   themeId?: string | null;
   theme?: Theme | null;
+  // Intelligence fields
+  priorityScore?: number | null;
+  confidenceScore?: number | null;
+  revenueImpactScore?: number | null;
+  revenueImpactValue?: number | null;
+  dealInfluenceValue?: number | null;
   feedbackCount?: number;
+  signalCount?: number;
+  customerCount?: number | null;
+  targetQuarter?: string | null;
+  targetYear?: number | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Extended detail view returned by GET /roadmap/:id */
+export interface RoadmapItemDetail extends RoadmapItem {
+  linkedFeedback: Array<{
+    id: string;
+    title: string;
+    description?: string | null;
+    status: string;
+    sentiment?: number | null;
+    impactScore?: number | null;
+    sourceType?: string | null;
+    createdAt: string;
+    assignedBy?: string | null;
+    assignmentConfidence?: number | null;
+    customer?: {
+      id: string;
+      name?: string | null;
+      companyName?: string | null;
+      arrValue?: number | null;
+    } | null;
+  }>;
+  signalSummary: Record<string, number>;
 }
 
 export interface RoadmapListResponse {
@@ -463,6 +496,8 @@ export interface CreateRoadmapItemDto {
   status?: RoadmapStatus;
   isPublic?: boolean;
   themeId?: string;
+  targetQuarter?: string;
+  targetYear?: number;
 }
 
 export interface UpdateRoadmapItemDto {
@@ -471,6 +506,8 @@ export interface UpdateRoadmapItemDto {
   status?: RoadmapStatus;
   isPublic?: boolean;
   themeId?: string | null;
+  targetQuarter?: string | null;
+  targetYear?: number | null;
 }
 
 // --- Integrations ---

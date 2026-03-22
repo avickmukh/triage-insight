@@ -56,6 +56,15 @@ export class RoadmapController {
     return this.roadmapService.update(workspaceId, req.user.sub, id, dto);
   }
 
+  @Post(":id/refresh-intelligence")
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  refreshIntelligence(
+    @Param("workspaceId") workspaceId: string,
+    @Param("id") id: string
+  ) {
+    return this.roadmapService.refreshIntelligence(workspaceId, id);
+  }
+
   @Delete(":id")
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
   @HttpCode(HttpStatus.NO_CONTENT)

@@ -33,6 +33,7 @@ export const appRoutes = (slug: string) => ({
   themes:     `/${slug}/app/themes`,
   themeItem:  (id: string) => `/${slug}/app/themes/${id}`,
   roadmap:    `/${slug}/app/roadmap`,
+  roadmapItem: (id: string) => `/${slug}/app/roadmap/${id}`,
   voice:      `/${slug}/app/voice`,
   digest:     `/${slug}/app/digest`,
   support: {

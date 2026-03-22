@@ -680,6 +680,12 @@ model RoadmapItem {
   isPublic          Boolean       @default(false)
 
   priorityScore      Float?
+  /// 0–1: AI confidence in the priority score (null = not yet computed)
+  confidenceScore    Float?
+  /// Normalised 0–100 revenue impact score derived from ARR signals
+  revenueImpactScore Float?
+  /// Cached count of CustomerSignal rows linked via the theme
+  signalCount        Int      @default(0)
   revenueImpactValue Float?
   dealInfluenceValue Float?
   customerCount      Int?

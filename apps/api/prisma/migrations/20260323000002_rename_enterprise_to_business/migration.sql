@@ -10,9 +10,10 @@ UPDATE "Workspace" SET "billingPlan" = 'BUSINESS'  WHERE "billingPlan"::text = '
 UPDATE "Workspace" SET "billingPlan" = 'BUSINESS'  WHERE "billingPlan"::text = 'GROWTH';
 
 -- ── 2. Migrate Plan rows using old enum values ────────────────────────────────
-UPDATE "Plan" SET "planType" = 'PRO'      WHERE "planType"::text = 'STARTER';
-UPDATE "Plan" SET "planType" = 'BUSINESS'  WHERE "planType"::text = 'ENTERPRISE';
-UPDATE "Plan" SET "planType" = 'BUSINESS'  WHERE "planType"::text = 'GROWTH';
+-- Delete any duplicate rows first to avoid unique constraint violations
+DELETE FROM "Plan" WHERE "planType"::text IN ('STARTER', 'GROWTH', 'ENTERPRISE');
+-- Also delete any pre-existing PRO/BUSINESS rows so the upserts below are clean
+DELETE FROM "Plan" WHERE "planType"::text IN ('FREE', 'PRO', 'BUSINESS');
 
 -- ── 3. Upsert canonical plan rows ─────────────────────────────────────────────
 -- FREE plan

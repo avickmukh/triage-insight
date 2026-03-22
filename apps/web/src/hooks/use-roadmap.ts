@@ -4,6 +4,7 @@ import {
   CreateRoadmapItemDto,
   RoadmapBoardResponse,
   RoadmapItem,
+  RoadmapItemDetail,
   UpdateRoadmapItemDto,
 } from "@/lib/api-types";
 import { useWorkspace } from "./use-workspace";
@@ -27,13 +28,13 @@ export const useRoadmapBoard = (params?: { search?: string; isPublic?: boolean }
   });
 };
 
-// ─── Single item ──────────────────────────────────────────────────────────────
+// ─── Single item (full detail: linkedFeedback + signalSummary) ────────────────────
 
 export const useRoadmapItem = (itemId: string | null) => {
   const { workspace } = useWorkspace();
   const workspaceId = workspace?.id;
 
-  return useQuery<RoadmapItem, Error>({
+  return useQuery<RoadmapItemDetail, Error>({
     queryKey: [ROADMAP_KEY, workspaceId, "item", itemId],
     queryFn: () => {
       if (!workspaceId) throw new Error("Workspace ID is not available");
@@ -41,6 +42,25 @@ export const useRoadmapItem = (itemId: string | null) => {
       return apiClient.roadmap.getById(workspaceId, itemId);
     },
     enabled: !!workspaceId && !!itemId,
+  });
+};
+
+// ─── Refresh intelligence ─────────────────────────────────────────────────────
+
+export const useRefreshIntelligence = () => {
+  const queryClient = useQueryClient();
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id;
+
+  return useMutation<RoadmapItem, Error, string>({
+    mutationFn: (itemId) => {
+      if (!workspaceId) throw new Error("Workspace ID is not available");
+      return apiClient.roadmap.refreshIntelligence(workspaceId, itemId);
+    },
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: [ROADMAP_KEY, workspaceId, "board"] });
+      queryClient.invalidateQueries({ queryKey: [ROADMAP_KEY, workspaceId, "item", updated.id] });
+    },
   });
 };
 
