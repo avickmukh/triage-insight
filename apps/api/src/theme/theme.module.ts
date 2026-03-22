@@ -5,6 +5,7 @@ import { AiModule } from '../ai/ai.module';
 import { ThemeService, AI_CLUSTERING_QUEUE } from './services/theme.service';
 import { ThemeController } from './theme.controller';
 import { ThemeRepository } from './repositories/theme.repository';
+import { ThemeClusteringProcessor } from './processors/theme-clustering.processor';
 
 @Module({
   imports: [
@@ -13,6 +14,6 @@ import { ThemeRepository } from './repositories/theme.repository';
     BullModule.registerQueue({ name: AI_CLUSTERING_QUEUE }),
   ],
   controllers: [ThemeController],
-  providers: [ThemeService, ThemeRepository],
+  providers: [ThemeService, ThemeRepository, ThemeClusteringProcessor],
 })
 export class ThemeModule {}

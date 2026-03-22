@@ -596,12 +596,17 @@ model ThemeFeedback {
   themeId          String
   feedbackId       String
   assignedAt       DateTime @default(now())
+  /// Source of assignment: "manual" (by a user) or "ai" (by the clustering pipeline)
+  assignedBy       String   @default("manual")
+  /// AI similarity confidence score (0–1); null for manual assignments
+  confidence       Float?
 
   theme            Theme    @relation(fields: [themeId], references: [id], onDelete: Cascade)
   feedback         Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
 
   @@id([themeId, feedbackId])
   @@index([feedbackId])
+  @@index([assignedBy])
 }
 
 model CustomerSignal {

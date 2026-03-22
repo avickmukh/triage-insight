@@ -1,4 +1,17 @@
-import { Controller, Get, Post, Body, Patch, Param, Query, UseGuards, Req } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  Query,
+  UseGuards,
+  Req,
+  ParseIntPipe,
+  DefaultValuePipe,
+} from '@nestjs/common';
 import { ThemeService } from './services/theme.service';
 import { CreateThemeDto } from './dto/create-theme.dto';
 import { UpdateThemeDto } from './dto/update-theme.dto';
@@ -54,6 +67,42 @@ export class ThemeController {
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
   update(@Param('workspaceId') workspaceId: string, @Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() updateThemeDto: UpdateThemeDto) {
     return this.themeService.update(workspaceId, req.user.sub, id, updateThemeDto);
+  }
+
+  /** GET /workspaces/:workspaceId/themes/:id/feedback — list linked feedback (paginated) */
+  @Get(':id/feedback')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
+  listLinkedFeedback(
+    @Param('workspaceId') workspaceId: string,
+    @Param('id') id: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
+  ) {
+    return this.themeService.listLinkedFeedback(workspaceId, id, page, limit);
+  }
+
+  /** POST /workspaces/:workspaceId/themes/:id/feedback/:feedbackId — manually link feedback */
+  @Post(':id/feedback/:feedbackId')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  addFeedback(
+    @Param('workspaceId') workspaceId: string,
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Param('feedbackId') feedbackId: string,
+  ) {
+    return this.themeService.addFeedback(workspaceId, req.user.sub, id, feedbackId);
+  }
+
+  /** DELETE /workspaces/:workspaceId/themes/:id/feedback/:feedbackId — unlink feedback */
+  @Delete(':id/feedback/:feedbackId')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  removeFeedback(
+    @Param('workspaceId') workspaceId: string,
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Param('feedbackId') feedbackId: string,
+  ) {
+    return this.themeService.removeFeedback(workspaceId, req.user.sub, id, feedbackId);
   }
 
   @Post(':id/merge')
