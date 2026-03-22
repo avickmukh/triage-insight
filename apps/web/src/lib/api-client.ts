@@ -3,6 +3,7 @@ import axios from "axios";
 import { getAccessToken, getRefreshToken, setAccessToken, clearTokens } from "@/lib/token-storage";
 import {
   ApiError,
+  BillingStatusResponse,
   ConnectIntercomDto,
   ConnectSlackDto,
   ConnectZendeskDto,
@@ -18,6 +19,7 @@ import {
   FeedbackListResponse,
   IntegrationStatus,
   InviteMemberDto,
+  UpdateBillingEmailDto,
   InviteInfo,
   LoginRequest,
   LoginResponse,
@@ -447,6 +449,23 @@ const apiClient = {
           `/workspaces/${workspaceId}/duplicate-suggestions/${suggestionId}/reject`
         )
         .then(handleResponse),
+  },
+
+  billing: {
+    /**
+     * GET /billing/status
+     * Returns the full billing snapshot for the calling user's workspace.
+     * Accessible to ADMIN, EDITOR, and VIEWER.
+     */
+    getStatus: (): Promise<BillingStatusResponse> =>
+      api.get('/billing/status').then(handleResponse),
+
+    /**
+     * PATCH /billing/email
+     * Updates the billing contact email. ADMIN only.
+     */
+    updateEmail: (data: UpdateBillingEmailDto): Promise<{ billingEmail: string | null }> =>
+      api.patch('/billing/email', data).then(handleResponse),
   },
 };
 

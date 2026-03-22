@@ -505,6 +505,43 @@ export interface ConnectSlackDto {
   teamName?: string;
 }
 
+// --- Billing ---
+
+export interface BillingPlanLimits {
+  /** Maximum number of workspace seats; null = unlimited */
+  seats: number | null;
+  /** Maximum feedback items per calendar month; null = unlimited */
+  feedbackPerMonth: number | null;
+  aiInsights: boolean;
+  integrations: boolean;
+  publicPortal: boolean;
+  churnIntelligence: boolean;
+  sso: boolean;
+}
+
+/**
+ * Full billing snapshot returned by GET /billing/status.
+ * All authenticated members can read this; only ADMIN can mutate.
+ */
+export interface BillingStatusResponse {
+  workspaceId: string;
+  billingPlan: BillingPlan;
+  billingStatus: BillingStatus;
+  billingEmail: string | null;
+  trialEndsAt: string | null;
+  /** Number of days remaining in the trial; null when not trialing */
+  trialDaysRemaining: number | null;
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+  /** True when a Stripe customer record exists for this workspace */
+  hasStripeCustomer: boolean;
+  planLimits: BillingPlanLimits;
+}
+
+export interface UpdateBillingEmailDto {
+  billingEmail: string;
+}
+
 // --- API Error ---
 export interface ApiError {
   statusCode: number;

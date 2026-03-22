@@ -16,6 +16,7 @@ import { IntegrationsModule } from './integrations/integrations.module';
 import { SupportModule } from './support/support.module';
 import { PublicPortalModule } from './public/public-portal.module';
 import { PortalModule } from './portal/portal.module';
+import { BillingModule } from './billing/billing.module';
 import { validationSchema } from './config/validation';
 
 @Module({
@@ -39,6 +40,7 @@ import { validationSchema } from './config/validation';
     SupportModule,
     PublicPortalModule,
     PortalModule,
+    BillingModule,
   ],
 })
 export class AppModule {}
