@@ -2,11 +2,12 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
 import { PrismaService } from '../prisma/prisma.service';
-import { FeedbackStatus, FeedbackSourceType } from '@prisma/client';
+import { FeedbackStatus, FeedbackSourceType, WorkspaceStatus } from '@prisma/client';
 import { AI_ANALYSIS_QUEUE } from '../ai/processors/analysis.processor';
 import { PortalCreateFeedbackDto } from './dto/portal-create-feedback.dto';
 import { PublicFeedbackQueryDto } from '../public/dto/public-feedback-query.dto';
@@ -22,14 +23,22 @@ export class PortalService {
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
-  /** Resolve workspace by orgSlug or throw 404. */
+  /**
+   * Resolve workspace by orgSlug, enforce it is ACTIVE, or throw.
+   * Cross-tenant safety: all downstream queries are scoped to workspace.id.
+   */
   private async resolveWorkspace(orgSlug: string) {
     const workspace = await this.prisma.workspace.findUnique({
       where: { slug: orgSlug },
-      select: { id: true, name: true, slug: true },
+      select: { id: true, name: true, slug: true, status: true },
     });
     if (!workspace) {
       throw new NotFoundException(`Workspace '${orgSlug}' not found`);
+    }
+    if (workspace.status !== WorkspaceStatus.ACTIVE) {
+      throw new UnprocessableEntityException(
+        'This workspace is not currently accepting feedback.',
+      );
     }
     return workspace;
   }
@@ -179,15 +188,22 @@ export class PortalService {
       dto.name,
     );
 
+    // Synchronous normalization: trim before persisting
+    const rawTitle = dto.title.trim();
+    const rawDescription = dto.description.trim();
+
     const feedback = await this.prisma.feedback.create({
       data: {
         workspaceId: workspace.id,
-        title: dto.title,
-        description: dto.description,
+        title: rawTitle,
+        description: rawDescription,
+        rawText: rawDescription,
+        normalizedText: rawDescription.toLowerCase(),
         sourceType: FeedbackSourceType.PUBLIC_PORTAL,
         status: FeedbackStatus.NEW,
-        // Store email as customerId for CRM linkage (matches existing pattern)
-        customerId: dto.email ?? dto.anonymousId ?? null,
+        // Link to resolved PortalUser (null for anonymous submissions)
+        portalUserId: portalUserId ?? undefined,
+        // customerId is a CRM Customer FK — never set it to an email string
       },
       select: {
         id: true,
@@ -199,7 +215,7 @@ export class PortalService {
       },
     });
 
-    // Dispatch AI analysis job (same as FeedbackService.create)
+    // Dispatch async AI analysis job (embedding + duplicate detection)
     await this.analysisQueue.add({ feedbackId: feedback.id });
 
     return {

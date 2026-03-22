@@ -420,6 +420,7 @@ model PortalUser {
   workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   customer        Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
+  feedbacks        Feedback[]
   feedbackVotes   FeedbackVote[]
   feedbackComments FeedbackComment[]
 
@@ -437,16 +438,22 @@ model Feedback {
   id              String              @id @default(uuid())
   workspaceId      String
   customerId       String?
+  /// PortalUser who submitted this feedback (null for internal/CSV/Slack/API sources)
+  portalUserId    String?
   sourceType      FeedbackSourceType
   sourceRef       String?
   title           String
   description     String
+  /// Original unmodified text captured before any normalization
+  rawText         String?
   normalizedText  String?
   language        String?
   summary         String?
   status          FeedbackStatus      @default(NEW)
   sentiment       Float?
   impactScore     Float?
+  /// Arbitrary source-specific metadata (e.g. Slack channel, email headers, CSV row index)
+  metadata        Json?
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
   submittedAt     DateTime            @default(now())
@@ -459,6 +466,7 @@ model Feedback {
 
   workspace       Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   customer        Customer?           @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  portalUser      PortalUser?         @relation(fields: [portalUserId], references: [id], onDelete: SetNull)
 
   attachments     FeedbackAttachment[]
   comments        FeedbackComment[]
@@ -470,6 +478,7 @@ model Feedback {
 
   @@index([workspaceId])
   @@index([customerId])
+  @@index([portalUserId])
   @@index([status])
   @@index([sourceType])
   @@index([createdAt])

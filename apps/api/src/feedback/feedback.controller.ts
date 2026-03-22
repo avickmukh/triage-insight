@@ -129,6 +129,17 @@ export class FeedbackController {
     );
   }
 
+  // --- Duplicate Detection ---
+
+  @Get(':id/potential-duplicates')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  findPotentialDuplicates(
+    @Param('workspaceId') workspaceId: string,
+    @Param('id') id: string,
+  ) {
+    return this.feedbackService.findPotentialDuplicates(workspaceId, id);
+  }
+
   // --- Ingestion ---
 
   @Post('import/csv')

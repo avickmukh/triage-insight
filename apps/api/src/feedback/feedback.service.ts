@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import { WorkspaceStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
 import { UpdateFeedbackDto } from './dto/update-feedback.dto';
@@ -18,15 +19,38 @@ export class FeedbackService {
   ) {}
 
   async create(workspaceId: string, createFeedbackDto: CreateFeedbackDto) {
+    // Guard: reject if workspace is not active
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { status: true },
+    });
+    if (!workspace) {
+      throw new NotFoundException('Workspace not found');
+    }
+    if (workspace.status !== WorkspaceStatus.ACTIVE) {
+      throw new UnprocessableEntityException(
+        'Feedback cannot be submitted to an inactive workspace.',
+      );
+    }
+
+    // Synchronous normalization: trim and store raw text before any mutation
+    const rawTitle = createFeedbackDto.title.trim();
+    const rawDescription = createFeedbackDto.description.trim();
+
     const newFeedback = await this.prisma.feedback.create({
       data: {
         ...createFeedbackDto,
+        title: rawTitle,
+        description: rawDescription,
+        // Preserve original text before any future normalization pipeline
+        rawText: rawDescription,
+        normalizedText: rawDescription.toLowerCase(),
         status: createFeedbackDto.status ?? 'NEW',
         workspaceId,
       },
     });
 
-    // Dispatch AI analysis job
+    // Dispatch async AI analysis job (embedding + duplicate detection)
     await this.analysisQueue.add({ feedbackId: newFeedback.id });
 
     return newFeedback;
@@ -106,5 +130,62 @@ export class FeedbackService {
         sizeBytes,
       },
     });
+  }
+
+  /**
+   * Find potential duplicate feedback items for a given feedbackId.
+   *
+   * Current implementation uses a simple keyword-overlap heuristic on
+   * normalizedText / title within the same workspace.  This is intentionally
+   * structured so that the heuristic can be replaced by an embedding-cosine
+   * similarity query (pgvector) without changing the method signature or
+   * callers.
+   *
+   * The AI pipeline (DuplicateDetectionService) runs the embedding-based
+   * version asynchronously after creation; this method provides a synchronous
+   * fallback for UI-level "possible duplicates" hints.
+   */
+  async findPotentialDuplicates(
+    workspaceId: string,
+    feedbackId: string,
+    limit = 5,
+  ): Promise<Array<{ id: string; title: string; score: number }>> {
+    const source = await this.findOne(workspaceId, feedbackId);
+
+    // Use normalizedText when available, fall back to description
+    const sourceText = (source.normalizedText ?? source.description).toLowerCase();
+
+    // Extract meaningful tokens (words ≥ 4 chars) as a simple keyword set
+    const keywords = [...new Set(sourceText.match(/\b\w{4,}\b/g) ?? [])];
+
+    if (keywords.length === 0) {
+      return [];
+    }
+
+    // Fetch recent feedback in the same workspace (excluding self and merged)
+    const candidates = await this.prisma.feedback.findMany({
+      where: {
+        workspaceId,
+        id: { not: feedbackId },
+        status: { notIn: ['MERGED', 'ARCHIVED'] },
+      },
+      select: { id: true, title: true, normalizedText: true, description: true },
+      orderBy: { createdAt: 'desc' },
+      take: 200, // cap scan window
+    });
+
+    // Score each candidate by keyword overlap ratio
+    const scored = candidates
+      .map((c) => {
+        const candidateText = (c.normalizedText ?? c.description).toLowerCase();
+        const matches = keywords.filter((kw) => candidateText.includes(kw)).length;
+        const score = matches / keywords.length;
+        return { id: c.id, title: c.title, score };
+      })
+      .filter((c) => c.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+
+    return scored;
   }
 }
