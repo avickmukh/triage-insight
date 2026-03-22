@@ -40,6 +40,7 @@ export const appRoutes = (slug: string) => ({
   },
   risk:       `/${slug}/app/risk`,
   riskItem:   (id: string) => `/${slug}/app/risk/${id}`,
+  profile:    `/${slug}/app/profile`,
 });
 
 /** Workspace org-admin routes (admin only) */

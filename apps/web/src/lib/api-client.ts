@@ -69,6 +69,14 @@ const apiClient = {
     refresh: (data: { refreshToken: string }): Promise<LoginResponse> =>
       api.post("/auth/refresh", data).then(handleResponse),
     getMe: (): Promise<User> => api.get("/auth/me").then(handleResponse),
+    updateProfile: (data: { firstName?: string; lastName?: string }): Promise<User> =>
+      api.patch("/auth/me", data).then(handleResponse),
+    changePassword: (data: { currentPassword: string; newPassword: string }): Promise<{ message: string }> =>
+      api.patch("/auth/me/password", data).then(handleResponse),
+    getInviteInfo: (token: string): Promise<{ email: string; role: string; workspaceName: string; workspaceSlug: string }> =>
+      api.get("/auth/invite", { params: { token } }).then(handleResponse),
+    setupPassword: (data: { token: string; password: string }): Promise<LoginResponse> =>
+      api.post("/auth/setup-password", data).then(handleResponse),
   },
 
   workspace: {
@@ -78,6 +86,16 @@ const apiClient = {
       api.patch("/workspace/current", data).then(handleResponse),
     getMembers: (workspaceId: string): Promise<WorkspaceMember[]> =>
       api.get(`/workspace/${workspaceId}/members`).then(handleResponse),
+    inviteMember: (data: { email: string; role: string }): Promise<{ inviteToken: string; email: string; role: string; expiresAt: string }> =>
+      api.post("/workspace/current/invite", data).then(handleResponse),
+    getPendingInvites: (): Promise<Array<{ id: string; email: string; role: string; expiresAt: string; createdAt: string }>> =>
+      api.get("/workspace/current/invites").then(handleResponse),
+    revokeInvite: (inviteId: string): Promise<{ message: string }> =>
+      api.delete(`/workspace/current/invites/${inviteId}`).then(handleResponse),
+    removeMember: (userId: string): Promise<{ message: string }> =>
+      api.delete(`/workspace/current/members/${userId}`).then(handleResponse),
+    updateMemberRole: (userId: string, role: string): Promise<WorkspaceMember> =>
+      api.patch(`/workspace/current/members/${userId}/role`, { role }).then(handleResponse),
   },
 
   feedback: {

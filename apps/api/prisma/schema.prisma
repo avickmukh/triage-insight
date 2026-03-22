@@ -231,6 +231,7 @@ model User {
   feedbackVotes       FeedbackVote[]
   feedbackComments    FeedbackComment[]
   digestSubscriptions DigestSubscription[]
+  invitesSent         WorkspaceInvite[]   @relation("InvitedByUser")
 }
 
 model RefreshToken {
@@ -295,6 +296,7 @@ model Workspace {
   usageMetrics          UsageMetric[]
   churnScores           CustomerChurnScore[]
   portalUsers           PortalUser[]
+  invites               WorkspaceInvite[]
   customerSignals       CustomerSignal[]
 }
 
@@ -877,4 +879,22 @@ model AuditLog {
   @@index([userId])
   @@index([action])
   @@index([createdAt])
+}
+model WorkspaceInvite {
+  id          String        @id @default(uuid())
+  workspaceId String
+  email       String
+  role        WorkspaceRole @default(VIEWER)
+  token       String        @unique @default(uuid())
+  invitedById String
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime      @default(now())
+
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedBy   User          @relation("InvitedByUser", fields: [invitedById], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, email])
+  @@index([workspaceId])
+  @@index([token])
 }

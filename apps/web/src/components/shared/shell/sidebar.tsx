@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/shared/ui/tooltip";
-import { Home, Settings, Package, Package2, Users2, LineChart, Headphones } from "lucide-react";
+import { Home, Settings, Package, Package2, Users2, LineChart, Headphones, User } from "lucide-react";
 import { appRoutes, orgAdminRoutes } from "@/lib/routes";
 
 export function Sidebar({ orgSlug: orgSlugProp }: { orgSlug?: string }) {
@@ -50,6 +50,18 @@ export function Sidebar({ orgSlug: orgSlugProp }: { orgSlug?: string }) {
       </nav>
       <nav className="mt-auto flex flex-col items-center gap-4 px-2 sm:py-5">
         <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Link
+                href={r.profile}
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8"
+              >
+                <User className="h-5 w-5" />
+                <span className="sr-only">Profile</span>
+              </Link>
+            </TooltipTrigger>
+            <TooltipContent side="right">Profile</TooltipContent>
+          </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
               <Link

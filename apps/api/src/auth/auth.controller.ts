@@ -1,8 +1,11 @@
-import { Controller, Post, Body, Get, UseGuards, Req } from '@nestjs/common';
+import { Controller, Post, Patch, Body, Get, UseGuards, Req, Query } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SignUpDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { SetupPasswordDto } from './dto/setup-password.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 interface AuthenticatedRequest {
@@ -14,12 +17,12 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('signup')
-  signUp(@Body() signUpDto: SignUpDto) {
+  signUp(@Body() signUpDto: SignUpDto & { orgName?: string; orgSlug?: string }) {
     return this.authService.signUp(signUpDto);
   }
 
   @Post('login')
-  login(@Body() loginDto: LoginDto) {
+  login(@Body() loginDto: LoginDto & { orgSlug?: string }) {
     return this.authService.login(loginDto);
   }
 
@@ -39,5 +42,29 @@ export class AuthController {
   @Get('me')
   getMe(@Req() req: AuthenticatedRequest) {
     return this.authService.getMe(req.user.sub);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('me')
+  updateProfile(@Req() req: AuthenticatedRequest, @Body() dto: UpdateProfileDto) {
+    return this.authService.updateProfile(req.user.sub, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('me/password')
+  changePassword(@Req() req: AuthenticatedRequest, @Body() dto: ChangePasswordDto) {
+    return this.authService.changePassword(req.user.sub, dto);
+  }
+
+  /** Public — validate an invite token before the user fills in their password */
+  @Get('invite')
+  getInviteInfo(@Query('token') token: string) {
+    return this.authService.getInviteInfo(token);
+  }
+
+  /** Public — accept invite + set password */
+  @Post('setup-password')
+  setupPassword(@Body() dto: SetupPasswordDto) {
+    return this.authService.setupPassword(dto);
   }
 }
