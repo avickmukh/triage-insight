@@ -20,6 +20,9 @@ import {
   IntegrationStatus,
   InviteMemberDto,
   UpdateBillingEmailDto,
+  PlanConfig,
+  RequestPlanChangeDto,
+  RequestPlanChangeResponse,
   InviteInfo,
   LoginRequest,
   LoginResponse,
@@ -467,6 +470,20 @@ const apiClient = {
      */
     updateEmail: (data: UpdateBillingEmailDto): Promise<{ billingEmail: string | null }> =>
       api.patch('/billing/email', data).then(handleResponse),
+    /**
+     * GET /billing/plans
+     * Returns all active plan config rows for the feature comparison table.
+     * Accessible to all authenticated members.
+     */
+    listPlans: (): Promise<PlanConfig[]> =>
+      api.get('/billing/plans').then(handleResponse),
+    /**
+     * POST /billing/request-plan-change
+     * Records a plan-change intent. ADMIN only.
+     * MVP: logs the request; Production: creates a Stripe Checkout Session.
+     */
+    requestPlanChange: (data: RequestPlanChangeDto): Promise<RequestPlanChangeResponse> =>
+      api.post('/billing/request-plan-change', data).then(handleResponse),
   },
 
   domain: {

@@ -14,7 +14,7 @@ import { UpdateBillingEmailDto } from './dto/update-billing-email.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../workspace/guards/roles.guard';
 import { Roles } from '../workspace/decorators/roles.decorator';
-import { WorkspaceRole } from '@prisma/client';
+import { BillingPlan, WorkspaceRole } from '@prisma/client';
 
 interface AuthenticatedRequest extends Request {
   user: { sub: string; email: string };
@@ -26,12 +26,11 @@ interface AuthenticatedRequest extends Request {
  * All authenticated routes live under /billing.
  *
  * Route summary:
- *   GET  /billing/status        — any authenticated member (ADMIN/EDITOR/VIEWER)
- *   PATCH /billing/email        — ADMIN only
- *   POST /billing/webhook       — public (no JWT); Stripe calls this directly
- *
- * The Stripe-ready checkout and portal session endpoints are stubbed here
- * and will be activated once the Stripe SDK is installed.
+ *   GET  /billing/status              — any authenticated member
+ *   GET  /billing/plans               — any authenticated member (plan catalogue)
+ *   PATCH /billing/email              — ADMIN only
+ *   POST /billing/request-plan-change — ADMIN only (mock; no Stripe yet)
+ *   POST /billing/webhook             — public (Stripe calls this directly)
  */
 @Controller('billing')
 export class BillingController {
@@ -42,14 +41,27 @@ export class BillingController {
   /**
    * GET /billing/status
    *
-   * Returns the workspace billing snapshot: plan, status, trial state,
-   * current period dates, and static plan limits.
+   * Returns the workspace billing snapshot: plan, status, trial lifecycle,
+   * current period dates, and DB-driven plan config.
    * Accessible to all authenticated workspace members.
    */
   @Get('status')
   @UseGuards(JwtAuthGuard)
   getStatus(@Req() req: AuthenticatedRequest) {
     return this.billingService.getStatus(req.user.sub);
+  }
+
+  /**
+   * GET /billing/plans
+   *
+   * Returns all active plan config rows so the billing page can render
+   * the feature comparison table.
+   * Accessible to all authenticated workspace members.
+   */
+  @Get('plans')
+  @UseGuards(JwtAuthGuard)
+  listPlans() {
+    return this.billingService.listPlans();
   }
 
   // ── Mutations (ADMIN only) ─────────────────────────────────────────────────
@@ -67,6 +79,23 @@ export class BillingController {
     @Body() dto: UpdateBillingEmailDto,
   ) {
     return this.billingService.updateBillingEmail(req.user.sub, dto);
+  }
+
+  /**
+   * POST /billing/request-plan-change
+   *
+   * Records a plan-change intent from the workspace admin.
+   * MVP: logs the request and returns a confirmation message.
+   * Production: will create a Stripe Checkout Session.
+   */
+  @Post('request-plan-change')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(WorkspaceRole.ADMIN)
+  requestPlanChange(
+    @Req() req: AuthenticatedRequest,
+    @Body('targetPlan') targetPlan: BillingPlan,
+  ) {
+    return this.billingService.requestPlanChange(req.user.sub, targetPlan);
   }
 
   // ── Stripe-ready stubs ─────────────────────────────────────────────────────

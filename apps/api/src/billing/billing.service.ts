@@ -4,17 +4,19 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { BillingPlan, BillingStatus, WorkspaceRole } from '@prisma/client';
+import { BillingPlan, BillingStatus, TrialStatus, WorkspaceRole } from '@prisma/client';
 import { UpdateBillingEmailDto } from './dto/update-billing-email.dto';
 
 /**
  * BillingService
  *
  * Owns all billing-related reads and writes against the Workspace model.
- * Stripe integration will be added here once the Stripe SDK is wired in.
+ * Plan limits are now read from the Plan config table (managed by SUPER_ADMIN
+ * via /platform/plans) rather than being hard-coded.
  *
  * Current capabilities:
  *   - getStatus          — returns the full billing snapshot for a workspace
+ *   - requestPlanChange  — records a plan-change request (mock; no Stripe yet)
  *   - updateBillingEmail — ADMIN-only update of the billing contact email
  *   - handleStripeWebhook — placeholder for incoming Stripe webhook events
  */
@@ -48,74 +50,46 @@ export class BillingService {
     }
   }
 
-  // ── Plan limits catalogue ──────────────────────────────────────────────────
-
   /**
-   * Static plan limits.  These will eventually be driven by a database table
-   * or a Stripe Product metadata lookup; for now they are hard-coded to match
-   * the PRD pricing tiers.
+   * Resolve the Plan config row for a given BillingPlan.
+   * Falls back to a safe default object if the row is missing (e.g. fresh DB).
    */
-  static readonly PLAN_LIMITS: Record<
-    BillingPlan,
-    {
-      seats: number | null;
-      feedbackPerMonth: number | null;
-      aiInsights: boolean;
-      integrations: boolean;
-      publicPortal: boolean;
-      churnIntelligence: boolean;
-      sso: boolean;
-    }
-  > = {
-    FREE: {
-      seats: 3,
-      feedbackPerMonth: 200,
-      aiInsights: false,
-      integrations: false,
+  private async resolvePlanConfig(planType: BillingPlan) {
+    const plan = await this.prisma.plan.findUnique({ where: { planType } });
+    if (plan) return plan;
+    // Safe fallback — should not happen after migration seed
+    return {
+      planType,
+      displayName: planType,
+      description: null,
+      trialDays: 0,
+      seatLimit: planType === BillingPlan.FREE ? 3 : null,
+      aiUsageLimit: 0,
+      feedbackLimit: planType === BillingPlan.FREE ? 200 : null,
+      aiInsights: planType !== BillingPlan.FREE,
+      integrations: planType === BillingPlan.ENTERPRISE,
       publicPortal: true,
-      churnIntelligence: false,
-      sso: false,
-    },
-    STARTER: {
-      seats: 5,
-      feedbackPerMonth: 1000,
-      aiInsights: true,
-      integrations: false,
-      publicPortal: true,
-      churnIntelligence: false,
-      sso: false,
-    },
-    PRO: {
-      seats: null, // unlimited
-      feedbackPerMonth: null,
-      aiInsights: true,
-      integrations: true,
-      publicPortal: true,
-      churnIntelligence: false,
-      sso: false,
-    },
-    ENTERPRISE: {
-      seats: null,
-      feedbackPerMonth: null,
-      aiInsights: true,
-      integrations: true,
-      publicPortal: true,
-      churnIntelligence: true,
-      sso: true,
-    },
-  };
+      churnIntelligence: planType === BillingPlan.ENTERPRISE,
+      sso: planType === BillingPlan.ENTERPRISE,
+      isActive: true,
+      isDefault: planType === BillingPlan.FREE,
+    };
+  }
 
   // ── Public methods ─────────────────────────────────────────────────────────
 
   /**
    * GET /billing/status
    *
-   * Returns the current billing snapshot for the calling user's workspace.
+   * Returns the current billing snapshot for the calling user's workspace,
+   * including DB-driven plan limits and all trial/plan lifecycle fields.
    * Accessible to ADMIN, EDITOR, and VIEWER.
    */
   async getStatus(userId: string) {
     const workspace = await this.resolveWorkspace(userId);
+    const planConfig = await this.resolvePlanConfig(workspace.billingPlan);
 
+    // Compute trial days remaining
     const trialDaysRemaining =
       workspace.trialEndsAt && workspace.billingStatus === BillingStatus.TRIALING
         ? Math.max(
@@ -127,18 +101,90 @@ export class BillingService {
           )
         : null;
 
+    // Auto-detect expired trials (read-only; a background job should update the DB)
+    const effectiveTrialStatus: TrialStatus =
+      workspace.trialStatus === TrialStatus.ACTIVE &&
+      workspace.trialEndsAt &&
+      new Date(workspace.trialEndsAt) < new Date()
+        ? TrialStatus.EXPIRED
+        : workspace.trialStatus;
+
     return {
       workspaceId: workspace.id,
+      // Plan identity
       billingPlan: workspace.billingPlan,
       billingStatus: workspace.billingStatus,
-      billingEmail: workspace.billingEmail ?? null,
+      planStatus: workspace.planStatus,
+      // Trial lifecycle
+      trialStatus: effectiveTrialStatus,
+      trialStartedAt: workspace.trialStartedAt?.toISOString() ?? null,
       trialEndsAt: workspace.trialEndsAt?.toISOString() ?? null,
       trialDaysRemaining,
+      // Billing period (populated by Stripe webhooks)
       currentPeriodStart: workspace.currentPeriodStart?.toISOString() ?? null,
       currentPeriodEnd: workspace.currentPeriodEnd?.toISOString() ?? null,
-      /** Whether a Stripe customer record exists (true = billing is active). */
+      // Contact
+      billingEmail: workspace.billingEmail ?? null,
       hasStripeCustomer: !!workspace.stripeCustomerId,
-      planLimits: BillingService.PLAN_LIMITS[workspace.billingPlan],
+      // Workspace-level overrides (may differ from plan defaults)
+      seatLimit: workspace.seatLimit,
+      aiUsageLimit: workspace.aiUsageLimit,
+      // DB-driven plan config
+      planConfig: {
+        displayName: planConfig.displayName,
+        description: planConfig.description,
+        trialDays: planConfig.trialDays,
+        seatLimit: planConfig.seatLimit,
+        aiUsageLimit: planConfig.aiUsageLimit,
+        feedbackLimit: planConfig.feedbackLimit,
+        aiInsights: planConfig.aiInsights,
+        integrations: planConfig.integrations,
+        publicPortal: planConfig.publicPortal,
+        churnIntelligence: planConfig.churnIntelligence,
+        sso: planConfig.sso,
+      },
+    };
+  }
+
+  /**
+   * GET /billing/plans
+   *
+   * Returns all active Plan config rows so the billing page can render
+   * the feature comparison table without a separate platform API call.
+   * Accessible to all authenticated workspace members.
+   */
+  async listPlans() {
+    const ORDER: BillingPlan[] = [
+      BillingPlan.FREE,
+      BillingPlan.STARTER,
+      BillingPlan.GROWTH,
+      BillingPlan.ENTERPRISE,
+    ];
+    const plans = await this.prisma.plan.findMany({ where: { isActive: true } });
+    return plans.sort(
+      (a, b) => ORDER.indexOf(a.planType) - ORDER.indexOf(b.planType),
+    );
+  }
+
+  /**
+   * POST /billing/request-plan-change
+   *
+   * Records a plan-change intent from the workspace admin.
+   * MVP: logs the request and returns a confirmation.
+   * Production: this will create a Stripe Checkout Session.
+   */
+  async requestPlanChange(userId: string, targetPlan: BillingPlan) {
+    const workspace = await this.resolveWorkspace(userId);
+    await this.assertAdmin(userId, workspace.id);
+    // TODO: replace with Stripe checkout session creation
+    console.log(
+      `[BillingService] Plan change requested: workspace=${workspace.id} from=${workspace.billingPlan} to=${targetPlan}`,
+    );
+    return {
+      requested: true,
+      currentPlan: workspace.billingPlan,
+      targetPlan,
+      message: 'Plan change request received. Our team will be in touch shortly.',
     };
   }
 
@@ -170,10 +216,11 @@ export class BillingService {
    * Current implementation: logs the event type and returns 200.
    * Production implementation should:
    *   1. Verify the Stripe-Signature header with stripe.webhooks.constructEvent()
-   *   2. Handle checkout.session.completed → activate subscription
+   *   2. Handle checkout.session.completed → activate subscription, set billingPlan
    *   3. Handle invoice.payment_succeeded → update currentPeriodStart/End
    *   4. Handle invoice.payment_failed    → set billingStatus = PAST_DUE
-   *   5. Handle customer.subscription.deleted → set billingStatus = CANCELED
+   *   5. Handle customer.subscription.deleted → set billingStatus = CANCELED, planStatus = CANCELLED
+   *   6. Handle customer.subscription.trial_will_end → notify workspace admin
    */
   async handleStripeWebhook(
     rawBody: Buffer,

@@ -1,4 +1,13 @@
-import { IsEmail, IsNotEmpty, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
+import { BillingPlan } from '@prisma/client';
 
 export class SignUpDto {
   @IsNotEmpty({ message: 'First name is required.' })
@@ -29,4 +38,14 @@ export class SignUpDto {
   @IsString()
   @MinLength(8, { message: 'Password must be at least 8 characters.' })
   password: string;
+
+  /**
+   * The plan the user selected on the pricing page.
+   * Defaults to FREE if omitted.
+   * Trial lifecycle (trialStartedAt, trialEndsAt) is applied automatically
+   * for STARTER and GROWTH based on the Plan config trialDays value.
+   */
+  @IsOptional()
+  @IsEnum(BillingPlan, { message: 'Invalid plan type.' })
+  planType?: BillingPlan;
 }

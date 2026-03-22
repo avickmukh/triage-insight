@@ -4,9 +4,12 @@ import Link from "next/link";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useSearchParams } from "next/navigation";
 import * as z from "zod";
 import { useAuth } from "@/lib/auth";
+import { BillingPlan } from "@/lib/api-types";
 
+// ── Zod schema ────────────────────────────────────────────────────────────────
 const signupSchema = z.object({
   firstName: z.string().min(1, "First name is required").max(100),
   lastName: z.string().min(1, "Last name is required").max(100),
@@ -20,6 +23,23 @@ const signupSchema = z.object({
 
 type SignupFormValues = z.infer<typeof signupSchema>;
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const VALID_PLANS = new Set<string>(Object.values(BillingPlan));
+
+function parsePlanParam(raw: string | null): BillingPlan | undefined {
+  if (!raw) return undefined;
+  const upper = raw.toUpperCase();
+  return VALID_PLANS.has(upper) ? (upper as BillingPlan) : undefined;
+}
+
+const PLAN_LABELS: Partial<Record<BillingPlan, string>> = {
+  [BillingPlan.STARTER]: 'Starter',
+  [BillingPlan.GROWTH]: 'Growth',
+  [BillingPlan.PRO]: 'Pro',
+  [BillingPlan.ENTERPRISE]: 'Enterprise',
+};
+
+// ── Styles ────────────────────────────────────────────────────────────────────
 const inputStyle = (hasError: boolean): React.CSSProperties => ({
   width: "100%",
   padding: "0.7rem 1rem",
@@ -49,9 +69,15 @@ const errorStyle: React.CSSProperties = {
   marginTop: "0.3rem",
 };
 
+// ── Page ──────────────────────────────────────────────────────────────────────
 export default function SignupPage() {
   const { signUp } = useAuth();
   const [serverError, setServerError] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+
+  // Read optional ?plan=STARTER|GROWTH|PRO|ENTERPRISE from URL (set by pricing page CTAs)
+  const planParam = parsePlanParam(searchParams.get("plan"));
+  const planLabel = planParam ? PLAN_LABELS[planParam] : null;
 
   const {
     register,
@@ -62,7 +88,9 @@ export default function SignupPage() {
   const onSubmit = async (data: SignupFormValues) => {
     setServerError(null);
     try {
-      await signUp(data);
+      // Pass planType only when a valid plan was selected on the pricing page.
+      // The backend defaults to FREE when planType is omitted.
+      await signUp({ ...data, ...(planParam ? { planType: planParam } : {}) });
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { message?: string | string[] } } })
@@ -120,11 +148,44 @@ export default function SignupPage() {
           }}
         >
           <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#fff", marginBottom: "0.375rem" }}>
-            Start for free
+            {planLabel ? `Start your ${planLabel} trial` : "Start for free"}
           </h1>
           <p style={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.55)", marginBottom: "2rem" }}>
-            Create your TriageInsight workspace in 30 seconds
+            {planLabel
+              ? `Create your TriageInsight workspace and start your ${planLabel} trial.`
+              : "Create your TriageInsight workspace in 30 seconds"}
           </p>
+
+          {/* Selected plan badge */}
+          {planLabel && (
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.4rem",
+                background: "rgba(32,164,164,0.15)",
+                border: "1px solid rgba(32,164,164,0.35)",
+                borderRadius: "999px",
+                padding: "0.3rem 0.9rem",
+                fontSize: "0.78rem",
+                fontWeight: 700,
+                color: "#20A4A4",
+                marginBottom: "1.5rem",
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <circle cx="6" cy="6" r="5" fill="#20A4A4" fillOpacity="0.25" />
+                <path d="M3.5 6l1.5 1.5 3.5-3.5" stroke="#20A4A4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              {planLabel} plan selected
+              <Link
+                href="/signup"
+                style={{ color: "rgba(32,164,164,0.7)", fontSize: "0.7rem", marginLeft: "0.25rem", textDecoration: "underline" }}
+              >
+                change
+              </Link>
+            </div>
+          )}
 
           {serverError && (
             <div
@@ -235,7 +296,11 @@ export default function SignupPage() {
                 marginTop: "0.25rem",
               }}
             >
-              {isSubmitting ? "Creating workspace…" : "Create free account"}
+              {isSubmitting
+                ? "Creating workspace…"
+                : planLabel
+                ? `Start ${planLabel} trial`
+                : "Create free account"}
             </button>
           </form>
 

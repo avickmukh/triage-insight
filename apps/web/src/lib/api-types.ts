@@ -32,8 +32,21 @@ export enum WorkspaceStatus {
 export enum BillingPlan {
   FREE = 'FREE',
   STARTER = 'STARTER',
+  GROWTH = 'GROWTH',
   PRO = 'PRO',
   ENTERPRISE = 'ENTERPRISE',
+}
+
+export enum TrialStatus {
+  ACTIVE = 'ACTIVE',
+  EXPIRED = 'EXPIRED',
+  CONVERTED = 'CONVERTED',
+}
+
+export enum PlanStatus {
+  ACTIVE = 'ACTIVE',
+  SUSPENDED = 'SUSPENDED',
+  CANCELLED = 'CANCELLED',
 }
 
 export enum BillingStatus {
@@ -361,6 +374,8 @@ export interface SignUpDto {
   firstName: string;
   lastName: string;
   organizationName: string;
+  /** Optional plan selected on the pricing page; defaults to FREE */
+  planType?: BillingPlan;
 }
 
 export interface InviteInfo {
@@ -507,16 +522,25 @@ export interface ConnectSlackDto {
 
 // --- Billing ---
 
-export interface BillingPlanLimits {
-  /** Maximum number of workspace seats; null = unlimited */
-  seats: number | null;
-  /** Maximum feedback items per calendar month; null = unlimited */
-  feedbackPerMonth: number | null;
+/**
+ * A single row from the Plan config table (managed by SUPER_ADMIN).
+ * Returned by GET /billing/plans.
+ */
+export interface PlanConfig {
+  planType: BillingPlan;
+  displayName: string;
+  description: string | null;
+  trialDays: number;
+  seatLimit: number | null;
+  aiUsageLimit: number | null;
+  feedbackLimit: number | null;
   aiInsights: boolean;
   integrations: boolean;
   publicPortal: boolean;
   churnIntelligence: boolean;
   sso: boolean;
+  isActive: boolean;
+  isDefault: boolean;
 }
 
 /**
@@ -525,21 +549,43 @@ export interface BillingPlanLimits {
  */
 export interface BillingStatusResponse {
   workspaceId: string;
+  // Plan identity
   billingPlan: BillingPlan;
   billingStatus: BillingStatus;
-  billingEmail: string | null;
+  planStatus: PlanStatus;
+  // Trial lifecycle
+  trialStatus: TrialStatus;
+  trialStartedAt: string | null;
   trialEndsAt: string | null;
   /** Number of days remaining in the trial; null when not trialing */
   trialDaysRemaining: number | null;
+  // Billing period (populated by Stripe webhooks)
   currentPeriodStart: string | null;
   currentPeriodEnd: string | null;
+  // Contact
+  billingEmail: string | null;
   /** True when a Stripe customer record exists for this workspace */
   hasStripeCustomer: boolean;
-  planLimits: BillingPlanLimits;
+  // Workspace-level overrides
+  seatLimit: number;
+  aiUsageLimit: number;
+  // DB-driven plan config
+  planConfig: Omit<PlanConfig, 'planType' | 'isActive' | 'isDefault'>;
 }
 
 export interface UpdateBillingEmailDto {
   billingEmail: string;
+}
+
+export interface RequestPlanChangeDto {
+  targetPlan: BillingPlan;
+}
+
+export interface RequestPlanChangeResponse {
+  requested: boolean;
+  currentPlan: BillingPlan;
+  targetPlan: BillingPlan;
+  message: string;
 }
 
 // --- Domain Management ---

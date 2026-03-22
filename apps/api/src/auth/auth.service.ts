@@ -16,7 +16,7 @@ import { LoginDto } from './dto/login.dto';
 import { SetupPasswordDto } from './dto/setup-password.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
-import { WorkspaceRole, WorkspaceStatus } from '@prisma/client';
+import { BillingPlan, BillingStatus, TrialStatus, WorkspaceRole, WorkspaceStatus } from '@prisma/client';
 
 /** SHA-256 hash of a raw token string (hex). Used for invite token storage. */
 function hashToken(raw: string): string {
@@ -39,7 +39,7 @@ export class AuthService {
    * Only the initial org admin can self-register; all other users must be invited.
    */
   async signUp(signUpDto: SignUpDto) {
-    const { email, password, firstName, lastName, organizationName } = signUpDto;
+    const { email, password, firstName, lastName, organizationName, planType } = signUpDto;
 
     // ── Email uniqueness ──────────────────────────────────────────────────────
     const existingUser = await this.prisma.user.findUnique({ where: { email } });
@@ -74,6 +74,25 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
+
+    // ── Resolve plan config and compute trial dates ───────────────────────
+    const selectedPlan = planType ?? BillingPlan.FREE;
+    const planConfig = await this.prisma.plan.findUnique({
+      where: { planType: selectedPlan },
+    });
+    // If no Plan row exists yet (e.g. fresh DB before seed), fall back to FREE with no trial
+    const trialDays = planConfig?.trialDays ?? 0;
+    const trialApplies =
+      trialDays > 0 &&
+      (selectedPlan === BillingPlan.STARTER || selectedPlan === BillingPlan.GROWTH);
+    const now = new Date();
+    const trialEndsAt = trialApplies
+      ? new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000)
+      : null;
+    const initialBillingStatus = trialApplies
+      ? BillingStatus.TRIALING
+      : BillingStatus.ACTIVE;
+
     const { user } = await this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: { email, passwordHash, firstName, lastName },
@@ -83,6 +102,13 @@ export class AuthService {
           name: workspaceName,
           slug: rawSlug,
           status: WorkspaceStatus.ACTIVE,
+          billingPlan: selectedPlan,
+          billingStatus: initialBillingStatus,
+          trialStartedAt: trialApplies ? now : null,
+          trialEndsAt,
+          trialStatus: TrialStatus.ACTIVE,
+          seatLimit: planConfig?.seatLimit ?? 3,
+          aiUsageLimit: planConfig?.aiUsageLimit ?? 0,
           members: {
             create: { userId: user.id, role: WorkspaceRole.ADMIN },
           },

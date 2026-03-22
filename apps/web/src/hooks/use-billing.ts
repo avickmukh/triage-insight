@@ -1,7 +1,13 @@
 'use client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/lib/api-client';
-import { BillingStatusResponse, UpdateBillingEmailDto } from '@/lib/api-types';
+import {
+  BillingStatusResponse,
+  PlanConfig,
+  RequestPlanChangeDto,
+  RequestPlanChangeResponse,
+  UpdateBillingEmailDto,
+} from '@/lib/api-types';
 
 const BILLING_KEY = 'billing';
 
@@ -36,6 +42,29 @@ export const useBilling = () => {
 };
 
 /**
+ * usePlans
+ *
+ * Fetches all active plan config rows from GET /billing/plans.
+ * Used by the billing page to render the feature comparison table
+ * and upgrade CTAs. Accessible to all authenticated members.
+ */
+export const usePlans = () => {
+  const {
+    data: plans,
+    isLoading,
+    isError,
+    error,
+  } = useQuery<PlanConfig[], Error>({
+    queryKey: [BILLING_KEY, 'plans'],
+    queryFn: apiClient.billing.listPlans,
+    staleTime: 5 * 60_000, // 5 min — plan config changes rarely
+    retry: 1,
+  });
+
+  return { plans: plans ?? [], isLoading, isError, error };
+};
+
+/**
  * useUpdateBillingEmail
  *
  * Mutation to update the billing contact email. ADMIN only.
@@ -52,6 +81,25 @@ export const useUpdateBillingEmail = () => {
         [BILLING_KEY, 'status'],
         (prev) => (prev ? { ...prev, billingEmail: data.billingEmail } : prev),
       );
+    },
+  });
+};
+
+/**
+ * useRequestPlanChange
+ *
+ * Mutation to request a plan change. ADMIN only.
+ * MVP: records the intent and returns a confirmation message.
+ * Production: will redirect to a Stripe Checkout Session URL.
+ */
+export const useRequestPlanChange = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<RequestPlanChangeResponse, Error, RequestPlanChangeDto>({
+    mutationFn: (data) => apiClient.billing.requestPlanChange(data),
+    onSuccess: () => {
+      // Refetch billing status in case the plan changed
+      queryClient.invalidateQueries({ queryKey: [BILLING_KEY, 'status'] });
     },
   });
 };

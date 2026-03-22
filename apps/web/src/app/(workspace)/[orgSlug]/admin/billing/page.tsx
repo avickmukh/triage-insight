@@ -1,7 +1,12 @@
 'use client';
 import { useState } from 'react';
-import { useBilling, useUpdateBillingEmail } from '@/hooks/use-billing';
-import { BillingPlan, BillingStatus, BillingPlanLimits } from '@/lib/api-types';
+import { useBilling, usePlans, useUpdateBillingEmail, useRequestPlanChange } from '@/hooks/use-billing';
+import {
+  BillingPlan,
+  BillingStatus,
+  PlanConfig,
+  TrialStatus,
+} from '@/lib/api-types';
 
 // ── Design tokens (matches existing admin design system) ──────────────────────
 const CARD: React.CSSProperties = {
@@ -73,16 +78,10 @@ const HINT: React.CSSProperties = {
 };
 
 // ── Plan metadata ─────────────────────────────────────────────────────────────
-const PLAN_LABELS: Record<BillingPlan, string> = {
-  [BillingPlan.FREE]: 'Free',
-  [BillingPlan.STARTER]: 'Starter',
-  [BillingPlan.PRO]: 'Pro',
-  [BillingPlan.ENTERPRISE]: 'Enterprise',
-};
-
-const PLAN_PRICES: Record<BillingPlan, string> = {
+const PLAN_PRICES: Record<string, string> = {
   [BillingPlan.FREE]: '$0 / month',
-  [BillingPlan.STARTER]: '$49 / month',
+  [BillingPlan.STARTER]: '$29 / month',
+  [BillingPlan.GROWTH]: '$79 / month',
   [BillingPlan.PRO]: '$149 / month',
   [BillingPlan.ENTERPRISE]: 'Custom pricing',
 };
@@ -101,10 +100,13 @@ function formatDate(iso: string | null | undefined): string {
   return new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium' });
 }
 
-function LimitValue({ value }: { value: number | null | boolean }) {
-  if (value === null) return <span style={{ color: '#10b981', fontWeight: 600 }}>∞ Unlimited</span>;
-  if (value === true) return <span style={{ color: '#10b981', fontWeight: 600 }}>✓ Included</span>;
-  if (value === false) return <span style={{ color: '#adb5bd' }}>– Not included</span>;
+function FeatureValue({ value }: { value: number | null | boolean | undefined }) {
+  if (value === null || value === undefined)
+    return <span style={{ color: '#10b981', fontWeight: 600 }}>∞ Unlimited</span>;
+  if (value === true)
+    return <span style={{ color: '#10b981', fontWeight: 600 }}>✓ Included</span>;
+  if (value === false)
+    return <span style={{ color: '#adb5bd' }}>– Not included</span>;
   return <span style={{ fontWeight: 600 }}>{(value as number).toLocaleString()}</span>;
 }
 
@@ -122,16 +124,17 @@ function Skeleton({ width = '60%', height = '1rem' }: { width?: string; height?:
   );
 }
 
-// ── Plan limits table ─────────────────────────────────────────────────────────
-function PlanLimitsTable({ limits }: { limits: BillingPlanLimits }) {
-  const rows: Array<{ label: string; value: number | null | boolean }> = [
-    { label: 'Workspace seats', value: limits.seats },
-    { label: 'Feedback / month', value: limits.feedbackPerMonth },
-    { label: 'AI insights', value: limits.aiInsights },
-    { label: 'Integrations', value: limits.integrations },
-    { label: 'Public portal', value: limits.publicPortal },
-    { label: 'Churn intelligence', value: limits.churnIntelligence },
-    { label: 'SSO', value: limits.sso },
+// ── Plan features table (DB-driven) ──────────────────────────────────────────
+function PlanFeaturesTable({ planConfig }: { planConfig: PlanConfig | Omit<PlanConfig, 'planType' | 'isActive' | 'isDefault'> }) {
+  const rows: Array<{ label: string; value: number | null | boolean | undefined }> = [
+    { label: 'Workspace seats', value: planConfig.seatLimit },
+    { label: 'Feedback limit', value: planConfig.feedbackLimit },
+    { label: 'AI usage limit', value: planConfig.aiUsageLimit },
+    { label: 'AI insights', value: planConfig.aiInsights },
+    { label: 'Integrations', value: planConfig.integrations },
+    { label: 'Public portal', value: planConfig.publicPortal },
+    { label: 'Churn intelligence', value: planConfig.churnIntelligence },
+    { label: 'SSO', value: planConfig.sso },
   ];
 
   return (
@@ -141,12 +144,120 @@ function PlanLimitsTable({ limits }: { limits: BillingPlanLimits }) {
           <tr key={label} style={{ borderBottom: '1px solid #f1f3f5' }}>
             <td style={{ padding: '0.55rem 0', color: '#6C757D', width: '55%' }}>{label}</td>
             <td style={{ padding: '0.55rem 0', color: '#0A2540', textAlign: 'right' }}>
-              <LimitValue value={value} />
+              <FeatureValue value={value} />
             </td>
           </tr>
         ))}
       </tbody>
     </table>
+  );
+}
+
+// ── Plan comparison table (all active plans from DB) ─────────────────────────
+function PlanComparisonTable({
+  plans,
+  currentPlan,
+  onSelect,
+  isPending,
+}: {
+  plans: PlanConfig[];
+  currentPlan: BillingPlan;
+  onSelect: (plan: BillingPlan) => void;
+  isPending: boolean;
+}) {
+  const featureRows: Array<{ key: keyof PlanConfig; label: string }> = [
+    { key: 'seatLimit', label: 'Seats' },
+    { key: 'feedbackLimit', label: 'Feedback limit' },
+    { key: 'aiInsights', label: 'AI insights' },
+    { key: 'integrations', label: 'Integrations' },
+    { key: 'publicPortal', label: 'Public portal' },
+    { key: 'churnIntelligence', label: 'Churn intelligence' },
+    { key: 'sso', label: 'SSO' },
+  ];
+
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', minWidth: '560px' }}>
+        <thead>
+          <tr>
+            <th style={{ textAlign: 'left', padding: '0.5rem 0', color: '#6C757D', fontWeight: 600, width: '30%' }}>
+              Feature
+            </th>
+            {plans.map((p) => (
+              <th
+                key={p.planType}
+                style={{
+                  textAlign: 'center',
+                  padding: '0.5rem 0.5rem',
+                  color: p.planType === currentPlan ? '#0A2540' : '#6C757D',
+                  fontWeight: p.planType === currentPlan ? 800 : 600,
+                }}
+              >
+                {p.displayName}
+                {p.planType === currentPlan && (
+                  <span
+                    style={{
+                      display: 'block',
+                      fontSize: '0.68rem',
+                      fontWeight: 600,
+                      color: '#10b981',
+                      marginTop: '0.1rem',
+                    }}
+                  >
+                    Current
+                  </span>
+                )}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {featureRows.map(({ key, label }) => (
+            <tr key={key} style={{ borderBottom: '1px solid #f1f3f5' }}>
+              <td style={{ padding: '0.5rem 0', color: '#6C757D' }}>{label}</td>
+              {plans.map((p) => (
+                <td key={p.planType} style={{ padding: '0.5rem', textAlign: 'center' }}>
+                  <FeatureValue value={p[key] as number | null | boolean} />
+                </td>
+              ))}
+            </tr>
+          ))}
+          {/* CTA row */}
+          <tr>
+            <td />
+            {plans.map((p) => (
+              <td key={p.planType} style={{ padding: '0.75rem 0.5rem', textAlign: 'center' }}>
+                {p.planType === currentPlan ? (
+                  <span style={{ fontSize: '0.78rem', color: '#10b981', fontWeight: 600 }}>
+                    Current plan
+                  </span>
+                ) : p.planType === BillingPlan.ENTERPRISE ? (
+                  <a
+                    href="mailto:sales@triageinsight.com"
+                    style={{
+                      fontSize: '0.78rem',
+                      color: '#0A2540',
+                      fontWeight: 600,
+                      textDecoration: 'underline',
+                    }}
+                  >
+                    Contact sales
+                  </a>
+                ) : (
+                  <button
+                    style={isPending ? BTN_DISABLED : BTN_PRIMARY}
+                    disabled={isPending}
+                    onClick={() => onSelect(p.planType)}
+                  >
+                    {isPending ? 'Requesting…' : `Switch to ${p.displayName}`}
+                  </button>
+                )}
+              </td>
+            ))}
+          </tr>
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -212,6 +323,11 @@ function BillingEmailForm({ currentEmail }: { currentEmail: string | null }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function BillingPage() {
   const { billing, isLoading, isError, error } = useBilling();
+  const { plans, isLoading: plansLoading } = usePlans();
+  const { mutate: requestChange, isPending: changePending, data: changeResult, isError: changeError } =
+    useRequestPlanChange();
+
+  const [showComparison, setShowComparison] = useState(false);
 
   if (isLoading) {
     return (
@@ -263,6 +379,10 @@ export default function BillingPage() {
   }
 
   const statusBadge = STATUS_BADGE[billing.billingStatus];
+  const isTrialing = billing.billingStatus === BillingStatus.TRIALING;
+  const trialExpired =
+    billing.trialStatus === TrialStatus.EXPIRED ||
+    (isTrialing && billing.trialDaysRemaining === 0);
 
   return (
     <div
@@ -301,10 +421,10 @@ export default function BillingPage() {
         >
           <div>
             <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0A2540' }}>
-              {PLAN_LABELS[billing.billingPlan]}
+              {billing.planConfig.displayName}
             </div>
             <div style={{ fontSize: '0.88rem', color: '#6C757D', marginTop: '0.15rem' }}>
-              {PLAN_PRICES[billing.billingPlan]}
+              {PLAN_PRICES[billing.billingPlan] ?? 'Custom pricing'}
             </div>
           </div>
           <span
@@ -325,24 +445,40 @@ export default function BillingPage() {
         </div>
 
         {/* Trial banner */}
-        {billing.billingStatus === BillingStatus.TRIALING && billing.trialEndsAt && (
+        {isTrialing && billing.trialEndsAt && (
           <div
             style={{
-              background: '#eff6ff',
-              border: '1px solid #bfdbfe',
+              background: trialExpired ? '#fff5f5' : '#eff6ff',
+              border: `1px solid ${trialExpired ? '#feb2b2' : '#bfdbfe'}`,
               borderRadius: '0.5rem',
               padding: '0.75rem 1rem',
               fontSize: '0.85rem',
-              color: '#1e40af',
+              color: trialExpired ? '#c53030' : '#1e40af',
               marginBottom: '1.25rem',
             }}
           >
-            {billing.trialDaysRemaining !== null && billing.trialDaysRemaining > 0
+            {!trialExpired && billing.trialDaysRemaining !== null && billing.trialDaysRemaining > 0
               ? `Your free trial ends in ${billing.trialDaysRemaining} day${
                   billing.trialDaysRemaining === 1 ? '' : 's'
                 } (${formatDate(billing.trialEndsAt)}).`
               : `Your free trial ended on ${formatDate(billing.trialEndsAt)}.`}{' '}
             Upgrade to continue using all features.
+          </div>
+        )}
+
+        {/* Trial start date */}
+        {billing.trialStartedAt && (
+          <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+            <div>
+              <span style={LABEL}>Trial started</span>
+              <span style={VALUE}>{formatDate(billing.trialStartedAt)}</span>
+            </div>
+            {billing.trialEndsAt && (
+              <div>
+                <span style={LABEL}>Trial ends</span>
+                <span style={VALUE}>{formatDate(billing.trialEndsAt)}</span>
+              </div>
+            )}
           </div>
         )}
 
@@ -385,10 +521,20 @@ export default function BillingPage() {
           </div>
         )}
 
-        {/* Stripe customer status */}
-        <div
-          style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}
-        >
+        {/* Workspace limits */}
+        <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+          <div>
+            <span style={LABEL}>Seat limit</span>
+            <span style={VALUE}>
+              {billing.seatLimit === 0 ? '∞ Unlimited' : billing.seatLimit.toLocaleString()}
+            </span>
+          </div>
+          <div>
+            <span style={LABEL}>AI usage limit</span>
+            <span style={VALUE}>
+              {billing.aiUsageLimit === 0 ? 'Not included' : billing.aiUsageLimit.toLocaleString()}
+            </span>
+          </div>
           <div>
             <span style={LABEL}>Stripe customer</span>
             <span style={VALUE}>
@@ -401,14 +547,46 @@ export default function BillingPage() {
           </div>
         </div>
 
+        {/* Plan change success/error feedback */}
+        {changeResult && (
+          <div
+            style={{
+              background: '#d1fae5',
+              border: '1px solid #6ee7b7',
+              borderRadius: '0.5rem',
+              padding: '0.75rem 1rem',
+              fontSize: '0.85rem',
+              color: '#065f46',
+              marginBottom: '1rem',
+            }}
+          >
+            {changeResult.message}
+          </div>
+        )}
+        {changeError && (
+          <div
+            style={{
+              background: '#fff5f5',
+              border: '1px solid #feb2b2',
+              borderRadius: '0.5rem',
+              padding: '0.75rem 1rem',
+              fontSize: '0.85rem',
+              color: '#c53030',
+              marginBottom: '1rem',
+            }}
+          >
+            Failed to submit plan change request. Please try again.
+          </div>
+        )}
+
         {/* Upgrade / manage CTAs */}
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
           {billing.billingPlan !== BillingPlan.ENTERPRISE && (
             <button
               style={BTN_PRIMARY}
-              onClick={() => alert('Stripe Checkout integration coming soon.')}
+              onClick={() => setShowComparison((v) => !v)}
             >
-              Upgrade plan
+              {showComparison ? 'Hide plans' : 'Upgrade plan'}
             </button>
           )}
           {billing.hasStripeCustomer && (
@@ -422,12 +600,44 @@ export default function BillingPage() {
         </div>
       </div>
 
-      {/* Plan limits card */}
+      {/* Plan comparison table (toggled) */}
+      {showComparison && (
+        <div style={CARD}>
+          <p style={SECTION_TITLE}>Compare plans</p>
+          {plansLoading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {[1, 2, 3, 4].map((i) => (
+                <Skeleton key={i} width="100%" height="1.2rem" />
+              ))}
+            </div>
+          ) : plans.length === 0 ? (
+            <p style={{ fontSize: '0.88rem', color: '#6C757D' }}>
+              No plan configuration found. Contact your administrator.
+            </p>
+          ) : (
+            <PlanComparisonTable
+              plans={plans}
+              currentPlan={billing.billingPlan}
+              onSelect={(targetPlan) =>
+                requestChange({ targetPlan })
+              }
+              isPending={changePending}
+            />
+          )}
+        </div>
+      )}
+
+      {/* Current plan features card (DB-driven) */}
       <div style={CARD}>
         <p style={SECTION_TITLE}>
-          Plan limits — {PLAN_LABELS[billing.billingPlan]}
+          Plan features — {billing.planConfig.displayName}
         </p>
-        <PlanLimitsTable limits={billing.planLimits} />
+        {billing.planConfig.description && (
+          <p style={{ fontSize: '0.85rem', color: '#6C757D', marginBottom: '1rem', marginTop: '-0.5rem' }}>
+            {billing.planConfig.description}
+          </p>
+        )}
+        <PlanFeaturesTable planConfig={billing.planConfig} />
       </div>
 
       {/* Billing contact card */}

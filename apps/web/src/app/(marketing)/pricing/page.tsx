@@ -37,7 +37,7 @@ export default function PricingPage() {
                   </li>
                 ))}
               </ul>
-              <a href="/signup" className="btn btn-outline-teal" style={{ width: "100%", justifyContent: "center" }}>Get started free</a>
+              <a href="/signup?plan=FREE" className="btn btn-outline-teal" style={{ width: "100%", justifyContent: "center" }}>Get started free</a>
             </div>
 
             {/* Pro */}
@@ -54,7 +54,7 @@ export default function PricingPage() {
                   </li>
                 ))}
               </ul>
-              <a href="/signup" className="btn btn-yellow" style={{ width: "100%", justifyContent: "center" }}>Start free trial</a>
+              <a href="/signup?plan=PRO" className="btn btn-yellow" style={{ width: "100%", justifyContent: "center" }}>Start free trial</a>
             </div>
 
             {/* Enterprise */}
@@ -103,7 +103,7 @@ export default function PricingPage() {
         <div className="container">
           <h2 style={{ fontSize: "clamp(1.75rem,3vw,2.5rem)", fontWeight: 800, color: "#fff", marginBottom: "1rem" }}>Ready to bring clarity to your feedback?</h2>
           <p style={{ fontSize: "1.1rem", color: "rgba(255,255,255,0.65)", marginBottom: "2rem" }}>Join 200+ SaaS teams already using TriageInsight.</p>
-          <a href="/signup" className="btn btn-yellow">Start free trial</a>
+          <a href="/signup?plan=PRO" className="btn btn-yellow">Start free trial</a>
         </div>
       </section>
     </main>

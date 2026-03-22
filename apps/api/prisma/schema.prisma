@@ -39,8 +39,20 @@ enum WorkspaceStatus {
 enum BillingPlan {
   FREE
   STARTER
-  PRO
+  GROWTH
   ENTERPRISE
+}
+
+enum TrialStatus {
+  ACTIVE
+  EXPIRED
+  CONVERTED
+}
+
+enum PlanStatus {
+  ACTIVE
+  SUSPENDED
+  CANCELLED
 }
 
 enum BillingStatus {
@@ -278,6 +290,15 @@ model Workspace {
   trialEndsAt           DateTime?
   currentPeriodStart    DateTime?
   currentPeriodEnd      DateTime?
+  /// Trial lifecycle fields
+  trialStartedAt        DateTime?
+  trialStatus           TrialStatus            @default(ACTIVE)
+  planStatus            PlanStatus             @default(ACTIVE)
+  /// Plan limits (overridable per workspace; defaults come from Plan config)
+  seatLimit             Int                    @default(3)
+  aiUsageLimit          Int                    @default(0)
+  /// FK to the Plan config row that governs this workspace
+  planId                String?
 
   /// Custom domain set by the workspace admin (e.g. "feedback.acme.com")
   customDomain             String?                      @unique
@@ -937,4 +958,35 @@ model WorkspaceInvite {
   @@unique([workspaceId, email])
   @@index([workspaceId])
   @@index([token])
+}
+
+/// ── Plan Configuration ────────────────────────────────────────────────────
+/// Managed exclusively by SUPER_ADMIN via /platform/plans endpoints.
+/// Each row defines the limits and trial rules for one BillingPlan tier.
+model Plan {
+  id                  String      @id @default(uuid())
+  /// Matches the BillingPlan enum value (unique — one config row per plan)
+  planType            BillingPlan @unique
+  displayName         String
+  description         String?
+  /// Trial duration in days (0 = no trial; only used for STARTER and GROWTH)
+  trialDays           Int         @default(0)
+  /// Seat limit (null = unlimited)
+  seatLimit           Int?
+  /// Monthly AI inference calls allowed (null = unlimited)
+  aiUsageLimit        Int?
+  /// Monthly feedback items allowed (null = unlimited)
+  feedbackLimit       Int?
+  /// Feature flags
+  aiInsights          Boolean     @default(false)
+  integrations        Boolean     @default(false)
+  publicPortal        Boolean     @default(true)
+  churnIntelligence   Boolean     @default(false)
+  sso                 Boolean     @default(false)
+  /// Whether this plan is offered to new signups
+  isActive            Boolean     @default(true)
+  /// Whether this is the default plan assigned on signup when no plan is chosen
+  isDefault           Boolean     @default(false)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
 }
