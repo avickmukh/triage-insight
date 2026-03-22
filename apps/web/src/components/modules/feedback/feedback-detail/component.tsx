@@ -53,10 +53,12 @@ export function FeedbackDetail({ data }: FeedbackDetailProps) {
                 <ul className="mt-2 space-y-2">
                   {data.attachments.map((att) => (
                     <li key={att.id}>
-                      <a href={att.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-primary hover:underline">
+                      {/* Presigned URL endpoint not yet implemented in the backend.
+                          Rendered as plain text until the backend exposes a download URL. */}
+                      <span className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Paperclip className="h-4 w-4" />
                         {att.fileName}
-                      </a>
+                      </span>
                     </li>
                   ))}
                 </ul>

@@ -29,6 +29,7 @@ export const appRoutes = (slug: string) => ({
   dashboard:  `/${slug}/app`,
   inbox:      `/${slug}/app/inbox`,
   inboxItem:  (id: string) => `/${slug}/app/inbox/${id}`,
+  inboxNew:   `/${slug}/app/inbox/new`,
   themes:     `/${slug}/app/themes`,
   themeItem:  (id: string) => `/${slug}/app/themes/${id}`,
   roadmap:    `/${slug}/app/roadmap`,

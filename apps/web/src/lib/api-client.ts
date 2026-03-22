@@ -113,7 +113,14 @@ const apiClient = {
   feedback: {
     list: (
       workspaceId: string,
-      params?: any
+      params?: {
+        page?: number;
+        limit?: number;
+        search?: string;
+        status?: string;
+        sourceType?: string;
+        customerId?: string;
+      }
     ): Promise<FeedbackListResponse> =>
       api
         .get(`/workspaces/${workspaceId}/feedback`, { params })
@@ -132,6 +139,17 @@ const apiClient = {
       api
         .patch(`/workspaces/${workspaceId}/feedback/${feedbackId}`, data)
         .then(handleResponse),
+    remove: (workspaceId: string, feedbackId: string): Promise<void> =>
+      api
+        .delete(`/workspaces/${workspaceId}/feedback/${feedbackId}`)
+        .then(handleResponse),
+    /**
+     * NOTE: The workspace feedback controller does not expose a comments
+     * endpoint. Comments on workspace feedback are an internal-only feature
+     * that has not yet been implemented in the backend. This method is kept
+     * as a typed stub so callers compile; it will 404 until the backend
+     * adds the route.
+     */
     addComment: (
       workspaceId: string,
       feedbackId: string,

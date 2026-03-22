@@ -110,18 +110,49 @@ export interface WorkspaceMember {
   joinedAt: string;
 }
 
+/** Attachment record returned by the backend on feedback detail/list */
+export interface FeedbackAttachment {
+  id: string;
+  feedbackId: string;
+  workspaceId: string;
+  fileName: string;
+  s3Key: string;
+  s3Bucket: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: string;
+}
+
 export interface Feedback {
   id: string;
+  workspaceId: string;
+  customerId?: string | null;
+  /** PortalUser FK — set for PUBLIC_PORTAL submissions */
+  portalUserId?: string | null;
+  sourceType: FeedbackSourceType;
+  sourceRef?: string | null;
   title: string;
   description: string;
-  summary?: string;
+  /** Original unmodified text before normalization */
+  rawText?: string | null;
+  normalizedText?: string | null;
+  language?: string | null;
+  summary?: string | null;
   status: FeedbackStatus;
-  sourceType: FeedbackSourceType;
-  customerId?: string;
-  workspaceId: string;
+  sentiment?: number | null;
+  impactScore?: number | null;
+  /** Arbitrary source metadata (Slack channel, CSV row, etc.) */
+  metadata?: Record<string, unknown> | null;
   createdAt: string;
   updatedAt: string;
-  mergedIntoId?: string;
+  submittedAt: string;
+  mergedIntoId?: string | null;
+  /** Included by findAll and findOne (include: { attachments: true }) */
+  attachments?: FeedbackAttachment[];
+  /**
+   * Workspace-scoped comments — not yet returned by the backend.
+   * Field is reserved for when the backend adds the route.
+   */
   comments?: FeedbackComment[];
 }
 
@@ -210,9 +241,28 @@ export interface LoginResponse {
 }
 
 // Feedback
-export type FeedbackListResponse = PaginatedResponse<Feedback>;
-export interface CreateFeedbackDto extends Pick<Feedback, 'title' | 'sourceType' | 'customerId'> { description?: string; }
-export interface UpdateFeedbackDto extends Partial<Pick<Feedback, 'title' | 'description' | 'status' | 'customerId'>> {}
+/**
+ * Backend returns flat pagination: { data, total, page, limit }
+ * NOT wrapped in a `meta` object like PaginatedResponse.
+ */
+export interface FeedbackListResponse {
+  data: Feedback[];
+  total: number;
+  page: number;
+  limit: number;
+}
+export interface CreateFeedbackDto {
+  title: string;
+  description?: string;
+  sourceType: FeedbackSourceType;
+  customerId?: string;
+}
+export interface UpdateFeedbackDto {
+  title?: string;
+  description?: string;
+  status?: FeedbackStatus;
+  customerId?: string;
+}
 export interface PublicFeedbackDto {
   title: string;
   description?: string;

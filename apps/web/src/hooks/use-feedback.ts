@@ -1,25 +1,50 @@
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import apiClient from "@/lib/api-client";
-import { CreateFeedbackDto, Feedback, FeedbackComment, FeedbackListResponse, UpdateFeedbackDto } from "@/lib/api-types";
+import {
+  CreateFeedbackDto,
+  Feedback,
+  FeedbackComment,
+  FeedbackListResponse,
+  FeedbackSourceType,
+  FeedbackStatus,
+  UpdateFeedbackDto,
+} from "@/lib/api-types";
 import { useWorkspace } from "./use-workspace";
 
 const FEEDBACK_QUERY_KEY = "feedback";
+
+export interface FeedbackListParams {
+  status?: FeedbackStatus;
+  sourceType?: FeedbackSourceType;
+  search?: string;
+  customerId?: string;
+  limit?: number;
+}
 
 export const useFeedback = (feedbackId?: string) => {
   const queryClient = useQueryClient();
   const { workspace } = useWorkspace();
   const workspaceId = workspace?.id;
 
-  const useFeedbackList = (params: any = {}) => {
+  /**
+   * Infinite-scroll list of workspace feedback.
+   *
+   * Backend returns flat pagination: { data, total, page, limit }
+   * NOT wrapped in a `meta` object.
+   */
+  const useFeedbackList = (params: FeedbackListParams = {}) => {
     return useInfiniteQuery<FeedbackListResponse, Error>({
       queryKey: [FEEDBACK_QUERY_KEY, workspaceId, "list", params],
       queryFn: ({ pageParam = 1 }) => {
         if (!workspaceId) throw new Error("Workspace ID is not available");
-        return apiClient.feedback.list(workspaceId, { ...params, page: pageParam });
+        return apiClient.feedback.list(workspaceId, { ...params, page: pageParam as number });
       },
       getNextPageParam: (lastPage) => {
-        if (lastPage?.meta?.page < lastPage?.meta?.totalPages) {
-          return lastPage?.meta?.page + 1;
+        // Backend returns flat { data, total, page, limit }
+        const { page, limit, total } = lastPage;
+        const totalPages = Math.ceil(total / limit);
+        if (page < totalPages) {
+          return page + 1;
         }
         return undefined;
       },
@@ -37,11 +62,13 @@ export const useFeedback = (feedbackId?: string) => {
     enabled: !!workspaceId && !!feedbackId,
   });
 
-  const { mutate: createFeedback, isPending: isCreating } = useMutation<
-    Feedback,
-    Error,
-    CreateFeedbackDto
-  >({
+  const {
+    mutate: createFeedback,
+    isPending: isCreating,
+    isSuccess: isCreateSuccess,
+    isError: isCreateError,
+    error: createError,
+  } = useMutation<Feedback, Error, CreateFeedbackDto>({
     mutationFn: (data) => {
       if (!workspaceId) throw new Error("Workspace ID is not available");
       return apiClient.feedback.create(workspaceId, data);
@@ -84,6 +111,9 @@ export const useFeedback = (feedbackId?: string) => {
     error,
     createFeedback,
     isCreating,
+    isCreateSuccess,
+    isCreateError,
+    createError,
     updateFeedback,
     isUpdating,
     addComment,
