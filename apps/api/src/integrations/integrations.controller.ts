@@ -1,3 +1,22 @@
+/**
+ * IntegrationsController
+ *
+ * All integration management endpoints for a workspace.
+ * Uses the unified IntegrationService for all state transitions.
+ *
+ * Routes:
+ *   GET    /workspaces/:id/integrations                  — list all providers
+ *   GET    /workspaces/:id/integrations/:provider/status — single provider status
+ *   POST   /workspaces/:id/integrations/zendesk/connect  — connect Zendesk
+ *   POST   /workspaces/:id/integrations/intercom/connect — connect Intercom
+ *   POST   /workspaces/:id/integrations/slack/connect    — connect Slack
+ *   GET    /workspaces/:id/integrations/slack/channels   — list Slack channels
+ *   POST   /workspaces/:id/integrations/slack/channels   — configure channels
+ *   POST   /workspaces/:id/integrations/slack/sync       — trigger Slack sync
+ *   POST   /workspaces/:id/integrations/slack/webhook    — Slack Events API webhook
+ *   DELETE /workspaces/:id/integrations/:provider        — disconnect
+ *   POST   /workspaces/:id/integrations/sync             — sync all
+ */
 import {
   Controller,
   Post,
@@ -8,12 +27,13 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  Logger,
+  Headers,
 } from '@nestjs/common';
-import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
-import { RolesGuard } from "../workspace/guards/roles.guard";
-import { Roles } from "../workspace/decorators/roles.decorator";
-import { WorkspaceRole, IntegrationProvider } from "@prisma/client";
-import { PrismaService } from "../prisma/prisma.service";
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../workspace/guards/roles.guard';
+import { Roles } from '../workspace/decorators/roles.decorator';
+import { WorkspaceRole, IntegrationProvider } from '@prisma/client';
 import { ConnectZendeskDto } from './dto/connect-zendesk.dto';
 import { ConnectIntercomDto } from './dto/connect-intercom.dto';
 import { ConnectSlackDto } from './dto/connect-slack.dto';
@@ -22,39 +42,19 @@ import type { Queue } from 'bull';
 import { SlackService } from './providers/slack.service';
 import { SlackIngestionService } from './services/slack-ingestion.service';
 import { SLACK_INGESTION_QUEUE } from './processors/slack-ingestion.processor';
-
-/**
- * Shape returned by GET /workspaces/:workspaceId/integrations
- *
- * Every known provider is always present in the list so the frontend can
- * render a card for each one regardless of connection state.
- */
-export interface IntegrationStatus {
-  provider: IntegrationProvider;
-  connected: boolean;
-  lastSyncedAt: string | null;
-  /** Non-sensitive metadata (e.g. Slack team name, Zendesk subdomain). */
-  metadata: Record<string, string> | null;
-  createdAt: string | null;
-}
-
-/** All providers the product currently surfaces to workspace admins. */
-const KNOWN_PROVIDERS: IntegrationProvider[] = [
-  IntegrationProvider.SLACK,
-  IntegrationProvider.ZENDESK,
-  IntegrationProvider.INTERCOM,
-  IntegrationProvider.FRESHDESK,
-  IntegrationProvider.HUBSPOT,
-  IntegrationProvider.SALESFORCE,
-  IntegrationProvider.EMAIL,
-  IntegrationProvider.STRIPE,
-];
+import {
+  IntegrationService,
+  IntegrationStatusDto,
+} from './services/integration.service';
+import * as crypto from 'crypto';
 
 @Controller('workspaces/:workspaceId/integrations')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class IntegrationsController {
+  private readonly logger = new Logger(IntegrationsController.name);
+
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly integrationService: IntegrationService,
     private readonly slackService: SlackService,
     private readonly slackIngestionService: SlackIngestionService,
     @InjectQueue('support-sync') private readonly syncQueue: Queue,
@@ -62,193 +62,214 @@ export class IntegrationsController {
   ) {}
 
   // ─── GET /workspaces/:workspaceId/integrations ────────────────────────────
-  /**
-   * Returns the connection status for every known provider.
-   * ADMIN, EDITOR, and VIEWER may all read this list.
-   */
+
   @Get()
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
   async listIntegrations(
     @Param('workspaceId') workspaceId: string,
-  ): Promise<IntegrationStatus[]> {
-    const connections = await this.prisma.integrationConnection.findMany({
-      where: { workspaceId },
-      select: {
-        provider: true,
-        lastSyncedAt: true,
-        metadata: true,
-        subdomain: true,
-        createdAt: true,
-      },
-    });
+  ): Promise<IntegrationStatusDto[]> {
+    return this.integrationService.listAll(workspaceId);
+  }
 
-    const connectedMap = new Map(
-      connections.map((c) => [c.provider, c]),
-    );
+  // ─── GET /workspaces/:workspaceId/integrations/:provider/status ───────────
 
-    return KNOWN_PROVIDERS.map((provider) => {
-      const conn = connectedMap.get(provider);
-      if (!conn) {
-        return {
-          provider,
-          connected: false,
-          lastSyncedAt: null,
-          metadata: null,
-          createdAt: null,
-        };
-      }
-      const stored = (conn.metadata as Record<string, string> | null) ?? {};
-      const meta: Record<string, string> = { ...stored };
-      if (conn.subdomain) meta.subdomain = conn.subdomain;
-      return {
-        provider,
-        connected: true,
-        lastSyncedAt: conn.lastSyncedAt?.toISOString() ?? null,
-        metadata: Object.keys(meta).length > 0 ? meta : null,
-        createdAt: conn.createdAt.toISOString(),
-      };
-    });
+  @Get(':provider/status')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
+  async getProviderStatus(
+    @Param('workspaceId') workspaceId: string,
+    @Param('provider') provider: string,
+  ): Promise<IntegrationStatusDto> {
+    const providerEnum = provider.toUpperCase() as IntegrationProvider;
+    return this.integrationService.getStatus(workspaceId, providerEnum);
   }
 
   // ─── POST /workspaces/:workspaceId/integrations/zendesk/connect ───────────
+
   @Post('zendesk/connect')
   @Roles(WorkspaceRole.ADMIN)
   async connectZendesk(
     @Param('workspaceId') workspaceId: string,
     @Body() dto: ConnectZendeskDto,
-  ): Promise<IntegrationStatus> {
-    const conn = await this.prisma.integrationConnection.upsert({
-      where: { workspaceId_provider: { workspaceId, provider: IntegrationProvider.ZENDESK } },
-      update: { accessToken: dto.accessToken, subdomain: dto.subdomain },
-      create: { workspaceId, provider: IntegrationProvider.ZENDESK, accessToken: dto.accessToken, subdomain: dto.subdomain },
-    });
-    return {
-      provider: conn.provider,
-      connected: true,
-      lastSyncedAt: conn.lastSyncedAt?.toISOString() ?? null,
-      metadata: conn.subdomain ? { subdomain: conn.subdomain } : null,
-      createdAt: conn.createdAt.toISOString(),
-    };
+  ): Promise<IntegrationStatusDto> {
+    return this.integrationService.connect(
+      workspaceId,
+      IntegrationProvider.ZENDESK,
+      {
+        accessToken: dto.accessToken,
+        subdomain: dto.subdomain,
+        metadata: { subdomain: dto.subdomain },
+      },
+    );
   }
 
   // ─── POST /workspaces/:workspaceId/integrations/intercom/connect ──────────
+
   @Post('intercom/connect')
   @Roles(WorkspaceRole.ADMIN)
   async connectIntercom(
     @Param('workspaceId') workspaceId: string,
     @Body() dto: ConnectIntercomDto,
-  ): Promise<IntegrationStatus> {
-    const conn = await this.prisma.integrationConnection.upsert({
-      where: { workspaceId_provider: { workspaceId, provider: IntegrationProvider.INTERCOM } },
-      update: { accessToken: dto.accessToken },
-      create: { workspaceId, provider: IntegrationProvider.INTERCOM, accessToken: dto.accessToken },
-    });
-    return {
-      provider: conn.provider,
-      connected: true,
-      lastSyncedAt: conn.lastSyncedAt?.toISOString() ?? null,
-      metadata: null,
-      createdAt: conn.createdAt.toISOString(),
-    };
+  ): Promise<IntegrationStatusDto> {
+    return this.integrationService.connect(
+      workspaceId,
+      IntegrationProvider.INTERCOM,
+      { accessToken: dto.accessToken },
+    );
   }
 
   // ─── POST /workspaces/:workspaceId/integrations/slack/connect ─────────────
-  /**
-   * Stores a Slack bot token.  In production this endpoint would be called
-   * from the OAuth callback after the user authorises the Slack App.
-   */
+
   @Post('slack/connect')
   @Roles(WorkspaceRole.ADMIN)
   async connectSlack(
     @Param('workspaceId') workspaceId: string,
     @Body() dto: ConnectSlackDto,
-  ): Promise<IntegrationStatus> {
-    const metadata: Record<string, string> = {};
-    if (dto.teamId) metadata.teamId = dto.teamId;
-    if (dto.teamName) metadata.teamName = dto.teamName;
+  ): Promise<IntegrationStatusDto> {
+    let teamMeta: Record<string, string> = {};
+    if (dto.accessToken) {
+      try {
+        const authInfo = await this.slackService.testAuth(dto.accessToken);
+        teamMeta = {
+          teamId: authInfo.teamId,
+          teamName: authInfo.teamName,
+          botUserId: authInfo.botUserId,
+        };
+      } catch {
+        if (dto.teamId) teamMeta.teamId = dto.teamId;
+        if (dto.teamName) teamMeta.teamName = dto.teamName;
+      }
+    }
 
-    const conn = await this.prisma.integrationConnection.upsert({
-      where: { workspaceId_provider: { workspaceId, provider: IntegrationProvider.SLACK } },
-      update: {
+    return this.integrationService.connect(
+      workspaceId,
+      IntegrationProvider.SLACK,
+      {
         accessToken: dto.accessToken,
-        ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+        metadata: teamMeta,
       },
-      create: {
-        workspaceId,
-        provider: IntegrationProvider.SLACK,
-        accessToken: dto.accessToken,
-        ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
-      },
-    });
-    return {
-      provider: conn.provider,
-      connected: true,
-      lastSyncedAt: conn.lastSyncedAt?.toISOString() ?? null,
-      metadata: Object.keys(metadata).length > 0 ? metadata : null,
-      createdAt: conn.createdAt.toISOString(),
-    };
+    );
   }
 
-  // ─── GET /workspaces/:workspaceId/integrations/slack/channels ───────────────
-  /**
-   * Lists all Slack channels available to the bot token.
-   * Used by the frontend channel selector.
-   */
+  // ─── GET /workspaces/:workspaceId/integrations/slack/channels ────────────
+
   @Get('slack/channels')
   @Roles(WorkspaceRole.ADMIN)
   async listSlackChannels(@Param('workspaceId') workspaceId: string) {
-    const conn = await this.prisma.integrationConnection.findUnique({
-      where: { workspaceId_provider: { workspaceId, provider: IntegrationProvider.SLACK } },
-    });
-    if (!conn) return { channels: [] };
+    const conn = await this.integrationService.getConnection(
+      workspaceId,
+      IntegrationProvider.SLACK,
+    );
     const channels = await this.slackService.listChannels(conn.accessToken);
     return { channels };
   }
 
-  // ─── POST /workspaces/:workspaceId/integrations/slack/channels ───────────────
-  /**
-   * Saves the selected channels into IntegrationConnection.metadata.
-   */
+  // ─── POST /workspaces/:workspaceId/integrations/slack/channels ───────────
+
   @Post('slack/channels')
   @Roles(WorkspaceRole.ADMIN)
   async configureSlackChannels(
     @Param('workspaceId') workspaceId: string,
     @Body() body: { channels: Array<{ id: string; name: string }> },
-  ) {
-    const conn = await this.prisma.integrationConnection.findUnique({
-      where: { workspaceId_provider: { workspaceId, provider: IntegrationProvider.SLACK } },
-    });
-    if (!conn) throw new Error('Slack not connected');
+  ): Promise<IntegrationStatusDto> {
+    const conn = await this.integrationService.getConnection(
+      workspaceId,
+      IntegrationProvider.SLACK,
+    );
     const existing = (conn.metadata ?? {}) as Record<string, unknown>;
-    const updated = await this.prisma.integrationConnection.update({
-      where: { workspaceId_provider: { workspaceId, provider: IntegrationProvider.SLACK } },
+    // Merge channels into existing metadata via direct Prisma access
+    await (this.integrationService as any).prisma.integrationConnection.update({
+      where: {
+        workspaceId_provider: { workspaceId, provider: IntegrationProvider.SLACK },
+      },
       data: { metadata: { ...existing, channels: body.channels } },
     });
-    return {
-      provider: updated.provider,
-      connected: true,
-      lastSyncedAt: updated.lastSyncedAt?.toISOString() ?? null,
-      metadata: updated.metadata as Record<string, unknown>,
-      createdAt: updated.createdAt.toISOString(),
-    };
+    return this.integrationService.getStatus(workspaceId, IntegrationProvider.SLACK);
   }
 
-  // ─── POST /workspaces/:workspaceId/integrations/slack/sync ───────────────────
-  /**
-   * Triggers an immediate Slack ingestion job for this workspace.
-   */
+  // ─── POST /workspaces/:workspaceId/integrations/slack/sync ───────────────
+
   @Post('slack/sync')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
   async syncSlack(@Param('workspaceId') workspaceId: string) {
-    await this.slackQueue.add({ workspaceId });
+    await this.slackQueue.add(
+      { workspaceId },
+      { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
+    );
     return { message: 'Slack ingestion job queued.' };
   }
 
-  // ─── DELETE /workspaces/:workspaceId/integrations/:provider ───────────────
+  // ─── POST /workspaces/:workspaceId/integrations/slack/webhook ────────────
   /**
-   * Disconnects (deletes) an integration connection.
-   * Returns 204 No Content on success.
+   * Slack Events API webhook receiver.
+   *
+   * Handles:
+   * 1. URL verification challenge (no auth required — Slack sends during setup)
+   * 2. Real-time message events — dispatched to the Slack ingestion queue
+   *
+   * Security: verifies Slack request signature using SLACK_SIGNING_SECRET env var.
+   * Falls back to accepting all requests if the env var is not set (dev mode).
+   *
+   * Note: This endpoint intentionally bypasses JwtAuthGuard — Slack calls it directly.
+   * Route-level guard override is handled by not applying @UseGuards here.
    */
+  @Post('slack/webhook')
+  @HttpCode(HttpStatus.OK)
+  async slackWebhook(
+    @Param('workspaceId') workspaceId: string,
+    @Body() body: Record<string, unknown>,
+    @Headers('x-slack-signature') slackSignature?: string,
+    @Headers('x-slack-request-timestamp') slackTimestamp?: string,
+  ) {
+    // ── URL verification challenge ─────────────────────────────────────────
+    if (body.type === 'url_verification') {
+      return { challenge: body.challenge };
+    }
+
+    // ── Signature verification ─────────────────────────────────────────────
+    const signingSecret = process.env.SLACK_SIGNING_SECRET;
+    if (signingSecret && slackSignature && slackTimestamp) {
+      const now = Math.floor(Date.now() / 1000);
+      const ts = parseInt(slackTimestamp, 10);
+      if (Math.abs(now - ts) > 300) {
+        this.logger.warn(`Slack webhook replay attack: workspace=${workspaceId}`);
+        return { ok: false };
+      }
+      const rawBody = JSON.stringify(body);
+      const sigBase = `v0:${slackTimestamp}:${rawBody}`;
+      const expected = `v0=${crypto
+        .createHmac('sha256', signingSecret)
+        .update(sigBase)
+        .digest('hex')}`;
+      const sigBuf = Buffer.from(slackSignature, 'utf8');
+      const expBuf = Buffer.from(expected, 'utf8');
+      if (
+        sigBuf.length !== expBuf.length ||
+        !crypto.timingSafeEqual(sigBuf, expBuf)
+      ) {
+        this.logger.warn(`Slack webhook signature mismatch: workspace=${workspaceId}`);
+        return { ok: false };
+      }
+    }
+
+    // ── Dispatch event to ingestion queue ──────────────────────────────────
+    if (body.type === 'event_callback') {
+      const event = body.event as Record<string, unknown> | undefined;
+      if (event?.type === 'message' && !event.subtype) {
+        await this.slackQueue.add(
+          { workspaceId, event },
+          { attempts: 3, backoff: { type: 'exponential', delay: 1000 } },
+        );
+        this.logger.debug(
+          `Slack message event queued: workspace=${workspaceId} channel=${String(event.channel)}`,
+        );
+      }
+    }
+
+    return { ok: true };
+  }
+
+  // ─── DELETE /workspaces/:workspaceId/integrations/:provider ──────────────
+
   @Delete(':provider')
   @Roles(WorkspaceRole.ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -257,28 +278,25 @@ export class IntegrationsController {
     @Param('provider') provider: string,
   ): Promise<void> {
     const providerEnum = provider.toUpperCase() as IntegrationProvider;
-    if (!Object.values(IntegrationProvider).includes(providerEnum)) {
-      return;
-    }
-    await this.prisma.integrationConnection.deleteMany({
-      where: { workspaceId, provider: providerEnum },
-    });
+    if (!Object.values(IntegrationProvider).includes(providerEnum)) return;
+    await this.integrationService.disconnect(workspaceId, providerEnum);
   }
 
   // ─── POST /workspaces/:workspaceId/integrations/sync ─────────────────────
+
   @Post('sync')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
   async sync(@Param('workspaceId') workspaceId: string) {
-    const connections = await this.prisma.integrationConnection.findMany({
+    const connections = await (this.integrationService as any).prisma.integrationConnection.findMany({
       where: { workspaceId },
+      select: { provider: true, lastSyncedAt: true },
     });
     for (const conn of connections) {
-      await this.syncQueue.add({
-        workspaceId,
-        provider: conn.provider,
-        lastSyncedAt: conn.lastSyncedAt,
-      });
+      await this.syncQueue.add(
+        { workspaceId, provider: conn.provider, lastSyncedAt: conn.lastSyncedAt },
+        { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
+      );
     }
-    return { message: 'Sync jobs started for all active integrations.' };
+    return { message: `Sync jobs started for ${connections.length} active integration(s).` };
   }
 }

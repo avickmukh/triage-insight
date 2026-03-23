@@ -112,6 +112,20 @@ enum IntegrationProvider {
   STRIPE
 }
 
+enum IntegrationStatus {
+  ACTIVE
+  DISCONNECTED
+  ERROR
+  SYNCING
+}
+
+enum IntegrationHealthState {
+  OK
+  ERROR
+  SYNCING
+  UNKNOWN
+}
+
 enum SupportTicketStatus {
   OPEN
   PENDING
@@ -816,21 +830,27 @@ model PrioritizationSettings {
 //
 
 model IntegrationConnection {
-  id                String              @id @default(uuid())
+  id                String                   @id @default(uuid())
   workspaceId       String
   provider          IntegrationProvider
+  status            IntegrationStatus        @default(ACTIVE)
+  healthState       IntegrationHealthState   @default(OK)
   accessToken       String
   refreshToken      String?
   subdomain         String?
   metadata          Json?
   lastSyncedAt      DateTime?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
+  lastErrorAt       DateTime?
+  lastErrorMessage  String?
+  createdBy         String?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
 
-  workspace         Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace         Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, provider])
   @@index([workspaceId])
+  @@index([status])
 }
 
 model SupportTicket {
