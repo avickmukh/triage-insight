@@ -1,5 +1,5 @@
-import { Processor, Process } from '@nestjs/bull';
-import type { Job } from 'bull';
+import { Processor, Process, InjectQueue } from '@nestjs/bull';
+import type { Job, Queue } from 'bull';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
@@ -8,6 +8,7 @@ import { TranscriptionService } from '../services/transcription.service';
 import { SummarizationService } from '../../ai/services/summarization.service';
 import { VoiceTranscriptionJobPayload, VOICE_TRANSCRIPTION_QUEUE } from '../services/voice.service';
 import { AiJobStatus, FeedbackSourceType, FeedbackStatus } from '@prisma/client';
+import { VOICE_EXTRACTION_QUEUE, VoiceExtractionJobPayload } from './voice-extraction.processor';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -25,6 +26,8 @@ export class VoiceTranscriptionProcessor {
     private readonly transcriptionService: TranscriptionService,
     private readonly summarizationService: SummarizationService,
     private readonly configService: ConfigService,
+    @InjectQueue(VOICE_EXTRACTION_QUEUE)
+    private readonly extractionQueue: Queue<VoiceExtractionJobPayload>,
   ) {
     this.bucket = this.configService.getOrThrow<string>('AWS_S3_BUCKET');
     this.s3Client = new S3Client({
@@ -61,7 +64,8 @@ export class VoiceTranscriptionProcessor {
         throw new Error('Transcription returned empty result');
       }
 
-      // ── 3. Generate a title via summarization ─────────────────────────────
+      // ── 3. Generate a provisional title via summarization ─────────────────
+      //      (VoiceIntelligenceService will produce a better title in step 5)
       let title = label ?? 'Voice Feedback';
       try {
         title = await this.summarizationService.summarize(transcript);
@@ -89,7 +93,7 @@ export class VoiceTranscriptionProcessor {
         },
       });
 
-      // ── 5. Mark job as COMPLETED with transcript in output ────────────────
+      // ── 5. Mark transcription job as COMPLETED ────────────────────────────
       await this.prisma.aiJobLog.update({
         where: { id: aiJobLogId },
         data: {
@@ -104,6 +108,28 @@ export class VoiceTranscriptionProcessor {
 
       this.logger.log(
         `Transcription job ${aiJobLogId} completed. Feedback created: ${feedback.id}`,
+      );
+
+      // ── 6. Enqueue voice intelligence extraction (async, non-blocking) ────
+      await this.extractionQueue.add(
+        {
+          uploadAssetId,
+          aiJobLogId,
+          workspaceId,
+          feedbackId: feedback.id,
+          transcript,
+          label,
+        },
+        {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 5000 },
+          removeOnComplete: false,
+          removeOnFail: false,
+        },
+      );
+
+      this.logger.log(
+        `Voice extraction job enqueued for feedback ${feedback.id}`,
       );
     } catch (err) {
       const errorMessage = (err as Error).message ?? 'Unknown error';

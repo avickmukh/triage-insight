@@ -38,6 +38,18 @@ const ALLOWED_AUDIO_TYPES = new Set([
   'audio/flac',
 ]);
 
+/** Intelligence output stored in the VOICE_EXTRACTION AiJobLog.output */
+interface ExtractionOutput {
+  title?: string;
+  summary?: string;
+  painPoints?: string[];
+  featureRequests?: string[];
+  keyTopics?: string[];
+  sentiment?: number;
+  confidenceScore?: number;
+  linkedThemeId?: string | null;
+}
+
 @Injectable()
 export class VoiceService {
   private readonly logger = new Logger(VoiceService.name);
@@ -158,10 +170,10 @@ export class VoiceService {
       }),
     ]);
 
-    // Enrich each asset with its latest AiJobLog status
+    // Enrich each asset with its latest AiJobLog status + intelligence summary
     const enriched = await Promise.all(
       assets.map(async (asset) => {
-        const job = await this.prisma.aiJobLog.findFirst({
+        const transcriptionJob = await this.prisma.aiJobLog.findFirst({
           where: {
             workspaceId,
             entityType: 'UploadAsset',
@@ -171,25 +183,49 @@ export class VoiceService {
           orderBy: { createdAt: 'desc' },
         });
 
-        // Find feedback created from this upload (stored in metadata.uploadAssetId)
-        const feedback = job?.output
+        // Find feedback created from this upload
+        const feedback = transcriptionJob?.output
           ? await this.prisma.feedback.findFirst({
               where: {
                 workspaceId,
                 metadata: { path: ['uploadAssetId'], equals: asset.id },
               },
-              select: { id: true, title: true, status: true },
+              select: { id: true, title: true, status: true, sentiment: true, impactScore: true },
             })
           : null;
 
+        // Find the extraction job for intelligence status
+        const extractionJob = feedback
+          ? await this.prisma.aiJobLog.findFirst({
+              where: {
+                workspaceId,
+                entityType: 'Feedback',
+                entityId: feedback.id,
+                jobType: AiJobType.VOICE_EXTRACTION,
+              },
+              orderBy: { createdAt: 'desc' },
+            })
+          : null;
+
+        const extractionOutput = extractionJob?.output as ExtractionOutput | null;
+
         return {
           ...asset,
-          jobStatus: job?.status ?? null,
-          jobId: job?.id ?? null,
-          transcript: (job?.output as { transcript?: string } | null)?.transcript ?? null,
+          // Transcription state
+          jobStatus: transcriptionJob?.status ?? null,
+          jobId: transcriptionJob?.id ?? null,
+          transcript: (transcriptionJob?.output as { transcript?: string } | null)?.transcript ?? null,
+          error: transcriptionJob?.error ?? extractionJob?.error ?? null,
+          // Feedback linkage
           feedbackId: feedback?.id ?? null,
           feedbackTitle: feedback?.title ?? null,
-          error: job?.error ?? null,
+          // Intelligence summary (from extraction job)
+          intelligenceStatus: extractionJob?.status ?? null,
+          summary: extractionOutput?.summary ?? null,
+          sentiment: extractionOutput?.sentiment ?? feedback?.sentiment ?? null,
+          confidenceScore: extractionOutput?.confidenceScore ?? null,
+          keyTopics: extractionOutput?.keyTopics ?? [],
+          linkedThemeId: extractionOutput?.linkedThemeId ?? null,
         };
       }),
     );
@@ -203,7 +239,7 @@ export class VoiceService {
     };
   }
 
-  // ─── Get a single upload with full details ─────────────────────────────────
+  // ─── Get a single upload with full intelligence details ────────────────────
 
   async getUpload(workspaceId: string, uploadAssetId: string) {
     const asset = await this.prisma.uploadAsset.findFirst({
@@ -211,7 +247,8 @@ export class VoiceService {
     });
     if (!asset) return null;
 
-    const job = await this.prisma.aiJobLog.findFirst({
+    // Transcription job
+    const transcriptionJob = await this.prisma.aiJobLog.findFirst({
       where: {
         workspaceId,
         entityType: 'UploadAsset',
@@ -221,15 +258,45 @@ export class VoiceService {
       orderBy: { createdAt: 'desc' },
     });
 
-    const feedback = job?.output
+    // Feedback created by transcription
+    const feedback = transcriptionJob?.output
       ? await this.prisma.feedback.findFirst({
           where: {
             workspaceId,
             metadata: { path: ['uploadAssetId'], equals: asset.id },
           },
-          select: { id: true, title: true, description: true, status: true, createdAt: true },
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            summary: true,
+            status: true,
+            sentiment: true,
+            impactScore: true,
+            createdAt: true,
+            themes: {
+              select: {
+                theme: { select: { id: true, title: true, status: true } },
+              },
+            },
+          },
         })
       : null;
+
+    // Extraction job (intelligence layer)
+    const extractionJob = feedback
+      ? await this.prisma.aiJobLog.findFirst({
+          where: {
+            workspaceId,
+            entityType: 'Feedback',
+            entityId: feedback.id,
+            jobType: AiJobType.VOICE_EXTRACTION,
+          },
+          orderBy: { createdAt: 'desc' },
+        })
+      : null;
+
+    const extractionOutput = extractionJob?.output as ExtractionOutput | null;
 
     // Generate a short-lived signed download URL for the audio player
     const downloadUrl = await this.getSignedDownloadUrl(asset.s3Key);
@@ -237,11 +304,38 @@ export class VoiceService {
     return {
       ...asset,
       downloadUrl,
-      jobStatus: job?.status ?? null,
-      jobId: job?.id ?? null,
-      transcript: (job?.output as { transcript?: string } | null)?.transcript ?? null,
-      feedback,
-      error: job?.error ?? null,
+      // Transcription state
+      jobStatus: transcriptionJob?.status ?? null,
+      jobId: transcriptionJob?.id ?? null,
+      transcript: (transcriptionJob?.output as { transcript?: string } | null)?.transcript ?? null,
+      error: transcriptionJob?.error ?? extractionJob?.error ?? null,
+      // Feedback linkage
+      feedback: feedback
+        ? {
+            id: feedback.id,
+            title: feedback.title,
+            description: feedback.description,
+            summary: feedback.summary,
+            status: feedback.status,
+            sentiment: feedback.sentiment,
+            impactScore: feedback.impactScore,
+            createdAt: feedback.createdAt,
+            themes: feedback.themes.map((tf) => tf.theme),
+          }
+        : null,
+      // Intelligence outputs
+      intelligenceStatus: extractionJob?.status ?? null,
+      intelligence: extractionOutput
+        ? {
+            summary: extractionOutput.summary ?? null,
+            painPoints: extractionOutput.painPoints ?? [],
+            featureRequests: extractionOutput.featureRequests ?? [],
+            keyTopics: extractionOutput.keyTopics ?? [],
+            sentiment: extractionOutput.sentiment ?? null,
+            confidenceScore: extractionOutput.confidenceScore ?? null,
+            linkedThemeId: extractionOutput.linkedThemeId ?? null,
+          }
+        : null,
     };
   }
 

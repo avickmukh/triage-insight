@@ -965,6 +965,16 @@ export interface UpdateDealPayload extends Partial<CreateDealPayload> {}
 
 export type VoiceJobStatus = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED';
 
+export interface VoiceIntelligenceOutput {
+  summary: string | null;
+  painPoints: string[];
+  featureRequests: string[];
+  keyTopics: string[];
+  sentiment: number | null;
+  confidenceScore: number | null;
+  linkedThemeId: string | null;
+}
+
 export interface VoiceUploadListItem {
   id: string;
   workspaceId: string;
@@ -980,6 +990,13 @@ export interface VoiceUploadListItem {
   feedbackId: string | null;
   feedbackTitle: string | null;
   error: string | null;
+  // Intelligence fields (populated after extraction job completes)
+  intelligenceStatus: VoiceJobStatus | null;
+  summary: string | null;
+  sentiment: number | null;
+  confidenceScore: number | null;
+  keyTopics: string[];
+  linkedThemeId: string | null;
 }
 
 export interface VoiceUploadDetail extends VoiceUploadListItem {
@@ -988,9 +1005,14 @@ export interface VoiceUploadDetail extends VoiceUploadListItem {
     id: string;
     title: string;
     description: string;
+    summary: string | null;
     status: string;
+    sentiment: number | null;
+    impactScore: number | null;
     createdAt: string;
+    themes: Array<{ id: string; title: string; status: string }>;
   } | null;
+  intelligence: VoiceIntelligenceOutput | null;
 }
 
 export interface VoiceUploadListResponse {
