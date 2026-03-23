@@ -395,10 +395,20 @@ model Customer {
   locale           String?
   countryCode      String?
   /// External CRM identifier (e.g. Salesforce Account ID, HubSpot Contact ID)
-  externalId       String?
-  externalRef      String?
-  createdAt        DateTime                @default(now())
-  updatedAt        DateTime                @updatedAt
+  externalId              String?
+  externalRef             String?
+  /// Composite CIQ influence score 0–100; updated by CustomerSignalAggregationProcessor
+  ciqInfluenceScore       Float?   @default(0)
+  /// Feature demand score 0–100; derived from feedback volume × ARR weight
+  featureDemandScore      Float?   @default(0)
+  /// Support intensity score 0–100; derived from support ticket volume and severity
+  supportIntensityScore   Float?   @default(0)
+  /// Health score 0–100; composite of lifecycle, churn risk, and activity
+  healthScore             Float?   @default(0)
+  /// Timestamp of last signal activity (feedback, deal update, survey response)
+  lastActivityAt          DateTime?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
   workspace        Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   feedbacks        Feedback[]

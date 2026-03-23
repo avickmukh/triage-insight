@@ -875,8 +875,76 @@ export interface Customer {
   locale?: string | null;
   countryCode?: string | null;
   externalRef?: string | null;
+  ciqInfluenceScore?: number | null;
+  featureDemandScore?: number | null;
+  supportIntensityScore?: number | null;
+  healthScore?: number | null;
+  lastActivityAt?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CustomerSignals {
+  customerId: string;
+  scores: {
+    ciqInfluenceScore: number;
+    featureDemandScore: number;
+    supportIntensityScore: number;
+    healthScore: number;
+    churnRisk: number;
+  };
+  sentiment: {
+    avg: number;
+    positive: number;
+    neutral: number;
+    negative: number;
+    total: number;
+  };
+  signals: Array<{
+    id: string;
+    signalType: string;
+    strength: number;
+    createdAt: string;
+    themeId?: string | null;
+    theme?: { id: string; title: string } | null;
+  }>;
+  lastActivityAt?: string | null;
+}
+
+export interface CustomerAnalytics {
+  totalCustomers: number;
+  totalARR: number;
+  atRiskARR: number;
+  segmentBreakdown: Array<{
+    segment: string;
+    count: number;
+    totalARR: number;
+    avgCIQ: number;
+  }>;
+  lifecycleDistribution: Record<string, number>;
+  arrWeightedDemand: Array<{
+    customerId: string;
+    name: string;
+    arrValue: number;
+    featureDemandScore: number;
+    weightedScore: number;
+  }>;
+  churnRiskDistribution: {
+    low: number;
+    medium: number;
+    high: number;
+    critical: number;
+  };
+  topByCIQ: Array<{
+    id: string;
+    name: string;
+    segment?: string | null;
+    arrValue: number;
+    ciqInfluenceScore: number;
+    healthScore: number;
+    lifecycleStage: string;
+    feedbackCount: number;
+  }>;
 }
 
 export interface CustomerRevenueIntelligence {

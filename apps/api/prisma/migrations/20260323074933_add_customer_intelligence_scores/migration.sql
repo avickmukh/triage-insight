@@ -1,0 +1,6 @@
+-- AlterTable
+ALTER TABLE "Customer" ADD COLUMN     "ciqInfluenceScore" DOUBLE PRECISION DEFAULT 0,
+ADD COLUMN     "featureDemandScore" DOUBLE PRECISION DEFAULT 0,
+ADD COLUMN     "healthScore" DOUBLE PRECISION DEFAULT 0,
+ADD COLUMN     "lastActivityAt" TIMESTAMP(3),
+ADD COLUMN     "supportIntensityScore" DOUBLE PRECISION DEFAULT 0;

@@ -57,6 +57,8 @@ import {
   CiqScoreOutput,
   Customer,
   CustomerDetail,
+  CustomerAnalytics,
+  CustomerSignals,
   PaginatedCustomers,
   PaginatedDeals,
   RevenueSummary,
@@ -596,6 +598,18 @@ const apiClient = {
     /** DELETE /workspaces/:id/customers/:customerId */
     remove: (workspaceId: string, customerId: string): Promise<void> =>
       api.delete(`/workspaces/${workspaceId}/customers/${customerId}`).then(handleResponse),
+    /** GET /workspaces/:id/customers/analytics */
+    getAnalytics: (workspaceId: string): Promise<CustomerAnalytics> =>
+      api.get(`/workspaces/${workspaceId}/customers/analytics`).then(handleResponse),
+    /** GET /workspaces/:id/customers/:customerId/signals */
+    getSignals: (workspaceId: string, customerId: string): Promise<CustomerSignals> =>
+      api.get(`/workspaces/${workspaceId}/customers/${customerId}/signals`).then(handleResponse),
+    /** POST /workspaces/:id/customers/:customerId/rescore */
+    rescore: (workspaceId: string, customerId: string): Promise<{ queued: boolean }> =>
+      api.post(`/workspaces/${workspaceId}/customers/${customerId}/rescore`).then(handleResponse),
+    /** POST /workspaces/:id/customers/rescore-all */
+    rescoreAll: (workspaceId: string): Promise<{ queued: boolean }> =>
+      api.post(`/workspaces/${workspaceId}/customers/rescore-all`).then(handleResponse),
   },
 
   deals: {

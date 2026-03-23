@@ -15,6 +15,8 @@ const CUSTOMER_KEYS = {
   list: (workspaceId: string, params?: object) => ['customers', workspaceId, 'list', params] as const,
   detail: (workspaceId: string, id: string) => ['customers', workspaceId, 'detail', id] as const,
   revenueSummary: (workspaceId: string) => ['customers', workspaceId, 'revenue-summary'] as const,
+  analytics: (workspaceId: string) => ['customers', workspaceId, 'analytics'] as const,
+  signals: (workspaceId: string, customerId: string) => ['customers', workspaceId, 'signals', customerId] as const,
 };
 
 // ─── Revenue Summary ──────────────────────────────────────────────────────────
@@ -65,6 +67,30 @@ export function useCustomerDetail(_orgSlug: string, customerId: string) {
   });
 }
 
+// ─── Customer Analytics ───────────────────────────────────────────────────────
+export function useCustomerAnalytics() {
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id;
+  return useQuery({
+    queryKey: CUSTOMER_KEYS.analytics(workspaceId ?? ''),
+    queryFn: () => apiClient.customers.getAnalytics(workspaceId!),
+    enabled: !!workspaceId,
+    staleTime: 2 * 60 * 1000,
+  });
+}
+
+// ─── Customer Signals ─────────────────────────────────────────────────────────
+export function useCustomerSignals(customerId: string) {
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id;
+  return useQuery({
+    queryKey: CUSTOMER_KEYS.signals(workspaceId ?? '', customerId),
+    queryFn: () => apiClient.customers.getSignals(workspaceId!, customerId),
+    enabled: !!workspaceId && !!customerId,
+    staleTime: 60 * 1000,
+  });
+}
+
 // ─── Create Customer ──────────────────────────────────────────────────────────
 export function useCreateCustomer() {
   const { workspace } = useWorkspace();
@@ -102,6 +128,34 @@ export function useDeleteCustomer(_orgSlug?: string) {
   return useMutation({
     mutationFn: (customerId: string) =>
       apiClient.customers.remove(workspaceId!, customerId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['customers', workspaceId] });
+    },
+  });
+}
+
+// ─── Rescore Customer ─────────────────────────────────────────────────────────
+export function useRescoreCustomer() {
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id;
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (customerId: string) =>
+      apiClient.customers.rescore(workspaceId!, customerId),
+    onSuccess: (_data, customerId) => {
+      qc.invalidateQueries({ queryKey: CUSTOMER_KEYS.detail(workspaceId ?? '', customerId) });
+      qc.invalidateQueries({ queryKey: CUSTOMER_KEYS.signals(workspaceId ?? '', customerId) });
+    },
+  });
+}
+
+// ─── Rescore All Customers ────────────────────────────────────────────────────
+export function useRescoreAllCustomers() {
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id;
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiClient.customers.rescoreAll(workspaceId!),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['customers', workspaceId] });
     },

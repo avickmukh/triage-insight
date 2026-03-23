@@ -1,7 +1,7 @@
 'use client';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { useCustomerDetail, useUpdateCustomer } from '@/hooks/use-customers';
+import { useCustomerDetail, useUpdateCustomer, useCustomerSignals, useRescoreCustomer } from '@/hooks/use-customers';
 import { useCurrentMemberRole } from '@/hooks/use-workspace';
 import {
   CustomerLifecycleStage,
@@ -89,6 +89,164 @@ function SectionHeader({ title, count }: { title: string; count?: number }) {
   );
 }
 
+// ─── Score Gauge ──────────────────────────────────────────────────────────────
+function ScoreGauge({ label, value, max = 100, color }: { label: string; value: number | null | undefined; max?: number; color: string }) {
+  const pct = value != null ? Math.min(100, Math.round((value / max) * 100)) : 0;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: '0.72rem', color: '#6C757D', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</span>
+        <span style={{ fontSize: '0.85rem', fontWeight: 700, color: value != null ? color : '#adb5bd' }}>
+          {value != null ? Math.round(value) : '—'}
+        </span>
+      </div>
+      <div style={{ height: '6px', background: '#e9ecef', borderRadius: '3px' }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: '3px', transition: 'width 0.4s ease' }} />
+      </div>
+    </div>
+  );
+}
+
+// ─── Sentiment Bar ────────────────────────────────────────────────────────────
+function SentimentBar({ positive, neutral, negative, total }: { positive: number; neutral: number; negative: number; total: number }) {
+  if (total === 0) return <span style={{ color: '#adb5bd', fontSize: '0.8rem' }}>No sentiment data yet.</span>;
+  const pPos = Math.round((positive / total) * 100);
+  const pNeu = Math.round((neutral / total) * 100);
+  const pNeg = Math.round((negative / total) * 100);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+      <div style={{ display: 'flex', height: '10px', borderRadius: '5px', overflow: 'hidden', gap: '2px' }}>
+        {pPos > 0 && <div style={{ width: `${pPos}%`, background: '#059669' }} />}
+        {pNeu > 0 && <div style={{ width: `${pNeu}%`, background: '#94a3b8' }} />}
+        {pNeg > 0 && <div style={{ width: `${pNeg}%`, background: '#dc2626' }} />}
+      </div>
+      <div style={{ display: 'flex', gap: '1rem', fontSize: '0.72rem' }}>
+        <span style={{ color: '#059669', fontWeight: 600 }}>+{pPos}% Positive</span>
+        <span style={{ color: '#94a3b8', fontWeight: 600 }}>{pNeu}% Neutral</span>
+        <span style={{ color: '#dc2626', fontWeight: 600 }}>{pNeg}% Negative</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Signal Type Label ────────────────────────────────────────────────────────
+function SignalTypeBadge({ type }: { type: string }) {
+  const map: Record<string, { bg: string; color: string; label: string }> = {
+    FEEDBACK_VOLUME:   { bg: '#e3f2fd', color: '#1565c0', label: 'Feedback' },
+    SUPPORT_TICKET:    { bg: '#fff8e1', color: '#b8860b', label: 'Support' },
+    DEAL_SIGNAL:       { bg: '#e8f5e9', color: '#2e7d32', label: 'Deal' },
+    CHURN_RISK:        { bg: '#fce4ec', color: '#c62828', label: 'Churn Risk' },
+    EXPANSION_SIGNAL:  { bg: '#f3e5f5', color: '#6a1b9a', label: 'Expansion' },
+    VOICE_FEEDBACK:    { bg: '#e0f7fa', color: '#00695c', label: 'Voice' },
+    SURVEY_RESPONSE:   { bg: '#fce4ec', color: '#880e4f', label: 'Survey' },
+  };
+  const style = map[type] ?? { bg: '#f0f4f8', color: '#6C757D', label: type.replace('_', ' ') };
+  return (
+    <span style={{ ...style, padding: '0.15rem 0.5rem', borderRadius: '1rem', fontSize: '0.7rem', fontWeight: 600 }}>
+      {style.label}
+    </span>
+  );
+}
+
+// ─── Signals Panel ────────────────────────────────────────────────────────────
+function SignalsPanel({ customerId }: { customerId: string }) {
+  const { data: signals, isLoading } = useCustomerSignals(customerId);
+
+  if (isLoading) {
+    return (
+      <div style={CARD}>
+        <SectionHeader title="Intelligence Signals" />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          {[0, 1, 2].map((i) => <Skeleton key={i} style={{ height: '2.5rem' }} />)}
+        </div>
+      </div>
+    );
+  }
+
+  if (!signals) return null;
+
+  const { scores, sentiment, signals: signalList } = signals;
+
+  return (
+    <>
+      {/* ── Intelligence Scores ─────────────────────────────────────────── */}
+      <div style={CARD}>
+        <SectionHeader title="Intelligence Scores" />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+          <ScoreGauge label="CIQ Influence" value={scores.ciqInfluenceScore} color="#20A4A4" />
+          <ScoreGauge label="Feature Demand" value={scores.featureDemandScore} color="#6a1b9a" />
+          <ScoreGauge label="Support Intensity" value={scores.supportIntensityScore} color="#f59e0b" />
+          <ScoreGauge label="Account Health" value={scores.healthScore != null ? scores.healthScore * 100 : null} color={
+            scores.healthScore != null
+              ? scores.healthScore >= 0.7 ? '#059669' : scores.healthScore >= 0.4 ? '#f59e0b' : '#dc2626'
+              : '#6C757D'
+          } />
+          <div style={{ borderTop: '1px solid #e9ecef', paddingTop: '0.875rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+              <span style={{ fontSize: '0.72rem', color: '#6C757D', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Churn Risk</span>
+              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: scores.churnRisk > 0.6 ? '#dc2626' : scores.churnRisk > 0.3 ? '#f59e0b' : '#059669' }}>
+                {Math.round(scores.churnRisk * 100)}%
+              </span>
+            </div>
+            <div style={{ height: '6px', background: '#e9ecef', borderRadius: '3px' }}>
+              <div style={{ width: `${Math.round(scores.churnRisk * 100)}%`, height: '100%', background: scores.churnRisk > 0.6 ? '#dc2626' : scores.churnRisk > 0.3 ? '#f59e0b' : '#059669', borderRadius: '3px' }} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Sentiment Breakdown ─────────────────────────────────────────── */}
+      <div style={CARD}>
+        <SectionHeader title="Sentiment Breakdown" count={sentiment.total} />
+        <SentimentBar
+          positive={sentiment.positive}
+          neutral={sentiment.neutral}
+          negative={sentiment.negative}
+          total={sentiment.total}
+        />
+        {sentiment.total > 0 && (
+          <div style={{ marginTop: '0.75rem', padding: '0.5rem 0.75rem', background: '#f8f9fa', borderRadius: '0.5rem', fontSize: '0.8rem', color: '#0a2540' }}>
+            Avg sentiment: <strong style={{ color: sentiment.avg >= 0.3 ? '#059669' : sentiment.avg <= -0.3 ? '#dc2626' : '#6C757D' }}>
+              {sentiment.avg >= 0.3 ? 'Positive' : sentiment.avg <= -0.3 ? 'Negative' : 'Neutral'}
+            </strong> ({sentiment.avg.toFixed(2)})
+          </div>
+        )}
+      </div>
+
+      {/* ── Recent Signals ───────────────────────────────────────────────── */}
+      {signalList && signalList.length > 0 && (
+        <div style={CARD}>
+          <SectionHeader title="Recent Signals" count={signalList.length} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+            {signalList.slice(0, 8).map((sig) => (
+              <div key={sig.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem', background: '#f8f9fa', borderRadius: '0.5rem', border: '1px solid #e9ecef' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: 0 }}>
+                  <SignalTypeBadge type={sig.signalType} />
+                  {sig.theme && (
+                    <span style={{ fontSize: '0.75rem', color: '#6C757D', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {sig.theme.title}
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+                  <div style={{ display: 'flex', gap: '2px' }}>
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <div key={i} style={{ width: '5px', height: '12px', borderRadius: '2px', background: i < Math.round(sig.strength * 5) ? '#20A4A4' : '#e9ecef' }} />
+                    ))}
+                  </div>
+                  <span style={{ fontSize: '0.7rem', color: '#adb5bd' }}>
+                    {new Date(sig.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function CustomerDetailPage() {
   const { orgSlug, id } = useParams<{ orgSlug: string; id: string }>();
@@ -98,6 +256,7 @@ export default function CustomerDetailPage() {
 
   const { data: customer, isLoading, isError } = useCustomerDetail(orgSlug, id);
   const { mutate: updateCustomer, isPending: isUpdating } = useUpdateCustomer(orgSlug, id);
+  const { mutate: rescore, isPending: isRescoring } = useRescoreCustomer();
 
   const [editingArr, setEditingArr] = useState(false);
   const [arrInput, setArrInput] = useState('');
@@ -161,11 +320,29 @@ export default function CustomerDetailPage() {
                 {customer.segment.replace('_', ' ')}
               </span>
             )}
+            {customer.healthScore != null && (
+              <span style={{
+                background: customer.healthScore >= 0.7 ? '#e8f5e9' : customer.healthScore >= 0.4 ? '#fff8e1' : '#fce4ec',
+                color: customer.healthScore >= 0.7 ? '#2e7d32' : customer.healthScore >= 0.4 ? '#b8860b' : '#c62828',
+                padding: '0.2rem 0.6rem', borderRadius: '1rem', fontSize: '0.75rem', fontWeight: 600,
+              }}>
+                Health {Math.round(customer.healthScore * 100)}%
+              </span>
+            )}
           </div>
         </div>
+        {canEdit && (
+          <button
+            onClick={() => rescore(id)}
+            disabled={isRescoring}
+            style={{ padding: '0.5rem 1rem', border: '1px solid #dee2e6', borderRadius: '0.5rem', fontSize: '0.875rem', color: '#0a2540', background: '#fff', cursor: 'pointer', opacity: isRescoring ? 0.7 : 1, fontWeight: 500 }}
+          >
+            {isRescoring ? '↻ Rescoring…' : '↻ Rescore'}
+          </button>
+        )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '1.5rem', alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr 280px', gap: '1.5rem', alignItems: 'start' }}>
         {/* ── Left: Profile + Revenue Intelligence ──────────────────────── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {/* Profile card */}
@@ -215,6 +392,12 @@ export default function CustomerDetailPage() {
                   </span>
                 )}
               </dd>
+              {customer.lastActivityAt && (
+                <>
+                  <dt style={{ color: '#6C757D', fontWeight: 500 }}>Last Active</dt>
+                  <dd style={{ margin: 0, color: '#0a2540' }}>{new Date(customer.lastActivityAt).toLocaleDateString()}</dd>
+                </>
+              )}
               <dt style={{ color: '#6C757D', fontWeight: 500 }}>Added</dt>
               <dd style={{ margin: 0, color: '#0a2540' }}>{new Date(customer.createdAt).toLocaleDateString()}</dd>
             </dl>
@@ -245,7 +428,7 @@ export default function CustomerDetailPage() {
           )}
         </div>
 
-        {/* ── Right: Feedback, Deals, Roadmap ───────────────────────────── */}
+        {/* ── Center: Feedback, Deals, Roadmap ──────────────────────────── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {/* Feedback */}
           <div style={CARD}>
@@ -369,6 +552,11 @@ export default function CustomerDetailPage() {
               </div>
             </div>
           )}
+        </div>
+
+        {/* ── Right: Intelligence Signals ───────────────────────────────── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <SignalsPanel customerId={id} />
         </div>
       </div>
     </>

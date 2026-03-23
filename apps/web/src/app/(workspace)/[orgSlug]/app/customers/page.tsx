@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { useCustomerList, useCreateCustomer, useRevenueSummary } from '@/hooks/use-customers';
+import { useCustomerList, useCreateCustomer, useRevenueSummary, useRescoreAllCustomers } from '@/hooks/use-customers';
 import { useCurrentMemberRole } from '@/hooks/use-workspace';
 import {
   Customer,
@@ -247,12 +247,43 @@ function CreateCustomerModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ─── CIQ Score Bar ────────────────────────────────────────────────────────────
+function CiqScoreBar({ score, max = 100 }: { score: number | null | undefined; max?: number }) {
+  if (score == null) return <span style={{ color: '#adb5bd', fontSize: '0.8rem' }}>—</span>;
+  const pct = Math.min(100, Math.round((score / max) * 100));
+  const color = pct >= 70 ? '#059669' : pct >= 40 ? '#f59e0b' : '#6C757D';
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+      <div style={{ width: '48px', height: '6px', background: '#e9ecef', borderRadius: '3px' }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: '3px' }} />
+      </div>
+      <span style={{ fontSize: '0.75rem', fontWeight: 700, color }}>{Math.round(score)}</span>
+    </div>
+  );
+}
+
+// ─── Health Badge ─────────────────────────────────────────────────────────────
+function HealthBadge({ score }: { score: number | null | undefined }) {
+  if (score == null) return <span style={{ color: '#adb5bd', fontSize: '0.8rem' }}>—</span>;
+  const pct = Math.round(score * 100);
+  const { bg, color } = pct >= 70 ? { bg: '#e8f5e9', color: '#2e7d32' } : pct >= 40 ? { bg: '#fff8e1', color: '#b8860b' } : { bg: '#fce4ec', color: '#c62828' };
+  const label = pct >= 70 ? 'Healthy' : pct >= 40 ? 'At Risk' : 'Critical';
+  return (
+    <span style={{ background: bg, color, padding: '0.2rem 0.5rem', borderRadius: '1rem', fontSize: '0.7rem', fontWeight: 700 }}>
+      {label} {pct}%
+    </span>
+  );
+}
+
 // ─── Customer Row ─────────────────────────────────────────────────────────────
 function CustomerRow({ customer, orgSlug }: { customer: Customer & { _count?: { feedbacks: number; deals: number; signals: number } }; orgSlug: string }) {
   const r = appRoutes(orgSlug);
   const seg = customer.segment ? SEGMENT_COLORS[customer.segment] : null;
-  const pri = PRIORITY_COLORS[customer.accountPriority ?? AccountPriority.MEDIUM];
   const lc = LIFECYCLE_COLORS[customer.lifecycleStage ?? CustomerLifecycleStage.PROSPECT];
+
+  const lastActivity = customer.lastActivityAt
+    ? new Date(customer.lastActivityAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    : null;
 
   return (
     <tr style={{ borderBottom: '1px solid #f0f4f8' }}>
@@ -262,6 +293,9 @@ function CustomerRow({ customer, orgSlug }: { customer: Customer & { _count?: { 
         </Link>
         {customer.companyName && (
           <div style={{ fontSize: '0.75rem', color: '#6C757D', marginTop: '0.1rem' }}>{customer.companyName}</div>
+        )}
+        {lastActivity && (
+          <div style={{ fontSize: '0.7rem', color: '#adb5bd', marginTop: '0.1rem' }}>Active {lastActivity}</div>
         )}
       </td>
       <td style={{ padding: '0.875rem 1rem' }}>
@@ -279,27 +313,13 @@ function CustomerRow({ customer, orgSlug }: { customer: Customer & { _count?: { 
           {LIFECYCLE_LABELS[customer.lifecycleStage ?? CustomerLifecycleStage.PROSPECT]}
         </span>
       </td>
+      {/* CIQ Influence Score */}
       <td style={{ padding: '0.875rem 1rem' }}>
-        <span style={{ ...pri, padding: '0.2rem 0.6rem', borderRadius: '1rem', fontSize: '0.75rem', fontWeight: 600 }}>
-          {customer.accountPriority ?? 'MEDIUM'}
-        </span>
+        <CiqScoreBar score={customer.ciqInfluenceScore} />
       </td>
-      {/* Signal Intensity */}
+      {/* Health */}
       <td style={{ padding: '0.875rem 1rem' }}>
-        {customer._count ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-              {Array.from({ length: 5 }).map((_, i) => {
-                const totalSignals = (customer._count?.feedbacks ?? 0) + (customer._count?.signals ?? 0);
-                const filled = i < Math.min(5, Math.ceil(totalSignals / 2));
-                return (
-                  <div key={i} style={{ width: '8px', height: '8px', borderRadius: '50%', background: filled ? '#20A4A4' : '#e9ecef' }} />
-                );
-              })}
-            </div>
-            <span style={{ fontSize: '0.7rem', color: '#6C757D' }}>{customer._count.feedbacks}f · {customer._count.signals}s</span>
-          </div>
-        ) : <span style={{ color: '#adb5bd' }}>—</span>}
+        <HealthBadge score={customer.healthScore} />
       </td>
       {/* Churn Risk */}
       <td style={{ padding: '0.875rem 1rem' }}>
@@ -317,7 +337,7 @@ function CustomerRow({ customer, orgSlug }: { customer: Customer & { _count?: { 
       {/* Activity */}
       <td style={{ padding: '0.875rem 1rem', fontSize: '0.8rem', color: '#6C757D' }}>
         {customer._count ? (
-          <span>{customer._count.feedbacks} feedback · {customer._count.deals} deals</span>
+          <span>{customer._count.feedbacks}f · {customer._count.deals}d</span>
         ) : '—'}
       </td>
       <td style={{ padding: '0.875rem 1rem' }}>
@@ -335,6 +355,7 @@ export default function CustomersPage() {
   const r = appRoutes(orgSlug);
   const { role } = useCurrentMemberRole();
   const canEdit = role === WorkspaceRole.ADMIN || role === WorkspaceRole.EDITOR;
+  const { mutate: rescoreAll, isPending: isRescoring } = useRescoreAllCustomers();
 
   const [search, setSearch] = useState('');
   const [segment, setSegment] = useState<CustomerSegment | ''>('');
@@ -373,14 +394,31 @@ export default function CustomersPage() {
             Revenue-aware customer intelligence — linked to feedback, themes, and roadmap.
           </p>
         </div>
-        {canEdit && (
-          <button
-            onClick={() => setShowCreate(true)}
-            style={{ background: '#0a2540', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.5rem 1.25rem', fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer' }}
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <Link
+            href={`${r.customers}/analytics`}
+            style={{ padding: '0.5rem 1rem', border: '1px solid #dee2e6', borderRadius: '0.5rem', fontSize: '0.875rem', color: '#0a2540', textDecoration: 'none', fontWeight: 500, background: '#fff' }}
           >
-            + Add Customer
-          </button>
-        )}
+            Analytics
+          </Link>
+          {canEdit && (
+            <button
+              onClick={() => rescoreAll()}
+              disabled={isRescoring}
+              style={{ padding: '0.5rem 1rem', border: '1px solid #dee2e6', borderRadius: '0.5rem', fontSize: '0.875rem', color: '#0a2540', background: '#fff', cursor: 'pointer', opacity: isRescoring ? 0.7 : 1, fontWeight: 500 }}
+            >
+              {isRescoring ? '↻ Rescoring…' : '↻ Rescore All'}
+            </button>
+          )}
+          {canEdit && (
+            <button
+              onClick={() => setShowCreate(true)}
+              style={{ background: '#0a2540', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.5rem 1.25rem', fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer' }}
+            >
+              + Add Customer
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── Revenue Summary ──────────────────────────────────────────────── */}
@@ -451,7 +489,7 @@ export default function CustomersPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#f8f9fa', borderBottom: '1px solid #e9ecef' }}>
-                  {['Customer', 'ARR', 'Segment', 'Stage', 'Priority', 'Signals', 'Churn Risk', 'Activity', ''].map((h) => (
+                  {['Customer', 'ARR', 'Segment', 'Stage', 'CIQ Score', 'Health', 'Churn Risk', 'Activity', ''].map((h) => (
                     <th key={h} style={{ padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 600, color: '#6C757D', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
                       {h}
                     </th>

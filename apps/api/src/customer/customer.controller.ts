@@ -28,12 +28,31 @@ export class CustomerController {
   /**
    * GET /workspaces/:workspaceId/customers/revenue-summary
    * Workspace-level revenue aggregation (total ARR, open deals).
-   * All roles may read.
    */
   @Get('revenue-summary')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
   getRevenueSummary(@Param('workspaceId') workspaceId: string) {
     return this.customerService.getRevenueSummary(workspaceId);
+  }
+
+  /**
+   * GET /workspaces/:workspaceId/customers/analytics
+   * Workspace-level customer intelligence analytics.
+   */
+  @Get('analytics')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
+  getAnalytics(@Param('workspaceId') workspaceId: string) {
+    return this.customerService.getAnalytics(workspaceId);
+  }
+
+  /**
+   * POST /workspaces/:workspaceId/customers/rescore-all
+   * Trigger signal re-aggregation for all customers.
+   */
+  @Post('rescore-all')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  rescoreAll(@Param('workspaceId') workspaceId: string) {
+    return this.customerService.triggerAggregation(workspaceId);
   }
 
   /**
@@ -47,6 +66,32 @@ export class CustomerController {
     @Query() query: QueryCustomerDto,
   ) {
     return this.customerService.findAll(workspaceId, query);
+  }
+
+  /**
+   * GET /workspaces/:workspaceId/customers/:id/signals
+   * Aggregated signal breakdown for a single customer.
+   */
+  @Get(':id/signals')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
+  getSignals(
+    @Param('workspaceId') workspaceId: string,
+    @Param('id') id: string,
+  ) {
+    return this.customerService.getSignals(workspaceId, id);
+  }
+
+  /**
+   * POST /workspaces/:workspaceId/customers/:id/rescore
+   * Trigger signal re-aggregation for a single customer.
+   */
+  @Post(':id/rescore')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  rescore(
+    @Param('workspaceId') workspaceId: string,
+    @Param('id') id: string,
+  ) {
+    return this.customerService.triggerAggregation(workspaceId, id);
   }
 
   /**

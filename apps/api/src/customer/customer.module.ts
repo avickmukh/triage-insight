@@ -7,17 +7,26 @@ import {
   CUSTOMER_REVENUE_SIGNAL_QUEUE,
   CustomerRevenueSignalProcessor,
 } from './processors/customer-revenue-signal.processor';
+import {
+  CUSTOMER_SIGNAL_AGGREGATION_QUEUE,
+  CustomerSignalAggregationProcessor,
+} from './processors/customer-signal-aggregation.processor';
 import { CIQ_SCORING_QUEUE } from '../ai/processors/ciq-scoring.processor';
 
 @Module({
   imports: [
     PrismaModule,
     BullModule.registerQueue({ name: CUSTOMER_REVENUE_SIGNAL_QUEUE }),
-    // CIQ queue is needed so the processor can enqueue re-scoring jobs
+    BullModule.registerQueue({ name: CUSTOMER_SIGNAL_AGGREGATION_QUEUE }),
+    // CIQ queue is needed so the revenue signal processor can enqueue re-scoring jobs
     BullModule.registerQueue({ name: CIQ_SCORING_QUEUE }),
   ],
   controllers: [CustomerController],
-  providers: [CustomerService, CustomerRevenueSignalProcessor],
+  providers: [
+    CustomerService,
+    CustomerRevenueSignalProcessor,
+    CustomerSignalAggregationProcessor,
+  ],
   exports: [CustomerService],
 })
 export class CustomerModule {}
