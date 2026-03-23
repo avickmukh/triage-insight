@@ -134,6 +134,23 @@ export class CreateSurveyDto {
   @IsString()
   customerSegment?: string;
 
+  /** Target segment for revenue-weighted intelligence */
+  @IsOptional()
+  @IsString()
+  targetSegment?: string;
+
+  /** Multiple linked theme IDs for multi-theme validation */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  linkedThemeIds?: string[];
+
+  /** Multiple linked roadmap item IDs for multi-item validation */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  linkedRoadmapIds?: string[];
+
   /** When the survey should automatically close */
   @IsOptional()
   @IsDateString()
@@ -182,6 +199,20 @@ export class UpdateSurveyDto {
   @IsOptional()
   @IsString()
   customerSegment?: string;
+
+  @IsOptional()
+  @IsString()
+  targetSegment?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  linkedThemeIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  linkedRoadmapIds?: string[];
 
   @IsOptional()
   @IsDateString()

@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '../../prisma/prisma.service';
 import OpenAI from 'openai';
 
 // ─── Output types ─────────────────────────────────────────────────────────────
@@ -45,6 +46,62 @@ export interface SurveyResponseIntelligence {
   keyTopics: string[];
 }
 
+// ─── Revenue-weighted intelligence types ─────────────────────────────────────
+
+export interface ResponseCluster {
+  label: string;
+  count: number;
+  avgSentiment: number;
+  totalArr: number;
+  representativeTopics: string[];
+  churnRiskSignal: boolean;
+}
+
+export interface RevenueWeightedInsight {
+  validationScore: number;
+  revenueWeightedScore: number;
+  totalRespondentArr: number;
+  promoterArr: number;
+  detractorArr: number;
+  churnRiskArr: number;
+  churnRiskCount: number;
+  clusters: ResponseCluster[];
+  topFeatureRequests: Array<{ request: string; arrWeight: number; count: number }>;
+  topPainPoints: Array<{ point: string; arrWeight: number; count: number }>;
+  confidence: number;
+  executiveSummary: string | null;
+  churnSignals: Array<{
+    customerId: string;
+    customerName: string;
+    arrValue: number;
+    signal: string;
+    severity: 'low' | 'medium' | 'high';
+  }>;
+}
+
+export interface SurveyIntelligenceResult {
+  surveyId: string;
+  totalResponses: number;
+  processedCount: number;
+  avgSentiment: number | null;
+  avgNps: number | null;
+  avgRating: number | null;
+  npsScore: number | null;
+  linkedThemeIds: string[];
+  keyTopics: string[];
+  npsResponseCount: number;
+  ratingResponseCount: number;
+  textResponseCount: number;
+  insightScore: number | null;
+  sentimentDistribution: { positive: number; neutral: number; negative: number } | null;
+  topFeatureRequests: string[];
+  topPainPoints: string[];
+  revenueWeighted: RevenueWeightedInsight | null;
+  surveyType: string;
+  validationScore: number | null;
+  revenueWeightedScore: number | null;
+}
+
 // ─── Service ──────────────────────────────────────────────────────────────────
 
 @Injectable()
@@ -52,10 +109,263 @@ export class SurveyIntelligenceService {
   private readonly logger = new Logger(SurveyIntelligenceService.name);
   private readonly openai: OpenAI;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly prisma: PrismaService,
+  ) {
     this.openai = new OpenAI({
       apiKey: this.configService.getOrThrow<string>('OPENAI_API_KEY'),
     });
+  }
+
+  // ─── Revenue-weighted survey intelligence ─────────────────────────────────
+
+  async computeRevenueWeightedIntelligence(
+    workspaceId: string,
+    surveyId: string,
+  ): Promise<RevenueWeightedInsight> {
+    const responses = await this.prisma.surveyResponse.findMany({
+      where: { surveyId, workspaceId },
+      select: {
+        id: true,
+        customerId: true,
+        sentimentScore: true,
+        metadata: true,
+        answers: {
+          select: {
+            numericValue: true,
+            textValue: true,
+            question: { select: { type: true, label: true } },
+          },
+        },
+        customer: {
+          select: { id: true, name: true, arrValue: true, segment: true, churnRisk: true },
+        },
+      },
+    });
+
+    if (responses.length === 0) return this.emptyRevenueWeightedInsight();
+
+    const totalArr = responses.reduce((sum, r) => sum + (r.customer?.arrValue ?? 0), 0);
+    const avgArr = totalArr / responses.length;
+
+    const classified = responses.map((r) => {
+      const npsAnswer = r.answers.find((a) => a.question.type === 'NPS');
+      const npsVal = npsAnswer?.numericValue ?? null;
+      const sentiment = r.sentimentScore ?? 0;
+      const arr = r.customer?.arrValue ?? avgArr * 0.5;
+      const isPromoter = npsVal != null ? npsVal >= 9 : sentiment > 0.3;
+      const isDetractor = npsVal != null ? npsVal <= 6 : sentiment < -0.3;
+      const churnRisk = isDetractor && arr > 0;
+      const meta = (r.metadata ?? {}) as Record<string, any>;
+      const intel = meta.intelligence ?? {};
+      return {
+        responseId: r.id,
+        customerId: r.customerId,
+        customerName: r.customer?.name ?? 'Anonymous',
+        arr,
+        sentiment,
+        npsVal,
+        isPromoter,
+        isDetractor,
+        churnRisk,
+        churnRiskSeverity: this.churnSeverity(arr, sentiment),
+        keyTopics: Array.isArray(intel.keyTopics) ? intel.keyTopics as string[] : [],
+        featureRequests: Array.isArray(intel.featureRequests) ? intel.featureRequests as string[] : [],
+        painPoints: Array.isArray(intel.painPoints) ? intel.painPoints as string[] : [],
+        segment: r.customer?.segment ?? null,
+      };
+    });
+
+    const promoterArr = classified.filter((r) => r.isPromoter).reduce((s, r) => s + r.arr, 0);
+    const detractorArr = classified.filter((r) => r.isDetractor).reduce((s, r) => s + r.arr, 0);
+    const churnRiskArr = classified.filter((r) => r.churnRisk).reduce((s, r) => s + r.arr, 0);
+    const churnRiskCount = classified.filter((r) => r.churnRisk).length;
+    const totalRespondentArr = classified.reduce((s, r) => s + r.arr, 0);
+
+    const revenueWeightedScore = totalRespondentArr > 0
+      ? Math.round(((promoterArr - detractorArr * 0.5) / totalRespondentArr) * 50 + 50)
+      : 50;
+
+    const avgSentiment = classified.reduce((s, r) => s + r.sentiment, 0) / classified.length;
+    const volumeScore = Math.min(100, classified.length * 5);
+    const sentimentScore = ((avgSentiment + 1) / 2) * 100;
+    const validationScore = Math.round(
+      volumeScore * 0.3 + sentimentScore * 0.4 + this.clamp(revenueWeightedScore, 0, 100) * 0.3,
+    );
+
+    const clusters = this.clusterResponses(classified);
+
+    const featureMap = new Map<string, { arrWeight: number; count: number }>();
+    const painMap = new Map<string, { arrWeight: number; count: number }>();
+    for (const r of classified) {
+      for (const fr of r.featureRequests) {
+        const e = featureMap.get(fr) ?? { arrWeight: 0, count: 0 };
+        featureMap.set(fr, { arrWeight: e.arrWeight + r.arr, count: e.count + 1 });
+      }
+      for (const pp of r.painPoints) {
+        const e = painMap.get(pp) ?? { arrWeight: 0, count: 0 };
+        painMap.set(pp, { arrWeight: e.arrWeight + r.arr, count: e.count + 1 });
+      }
+    }
+    const topFeatureRequests = [...featureMap.entries()]
+      .sort((a, b) => b[1].arrWeight - a[1].arrWeight).slice(0, 5)
+      .map(([request, v]) => ({ request, arrWeight: Math.round(v.arrWeight), count: v.count }));
+    const topPainPoints = [...painMap.entries()]
+      .sort((a, b) => b[1].arrWeight - a[1].arrWeight).slice(0, 5)
+      .map(([point, v]) => ({ point, arrWeight: Math.round(v.arrWeight), count: v.count }));
+
+    const churnSignals = classified
+      .filter((r) => r.churnRisk && r.customerId)
+      .sort((a, b) => b.arr - a.arr).slice(0, 5)
+      .map((r) => ({
+        customerId: r.customerId!,
+        customerName: r.customerName,
+        arrValue: Math.round(r.arr),
+        signal: r.npsVal != null ? `NPS ${r.npsVal} — detractor` : `Negative sentiment (${r.sentiment.toFixed(2)})`,
+        severity: r.churnRiskSeverity,
+      }));
+
+    const confidence = this.clamp(
+      (classified.length / 20) * 0.4 + (totalRespondentArr > 0 ? 0.4 : 0) + (clusters.length > 1 ? 0.2 : 0),
+      0, 1,
+    );
+
+    let executiveSummary: string | null = null;
+    try {
+      executiveSummary = await this.generateExecutiveSummary({
+        totalResponses: classified.length, avgSentiment, revenueWeightedScore, validationScore,
+        churnRiskCount, churnRiskArr,
+        topFeatureRequests: topFeatureRequests.map((f) => f.request),
+        topPainPoints: topPainPoints.map((p) => p.point),
+        clusters,
+      });
+    } catch (err) {
+      this.logger.warn(`Executive summary generation failed: ${(err as Error).message}`);
+    }
+
+    return {
+      validationScore, revenueWeightedScore: this.clamp(revenueWeightedScore, 0, 100),
+      totalRespondentArr: Math.round(totalRespondentArr),
+      promoterArr: Math.round(promoterArr), detractorArr: Math.round(detractorArr),
+      churnRiskArr: Math.round(churnRiskArr), churnRiskCount,
+      clusters, topFeatureRequests, topPainPoints, confidence, executiveSummary, churnSignals,
+    };
+  }
+
+  async persistIntelligenceScores(surveyId: string, insight: RevenueWeightedInsight): Promise<void> {
+    await this.prisma.survey.update({
+      where: { id: surveyId },
+      data: {
+        revenueWeightedScore: insight.revenueWeightedScore,
+        validationScore: insight.validationScore,
+        responseClusterSummary: insight.clusters as any,
+      },
+    });
+  }
+
+  async updateResponseRevenueWeight(
+    responseId: string, arrValue: number, totalSurveyArr: number, clusterLabel: string | null,
+  ): Promise<void> {
+    const revenueWeight = totalSurveyArr > 0 ? arrValue / totalSurveyArr : 0;
+    await this.prisma.surveyResponse.update({
+      where: { id: responseId },
+      data: { revenueWeight, clusterLabel },
+    }).catch((err: Error) => {
+      this.logger.warn(`Failed to update response revenue weight: ${err.message}`);
+    });
+  }
+
+  computeCiqWeight(params: {
+    arrValue: number;
+    maxArrInWorkspace: number;
+    sentimentScore: number;
+    surveyType: string;
+  }): number {
+    const { arrValue, maxArrInWorkspace, sentimentScore, surveyType } = params;
+    const arrNorm = maxArrInWorkspace > 0
+      ? Math.log1p(arrValue) / Math.log1p(maxArrInWorkspace) : 0.3;
+    const sentimentNorm = (sentimentScore + 1) / 2;
+    const typeMultiplier: Record<string, number> = {
+      FEATURE_VALIDATION: 1.2, ROADMAP_VALIDATION: 1.1, CHURN_SIGNAL: 1.5,
+      NPS: 1.0, CSAT: 0.9, OPEN_INSIGHT: 0.8, CUSTOM: 0.7,
+    };
+    const multiplier = typeMultiplier[surveyType] ?? 1.0;
+    return this.clamp((arrNorm * 0.6 + sentimentNorm * 0.4) * multiplier, 0, 1);
+  }
+
+  // ─── Private helpers ─────────────────────────────────────────────────────────
+
+  private clusterResponses(
+    responses: Array<{
+      sentiment: number; arr: number; keyTopics: string[];
+      isPromoter: boolean; isDetractor: boolean; segment: string | null;
+    }>,
+  ): ResponseCluster[] {
+    const bands = [
+      { label: 'Promoters',  filter: (r: typeof responses[0]) => r.isPromoter },
+      { label: 'Neutrals',   filter: (r: typeof responses[0]) => !r.isPromoter && !r.isDetractor },
+      { label: 'Detractors', filter: (r: typeof responses[0]) => r.isDetractor },
+    ];
+    return bands.map((band) => {
+      const members = responses.filter(band.filter);
+      if (members.length === 0) return null;
+      const avgSentiment = members.reduce((s, r) => s + r.sentiment, 0) / members.length;
+      const totalArr = members.reduce((s, r) => s + r.arr, 0);
+      const topicCounts = new Map<string, number>();
+      for (const r of members) for (const t of r.keyTopics) topicCounts.set(t, (topicCounts.get(t) ?? 0) + 1);
+      const representativeTopics = [...topicCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([t]) => t);
+      return {
+        label: band.label, count: members.length,
+        avgSentiment: parseFloat(avgSentiment.toFixed(3)),
+        totalArr: Math.round(totalArr),
+        representativeTopics,
+        churnRiskSignal: band.label === 'Detractors' && totalArr > 0,
+      };
+    }).filter((c): c is ResponseCluster => c !== null);
+  }
+
+  private churnSeverity(arr: number, sentiment: number): 'low' | 'medium' | 'high' {
+    if (arr > 50_000 && sentiment < -0.5) return 'high';
+    if (arr > 10_000 && sentiment < -0.3) return 'medium';
+    return 'low';
+  }
+
+  private emptyRevenueWeightedInsight(): RevenueWeightedInsight {
+    return {
+      validationScore: 0, revenueWeightedScore: 50, totalRespondentArr: 0,
+      promoterArr: 0, detractorArr: 0, churnRiskArr: 0, churnRiskCount: 0,
+      clusters: [], topFeatureRequests: [], topPainPoints: [],
+      confidence: 0, executiveSummary: null, churnSignals: [],
+    };
+  }
+
+  private async generateExecutiveSummary(params: {
+    totalResponses: number; avgSentiment: number; revenueWeightedScore: number;
+    validationScore: number; churnRiskCount: number; churnRiskArr: number;
+    topFeatureRequests: string[]; topPainPoints: string[]; clusters: ResponseCluster[];
+  }): Promise<string> {
+    const { totalResponses, avgSentiment, revenueWeightedScore, validationScore,
+            churnRiskCount, churnRiskArr, topFeatureRequests, topPainPoints, clusters } = params;
+    const prompt = `You are a product intelligence analyst. Summarise this survey data in 2-3 executive sentences.
+
+Data:
+- ${totalResponses} responses
+- Avg sentiment: ${avgSentiment.toFixed(2)} (-1 to +1)
+- Revenue-weighted score: ${revenueWeightedScore}/100
+- Validation score: ${validationScore}/100
+- Churn risk: ${churnRiskCount} customers, $${Math.round(churnRiskArr / 1000)}k ARR at risk
+- Clusters: ${clusters.map((c) => `${c.label} (${c.count}, $${Math.round(c.totalArr / 1000)}k ARR)`).join(', ')}
+- Top feature requests: ${topFeatureRequests.slice(0, 3).join(', ') || 'none'}
+- Top pain points: ${topPainPoints.slice(0, 3).join(', ') || 'none'}
+
+Write 2-3 executive sentences. Be specific about revenue impact. No bullet points.`;
+    const response = await this.openai.chat.completions.create({
+      model: 'gpt-4.1-mini',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.2, max_tokens: 200,
+    });
+    return response.choices[0].message.content?.trim() ?? '';
   }
 
   // ─── Public API ─────────────────────────────────────────────────────────────
@@ -146,7 +456,7 @@ export class SurveyIntelligenceService {
     return { normalisedValue: normalised, sentimentEquivalent: this.clamp(sentiment, -1, 1), label, rawValue: value };
   }
 
-  // ─── Private helpers ─────────────────────────────────────────────────────────
+  // ─── Per-response intelligence extraction ─────────────────────────────────
 
   private async extractTextInsights(
     textAnswers: Array<{ questionLabel: string; textValue?: string | null }>,

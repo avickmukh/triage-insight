@@ -174,6 +174,7 @@ export default function SurveyDetailPage() {
     [SurveyType.CSAT]:               'CSAT',
     [SurveyType.FEATURE_VALIDATION]: 'Feature Validation',
     [SurveyType.ROADMAP_VALIDATION]: 'Roadmap Validation',
+    [SurveyType.CHURN_SIGNAL]:       'Churn Signal',
     [SurveyType.OPEN_INSIGHT]:       'Open Insight',
     [SurveyType.CUSTOM]:             'Custom',
   };
@@ -549,10 +550,102 @@ export default function SurveyDetailPage() {
                 </div>
               )}
 
+              {/* Revenue-Weighted Intelligence Card */}
+              {intelligence.revenueWeighted && (
+                <div style={{ ...CARD, border: '1px solid #ffe0b2', background: 'linear-gradient(135deg, #fff8f0 0%, #fff3e0 100%)' }}>
+                  <h3 style={{ fontSize: '0.875rem', fontWeight: 700, color: '#e65100', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span>💰</span> Revenue-Weighted Intelligence
+                  </h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
+                    {[
+                      { label: 'Revenue Score', value: Math.round(intelligence.revenueWeighted.revenueWeightedScore), color: '#e65100' },
+                      { label: 'Validation Score', value: `${Math.round(intelligence.revenueWeighted.validationScore)}%`, color: '#6a1b9a' },
+                      { label: 'Respondent ARR', value: `$${(intelligence.revenueWeighted.totalRespondentArr / 1000).toFixed(0)}k`, color: '#1565c0' },
+                      { label: 'Avg CIQ Weight', value: intelligence.revenueWeighted.avgCiqWeight.toFixed(2), color: '#20A4A4' },
+                      { label: 'Enterprise Val.', value: `${Math.round(intelligence.revenueWeighted.enterpriseValidation)}%`, color: '#2e7d32' },
+                      { label: 'SMB Val.', value: `${Math.round(intelligence.revenueWeighted.smbValidation)}%`, color: '#0a2540' },
+                    ].map((kpi) => (
+                      <div key={kpi.label} style={{ background: '#fff', border: '1px solid #ffe0b2', borderRadius: '0.625rem', padding: '0.75rem', textAlign: 'center' }}>
+                        <div style={{ fontSize: '1.25rem', fontWeight: 800, color: kpi.color }}>{kpi.value}</div>
+                        <div style={{ fontSize: '0.65rem', color: '#6C757D', textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: '0.2rem' }}>{kpi.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Response Clusters */}
+                  {intelligence.revenueWeighted.clusters.length > 0 && (
+                    <div style={{ marginBottom: '1rem' }}>
+                      <h4 style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0a2540', marginBottom: '0.5rem' }}>Response Clusters</h4>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {intelligence.revenueWeighted.clusters.map((cluster) => (
+                          <div key={cluster.label} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.625rem 0.875rem', background: '#fff', border: '1px solid #ffe0b2', borderRadius: '0.5rem' }}>
+                            <span style={{
+                              padding: '0.15rem 0.5rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 700,
+                              background: cluster.label === 'Promoter' ? '#e8f5e9' : cluster.label === 'Detractor' ? '#fce4ec' : '#fff8e1',
+                              color: cluster.label === 'Promoter' ? '#2e7d32' : cluster.label === 'Detractor' ? '#c62828' : '#b8860b',
+                            }}>{cluster.label}</span>
+                            <span style={{ fontSize: '0.8125rem', color: '#0a2540', fontWeight: 600 }}>{cluster.count} respondents</span>
+                            <span style={{ fontSize: '0.8125rem', color: '#6C757D' }}>${(cluster.totalArr / 1000).toFixed(0)}k ARR</span>
+                            <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                              {cluster.topTopics.slice(0, 3).map((t) => (
+                                <span key={t} style={{ background: '#f0f4f8', color: '#495057', padding: '0.1rem 0.375rem', borderRadius: '999px', fontSize: '0.7rem' }}>{t}</span>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {/* Top Features by ARR */}
+                  {intelligence.revenueWeighted.topFeaturesByArr.length > 0 && (
+                    <div style={{ marginBottom: '1rem' }}>
+                      <h4 style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0a2540', marginBottom: '0.5rem' }}>🔬 Top Features by ARR Demand</h4>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                        {intelligence.revenueWeighted.topFeaturesByArr.slice(0, 5).map((f, i) => (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                            <span style={{ fontSize: '0.75rem', color: '#adb5bd', width: '1rem', flexShrink: 0 }}>#{i + 1}</span>
+                            <span style={{ flex: 1, fontSize: '0.8125rem', color: '#0a2540' }}>{f.feature}</span>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1565c0' }}>${(f.arr / 1000).toFixed(0)}k</span>
+                            <span style={{ fontSize: '0.7rem', color: '#6C757D' }}>{f.count} votes</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Churn Signal Panel */}
+              {intelligence.revenueWeighted && intelligence.revenueWeighted.churnSignals.length > 0 && (
+                <div style={{ ...CARD, border: '1px solid #ffcdd2', background: 'linear-gradient(135deg, #fff5f5 0%, #fce4ec 100%)' }}>
+                  <h3 style={{ fontSize: '0.875rem', fontWeight: 700, color: '#c62828', marginBottom: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span>🚨</span> Churn Risk Signals ({intelligence.revenueWeighted.churnSignals.length} customers)
+                  </h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {intelligence.revenueWeighted.churnSignals.map((signal) => (
+                      <div key={signal.customerId} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.625rem 0.875rem', background: '#fff', border: '1px solid #ffcdd2', borderRadius: '0.5rem' }}>
+                        <span style={{
+                          padding: '0.15rem 0.5rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 700,
+                          background: signal.riskLevel === 'HIGH' ? '#fce4ec' : signal.riskLevel === 'MEDIUM' ? '#fff8e1' : '#f0f4f8',
+                          color: signal.riskLevel === 'HIGH' ? '#c62828' : signal.riskLevel === 'MEDIUM' ? '#b8860b' : '#6C757D',
+                        }}>{signal.riskLevel}</span>
+                        <span style={{ flex: 1, fontSize: '0.8125rem', fontWeight: 600, color: '#0a2540' }}>{signal.customerName}</span>
+                        <span style={{ fontSize: '0.75rem', color: '#6C757D' }}>${(signal.arr / 1000).toFixed(0)}k ARR</span>
+                        {signal.npsScore != null && (
+                          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: signal.npsScore <= 3 ? '#c62828' : '#b8860b' }}>NPS: {signal.npsScore}</span>
+                        )}
+                        <span style={{ fontSize: '0.75rem', color: signal.sentiment < -0.5 ? '#c62828' : '#b8860b' }}>
+                          Sentiment: {signal.sentiment.toFixed(2)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* How it works */}
               <div style={{ background: '#f0f4f8', border: '1px solid #dee2e6', borderRadius: '0.75rem', padding: '1rem 1.25rem' }}>
                 <p style={{ fontSize: '0.8125rem', color: '#495057', margin: 0 }}>
-                  <strong>How intelligence works:</strong> After each response is submitted, TriageInsight automatically extracts sentiment, key topics, pain points, and feature requests from text answers using GPT-4.1-mini. Rating and NPS answers are converted to normalised signals and stored as Customer Signals for CIQ scoring. Text responses are linked to the most relevant theme via semantic clustering.
+                  <strong>How intelligence works:</strong> After each response is submitted, TriageInsight automatically extracts sentiment, key topics, pain points, and feature requests from text answers using GPT-4.1-mini. Rating and NPS answers are converted to normalised signals and stored as Customer Signals for CIQ scoring. Revenue-weighted scores are computed by weighting each respondent’s signal by their ARR contribution. Text responses are linked to the most relevant theme via semantic clustering.
                 </p>
               </div>
             </div>

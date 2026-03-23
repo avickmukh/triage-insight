@@ -27,6 +27,7 @@ const TYPE_CONFIG: Record<SurveyType, { bg: string; color: string; label: string
   [SurveyType.CSAT]:               { bg: '#fce4ec', color: '#c62828', label: 'CSAT',              icon: '⭐' },
   [SurveyType.FEATURE_VALIDATION]: { bg: '#f3e5f5', color: '#6a1b9a', label: 'Feature Val.',      icon: '🔬' },
   [SurveyType.ROADMAP_VALIDATION]: { bg: '#e8eaf6', color: '#283593', label: 'Roadmap Val.',      icon: '🗺️' },
+  [SurveyType.CHURN_SIGNAL]:       { bg: '#fff3e0', color: '#e65100', label: 'Churn Signal',      icon: '🚨' },
   [SurveyType.OPEN_INSIGHT]:       { bg: '#e8f5e9', color: '#1b5e20', label: 'Open Insight',      icon: '💡' },
   [SurveyType.CUSTOM]:             { bg: '#f0f4f8', color: '#495057', label: 'Custom',            icon: '⚙️' },
 };
@@ -37,6 +38,7 @@ const TYPE_TABS = [
   { label: 'CSAT',               value: SurveyType.CSAT },
   { label: 'Feature Validation', value: SurveyType.FEATURE_VALIDATION },
   { label: 'Roadmap Validation', value: SurveyType.ROADMAP_VALIDATION },
+  { label: 'Churn Signal',       value: SurveyType.CHURN_SIGNAL },
   { label: 'Open Insight',       value: SurveyType.OPEN_INSIGHT },
 ];
 
@@ -254,8 +256,10 @@ function SurveyCard({ survey, orgSlug }: { survey: Survey; orgSlug: string }) {
   const href      = `${r.surveys}/${survey.id}`;
 
   // Derive insight score from _count if available (placeholder until intelligence endpoint wired)
-  const responseCount = survey._count?.responses ?? 0;
-  const insightScore  = responseCount > 0 ? Math.min(100, Math.round(responseCount * 4.5)) : null;
+  const responseCount  = survey._count?.responses ?? 0;
+  const insightScore   = survey.insightScore ?? (responseCount > 0 ? Math.min(100, Math.round(responseCount * 4.5)) : null);
+  const revenueScore   = survey.revenueWeightedScore;
+  const validationScore = survey.validationScore;
 
   return (
     <Link href={href} style={{ textDecoration: 'none' }}>
@@ -305,6 +309,22 @@ function SurveyCard({ survey, orgSlug }: { survey: Survey; orgSlug: string }) {
               {statusCfg.label}
             </span>
             {insightScore !== null && <InsightScorePill score={insightScore} />}
+            {revenueScore != null && (
+              <span
+                title="Revenue-Weighted Score — validation weighted by respondent ARR"
+                style={{ background: '#fff3e0', color: '#e65100', padding: '0.2rem 0.5rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}
+              >
+                <span style={{ fontSize: '0.65rem' }}>💰</span> {Math.round(revenueScore)}
+              </span>
+            )}
+            {validationScore != null && (
+              <span
+                title="Validation Score — feature/roadmap validation confidence"
+                style={{ background: '#f3e5f5', color: '#6a1b9a', padding: '0.2rem 0.5rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}
+              >
+                <span style={{ fontSize: '0.65rem' }}>✓</span> {Math.round(validationScore)}%
+              </span>
+            )}
           </div>
         </div>
 

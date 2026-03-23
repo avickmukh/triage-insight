@@ -1210,6 +1210,7 @@ export enum SurveyType {
   CSAT               = 'CSAT',
   FEATURE_VALIDATION = 'FEATURE_VALIDATION',
   ROADMAP_VALIDATION = 'ROADMAP_VALIDATION',
+  CHURN_SIGNAL       = 'CHURN_SIGNAL',
   OPEN_INSIGHT       = 'OPEN_INSIGHT',
   CUSTOM             = 'CUSTOM',
 }
@@ -1249,7 +1250,13 @@ export interface Survey {
   redirectUrl: string | null;
   linkedThemeId: string | null;
   linkedRoadmapItemId: string | null;
+  linkedThemeIds: string[];
+  linkedRoadmapIds: string[];
+  targetSegment: string | null;
   customerSegment: string | null;
+  revenueWeightedScore: number | null;
+  validationScore: number | null;
+  insightScore: number | null;
   expiresAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -1271,10 +1278,15 @@ export interface SurveyResponse {
   id: string;
   surveyId: string;
   portalUserId: string | null;
+  customerId: string | null;
   respondentEmail: string | null;
   respondentName: string | null;
   submittedAt: string;
   feedbackId: string | null;
+  ciqWeight: number | null;
+  revenueWeight: number | null;
+  sentimentScore: number | null;
+  clusterLabel: string | null;
   answers: SurveyAnswer[];
   portalUser?: { id: string; email: string; name: string | null } | null;
 }
@@ -1304,6 +1316,9 @@ export interface CreateSurveyPayload {
   redirectUrl?: string;
   linkedThemeId?: string;
   linkedRoadmapItemId?: string;
+  linkedThemeIds?: string[];
+  linkedRoadmapIds?: string[];
+  targetSegment?: string;
   customerSegment?: string;
   expiresAt?: string;
 }
@@ -1333,6 +1348,36 @@ export interface SubmitSurveyResponsePayload {
 
 // ─── Survey Intelligence ───────────────────────────────────────────────────────
 
+export interface RevenueWeightedCluster {
+  label: string;
+  count: number;
+  totalArr: number;
+  avgSentiment: number;
+  topTopics: string[];
+}
+
+export interface ChurnSignal {
+  customerId: string;
+  customerName: string;
+  arr: number;
+  npsScore: number | null;
+  sentiment: number;
+  riskLevel: 'HIGH' | 'MEDIUM' | 'LOW';
+}
+
+export interface RevenueWeightedIntelligence {
+  revenueWeightedScore: number;
+  validationScore: number;
+  totalRespondentArr: number;
+  avgCiqWeight: number;
+  clusters: RevenueWeightedCluster[];
+  churnSignals: ChurnSignal[];
+  topFeaturesByArr: Array<{ feature: string; arr: number; count: number }>;
+  topPainsByArr: Array<{ pain: string; arr: number; count: number }>;
+  enterpriseValidation: number;
+  smbValidation: number;
+}
+
 export interface SurveyIntelligence {
   surveyId: string;
   totalResponses: number;
@@ -1346,10 +1391,14 @@ export interface SurveyIntelligence {
   npsResponseCount: number;
   ratingResponseCount: number;
   textResponseCount: number;
-  insightScore?: number | null;
-  sentimentDistribution?: { positive: number; neutral: number; negative: number } | null;
-  topFeatureRequests?: string[];
-  topPainPoints?: string[];
+  insightScore: number | null;
+  sentimentDistribution: { positive: number; neutral: number; negative: number } | null;
+  topFeatureRequests: string[];
+  topPainPoints: string[];
+  revenueWeighted: RevenueWeightedIntelligence | null;
+  surveyType: SurveyType;
+  validationScore: number | null;
+  revenueWeightedScore: number | null;
 }
 
 // ─── Prioritization Settings ───────────────────────────────────────────────────

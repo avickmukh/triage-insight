@@ -1111,6 +1111,7 @@ enum SurveyType {
   CSAT
   FEATURE_VALIDATION
   ROADMAP_VALIDATION
+  CHURN_SIGNAL
   OPEN_INSIGHT
   CUSTOM
 }
@@ -1136,11 +1137,17 @@ model Survey {
   convertToFeedback   Boolean      @default(true)
   thankYouMessage     String?
   redirectUrl         String?
-  linkedThemeId       String?
-  linkedRoadmapItemId String?
-  customerSegment     String?
-  expiresAt           DateTime?
-  insightScore        Float?
+  linkedThemeId            String?
+  linkedRoadmapItemId      String?
+  linkedThemeIds           String[]  @default([])
+  linkedRoadmapIds         String[]  @default([])
+  targetSegment            String?
+  customerSegment          String?
+  expiresAt                DateTime?
+  insightScore             Float?
+  revenueWeightedScore     Float?
+  validationScore          Float?
+  responseClusterSummary   Json?
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
 
@@ -1189,6 +1196,8 @@ model SurveyResponse {
   feedbackId      String?
   sentimentScore  Float?
   ciqWeight       Float?
+  revenueWeight   Float?
+  clusterLabel    String?
   metadata        Json?
   submittedAt     DateTime  @default(now())
 

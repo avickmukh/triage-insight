@@ -17,12 +17,14 @@ import {
   SubmitSurveyResponseDto,
   SurveyQueryDto,
 } from '../dto/survey.dto';
+import { SurveyIntelligenceService, RevenueWeightedInsight } from './survey-intelligence.service';
 
 @Injectable()
 export class SurveyService {
   constructor(
     private readonly prisma: PrismaService,
     @InjectQueue(SURVEY_INTELLIGENCE_QUEUE) private readonly intelligenceQueue: Queue,
+    private readonly surveyIntelligenceService: SurveyIntelligenceService,
   ) {}
 
   // ─── Private helpers ────────────────────────────────────────────────────────
@@ -60,6 +62,9 @@ export class SurveyService {
         redirectUrl: dto.redirectUrl ?? null,
         linkedThemeId: dto.linkedThemeId ?? null,
         linkedRoadmapItemId: dto.linkedRoadmapItemId ?? null,
+        linkedThemeIds: dto.linkedThemeIds ?? [],
+        linkedRoadmapIds: dto.linkedRoadmapIds ?? [],
+        targetSegment: dto.targetSegment ?? null,
         customerSegment: dto.customerSegment ?? null,
         expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
         status: SurveyStatus.DRAFT,
@@ -155,6 +160,9 @@ export class SurveyService {
         redirectUrl: dto.redirectUrl,
         linkedThemeId: dto.linkedThemeId,
         linkedRoadmapItemId: dto.linkedRoadmapItemId,
+        linkedThemeIds: dto.linkedThemeIds,
+        linkedRoadmapIds: dto.linkedRoadmapIds,
+        targetSegment: dto.targetSegment,
         customerSegment: dto.customerSegment,
         expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
       },
@@ -602,6 +610,50 @@ export class SurveyService {
 
     const processedCount = sentiments.length;
 
+    // Sentiment distribution
+    const sentimentDistribution = sentiments.length > 0 ? {
+      positive: sentiments.filter((s) => s > 0.1).length,
+      neutral:  sentiments.filter((s) => s >= -0.1 && s <= 0.1).length,
+      negative: sentiments.filter((s) => s < -0.1).length,
+    } : null;
+
+    // Top feature requests and pain points from metadata
+    const allFeatureRequests: string[] = [];
+    const allPainPoints: string[] = [];
+    for (const r of responses) {
+      const meta = r.metadata as Record<string, any> | null;
+      const intel = meta?.intelligence;
+      if (intel) {
+        if (Array.isArray(intel.featureRequests)) allFeatureRequests.push(...(intel.featureRequests as string[]));
+        if (Array.isArray(intel.painPoints)) allPainPoints.push(...(intel.painPoints as string[]));
+      }
+    }
+    const frCounts = new Map<string, number>();
+    for (const fr of allFeatureRequests) frCounts.set(fr, (frCounts.get(fr) ?? 0) + 1);
+    const ppCounts = new Map<string, number>();
+    for (const pp of allPainPoints) ppCounts.set(pp, (ppCounts.get(pp) ?? 0) + 1);
+    const topFeatureRequests = [...frCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([t]) => t);
+    const topPainPoints = [...ppCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([t]) => t);
+
+    // Insight score
+    const insightScore = totalResponses > 0
+      ? Math.round(
+          (processedCount / totalResponses) * 40 +
+          (keyTopics.length / 8) * 30 +
+          (avgSentiment != null ? 30 : 0),
+        )
+      : null;
+
+    // Revenue-weighted intelligence (best-effort)
+    const survey = await this.resolveSurvey(workspaceId, surveyId);
+    let revenueWeighted: RevenueWeightedInsight | null = null;
+    try {
+      revenueWeighted = await this.surveyIntelligenceService.computeRevenueWeightedIntelligence(workspaceId, surveyId);
+      await this.surveyIntelligenceService.persistIntelligenceScores(surveyId, revenueWeighted);
+    } catch (_err) {
+      // Non-critical
+    }
+
     return {
       surveyId,
       totalResponses,
@@ -615,6 +667,14 @@ export class SurveyService {
       npsResponseCount: npsValues.length,
       ratingResponseCount: ratingValues.length,
       textResponseCount: feedbackIds.length,
+      insightScore,
+      sentimentDistribution,
+      topFeatureRequests,
+      topPainPoints,
+      revenueWeighted,
+      surveyType: survey.surveyType,
+      validationScore: revenueWeighted?.validationScore ?? survey.validationScore ?? null,
+      revenueWeightedScore: revenueWeighted?.revenueWeightedScore ?? survey.revenueWeightedScore ?? null,
     };
   }
 }

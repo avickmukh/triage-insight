@@ -86,6 +86,94 @@ export class SurveyIntelligenceProcessor {
         },
       });
 
+      // ── 4b. Compute and persist CIQ weight and revenue weight for this response ──
+      try {
+        const surveyWithType = await this.prisma.survey.findUnique({
+          where: { id: surveyId },
+          select: { surveyType: true },
+        });
+        if (surveyWithType) {
+          // Get respondent ARR
+          const customerData = response.customerId
+            ? await this.prisma.customer.findUnique({
+                where: { id: response.customerId },
+                select: { arrValue: true },
+              })
+            : null;
+          const maxArrResult = await this.prisma.customer.aggregate({
+            where: { workspaceId },
+            _max: { arrValue: true },
+          });
+          const arrValue = customerData?.arrValue ?? 0;
+          const maxArr = maxArrResult._max.arrValue ?? 1;
+          const ciqWeight = this.intelligenceService.computeCiqWeight({
+            arrValue,
+            maxArrInWorkspace: maxArr,
+            sentimentScore: intelligence.aggregateSentiment,
+            surveyType: surveyWithType.surveyType as string,
+          });
+          // Revenue weight = respondent ARR / total survey ARR
+          const allResponses = await this.prisma.surveyResponse.findMany({
+            where: { surveyId },
+            select: { customerId: true },
+          });
+          const customerIds = allResponses.map((r) => r.customerId).filter(Boolean) as string[];
+          const totalArrResult = customerIds.length > 0
+            ? await this.prisma.customer.aggregate({
+                where: { id: { in: customerIds } },
+                _sum: { arrValue: true },
+              })
+            : { _sum: { arrValue: 0 } };
+          const totalSurveyArr = totalArrResult._sum.arrValue ?? 0;
+          const clusterLabel = intelligence.aggregateSentiment > 0.3 ? 'Promoter'
+            : intelligence.aggregateSentiment < -0.3 ? 'Detractor' : 'Neutral';
+          await this.prisma.surveyResponse.update({
+            where: { id: responseId },
+            data: {
+              ciqWeight,
+              sentimentScore: intelligence.aggregateSentiment,
+              revenueWeight: totalSurveyArr > 0 ? arrValue / totalSurveyArr : 0,
+              clusterLabel,
+            },
+          });
+          // ── 4c. Detect churn signal for CHURN_SIGNAL surveys or negative NPS ──
+          const customerId = response.customerId
+            ?? (response.portalUserId
+              ? (await this.prisma.portalUser.findUnique({
+                  where: { id: response.portalUserId },
+                  select: { customerId: true },
+                }))?.customerId
+              : null);
+          if (customerId && intelligence.aggregateSentiment < -0.3) {
+            const npsAnswer = response.answers.find((a) => a.question.type === 'NPS');
+            const npsVal = npsAnswer?.numericValue ?? null;
+            const isChurnRisk = npsVal != null ? npsVal <= 6 : true;
+            if (isChurnRisk) {
+              await this.prisma.customerSignal.create({
+                data: {
+                  workspaceId,
+                  customerId,
+                  signalType: 'CHURN_RISK',
+                  sourceId: responseId,
+                  strength: Math.abs(intelligence.aggregateSentiment),
+                  metadata: {
+                    label: `Survey churn signal: sentiment ${intelligence.aggregateSentiment.toFixed(2)}`,
+                    surveyId,
+                    responseId,
+                    npsVal,
+                    surveyType: surveyWithType.surveyType,
+                  },
+                } as any,
+              }).catch((err: Error) => {
+                this.logger.warn(`Failed to create churn CustomerSignal: ${err.message}`);
+              });
+            }
+          }
+        }
+      } catch (err) {
+        this.logger.warn(`CIQ weight computation failed for response ${responseId}: ${(err as Error).message}`);
+      }
+
       // ── 5. Enrich the linked Feedback record if present ──────────────────────
       if (feedbackId) {
         const firstTextInsight = intelligence.textInsights[0];
