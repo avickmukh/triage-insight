@@ -7,70 +7,82 @@ import {
   Headers,
   Req,
   UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { BillingService } from './billing.service';
 import { UpdateBillingEmailDto } from './dto/update-billing-email.dto';
+import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
+import { CreatePortalSessionDto } from './dto/create-portal-session.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../workspace/guards/roles.guard';
 import { Roles } from '../workspace/decorators/roles.decorator';
-import { BillingPlan, WorkspaceRole } from '@prisma/client';
+import { WorkspaceRole } from '@prisma/client';
 
 interface AuthenticatedRequest extends Request {
   user: { sub: string; email: string };
 }
 
-/**
- * BillingController
- *
- * All authenticated routes live under /billing.
- *
- * Route summary:
- *   GET  /billing/status              — any authenticated member
- *   GET  /billing/plans               — any authenticated member (plan catalogue)
- *   PATCH /billing/email              — ADMIN only
- *   POST /billing/request-plan-change — ADMIN only (mock; no Stripe yet)
- *   POST /billing/webhook             — public (Stripe calls this directly)
- */
 @Controller('billing')
 export class BillingController {
   constructor(private readonly billingService: BillingService) {}
 
-  // ── Read-only ──────────────────────────────────────────────────────────────
-
-  /**
-   * GET /billing/status
-   *
-   * Returns the workspace billing snapshot: plan, status, trial lifecycle,
-   * current period dates, and DB-driven plan config.
-   * Accessible to all authenticated workspace members.
-   */
   @Get('status')
   @UseGuards(JwtAuthGuard)
   getStatus(@Req() req: AuthenticatedRequest) {
     return this.billingService.getStatus(req.user.sub);
   }
 
-  /**
-   * GET /billing/plans
-   *
-   * Returns all active plan config rows so the billing page can render
-   * the feature comparison table.
-   * Accessible to all authenticated workspace members.
-   */
   @Get('plans')
   @UseGuards(JwtAuthGuard)
   listPlans() {
     return this.billingService.listPlans();
   }
 
-  // ── Mutations (ADMIN only) ─────────────────────────────────────────────────
+  @Get('invoices')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(WorkspaceRole.ADMIN)
+  listInvoices(@Req() req: AuthenticatedRequest) {
+    return this.billingService.listInvoices(req.user.sub);
+  }
 
   /**
-   * PATCH /billing/email
-   *
-   * Updates the billing contact email address for the workspace.
+   * POST /billing/checkout
+   * Creates a Stripe Checkout Session for plan upgrade/downgrade.
+   * Returns { url: string } — redirect the user to this URL.
+   * Body: { targetPlan, successUrl, cancelUrl }
    */
+  @Post('checkout')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(WorkspaceRole.ADMIN)
+  createCheckoutSession(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: CreateCheckoutSessionDto,
+  ) {
+    return this.billingService.createCheckoutSession(req.user.sub, {
+      targetPlan: dto.targetPlan,
+      successUrl: dto.successUrl,
+      cancelUrl: dto.cancelUrl,
+    });
+  }
+
+  /**
+   * POST /billing/portal
+   * Creates a Stripe Customer Portal session for self-service management.
+   * Returns { url: string } — redirect the user to this URL.
+   * Body: { returnUrl }
+   */
+  @Post('portal')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(WorkspaceRole.ADMIN)
+  createPortalSession(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: CreatePortalSessionDto,
+  ) {
+    return this.billingService.createPortalSession(req.user.sub, dto.returnUrl);
+  }
+
   @Patch('email')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(WorkspaceRole.ADMIN)
@@ -82,73 +94,23 @@ export class BillingController {
   }
 
   /**
-   * POST /billing/request-plan-change
-   *
-   * Records a plan-change intent from the workspace admin.
-   * MVP: logs the request and returns a confirmation message.
-   * Production: will create a Stripe Checkout Session.
-   */
-  @Post('request-plan-change')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(WorkspaceRole.ADMIN)
-  requestPlanChange(
-    @Req() req: AuthenticatedRequest,
-    @Body('targetPlan') targetPlan: BillingPlan,
-  ) {
-    return this.billingService.requestPlanChange(req.user.sub, targetPlan);
-  }
-
-  // ── Stripe-ready stubs ─────────────────────────────────────────────────────
-
-  /**
-   * POST /billing/checkout
-   *
-   * TODO: Create a Stripe Checkout Session for plan upgrades.
-   * Returns a redirect URL to the Stripe-hosted checkout page.
-   *
-   * Requires: stripe.checkout.sessions.create({ ... })
-   */
-  // @Post('checkout')
-  // @UseGuards(JwtAuthGuard, RolesGuard)
-  // @Roles(WorkspaceRole.ADMIN)
-  // createCheckoutSession(@Req() req: AuthenticatedRequest, @Body() dto: CreateCheckoutSessionDto) {
-  //   return this.billingService.createCheckoutSession(req.user.sub, dto);
-  // }
-
-  /**
-   * POST /billing/portal
-   *
-   * TODO: Create a Stripe Customer Portal session for self-service
-   * subscription management (cancel, update payment method, view invoices).
-   *
-   * Requires: stripe.billingPortal.sessions.create({ customer: stripeCustomerId })
-   */
-  // @Post('portal')
-  // @UseGuards(JwtAuthGuard, RolesGuard)
-  // @Roles(WorkspaceRole.ADMIN)
-  // createPortalSession(@Req() req: AuthenticatedRequest) {
-  //   return this.billingService.createPortalSession(req.user.sub);
-  // }
-
-  /**
    * POST /billing/webhook
-   *
-   * Stripe webhook endpoint.  Must receive the raw (un-parsed) request body
-   * for signature verification.  No JWT guard — Stripe calls this directly.
-   *
-   * In production:
-   *   - Register this URL in the Stripe Dashboard as a webhook endpoint.
-   *   - Enable raw body parsing for this route in main.ts:
-   *       app.use('/api/v1/billing/webhook', express.raw({ type: 'application/json' }));
-   *   - Set STRIPE_WEBHOOK_SECRET in environment.
+   * Stripe webhook endpoint. Raw body required for signature verification.
+   * No JWT guard — Stripe calls this directly.
+   * Handled events:
+   *   checkout.session.completed
+   *   customer.subscription.created / updated / deleted
+   *   invoice.paid / invoice.payment_failed
+   *   customer.subscription.trial_will_end
    */
   @Post('webhook')
+  @HttpCode(HttpStatus.OK)
   handleStripeWebhook(
     @Req() req: Request & { rawBody?: Buffer },
     @Headers('stripe-signature') stripeSignature: string | undefined,
   ) {
     return this.billingService.handleStripeWebhook(
-      req.rawBody ?? Buffer.alloc(0),
+      req.rawBody ?? Buffer.from(JSON.stringify(req.body)),
       stripeSignature,
     );
   }

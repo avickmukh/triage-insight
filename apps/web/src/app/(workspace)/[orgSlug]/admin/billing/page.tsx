@@ -1,9 +1,10 @@
 'use client';
 import { useState } from 'react';
-import { useBilling, usePlans, useUpdateBillingEmail, useRequestPlanChange } from '@/hooks/use-billing';
+import { useBilling, usePlans, useUpdateBillingEmail, useCreateCheckoutSession, useCreatePortalSession, useInvoices } from '@/hooks/use-billing';
 import {
   BillingPlan,
   BillingStatus,
+  InvoiceRecord,
   PlanConfig,
   TrialStatus,
 } from '@/lib/api-types';
@@ -330,8 +331,11 @@ function BillingEmailForm({ currentEmail }: { currentEmail: string | null }) {
 export default function BillingPage() {
   const { billing, isLoading, isError, error } = useBilling();
   const { plans, isLoading: plansLoading } = usePlans();
-  const { mutate: requestChange, isPending: changePending, data: changeResult, isError: changeError } =
-    useRequestPlanChange();
+  const { mutate: createCheckout, isPending: checkoutPending, isError: checkoutError } =
+    useCreateCheckoutSession();
+  const { mutate: createPortal, isPending: portalPending } =
+    useCreatePortalSession();
+  const { invoices, isLoading: invoicesLoading } = useInvoices();
 
   const [showComparison, setShowComparison] = useState(false);
 
@@ -553,23 +557,8 @@ export default function BillingPage() {
           </div>
         </div>
 
-        {/* Plan change success/error feedback */}
-        {changeResult && (
-          <div
-            style={{
-              background: '#d1fae5',
-              border: '1px solid #6ee7b7',
-              borderRadius: '0.5rem',
-              padding: '0.75rem 1rem',
-              fontSize: '0.85rem',
-              color: '#065f46',
-              marginBottom: '1rem',
-            }}
-          >
-            {changeResult.message}
-          </div>
-        )}
-        {changeError && (
+        {/* Plan change error feedback */}
+        {checkoutError && (
           <div
             style={{
               background: '#fff5f5',
@@ -581,7 +570,7 @@ export default function BillingPage() {
               marginBottom: '1rem',
             }}
           >
-            Failed to submit plan change request. Please try again.
+            Failed to start checkout. Please try again or contact support.
           </div>
         )}
 
@@ -597,10 +586,13 @@ export default function BillingPage() {
           )}
           {billing.hasStripeCustomer && (
             <button
-              style={BTN_SECONDARY}
-              onClick={() => alert('Stripe Customer Portal integration coming soon.')}
+              style={portalPending ? BTN_DISABLED : BTN_SECONDARY}
+              disabled={portalPending}
+              onClick={() =>
+                createPortal({ returnUrl: window.location.href })
+              }
             >
-              Manage subscription
+              {portalPending ? 'Redirecting…' : 'Manage subscription'}
             </button>
           )}
         </div>
@@ -625,9 +617,13 @@ export default function BillingPage() {
               plans={plans}
               currentPlan={billing.billingPlan}
               onSelect={(targetPlan) =>
-                requestChange({ targetPlan })
+                createCheckout({
+                  targetPlan,
+                  successUrl: `${window.location.origin}${window.location.pathname}?checkout=success`,
+                  cancelUrl: window.location.href,
+                })
               }
-              isPending={changePending}
+              isPending={checkoutPending}
             />
           )}
         </div>
@@ -646,6 +642,77 @@ export default function BillingPage() {
         <PlanFeaturesTable planConfig={billing.planConfig} />
       </div>
 
+      {/* Invoices card */}
+      <div style={CARD}>
+        <p style={SECTION_TITLE}>Invoices</p>
+        {invoicesLoading ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {[1, 2, 3].map((i) => <Skeleton key={i} width="100%" height="1.1rem" />)}
+          </div>
+        ) : invoices.length === 0 ? (
+          <p style={{ fontSize: '0.88rem', color: '#6C757D' }}>
+            No invoices yet. They will appear here after your first billing cycle.
+          </p>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #e9ecef' }}>
+                <th style={{ textAlign: 'left', padding: '0.5rem 0.25rem', color: '#6C757D', fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase' }}>Invoice</th>
+                <th style={{ textAlign: 'left', padding: '0.5rem 0.25rem', color: '#6C757D', fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase' }}>Date</th>
+                <th style={{ textAlign: 'right', padding: '0.5rem 0.25rem', color: '#6C757D', fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase' }}>Amount</th>
+                <th style={{ textAlign: 'center', padding: '0.5rem 0.25rem', color: '#6C757D', fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase' }}>Status</th>
+                <th style={{ textAlign: 'right', padding: '0.5rem 0.25rem', color: '#6C757D', fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase' }}>PDF</th>
+              </tr>
+            </thead>
+            <tbody>
+              {invoices.map((inv: InvoiceRecord) => (
+                <tr key={inv.id} style={{ borderBottom: '1px solid #f1f3f5' }}>
+                  <td style={{ padding: '0.65rem 0.25rem', color: '#0A2540', fontWeight: 500 }}>
+                    {inv.number ?? inv.stripeInvoiceId.slice(-8).toUpperCase()}
+                  </td>
+                  <td style={{ padding: '0.65rem 0.25rem', color: '#495057' }}>
+                    {inv.paidAt
+                      ? new Date(inv.paidAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+                      : inv.periodStart
+                        ? new Date(inv.periodStart).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+                        : '—'}
+                  </td>
+                  <td style={{ padding: '0.65rem 0.25rem', textAlign: 'right', color: '#0A2540', fontWeight: 600 }}>
+                    {(inv.amountPaid / 100).toLocaleString('en-US', { style: 'currency', currency: inv.currency.toUpperCase() })}
+                  </td>
+                  <td style={{ padding: '0.65rem 0.25rem', textAlign: 'center' }}>
+                    <span style={{
+                      padding: '0.2rem 0.55rem',
+                      borderRadius: '999px',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      background: inv.status === 'paid' ? '#d1fae5' : inv.status === 'open' ? '#fef9c3' : '#fee2e2',
+                      color: inv.status === 'paid' ? '#065f46' : inv.status === 'open' ? '#92400e' : '#991b1b',
+                    }}>
+                      {inv.status.toUpperCase()}
+                    </span>
+                  </td>
+                  <td style={{ padding: '0.65rem 0.25rem', textAlign: 'right' }}>
+                    {inv.invoicePdfUrl ? (
+                      <a href={inv.invoicePdfUrl} target="_blank" rel="noopener noreferrer"
+                        style={{ color: '#0070f3', textDecoration: 'none', fontSize: '0.82rem', fontWeight: 600 }}>
+                        Download
+                      </a>
+                    ) : inv.hostedInvoiceUrl ? (
+                      <a href={inv.hostedInvoiceUrl} target="_blank" rel="noopener noreferrer"
+                        style={{ color: '#0070f3', textDecoration: 'none', fontSize: '0.82rem', fontWeight: 600 }}>
+                        View
+                      </a>
+                    ) : (
+                      <span style={{ color: '#adb5bd', fontSize: '0.82rem' }}>—</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
       {/* Billing contact card */}
       <div style={CARD}>
         <p style={SECTION_TITLE}>Billing contact</p>

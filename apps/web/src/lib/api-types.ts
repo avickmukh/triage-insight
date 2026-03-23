@@ -1999,3 +1999,24 @@ export interface FeedbackVolumeReport {
   topSource: string | null;
   generatedAt: string;
 }
+
+// ── Billing: Invoice ──────────────────────────────────────────────────────────
+
+export interface InvoiceRecord {
+  id: string;
+  workspaceId: string;
+  stripeInvoiceId: string;
+  stripeSubscriptionId: string | null;
+  number: string | null;
+  status: string;
+  amountDue: number;
+  amountPaid: number;
+  currency: string;
+  invoicePdfUrl: string | null;
+  hostedInvoiceUrl: string | null;
+  periodStart: string | null;
+  periodEnd: string | null;
+  paidAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}

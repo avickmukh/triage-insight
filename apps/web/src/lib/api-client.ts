@@ -102,6 +102,7 @@ import {
   RevenueImpactReport,
   RoadmapProgressReport,
   FeedbackVolumeReport,
+  InvoiceRecord,
 } from "@/lib/api-types";
 
 const getApiBaseUrl = () => {
@@ -592,33 +593,44 @@ const apiClient = {
   },
 
   billing: {
-    /**
-     * GET /billing/status
-     * Returns the full billing snapshot for the calling user's workspace.
-     * Accessible to ADMIN, EDITOR, and VIEWER.
-     */
+    /** GET /billing/status — billing snapshot for the calling user's workspace */
     getStatus: (): Promise<BillingStatusResponse> =>
       api.get('/billing/status').then(handleResponse),
-    /**
-     * PATCH /billing/email
-     * Updates the billing contact email. ADMIN only.
-     */
+    /** PATCH /billing/email — update billing contact email. ADMIN only */
     updateEmail: (data: UpdateBillingEmailDto): Promise<{ billingEmail: string | null }> =>
       api.patch('/billing/email', data).then(handleResponse),
-    /**
-     * GET /billing/plans
-     * Returns all active plan config rows for the feature comparison table.
-     * Accessible to all authenticated members.
-     */
+    /** GET /billing/plans — all active plan config rows */
     listPlans: (): Promise<PlanConfig[]> =>
       api.get('/billing/plans').then(handleResponse),
     /**
-     * POST /billing/request-plan-change
-     * Records a plan-change intent. ADMIN only.
-     * MVP: logs the request; Production: creates a Stripe Checkout Session.
+     * POST /billing/checkout
+     * Creates a Stripe Checkout Session for plan upgrade/downgrade.
+     * Returns { url } — redirect the user to this URL.
+     * ADMIN only.
      */
-    requestPlanChange: (data: RequestPlanChangeDto): Promise<RequestPlanChangeResponse> =>
-      api.post('/billing/request-plan-change', data).then(handleResponse),
+    createCheckoutSession: (data: {
+      targetPlan: string;
+      successUrl: string;
+      cancelUrl: string;
+    }): Promise<{ url: string; mode: string }> =>
+      api.post('/billing/checkout', data).then(handleResponse),
+    /**
+     * POST /billing/portal
+     * Creates a Stripe Customer Portal session for self-service management.
+     * Returns { url } — redirect the user to this URL.
+     * ADMIN only.
+     */
+    createPortalSession: (data: {
+      returnUrl: string;
+    }): Promise<{ url: string }> =>
+      api.post('/billing/portal', data).then(handleResponse),
+    /**
+     * GET /billing/invoices
+     * Returns cached invoices from the Invoice table (synced from Stripe).
+     * ADMIN only.
+     */
+    listInvoices: (): Promise<InvoiceRecord[]> =>
+      api.get('/billing/invoices').then(handleResponse),
   },
 
   customers: {

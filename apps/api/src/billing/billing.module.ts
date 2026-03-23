@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from '../prisma/prisma.module';
 import { WorkspaceModule } from '../workspace/workspace.module';
 import { BillingController } from './billing.controller';
@@ -15,7 +16,7 @@ import { BillingService } from './billing.service';
  * BillingModule already imports WorkspaceModule).
  */
 @Module({
-  imports: [PrismaModule, WorkspaceModule],
+  imports: [ConfigModule, PrismaModule, WorkspaceModule],
   controllers: [BillingController],
   providers: [BillingService],
   exports: [BillingService],

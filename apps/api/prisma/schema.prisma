@@ -377,6 +377,7 @@ model Workspace {
   invites               WorkspaceInvite[]
    customerSignals       CustomerSignal[]
   surveys               Survey[]
+  invoices              Invoice[]
 }
 model WorkspaceMember {
   id          String        @id @default(uuid())
@@ -1146,8 +1147,11 @@ model Plan {
   isActive            Boolean     @default(true)
   /// Whether this is the default plan assigned on signup when no plan is chosen
   isDefault           Boolean     @default(false)
+  /// Stripe Price ID (e.g. price_xxx) — set by SUPER_ADMIN to link plan to Stripe product
+  stripePriceId       String?     @unique
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
+  invoices            Invoice[]
 }
 
 // ─── Survey Engine ─────────────────────────────────────────────────────────────
@@ -1293,4 +1297,38 @@ model PasswordResetToken {
   createdAt DateTime  @default(now())
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@index([userId])
+}
+
+// ─── Stripe Billing ────────────────────────────────────────────────────────────
+
+/// Cached Stripe invoice records.
+/// Populated and kept in sync by the Stripe webhook handler.
+/// Allows invoice history to be served without a live Stripe API call.
+model Invoice {
+  id              String   @id @default(uuid())
+  workspaceId     String
+  planId          String?
+  stripeInvoiceId String   @unique
+  /// Total amount due in the smallest currency unit (e.g. cents for USD)
+  amountDue       Int      @default(0)
+  /// Amount actually paid
+  amountPaid      Int      @default(0)
+  /// ISO 4217 currency code, lower-cased (e.g. "usd")
+  currency        String   @default("usd")
+  /// Stripe invoice status: draft | open | paid | uncollectible | void
+  status          String   @default("open")
+  periodStart     DateTime
+  periodEnd       DateTime
+  /// Hosted invoice URL (Stripe-hosted payment page)
+  invoiceUrl      String?
+  /// Direct PDF download URL
+  invoicePdf      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  plan      Plan?     @relation(fields: [planId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([stripeInvoiceId])
 }

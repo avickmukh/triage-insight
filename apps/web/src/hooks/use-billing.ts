@@ -3,9 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/lib/api-client';
 import {
   BillingStatusResponse,
+  InvoiceRecord,
   PlanConfig,
-  RequestPlanChangeDto,
-  RequestPlanChangeResponse,
   UpdateBillingEmailDto,
 } from '@/lib/api-types';
 
@@ -15,29 +14,17 @@ const BILLING_KEY = 'billing';
  * useBilling
  *
  * Fetches the workspace billing snapshot from GET /billing/status.
- * Accessible to all authenticated workspace members (ADMIN, EDITOR, VIEWER).
- *
- * Returns:
- *   billing          — BillingStatusResponse or undefined while loading
- *   isLoading        — true on first fetch
- *   isError          — true if the fetch failed
- *   error            — the Error object
- *   refetch          — manual refetch trigger
+ * Accessible to all authenticated workspace members.
  */
 export const useBilling = () => {
-  const {
-    data: billing,
-    isLoading,
-    isError,
-    error,
-    refetch,
-  } = useQuery<BillingStatusResponse, Error>({
+  const { data: billing, isLoading, isError, error, refetch } = useQuery<
+    BillingStatusResponse,
+    Error
+  >({
     queryKey: [BILLING_KEY, 'status'],
     queryFn: apiClient.billing.getStatus,
-    staleTime: 60_000, // 1 min — billing state changes infrequently
-    // retry handled globally in providers.tsx
+    staleTime: 60_000,
   });
-
   return { billing, isLoading, isError, error, refetch };
 };
 
@@ -45,38 +32,40 @@ export const useBilling = () => {
  * usePlans
  *
  * Fetches all active plan config rows from GET /billing/plans.
- * Used by the billing page to render the feature comparison table
- * and upgrade CTAs. Accessible to all authenticated members.
  */
 export const usePlans = () => {
-  const {
-    data: plans,
-    isLoading,
-    isError,
-    error,
-  } = useQuery<PlanConfig[], Error>({
+  const { data: plans, isLoading, isError, error } = useQuery<PlanConfig[], Error>({
     queryKey: [BILLING_KEY, 'plans'],
     queryFn: apiClient.billing.listPlans,
-    staleTime: 5 * 60_000, // 5 min — plan config changes rarely
-    // retry handled globally in providers.tsx
+    staleTime: 5 * 60_000,
   });
-
   return { plans: plans ?? [], isLoading, isError, error };
+};
+
+/**
+ * useInvoices
+ *
+ * Fetches cached invoices from GET /billing/invoices. ADMIN only.
+ */
+export const useInvoices = () => {
+  const { data: invoices, isLoading, isError, error } = useQuery<InvoiceRecord[], Error>({
+    queryKey: [BILLING_KEY, 'invoices'],
+    queryFn: apiClient.billing.listInvoices,
+    staleTime: 2 * 60_000,
+  });
+  return { invoices: invoices ?? [], isLoading, isError, error };
 };
 
 /**
  * useUpdateBillingEmail
  *
  * Mutation to update the billing contact email. ADMIN only.
- * Invalidates the billing status cache on success.
  */
 export const useUpdateBillingEmail = () => {
   const queryClient = useQueryClient();
-
   return useMutation<{ billingEmail: string | null }, Error, UpdateBillingEmailDto>({
     mutationFn: (data) => apiClient.billing.updateEmail(data),
     onSuccess: (data) => {
-      // Patch the cached billing status with the new email
       queryClient.setQueryData<BillingStatusResponse>(
         [BILLING_KEY, 'status'],
         (prev) => (prev ? { ...prev, billingEmail: data.billingEmail } : prev),
@@ -86,20 +75,39 @@ export const useUpdateBillingEmail = () => {
 };
 
 /**
- * useRequestPlanChange
+ * useCreateCheckoutSession
  *
- * Mutation to request a plan change. ADMIN only.
- * MVP: records the intent and returns a confirmation message.
- * Production: will redirect to a Stripe Checkout Session URL.
+ * Mutation to create a Stripe Checkout Session for plan upgrade/downgrade.
+ * On success, redirects the user to the Stripe-hosted checkout page.
+ * ADMIN only.
  */
-export const useRequestPlanChange = () => {
-  const queryClient = useQueryClient();
+export const useCreateCheckoutSession = () => {
+  return useMutation<
+    { url: string; mode: string },
+    Error,
+    { targetPlan: string; successUrl: string; cancelUrl: string }
+  >({
+    mutationFn: (data) => apiClient.billing.createCheckoutSession(data),
+    onSuccess: (data) => {
+      // Redirect to Stripe Checkout
+      window.location.href = data.url;
+    },
+  });
+};
 
-  return useMutation<RequestPlanChangeResponse, Error, RequestPlanChangeDto>({
-    mutationFn: (data) => apiClient.billing.requestPlanChange(data),
-    onSuccess: () => {
-      // Refetch billing status in case the plan changed
-      queryClient.invalidateQueries({ queryKey: [BILLING_KEY, 'status'] });
+/**
+ * useCreatePortalSession
+ *
+ * Mutation to create a Stripe Customer Portal session.
+ * On success, redirects the user to the Stripe-hosted portal.
+ * ADMIN only.
+ */
+export const useCreatePortalSession = () => {
+  return useMutation<{ url: string }, Error, { returnUrl: string }>({
+    mutationFn: (data) => apiClient.billing.createPortalSession(data),
+    onSuccess: (data) => {
+      // Redirect to Stripe Customer Portal
+      window.location.href = data.url;
     },
   });
 };

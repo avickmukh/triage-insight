@@ -5,9 +5,19 @@ import { HttpExceptionFilter } from './core/filters/http-exception.filter';
 import { LoggingInterceptor } from './core/interceptors/logging.interceptor';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
+import * as express from 'express';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    // Capture raw body for Stripe webhook signature verification
+    rawBody: true,
+  });
+
+  // Stripe webhook needs the raw body — must be registered BEFORE global JSON parser
+  app.use(
+    '/api/v1/billing/webhook',
+    express.raw({ type: 'application/json' }),
+  );
 
   app.enableCors({
     origin: [
