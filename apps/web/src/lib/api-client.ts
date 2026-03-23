@@ -962,6 +962,42 @@ const apiClient = {
       return `${base}/workspaces/${workspaceId}/reports/export/${report}?${params.toString()}`;
     },
   },
+  // ── Platform admin ─────────────────────────────────────────────────────────
+  platform: {
+    listPlans: () => api.get('/platform/plans').then(handleResponse),
+    getPlan: (planType: string) => api.get(`/platform/plans/${planType}`).then(handleResponse),
+    createPlan: (data: any) => api.post('/platform/plans', data).then(handleResponse),
+    updatePlan: (planType: string, data: any) => api.patch(`/platform/plans/${planType}`, data).then(handleResponse),
+    deletePlan: (planType: string) => api.delete(`/platform/plans/${planType}`).then(handleResponse),
+    updateTrialDuration: (planType: string, trialDays: number) => api.patch(`/platform/plans/${planType}/trial`, { trialDays }).then(handleResponse),
+    listWorkspaces: (params?: { page?: number; limit?: number; status?: string; plan?: string; search?: string }) =>
+      api.get('/platform/workspaces', { params }).then(handleResponse),
+    getWorkspace: (workspaceId: string) => api.get(`/platform/workspaces/${workspaceId}`).then(handleResponse),
+    updateWorkspaceStatus: (workspaceId: string, data: { status: string; reason?: string }) =>
+      api.patch(`/platform/workspaces/${workspaceId}/status`, data).then(handleResponse),
+    deleteWorkspace: (workspaceId: string) => api.delete(`/platform/workspaces/${workspaceId}`).then(handleResponse),
+    getBillingHealth: () => api.get('/platform/billing/health').then(handleResponse),
+    listAllSubscriptions: (params?: { page?: number; limit?: number }) =>
+      api.get('/platform/billing/subscriptions', { params }).then(handleResponse),
+    overrideBillingPlan: (workspaceId: string, data: { targetPlan: string; reason?: string }) =>
+      api.post(`/platform/billing/workspaces/${workspaceId}/override-plan`, data).then(handleResponse),
+    extendTrial: (workspaceId: string, data: { days: number; reason?: string }) =>
+      api.post(`/platform/billing/workspaces/${workspaceId}/extend-trial`, data).then(handleResponse),
+    cancelSubscription: (workspaceId: string) =>
+      api.post(`/platform/billing/workspaces/${workspaceId}/cancel`).then(handleResponse),
+    reactivateSubscription: (workspaceId: string) =>
+      api.post(`/platform/billing/workspaces/${workspaceId}/reactivate`).then(handleResponse),
+    listFeatureOverrides: (workspaceId: string) =>
+      api.get(`/platform/workspaces/${workspaceId}/feature-overrides`).then(handleResponse),
+    setFeatureOverride: (workspaceId: string, data: { feature: string; enabled: boolean; reason?: string }) =>
+      api.post(`/platform/workspaces/${workspaceId}/feature-overrides`, data).then(handleResponse),
+    deleteFeatureOverride: (workspaceId: string, feature: string) =>
+      api.delete(`/platform/workspaces/${workspaceId}/feature-overrides/${feature}`).then(handleResponse),
+    getSystemHealth: () => api.get('/platform/health').then(handleResponse),
+    listAuditLogs: (params?: { page?: number; limit?: number; workspaceId?: string }) =>
+      api.get('/platform/audit-log', { params }).then(handleResponse),
+    getMe: (): Promise<User> => api.get('/auth/me').then(handleResponse),
+  },
 };
 
 api.interceptors.response.use(

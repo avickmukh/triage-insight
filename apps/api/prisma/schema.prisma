@@ -290,6 +290,8 @@ model User {
   digestSubscriptions DigestSubscription[]
   invitesSent         WorkspaceInvite[]   @relation("InvitedByUser")
   passwordResetTokens PasswordResetToken[]
+  platformAuditLogs   PlatformAuditLog[]  @relation("PlatformAuditActor")
+  featureOverridesSet WorkspaceFeatureOverride[] @relation("FeatureOverrideSetBy")
 }
 
 model RefreshToken {
@@ -378,6 +380,8 @@ model Workspace {
    customerSignals       CustomerSignal[]
   surveys               Survey[]
   invoices              Invoice[]
+  platformAuditLogs     PlatformAuditLog[]  @relation("PlatformAuditWorkspace")
+  featureOverrides      WorkspaceFeatureOverride[]
 }
 model WorkspaceMember {
   id          String        @id @default(uuid())
@@ -1331,4 +1335,52 @@ model Invoice {
 
   @@index([workspaceId])
   @@index([stripeInvoiceId])
+}
+
+// ─── Platform Admin ────────────────────────────────────────────────────────────
+
+/// Platform-level audit log — records actions taken by SUPER_ADMIN / PLATFORM_ADMIN
+/// that are not scoped to a single workspace (e.g. billing overrides, suspensions).
+model PlatformAuditLog {
+  id          String   @id @default(uuid())
+  /// The platform admin user who performed the action
+  actorId     String?
+  /// Action key, e.g. "WORKSPACE_SUSPENDED", "BILLING_PLAN_OVERRIDE"
+  action      String
+  /// Target workspace (if applicable)
+  workspaceId String?
+  /// Arbitrary JSON payload (before/after state, reason, etc.)
+  details     Json     @default("{}")
+  createdAt   DateTime @default(now())
+
+  actor     User?      @relation("PlatformAuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  workspace Workspace? @relation("PlatformAuditWorkspace", fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  @@index([actorId])
+  @@index([workspaceId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+/// Per-workspace feature flag overrides set by a platform admin.
+/// When a row exists for a (workspaceId, feature) pair the override takes
+/// precedence over the plan-level default.
+model WorkspaceFeatureOverride {
+  id          String   @id @default(uuid())
+  workspaceId String
+  /// Feature key matching a boolean field on the Plan model
+  /// e.g. "voiceFeedback", "survey", "integrations", "ciqPrioritization"
+  feature     String
+  /// Whether the feature is enabled for this workspace
+  enabled     Boolean
+  /// Platform admin who set the override
+  setById     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  setBy     User?     @relation("FeatureOverrideSetBy", fields: [setById], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, feature])
+  @@index([workspaceId])
 }
