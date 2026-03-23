@@ -3,15 +3,24 @@ import {
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bull';
+import type { Queue } from 'bull';
 import { PrismaService } from '../prisma/prisma.service';
 import { PublicVoteDto } from './dto/public-vote.dto';
 import { PublicCommentDto } from './dto/public-comment.dto';
 import { PublicFeedbackQueryDto } from './dto/public-feedback-query.dto';
-import { FeedbackStatus } from '@prisma/client';
+import { FeedbackStatus, FeedbackSourceType } from '@prisma/client';
+import {
+  PORTAL_SIGNAL_QUEUE,
+  PORTAL_SIGNAL_JOB,
+} from './portal-signal.constants';
 
 @Injectable()
 export class PublicPortalService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @InjectQueue(PORTAL_SIGNAL_QUEUE) private readonly signalQueue: Queue,
+  ) {}
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
@@ -189,6 +198,61 @@ export class PublicPortalService {
     return { data: items };
   }
 
+  // ─── Create Feedback ──────────────────────────────────────────────────────
+
+  async createFeedback(
+    workspaceSlug: string,
+    dto: { title: string; description: string; email?: string; name?: string },
+  ) {
+    const workspace = await this.resolveWorkspace(workspaceSlug);
+    const portalUserId = await this.resolvePortalUser(
+      workspace.id,
+      dto.email,
+      dto.name,
+    );
+
+    const rawTitle = dto.title.trim();
+    const rawDescription = dto.description.trim();
+
+    const feedback = await this.prisma.feedback.create({
+      data: {
+        workspaceId: workspace.id,
+        title: rawTitle,
+        description: rawDescription,
+        rawText: rawDescription,
+        normalizedText: rawDescription.toLowerCase(),
+        sourceType: FeedbackSourceType.PUBLIC_PORTAL,
+        status: FeedbackStatus.NEW,
+        portalUserId: portalUserId ?? undefined,
+      },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        status: true,
+        sourceType: true,
+        createdAt: true,
+      },
+    });
+
+    // Publish portal signal (non-critical)
+    this.signalQueue
+      .add(
+        PORTAL_SIGNAL_JOB.FEEDBACK_CREATED,
+        {
+          workspaceId: workspace.id,
+          workspaceSlug: workspace.slug,
+          feedbackId: feedback.id,
+          actorType: portalUserId ? 'PortalUser' : 'Anonymous',
+          timestamp: new Date().toISOString(),
+        },
+        { attempts: 2, removeOnComplete: true },
+      )
+      .catch(() => {/* non-critical */});
+
+    return { ...feedback, portalUserId };
+  }
+
   // ─── Vote ─────────────────────────────────────────────────────────────────
 
   async vote(
@@ -239,6 +303,21 @@ export class PublicPortalService {
       where: { feedbackId },
     });
 
+    // Publish portal signal (non-critical)
+    this.signalQueue
+      .add(
+        PORTAL_SIGNAL_JOB.FEEDBACK_VOTED,
+        {
+          workspaceId: workspace.id,
+          workspaceSlug: workspace.slug,
+          feedbackId,
+          actorType: portalUserId ? 'PortalUser' : 'Anonymous',
+          timestamp: new Date().toISOString(),
+        },
+        { attempts: 2, removeOnComplete: true },
+      )
+      .catch(() => {/* non-critical */});
+
     return { ...vote, voteCount };
   }
 
@@ -276,6 +355,25 @@ export class PublicPortalService {
         createdAt: true,
       },
     });
+
+    // Publish portal signal (non-critical)
+    this.signalQueue
+      .add(
+        PORTAL_SIGNAL_JOB.FEEDBACK_COMMENTED,
+        {
+          workspaceId: workspace.id,
+          workspaceSlug: workspace.slug,
+          feedbackId,
+          actorType: portalUserId ? 'PortalUser' : 'Anonymous',
+          timestamp: new Date().toISOString(),
+          data: {
+            authorName: comment.authorName,
+            body: comment.body.substring(0, 100),
+          },
+        },
+        { attempts: 2, removeOnComplete: true },
+      )
+      .catch(() => {/* non-critical */});
 
     return comment;
   }

@@ -341,6 +341,9 @@ export interface PublicFeedbackDto {
 export interface PortalCreateFeedbackDto {
   title: string;
   description: string;
+  email?: string;
+  name?: string;
+  anonymousId?: string;
 }
 
 export interface PortalCreateFeedbackResponse {
@@ -351,35 +354,55 @@ export interface PortalCreateFeedbackResponse {
   createdAt: string;
 }
 
+export interface PublicFeedbackComment {
+  id: string;
+  body: string;
+  authorName: string | null;
+  createdAt: string;
+}
+
 export interface PublicFeedbackDetail {
   id: string;
   title: string;
   description: string;
   status: FeedbackStatus;
   voteCount: number;
-  commentCount: number;
+  commentCount?: number;
   createdAt: string;
   userVoted?: boolean;
+  comments: PublicFeedbackComment[];
+}
+
+export interface PublicFeedbackListMeta {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }
 
 export interface PublicFeedbackListResponse {
   data: PublicFeedbackDetail[];
-  total: number;
-  page: number;
-  limit: number;
+  meta: PublicFeedbackListMeta;
 }
 
 export interface PublicVoteDto {
-  value: 1 | -1;
+  anonymousId?: string;
+  email?: string;
+  name?: string;
 }
 
 export interface PublicVoteResponse {
+  id: string;
+  feedbackId: string;
   voteCount: number;
-  userVoted: boolean;
+  createdAt: string;
 }
 
 export interface PublicCommentDto {
-  content: string;
+  body: string;
+  email?: string;
+  name?: string;
+  anonymousId?: string;
 }
 
 export interface PublicRoadmapResponse {

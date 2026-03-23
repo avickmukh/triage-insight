@@ -37,7 +37,7 @@ export default function PublicFeedbackNewPage() {
       const anonymousId = getOrCreateAnonymousId();
       await apiClient.portal.createFeedback(orgSlug, {
         title: title.trim(),
-        description: description.trim() || undefined,
+        description: description.trim() || "",
         email: submitterEmail.trim() || undefined,
         anonymousId: anonymousId || undefined,
       });

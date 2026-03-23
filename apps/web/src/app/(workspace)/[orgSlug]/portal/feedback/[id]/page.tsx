@@ -1,13 +1,15 @@
 'use client';
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   usePublicFeedbackDetail,
   usePublicVote,
   usePublicAddComment,
 } from "@/hooks/use-public-portal";
+import { usePortalEvents, PortalEvent } from "@/hooks/use-portal-events";
 import { FeedbackStatus } from "@/lib/api-types";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -46,6 +48,7 @@ export default function PublicFeedbackDetailPage() {
   const orgSlug = (Array.isArray(params.orgSlug) ? params.orgSlug[0] : params.orgSlug) ?? "";
   const feedbackId = (Array.isArray(params.id) ? params.id[0] : params.id) ?? "";
 
+  const queryClient = useQueryClient();
   const { data: feedback, isLoading, isError } = usePublicFeedbackDetail(orgSlug, feedbackId);
   const voteMutation = usePublicVote(orgSlug, feedbackId);
   const commentMutation = usePublicAddComment(orgSlug, feedbackId);
@@ -110,6 +113,37 @@ export default function PublicFeedbackDetailPage() {
     );
   };
 
+  // ─── SSE real-time updates ─────────────────────────────────────────────────
+
+  const handlePortalEvent = useCallback((event: PortalEvent) => {
+    switch (event.type) {
+      case "FEEDBACK_VOTED": {
+        const { feedbackId: evtId, voteCount: newCount } = event.data as {
+          feedbackId: string;
+          voteCount: number;
+        };
+        if (evtId === feedbackId) {
+          setVoteCount(newCount);
+        }
+        break;
+      }
+      case "FEEDBACK_COMMENTED": {
+        const { feedbackId: evtId } = event.data as { feedbackId: string };
+        if (evtId === feedbackId) {
+          // Refetch the detail to get the new comment
+          queryClient.invalidateQueries({
+            queryKey: ["portal", orgSlug, "feedback", feedbackId],
+          });
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  }, [feedbackId, orgSlug, queryClient]);
+
+  usePortalEvents(orgSlug, handlePortalEvent, !!orgSlug && !!feedbackId);
+
   // ─── Loading ────────────────────────────────────────────────────────────────
 
   if (isLoading) {
@@ -125,7 +159,7 @@ export default function PublicFeedbackDetailPage() {
       <div style={{ textAlign: "center", padding: "4rem 0" }}>
         <p style={{ color: "#E85D4A", marginBottom: "1rem" }}>Feedback item not found.</p>
         <button
-          onClick={() => router.push(`/${orgSlug}/feedback`)}
+          onClick={() => router.push(`/${orgSlug}/portal/feedback`)}
           style={{ background: "#0A2540", color: "#fff", fontWeight: 600, fontSize: "0.875rem", padding: "0.6rem 1.25rem", borderRadius: 8, border: "none", cursor: "pointer" }}
         >
           ← Back to Feedback Board
@@ -140,7 +174,7 @@ export default function PublicFeedbackDetailPage() {
     <div style={{ maxWidth: 720, margin: "0 auto" }}>
       {/* Back link */}
       <Link
-        href={`/${orgSlug}/feedback`}
+        href={`/${orgSlug}/portal/feedback`}
         style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", color: "#20A4A4", fontWeight: 600, fontSize: "0.875rem", textDecoration: "none", marginBottom: "1.5rem" }}
       >
         ← Back to Feedback Board

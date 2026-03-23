@@ -13,12 +13,17 @@ import { PortalCreateFeedbackDto } from './dto/portal-create-feedback.dto';
 import { PublicFeedbackQueryDto } from '../public/dto/public-feedback-query.dto';
 import { PublicVoteDto } from '../public/dto/public-vote.dto';
 import { PublicCommentDto } from '../public/dto/public-comment.dto';
+import {
+  PORTAL_SIGNAL_QUEUE,
+  PORTAL_SIGNAL_JOB,
+} from '../public/portal-signal.constants';
 
 @Injectable()
 export class PortalService {
   constructor(
     private readonly prisma: PrismaService,
     @InjectQueue(AI_ANALYSIS_QUEUE) private readonly analysisQueue: Queue,
+    @InjectQueue(PORTAL_SIGNAL_QUEUE) private readonly signalQueue: Queue,
   ) {}
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -218,6 +223,21 @@ export class PortalService {
     // Dispatch async AI analysis job (embedding + duplicate detection)
     await this.analysisQueue.add({ feedbackId: feedback.id });
 
+    // Publish portal signal (non-critical)
+    this.signalQueue
+      .add(
+        PORTAL_SIGNAL_JOB.FEEDBACK_CREATED,
+        {
+          workspaceId: workspace.id,
+          workspaceSlug: workspace.slug,
+          feedbackId: feedback.id,
+          actorType: portalUserId ? 'PortalUser' : 'Anonymous',
+          timestamp: new Date().toISOString(),
+        },
+        { attempts: 2, removeOnComplete: true },
+      )
+      .catch(() => {/* non-critical */});
+
     return {
       ...feedback,
       portalUserId,
@@ -294,6 +314,21 @@ export class PortalService {
       where: { feedbackId },
     });
 
+    // Publish portal signal (non-critical)
+    this.signalQueue
+      .add(
+        PORTAL_SIGNAL_JOB.FEEDBACK_VOTED,
+        {
+          workspaceId: workspace.id,
+          workspaceSlug: workspace.slug,
+          feedbackId,
+          actorType: portalUserId ? 'PortalUser' : 'Anonymous',
+          timestamp: new Date().toISOString(),
+        },
+        { attempts: 2, removeOnComplete: true },
+      )
+      .catch(() => {/* non-critical */});
+
     return { ...vote, voteCount };
   }
 
@@ -331,6 +366,25 @@ export class PortalService {
         createdAt: true,
       },
     });
+
+    // Publish portal signal (non-critical)
+    this.signalQueue
+      .add(
+        PORTAL_SIGNAL_JOB.FEEDBACK_COMMENTED,
+        {
+          workspaceId: workspace.id,
+          workspaceSlug: workspace.slug,
+          feedbackId,
+          actorType: portalUserId ? 'PortalUser' : 'Anonymous',
+          timestamp: new Date().toISOString(),
+          data: {
+            authorName: comment.authorName,
+            body: comment.body.substring(0, 100),
+          },
+        },
+        { attempts: 2, removeOnComplete: true },
+      )
+      .catch(() => {/* non-critical */});
 
     return comment;
   }
