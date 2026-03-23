@@ -407,6 +407,7 @@ model Customer {
   signals          CustomerSignal[]
   churnScores      CustomerChurnScore[]
   portalUsers      PortalUser[]
+  uploadAssets     UploadAsset[]    @relation("CustomerUploadAssets")
 
   @@index([workspaceId])
   @@index([email])
@@ -435,6 +436,7 @@ model Deal {
   workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   customer    Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
   themeLinks  DealThemeLink[]
+  uploadAssets UploadAsset[] @relation("DealUploadAssets")
 
   @@index([workspaceId])
   @@index([customerId])
@@ -922,18 +924,30 @@ model DigestRun {
 }
 
 model UploadAsset {
-  id                String   @id @default(uuid())
+  id                String    @id @default(uuid())
   workspaceId       String
   fileName          String
   s3Key             String
   s3Bucket          String
   mimeType          String
   sizeBytes         Int
-  createdAt         DateTime @default(now())
+  /// Human-readable label / call title set at upload time
+  label             String?
+  /// Audio duration in seconds (populated after transcription)
+  durationSeconds   Float?
+  /// Optional customer this recording is linked to
+  customerId        String?
+  /// Optional deal this recording is linked to
+  dealId            String?
+  createdAt         DateTime  @default(now())
 
   workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  customer          Customer? @relation("CustomerUploadAssets", fields: [customerId], references: [id], onDelete: SetNull)
+  deal              Deal?     @relation("DealUploadAssets", fields: [dealId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId])
+  @@index([customerId])
+  @@index([dealId])
 }
 
 model AiJobLog {

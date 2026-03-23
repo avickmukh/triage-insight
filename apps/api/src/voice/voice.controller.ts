@@ -15,7 +15,12 @@ import { RolesGuard } from '../workspace/guards/roles.guard';
 import { Roles } from '../workspace/decorators/roles.decorator';
 import { WorkspaceRole } from '@prisma/client';
 import { VoiceService } from './services/voice.service';
-import { FinalizeVoiceUploadDto, VoicePresignedUrlDto } from './dto/voice.dto';
+import {
+  FinalizeVoiceUploadDto,
+  VoicePresignedUrlDto,
+  LinkVoiceThemeDto,
+  LinkVoiceCustomerDto,
+} from './dto/voice.dto';
 
 @Controller('workspaces/:workspaceId/voice')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -80,5 +85,52 @@ export class VoiceController {
     const result = await this.voiceService.getUpload(workspaceId, uploadAssetId);
     if (!result) throw new NotFoundException('Upload not found');
     return result;
+  }
+
+  /**
+   * POST /workspaces/:workspaceId/voice/:uploadAssetId/reprocess
+   * Re-enqueues the transcription pipeline for an existing upload.
+   * Useful after a failed job or when re-extraction is needed.
+   * ADMIN and EDITOR only.
+   */
+  @Post(':uploadAssetId/reprocess')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  async reprocessUpload(
+    @Param('workspaceId') workspaceId: string,
+    @Param('uploadAssetId') uploadAssetId: string,
+  ) {
+    return this.voiceService.reprocessUpload(workspaceId, uploadAssetId);
+  }
+
+  /**
+   * POST /workspaces/:workspaceId/voice/:uploadAssetId/link-theme
+   * Manually links the voice upload's generated feedback to a theme.
+   * Also triggers CIQ re-scoring for the linked theme.
+   * ADMIN and EDITOR only.
+   */
+  @Post(':uploadAssetId/link-theme')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  async linkTheme(
+    @Param('workspaceId') workspaceId: string,
+    @Param('uploadAssetId') uploadAssetId: string,
+    @Body() dto: LinkVoiceThemeDto,
+  ) {
+    return this.voiceService.linkTheme(workspaceId, uploadAssetId, dto);
+  }
+
+  /**
+   * POST /workspaces/:workspaceId/voice/:uploadAssetId/link-customer
+   * Associates the voice upload with a customer record.
+   * Also updates the linked feedback record with the customer association.
+   * ADMIN and EDITOR only.
+   */
+  @Post(':uploadAssetId/link-customer')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  async linkCustomer(
+    @Param('workspaceId') workspaceId: string,
+    @Param('uploadAssetId') uploadAssetId: string,
+    @Body() dto: LinkVoiceCustomerDto,
+  ) {
+    return this.voiceService.linkCustomer(workspaceId, uploadAssetId, dto);
   }
 }

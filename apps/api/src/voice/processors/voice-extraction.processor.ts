@@ -1,11 +1,14 @@
 import { Process, Processor } from '@nestjs/bull';
 import { Logger } from '@nestjs/common';
-import type { Job } from 'bull';
+import { InjectQueue } from '@nestjs/bull';
+import type { Job, Queue } from 'bull';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AiJobStatus, AiJobType } from '@prisma/client';
 import { VoiceIntelligenceService } from '../services/voice-intelligence.service';
 import { ThemeClusteringService } from '../../ai/services/theme-clustering.service';
 import { EmbeddingService } from '../../ai/services/embedding.service';
+import { CIQ_SCORING_QUEUE } from '../../ai/processors/ciq-scoring.processor';
+import type { CiqJobPayload } from '../../ai/processors/ciq-scoring.processor';
 
 export const VOICE_EXTRACTION_QUEUE = 'voice-extraction';
 
@@ -27,6 +30,8 @@ export class VoiceExtractionProcessor {
     private readonly intelligenceService: VoiceIntelligenceService,
     private readonly clusteringService: ThemeClusteringService,
     private readonly embeddingService: EmbeddingService,
+    @InjectQueue(CIQ_SCORING_QUEUE)
+    private readonly ciqQueue: Queue<CiqJobPayload>,
   ) {}
 
   @Process()
@@ -60,6 +65,8 @@ export class VoiceExtractionProcessor {
         `Intelligence extracted for feedback ${feedbackId}: ` +
           `sentiment=${intelligence.sentiment.toFixed(2)}, ` +
           `confidence=${intelligence.confidenceScore.toFixed(2)}, ` +
+          `urgency=${intelligence.urgencySignal.toFixed(2)}, ` +
+          `churn=${intelligence.churnSignal}, ` +
           `painPoints=${intelligence.painPoints.length}, ` +
           `featureRequests=${intelligence.featureRequests.length}`,
       );
@@ -81,18 +88,6 @@ export class VoiceExtractionProcessor {
       }
 
       // ── 4. Enrich the Feedback record with intelligence fields ─────────────
-      //
-      // Schema fields used:
-      //   - title       → AI-generated title (replaces the summarization-based title)
-      //   - summary     → 2-4 sentence call summary
-      //   - sentiment   → Float in [-1, 1]
-      //   - impactScore → mapped from confidenceScore [0, 100]
-      //   - metadata    → extended intelligence blob (pain points, feature requests, etc.)
-      //
-      // Schema gaps (noted, not invented):
-      //   - No dedicated `painPoints` or `featureRequests` columns → stored in metadata.intelligence
-      //   - No `keyTopics` column → stored in metadata.intelligence
-      //   - No `confidenceScore` column on Feedback → stored as impactScore (0-100 scale)
       await this.prisma.feedback.update({
         where: { id: feedbackId },
         data: {
@@ -109,6 +104,8 @@ export class VoiceExtractionProcessor {
               featureRequests: intelligence.featureRequests,
               keyTopics: intelligence.keyTopics,
               confidenceScore: intelligence.confidenceScore,
+              urgencySignal: intelligence.urgencySignal,
+              churnSignal: intelligence.churnSignal,
               extractedAt: new Date().toISOString(),
             },
           },
@@ -134,7 +131,30 @@ export class VoiceExtractionProcessor {
         );
       }
 
-      // ── 6. Mark extraction job as COMPLETED ───────────────────────────────
+      // ── 6. Enqueue CIQ re-scoring for the linked theme ────────────────────
+      if (linkedThemeId) {
+        try {
+          await this.ciqQueue.add(
+            { type: 'THEME_SCORED', themeId: linkedThemeId, workspaceId },
+            {
+              attempts: 3,
+              backoff: { type: 'exponential', delay: 3000 },
+              delay: 2000, // slight delay to let feedback persist
+              removeOnComplete: false,
+              removeOnFail: false,
+            },
+          );
+          this.logger.log(
+            `CIQ re-scoring enqueued for theme ${linkedThemeId} after voice extraction`,
+          );
+        } catch (ciqErr) {
+          this.logger.warn(
+            `CIQ re-scoring enqueue failed for theme ${linkedThemeId}: ${(ciqErr as Error).message}`,
+          );
+        }
+      }
+
+      // ── 7. Mark extraction job as COMPLETED ───────────────────────────────
       await this.prisma.aiJobLog.update({
         where: { id: extractionJob.id },
         data: {
@@ -147,6 +167,8 @@ export class VoiceExtractionProcessor {
             keyTopics: intelligence.keyTopics,
             sentiment: intelligence.sentiment,
             confidenceScore: intelligence.confidenceScore,
+            urgencySignal: intelligence.urgencySignal,
+            churnSignal: intelligence.churnSignal,
             linkedThemeId,
           },
         },

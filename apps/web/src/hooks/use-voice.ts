@@ -30,15 +30,22 @@ export function useVoiceUploads(orgSlug: string, page = 1, limit = 20) {
   });
 }
 
-// ─── Upload detail (lazy — only fetches when enabled=true) ────────────────────
-export function useVoiceUploadDetail(orgSlug: string, uploadId: string, enabled: boolean) {
+// ─── Upload detail ─────────────────────────────────────────────────────────────
+export function useVoiceUploadDetail(orgSlug: string, uploadId: string, enabled = true) {
   const workspaceId = useWorkspaceId(orgSlug);
   return useQuery<VoiceUploadDetail>({
     queryKey: voiceKeys.detail(orgSlug, uploadId),
     queryFn: () => apiClient.voice.getById(workspaceId!, uploadId),
-    enabled: !!workspaceId && enabled,
+    enabled: !!workspaceId && !!uploadId && enabled,
     staleTime: 10_000,
-    refetchInterval: enabled ? 10_000 : false,
+    // Poll while job is still in progress
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return 10_000;
+      const inFlight = data.jobStatus === 'QUEUED' || data.jobStatus === 'PROCESSING' ||
+                       data.intelligenceStatus === 'QUEUED' || data.intelligenceStatus === 'PROCESSING';
+      return inFlight ? 5_000 : false;
+    },
   });
 }
 
@@ -49,9 +56,9 @@ export function useVoiceUpload(orgSlug: string) {
 
   const upload = async (
     file: File,
-    label?: string,
+    options?: { label?: string; customerId?: string; dealId?: string },
     onProgress?: (pct: number) => void,
-  ): Promise<void> => {
+  ): Promise<{ uploadAssetId: string }> => {
     if (!workspaceId) throw new Error('Workspace not loaded');
 
     // 1. Get a pre-signed S3 PUT URL
@@ -80,18 +87,73 @@ export function useVoiceUpload(orgSlug: string) {
     });
 
     // 3. Finalize: create UploadAsset + AiJobLog + enqueue transcription
-    await apiClient.voice.finalize(workspaceId, {
-      key,
-      bucket,
+    const result = await apiClient.voice.finalize(workspaceId, {
+      s3Key: key,
+      s3Bucket: bucket,
       fileName: file.name,
       mimeType: file.type,
       sizeBytes: file.size,
-      label,
+      label: options?.label,
+      customerId: options?.customerId,
+      dealId: options?.dealId,
     });
 
     // 4. Invalidate the list so the new upload appears immediately
     await queryClient.invalidateQueries({ queryKey: voiceKeys.all(orgSlug) });
+
+    return { uploadAssetId: result.uploadAssetId };
   };
 
   return { upload };
+}
+
+// ─── Reprocess upload ─────────────────────────────────────────────────────────
+export function useVoiceReprocess(orgSlug: string) {
+  const workspaceId = useWorkspaceId(orgSlug);
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (uploadId: string) => {
+      if (!workspaceId) throw new Error('Workspace not loaded');
+      return apiClient.voice.reprocess(workspaceId, uploadId);
+    },
+    onSuccess: (_data, uploadId) => {
+      queryClient.invalidateQueries({ queryKey: voiceKeys.detail(orgSlug, uploadId) });
+      queryClient.invalidateQueries({ queryKey: voiceKeys.all(orgSlug) });
+    },
+  });
+}
+
+// ─── Link theme ───────────────────────────────────────────────────────────────
+export function useVoiceLinkTheme(orgSlug: string) {
+  const workspaceId = useWorkspaceId(orgSlug);
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ uploadId, themeId }: { uploadId: string; themeId: string }) => {
+      if (!workspaceId) throw new Error('Workspace not loaded');
+      return apiClient.voice.linkTheme(workspaceId, uploadId, themeId);
+    },
+    onSuccess: (_data, { uploadId }) => {
+      queryClient.invalidateQueries({ queryKey: voiceKeys.detail(orgSlug, uploadId) });
+      queryClient.invalidateQueries({ queryKey: voiceKeys.all(orgSlug) });
+    },
+  });
+}
+
+// ─── Link customer ────────────────────────────────────────────────────────────
+export function useVoiceLinkCustomer(orgSlug: string) {
+  const workspaceId = useWorkspaceId(orgSlug);
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ uploadId, customerId }: { uploadId: string; customerId: string }) => {
+      if (!workspaceId) throw new Error('Workspace not loaded');
+      return apiClient.voice.linkCustomer(workspaceId, uploadId, customerId);
+    },
+    onSuccess: (_data, { uploadId }) => {
+      queryClient.invalidateQueries({ queryKey: voiceKeys.detail(orgSlug, uploadId) });
+      queryClient.invalidateQueries({ queryKey: voiceKeys.all(orgSlug) });
+    },
+  });
 }

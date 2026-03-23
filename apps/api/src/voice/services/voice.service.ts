@@ -4,7 +4,12 @@ import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
 import { PrismaService } from '../../prisma/prisma.service';
 import { S3Service } from '../../uploads/services/s3.service';
-import { FinalizeVoiceUploadDto, VoicePresignedUrlDto } from '../dto/voice.dto';
+import {
+  FinalizeVoiceUploadDto,
+  VoicePresignedUrlDto,
+  LinkVoiceThemeDto,
+  LinkVoiceCustomerDto,
+} from '../dto/voice.dto';
 import { AiJobStatus, AiJobType } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
@@ -48,6 +53,8 @@ interface ExtractionOutput {
   sentiment?: number;
   confidenceScore?: number;
   linkedThemeId?: string | null;
+  urgencySignal?: number | null;
+  churnSignal?: boolean | null;
 }
 
 @Injectable()
@@ -76,11 +83,13 @@ export class VoiceService {
   // ─── Presigned PUT URL ─────────────────────────────────────────────────────
 
   async createPresignedUploadUrl(workspaceId: string, dto: VoicePresignedUrlDto) {
-    const { fileName, contentType, sizeBytes } = dto;
+    // Accept both mimeType and contentType for backwards-compat
+    const mimeType = dto.mimeType ?? dto.contentType ?? 'audio/mpeg';
+    const { fileName, sizeBytes } = dto;
 
-    if (!ALLOWED_AUDIO_TYPES.has(contentType)) {
+    if (!ALLOWED_AUDIO_TYPES.has(mimeType)) {
       throw new Error(
-        `Unsupported audio type: ${contentType}. Allowed: mp3, wav, m4a, ogg, webm, flac.`,
+        `Unsupported audio type: ${mimeType}. Allowed: mp3, wav, m4a, ogg, webm, flac.`,
       );
     }
 
@@ -88,7 +97,7 @@ export class VoiceService {
     const command = new PutObjectCommand({
       Bucket: this.bucket,
       Key: key,
-      ContentType: contentType,
+      ContentType: mimeType,
       ContentLength: sizeBytes,
     });
     const signedUrl = await getSignedUrl(this.s3Client, command, { expiresIn: 3600 });
@@ -99,7 +108,10 @@ export class VoiceService {
   // ─── Finalize Upload ───────────────────────────────────────────────────────
 
   async finalizeUpload(workspaceId: string, dto: FinalizeVoiceUploadDto) {
-    const { s3Key, fileName, contentType, sizeBytes, label } = dto;
+    // Accept both mimeType and contentType for backwards-compat
+    const mimeType = dto.mimeType ?? dto.contentType ?? 'audio/mpeg';
+    const { s3Key, fileName, sizeBytes, label, customerId, dealId } = dto;
+    const s3Bucket = dto.s3Bucket ?? this.bucket;
 
     // 1. Create UploadAsset record
     const uploadAsset = await this.prisma.uploadAsset.create({
@@ -107,9 +119,12 @@ export class VoiceService {
         workspaceId,
         fileName,
         s3Key,
-        s3Bucket: this.bucket,
-        mimeType: contentType,
+        s3Bucket,
+        mimeType,
         sizeBytes,
+        label: label ?? null,
+        customerId: customerId ?? null,
+        dealId: dealId ?? null,
       },
     });
 
@@ -121,7 +136,7 @@ export class VoiceService {
         status: AiJobStatus.QUEUED,
         entityType: 'UploadAsset',
         entityId: uploadAsset.id,
-        input: { s3Key, fileName, contentType, sizeBytes, label },
+        input: { s3Key, fileName, mimeType, sizeBytes, label },
       },
     });
 
@@ -132,8 +147,8 @@ export class VoiceService {
         aiJobLogId: aiJobLog.id,
         workspaceId,
         s3Key,
-        s3Bucket: this.bucket,
-        mimeType: contentType,
+        s3Bucket,
+        mimeType,
         label,
       },
       {
@@ -155,6 +170,109 @@ export class VoiceService {
     };
   }
 
+  // ─── Reprocess an upload (re-enqueue transcription) ───────────────────────
+
+  async reprocessUpload(workspaceId: string, uploadAssetId: string) {
+    const asset = await this.prisma.uploadAsset.findFirst({
+      where: { id: uploadAssetId, workspaceId },
+    });
+    if (!asset) throw new Error(`UploadAsset ${uploadAssetId} not found`);
+
+    // Create a fresh AiJobLog for the new attempt
+    const aiJobLog = await this.prisma.aiJobLog.create({
+      data: {
+        workspaceId,
+        jobType: AiJobType.VOICE_TRANSCRIPTION,
+        status: AiJobStatus.QUEUED,
+        entityType: 'UploadAsset',
+        entityId: asset.id,
+        input: {
+          s3Key: asset.s3Key,
+          fileName: asset.fileName,
+          mimeType: asset.mimeType,
+          sizeBytes: asset.sizeBytes,
+          label: asset.label,
+          reprocess: true,
+        },
+      },
+    });
+
+    await this.transcriptionQueue.add(
+      {
+        uploadAssetId: asset.id,
+        aiJobLogId: aiJobLog.id,
+        workspaceId,
+        s3Key: asset.s3Key,
+        s3Bucket: asset.s3Bucket,
+        mimeType: asset.mimeType,
+        label: asset.label ?? undefined,
+      },
+      {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5000 },
+        removeOnComplete: false,
+        removeOnFail: false,
+      },
+    );
+
+    this.logger.log(`Reprocess enqueued: asset=${asset.id}, newJob=${aiJobLog.id}`);
+    return { uploadAssetId: asset.id, aiJobLogId: aiJobLog.id, status: AiJobStatus.QUEUED };
+  }
+
+  // ─── Link a voice upload to a theme ───────────────────────────────────────
+
+  async linkTheme(workspaceId: string, uploadAssetId: string, dto: LinkVoiceThemeDto) {
+    const { themeId } = dto;
+    const asset = await this.prisma.uploadAsset.findFirst({
+      where: { id: uploadAssetId, workspaceId },
+    });
+    if (!asset) throw new Error(`UploadAsset ${uploadAssetId} not found`);
+
+    // Find the feedback created from this upload and link it to the theme
+    const feedback = await this.prisma.feedback.findFirst({
+      where: { workspaceId, metadata: { path: ['uploadAssetId'], equals: asset.id } },
+    });
+
+    if (feedback) {
+      // Upsert the ThemeFeedback link
+      await this.prisma.themeFeedback.upsert({
+        where: { themeId_feedbackId: { themeId, feedbackId: feedback.id } },
+        create: { themeId, feedbackId: feedback.id, assignedBy: 'manual' },
+        update: { assignedBy: 'manual' },
+      });
+    }
+
+    return { uploadAssetId, themeId, feedbackId: feedback?.id ?? null };
+  }
+
+  // ─── Link a voice upload to a customer ────────────────────────────────────
+
+  async linkCustomer(workspaceId: string, uploadAssetId: string, dto: LinkVoiceCustomerDto) {
+    const { customerId } = dto;
+    const asset = await this.prisma.uploadAsset.findFirst({
+      where: { id: uploadAssetId, workspaceId },
+    });
+    if (!asset) throw new Error(`UploadAsset ${uploadAssetId} not found`);
+
+    await this.prisma.uploadAsset.update({
+      where: { id: uploadAssetId },
+      data: { customerId },
+    });
+
+    // Also link the generated feedback to the customer
+    const feedback = await this.prisma.feedback.findFirst({
+      where: { workspaceId, metadata: { path: ['uploadAssetId'], equals: asset.id } },
+    });
+    if (feedback) {
+      await this.prisma.feedback.update({
+        where: { id: feedback.id },
+        data: { customerId },
+      });
+    }
+
+    return { uploadAssetId, customerId, feedbackId: feedback?.id ?? null };
+  }
+
   // ─── List uploads for a workspace ─────────────────────────────────────────
 
   async listUploads(workspaceId: string, page = 1, limit = 20) {
@@ -167,6 +285,10 @@ export class VoiceService {
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
+        include: {
+          customer: { select: { id: true, name: true, companyName: true, arrValue: true, churnRisk: true } },
+          deal: { select: { id: true, title: true, stage: true, annualValue: true } },
+        },
       }),
     ]);
 
@@ -226,6 +348,8 @@ export class VoiceService {
           confidenceScore: extractionOutput?.confidenceScore ?? null,
           keyTopics: extractionOutput?.keyTopics ?? [],
           linkedThemeId: extractionOutput?.linkedThemeId ?? null,
+          urgencySignal: extractionOutput?.urgencySignal ?? null,
+          churnSignal: extractionOutput?.churnSignal ?? null,
         };
       }),
     );
@@ -244,6 +368,10 @@ export class VoiceService {
   async getUpload(workspaceId: string, uploadAssetId: string) {
     const asset = await this.prisma.uploadAsset.findFirst({
       where: { id: uploadAssetId, workspaceId },
+      include: {
+          customer: { select: { id: true, name: true, companyName: true, arrValue: true, churnRisk: true, lifecycleStage: true } },
+          deal: { select: { id: true, title: true, stage: true, annualValue: true, expectedCloseDate: true } },
+      },
     });
     if (!asset) return null;
 
@@ -276,7 +404,15 @@ export class VoiceService {
             createdAt: true,
             themes: {
               select: {
-                theme: { select: { id: true, title: true, status: true } },
+                theme: {
+                  select: {
+                    id: true,
+                    title: true,
+                    status: true,
+                    priorityScore: true,
+                    revenueInfluence: true,
+                  },
+                },
               },
             },
           },
@@ -334,6 +470,8 @@ export class VoiceService {
             sentiment: extractionOutput.sentiment ?? null,
             confidenceScore: extractionOutput.confidenceScore ?? null,
             linkedThemeId: extractionOutput.linkedThemeId ?? null,
+            urgencySignal: extractionOutput.urgencySignal ?? null,
+            churnSignal: extractionOutput.churnSignal ?? null,
           }
         : null,
     };

@@ -7,9 +7,10 @@ import {
   useVoiceUploads,
   useVoiceUploadDetail,
   useVoiceUpload,
+  useVoiceReprocess,
 } from '@/hooks/use-voice';
 import { useCurrentMemberRole } from '@/hooks/use-workspace';
-import { WorkspaceRole } from '@/lib/api-types';
+import { WorkspaceRole, VoiceUploadListItem } from '@/lib/api-types';
 import { appRoutes } from '@/lib/routes';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -25,6 +26,7 @@ const C = {
   bg:      '#F8F9FA',
   purple:  '#6F42C1',
   blue:    '#0D6EFD',
+  orange:  '#FD7E14',
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -32,6 +34,20 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatDuration(seconds: number | null): string {
+  if (seconds === null) return '';
+  const m = Math.floor(seconds / 60);
+  const s = Math.round(seconds % 60);
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+function formatARR(value: number | null): string {
+  if (value === null || value === 0) return '';
+  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M ARR`;
+  if (value >= 1_000) return `$${(value / 1_000).toFixed(0)}K ARR`;
+  return `$${value} ARR`;
 }
 
 function sentimentLabel(v: number | null): { label: string; color: string } {
@@ -48,17 +64,28 @@ function confidenceColor(v: number | null): string {
   return C.red;
 }
 
+function urgencyColor(v: number | null): string {
+  if (v === null) return C.muted;
+  if (v >= 70) return C.red;
+  if (v >= 40) return C.orange;
+  return C.green;
+}
+
 // ─── Status badge ─────────────────────────────────────────────────────────────
 function StatusBadge({ status, label }: { status: string | null; label?: string }) {
   const map: Record<string, { text: string; bg: string; color: string }> = {
-    QUEUED:    { text: 'Queued',         bg: '#FFF3CD', color: '#856404' },
-    RUNNING:   { text: 'Processing',     bg: '#CCE5FF', color: '#004085' },
-    COMPLETED: { text: label ?? 'Done',  bg: '#D4EDDA', color: '#155724' },
-    FAILED:    { text: 'Failed',         bg: '#F8D7DA', color: '#721C24' },
+    QUEUED:           { text: 'Queued',      bg: '#FFF3CD', color: '#856404' },
+    RUNNING:          { text: 'Processing',  bg: '#CCE5FF', color: '#004085' },
+    PROCESSING:       { text: 'Processing',  bg: '#CCE5FF', color: '#004085' },
+    COMPLETED:        { text: label ?? 'Done', bg: '#D4EDDA', color: '#155724' },
+    FAILED:           { text: 'Failed',      bg: '#F8D7DA', color: '#721C24' },
+    INTELLIGENCE_DONE:{ text: 'Analysed',    bg: '#E8D5FF', color: '#5A189A' },
+    EXTRACTING:       { text: 'Extracting',  bg: '#CCE5FF', color: '#004085' },
+    TRANSCRIBED:      { text: 'Transcribed', bg: '#D4EDDA', color: '#155724' },
   };
   const s = status ? (map[status] ?? { text: status, bg: '#E9ECEF', color: C.navy }) : { text: 'Unknown', bg: '#E9ECEF', color: C.navy };
   return (
-    <span style={{ display: 'inline-block', padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 700, background: s.bg, color: s.color, letterSpacing: '0.02em' }}>
+    <span style={{ display: 'inline-block', padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 700, background: s.bg, color: s.color, letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>
       {s.text}
     </span>
   );
@@ -82,6 +109,20 @@ function TagPill({ text, color }: { text: string; color: string }) {
   );
 }
 
+// ─── Signal bar ───────────────────────────────────────────────────────────────
+function SignalBar({ value, color, label }: { value: number | null; color: string; label: string }) {
+  if (value === null) return null;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+      <div style={{ fontSize: '0.72rem', color: C.muted, width: 72, flexShrink: 0 }}>{label}</div>
+      <div style={{ flex: 1, height: 6, background: '#E9ECEF', borderRadius: 3, overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${value}%`, background: color, borderRadius: 3, transition: 'width 0.4s' }} />
+      </div>
+      <div style={{ fontSize: '0.72rem', fontWeight: 700, color, width: 32, textAlign: 'right' }}>{value}</div>
+    </div>
+  );
+}
+
 // ─── Intelligence panel ───────────────────────────────────────────────────────
 interface IntelligenceData {
   summary: string | null;
@@ -96,30 +137,32 @@ interface IntelligenceData {
 function IntelligencePanel({
   intelligence,
   intelligenceStatus,
+  urgencySignal,
+  churnSignal,
   linkedThemeTitle,
   orgSlug,
 }: {
   intelligence: IntelligenceData | null;
   intelligenceStatus: string | null;
+  urgencySignal?: number | null;
+  churnSignal?: number | null;
   linkedThemeTitle?: string | null;
   orgSlug: string;
 }) {
   const router = useRouter();
   const r = appRoutes(orgSlug);
 
-  // Still processing
-  if (intelligenceStatus === 'QUEUED' || intelligenceStatus === 'RUNNING') {
+  if (intelligenceStatus === 'QUEUED' || intelligenceStatus === 'RUNNING' || intelligenceStatus === 'PROCESSING') {
     return (
       <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '0.5rem', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
         <div style={{ width: 10, height: 10, borderRadius: '50%', background: C.blue, animation: 'pulse 1.5s infinite', flexShrink: 0 }} />
         <span style={{ fontSize: '0.875rem', color: C.navy }}>
-          <strong>Extracting product intelligence…</strong> Analysing transcript for pain points, feature requests, and sentiment.
+          <strong>Extracting product intelligence…</strong> Analysing transcript for pain points, feature requests, urgency, and sentiment.
         </span>
       </div>
     );
   }
 
-  // Failed
   if (intelligenceStatus === 'FAILED') {
     return (
       <div style={{ background: '#FFF5F5', border: '1px solid #FEB2B2', borderRadius: '0.5rem', padding: '0.875rem 1rem', fontSize: '0.875rem', color: C.red }}>
@@ -128,7 +171,6 @@ function IntelligencePanel({
     );
   }
 
-  // Not started yet (transcription still running)
   if (!intelligence) return null;
 
   const { summary, painPoints, featureRequests, keyTopics, sentiment, confidenceScore, linkedThemeId } = intelligence;
@@ -137,8 +179,6 @@ function IntelligencePanel({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-
-      {/* Summary */}
       {summary && (
         <div>
           <SectionLabel>Call Summary</SectionLabel>
@@ -148,22 +188,37 @@ function IntelligencePanel({
         </div>
       )}
 
-      {/* Signals row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem' }}>
+      {/* Signal metrics grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.75rem' }}>
         <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: '0.5rem', padding: '0.75rem 1rem' }}>
           <div style={{ fontSize: '0.72rem', fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>Sentiment</div>
           <div style={{ fontWeight: 700, color: sentInfo.color, fontSize: '0.9rem' }}>{sentInfo.label}</div>
           {sentiment !== null && <div style={{ fontSize: '0.72rem', color: C.muted, marginTop: '0.1rem' }}>{sentiment > 0 ? '+' : ''}{sentiment.toFixed(2)}</div>}
         </div>
         <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: '0.5rem', padding: '0.75rem 1rem' }}>
-          <div style={{ fontSize: '0.72rem', fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>Signal Confidence</div>
+          <div style={{ fontSize: '0.72rem', fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>Confidence</div>
           <div style={{ fontWeight: 700, color: confColor, fontSize: '0.9rem' }}>
             {confidenceScore !== null ? `${Math.round(confidenceScore * 100)}%` : 'N/A'}
           </div>
-          <div style={{ fontSize: '0.72rem', color: C.muted, marginTop: '0.1rem' }}>
-            {confidenceScore !== null && confidenceScore >= 0.7 ? 'High signal' : confidenceScore !== null && confidenceScore >= 0.4 ? 'Medium signal' : 'Low signal'}
-          </div>
         </div>
+        {urgencySignal !== null && urgencySignal !== undefined && (
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: '0.5rem', padding: '0.75rem 1rem' }}>
+            <div style={{ fontSize: '0.72rem', fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>Urgency</div>
+            <div style={{ fontWeight: 700, color: urgencyColor(urgencySignal), fontSize: '0.9rem' }}>{urgencySignal}/100</div>
+            <div style={{ fontSize: '0.72rem', color: C.muted, marginTop: '0.1rem' }}>
+              {urgencySignal >= 70 ? 'High' : urgencySignal >= 40 ? 'Medium' : 'Low'}
+            </div>
+          </div>
+        )}
+        {churnSignal !== null && churnSignal !== undefined && churnSignal > 0 && (
+          <div style={{ background: '#FFF5F5', border: '1px solid #FEB2B2', borderRadius: '0.5rem', padding: '0.75rem 1rem' }}>
+            <div style={{ fontSize: '0.72rem', fontWeight: 700, color: C.red, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>Churn Risk</div>
+            <div style={{ fontWeight: 700, color: C.red, fontSize: '0.9rem' }}>{churnSignal}/100</div>
+            <div style={{ fontSize: '0.72rem', color: C.red, marginTop: '0.1rem' }}>
+              {churnSignal >= 70 ? 'Critical' : churnSignal >= 40 ? 'Elevated' : 'Low'}
+            </div>
+          </div>
+        )}
         {linkedThemeId && (
           <div
             onClick={() => router.push(r.themeItem ? r.themeItem(linkedThemeId) : `/${orgSlug}/app/themes/${linkedThemeId}`)}
@@ -177,7 +232,6 @@ function IntelligencePanel({
         )}
       </div>
 
-      {/* Key topics */}
       {keyTopics.length > 0 && (
         <div>
           <SectionLabel>Key Topics</SectionLabel>
@@ -185,7 +239,6 @@ function IntelligencePanel({
         </div>
       )}
 
-      {/* Pain points */}
       {painPoints.length > 0 && (
         <div>
           <SectionLabel>Pain Points</SectionLabel>
@@ -197,7 +250,6 @@ function IntelligencePanel({
         </div>
       )}
 
-      {/* Feature requests */}
       {featureRequests.length > 0 && (
         <div>
           <SectionLabel>Feature Requests</SectionLabel>
@@ -209,7 +261,6 @@ function IntelligencePanel({
         </div>
       )}
 
-      {/* No signals */}
       {!summary && painPoints.length === 0 && featureRequests.length === 0 && keyTopics.length === 0 && (
         <div style={{ fontSize: '0.875rem', color: C.muted, fontStyle: 'italic' }}>
           No actionable product signals detected in this recording.
@@ -220,36 +271,16 @@ function IntelligencePanel({
 }
 
 // ─── Upload row ───────────────────────────────────────────────────────────────
-interface VoiceUploadListItem {
-  id: string;
-  fileName: string;
-  sizeBytes: number;
-  mimeType: string;
-  createdAt: string;
-  jobStatus: string | null;
-  jobId: string | null;
-  transcript: string | null;
-  feedbackId: string | null;
-  feedbackTitle: string | null;
-  error: string | null;
-  intelligenceStatus: string | null;
-  summary: string | null;
-  sentiment: number | null;
-  confidenceScore: number | null;
-  keyTopics: string[];
-  linkedThemeId: string | null;
-}
-
 function UploadRow({ item, orgSlug }: { item: VoiceUploadListItem; orgSlug: string }) {
   const [expanded, setExpanded] = useState(false);
   const { data: detail, isLoading } = useVoiceUploadDetail(orgSlug, item.id, expanded);
   const router = useRouter();
   const r = appRoutes(orgSlug);
+  const { mutate: reprocess, isPending: isReprocessing } = useVoiceReprocess(orgSlug);
 
-  // Determine overall processing state for the badge
   const overallStatus = (() => {
     if (item.intelligenceStatus === 'COMPLETED') return 'INTELLIGENCE_DONE';
-    if (item.intelligenceStatus === 'RUNNING' || item.intelligenceStatus === 'QUEUED') return 'EXTRACTING';
+    if (item.intelligenceStatus === 'RUNNING' || item.intelligenceStatus === 'QUEUED' || item.intelligenceStatus === 'PROCESSING') return 'EXTRACTING';
     if (item.jobStatus === 'COMPLETED') return 'TRANSCRIBED';
     return item.jobStatus;
   })();
@@ -260,6 +291,8 @@ function UploadRow({ item, orgSlug }: { item: VoiceUploadListItem; orgSlug: stri
     TRANSCRIBED: 'Transcribed',
   };
 
+  const displayTitle = item.label ?? item.feedbackTitle ?? item.fileName;
+
   return (
     <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: '0.75rem', overflow: 'hidden', marginBottom: '0.75rem', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
       {/* Row header */}
@@ -267,17 +300,26 @@ function UploadRow({ item, orgSlug }: { item: VoiceUploadListItem; orgSlug: stri
         onClick={() => setExpanded(e => !e)}
         style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem 1.25rem', cursor: 'pointer' }}
       >
+        {/* Icon */}
         <div style={{ width: 40, height: 40, borderRadius: '0.5rem', background: '#EEF2FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.purple} strokeWidth="2">
             <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
           </svg>
         </div>
+
+        {/* Title + meta */}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 600, color: C.navy, fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {item.feedbackTitle ?? item.fileName}
+            {displayTitle}
           </div>
           <div style={{ fontSize: '0.78rem', color: C.muted, marginTop: '0.15rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
             <span>{formatBytes(item.sizeBytes)}</span>
+            {item.durationSeconds && (
+              <>
+                <span>·</span>
+                <span>{formatDuration(item.durationSeconds)}</span>
+              </>
+            )}
             <span>·</span>
             <span>{new Date(item.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
             {item.sentiment !== null && (
@@ -288,20 +330,67 @@ function UploadRow({ item, orgSlug }: { item: VoiceUploadListItem; orgSlug: stri
                 </span>
               </>
             )}
+            {/* Customer badge */}
+            {item.customer && (
+              <span style={{ background: '#EFF6FF', color: '#1E40AF', padding: '0.1rem 0.45rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 600, border: '1px solid #BFDBFE' }}>
+                {item.customer.companyName ?? item.customer.name}
+                {item.customer.arrValue ? ` · ${formatARR(item.customer.arrValue)}` : ''}
+              </span>
+            )}
+            {/* Deal badge */}
+            {item.deal && (
+              <span style={{ background: '#F0FDF4', color: '#166534', padding: '0.1rem 0.45rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 600, border: '1px solid #BBF7D0' }}>
+                {item.deal.title}
+              </span>
+            )}
+            {/* Urgency badge */}
+            {item.urgencySignal !== null && item.urgencySignal !== undefined && item.urgencySignal >= 60 && (
+              <span style={{ background: '#FFF7ED', color: C.orange, padding: '0.1rem 0.45rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 700, border: `1px solid ${C.orange}44` }}>
+                ⚡ Urgent {item.urgencySignal}
+              </span>
+            )}
+            {/* Churn badge */}
+            {item.churnSignal !== null && item.churnSignal !== undefined && item.churnSignal >= 50 && (
+              <span style={{ background: '#FFF5F5', color: C.red, padding: '0.1rem 0.45rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 700, border: `1px solid ${C.red}44` }}>
+                ⚠ Churn {item.churnSignal}
+              </span>
+            )}
             {item.keyTopics?.slice(0, 2).map(t => (
               <span key={t} style={{ background: C.teal + '18', color: C.teal, padding: '0.1rem 0.45rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 600 }}>{t}</span>
             ))}
           </div>
         </div>
-        <StatusBadge status={overallStatus} label={overallStatus ? badgeLabel[overallStatus] : undefined} />
-        {item.feedbackId && (
+
+        {/* Action buttons */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+          <StatusBadge status={overallStatus} label={overallStatus ? badgeLabel[overallStatus] : undefined} />
+          {/* Reprocess button for failed uploads */}
+          {(item.jobStatus === 'FAILED' || item.intelligenceStatus === 'FAILED') && (
+            <button
+              onClick={() => reprocess(item.id)}
+              disabled={isReprocessing}
+              style={{ padding: '0.3rem 0.75rem', borderRadius: '0.5rem', border: `1px solid ${C.orange}`, background: 'transparent', color: C.orange, fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer' }}
+            >
+              {isReprocessing ? '…' : '↻ Retry'}
+            </button>
+          )}
+          {/* View detail page */}
           <button
-            onClick={e => { e.stopPropagation(); router.push(r.inboxItem(item.feedbackId!)); }}
-            style={{ padding: '0.3rem 0.75rem', borderRadius: '0.5rem', border: `1px solid ${C.teal}`, background: 'transparent', color: C.teal, fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}
+            onClick={() => router.push(`/${orgSlug}/app/voice/${item.id}`)}
+            style={{ padding: '0.3rem 0.75rem', borderRadius: '0.5rem', border: `1px solid ${C.teal}`, background: 'transparent', color: C.teal, fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer' }}
           >
-            View Feedback →
+            Detail →
           </button>
-        )}
+          {item.feedbackId && (
+            <button
+              onClick={() => router.push(r.inboxItem(item.feedbackId!))}
+              style={{ padding: '0.3rem 0.75rem', borderRadius: '0.5rem', border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer' }}
+            >
+              Feedback →
+            </button>
+          )}
+        </div>
+
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="2" style={{ transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', flexShrink: 0 }}>
           <polyline points="6 9 12 15 18 9" />
         </svg>
@@ -316,11 +405,27 @@ function UploadRow({ item, orgSlug }: { item: VoiceUploadListItem; orgSlug: stri
             </div>
           ) : detail ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-
-              {/* Error */}
               {detail.error && (
                 <div style={{ background: '#FFF5F5', border: '1px solid #FEB2B2', borderRadius: '0.5rem', padding: '0.75rem 1rem', fontSize: '0.875rem', color: C.red }}>
                   <strong>Error:</strong> {detail.error}
+                </div>
+              )}
+
+              {/* Signal bars */}
+              {(detail.urgencySignal !== null || detail.churnSignal !== null) && (
+                <div>
+                  <SectionLabel>CIQ Signal Intensity</SectionLabel>
+                  <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: '0.5rem', padding: '0.875rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <SignalBar value={detail.urgencySignal} color={urgencyColor(detail.urgencySignal)} label="Urgency" />
+                    <SignalBar value={detail.churnSignal} color={C.red} label="Churn Risk" />
+                    {detail.sentiment !== null && (
+                      <SignalBar
+                        value={detail.sentiment !== null ? Math.round(Math.abs(detail.sentiment) * 100) : null}
+                        color={sentimentLabel(detail.sentiment).color}
+                        label="Sentiment"
+                      />
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -330,7 +435,9 @@ function UploadRow({ item, orgSlug }: { item: VoiceUploadListItem; orgSlug: stri
                 <IntelligencePanel
                   intelligence={detail.intelligence ?? null}
                   intelligenceStatus={detail.intelligenceStatus ?? null}
-                  linkedThemeTitle={detail.intelligence?.linkedThemeId ? undefined : null}
+                  urgencySignal={detail.urgencySignal}
+                  churnSignal={detail.churnSignal}
+                  linkedThemeTitle={null}
                   orgSlug={orgSlug}
                 />
               </div>
@@ -356,7 +463,7 @@ function UploadRow({ item, orgSlug }: { item: VoiceUploadListItem; orgSlug: stri
                         <div style={{ fontSize: '0.8rem', color: C.muted, marginTop: '0.25rem', lineHeight: 1.55 }}>{detail.feedback.summary}</div>
                       )}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
-                        {detail.feedback.themes?.map((t: { id: string; title: string }) => (
+                        {detail.feedback.themes?.map((t) => (
                           <TagPill key={t.id} text={t.title} color={C.purple} />
                         ))}
                         {detail.feedback.sentiment !== null && detail.feedback.sentiment !== undefined && (
@@ -376,8 +483,7 @@ function UploadRow({ item, orgSlug }: { item: VoiceUploadListItem; orgSlug: stri
                 </div>
               )}
 
-              {/* Still transcribing */}
-              {(detail.jobStatus === 'QUEUED' || detail.jobStatus === 'RUNNING') && !detail.transcript && (
+              {(detail.jobStatus === 'QUEUED' || detail.jobStatus === 'RUNNING' || detail.jobStatus === 'PROCESSING') && !detail.transcript && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: C.muted, fontSize: '0.875rem' }}>
                   <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: '#CCE5FF', animation: 'pulse 1.5s infinite' }} />
                   Transcription in progress — this may take a minute.
@@ -395,7 +501,7 @@ function UploadRow({ item, orgSlug }: { item: VoiceUploadListItem; orgSlug: stri
 const ALLOWED_TYPES = ['audio/mpeg','audio/mp3','audio/wav','audio/x-wav','audio/wave','audio/m4a','audio/x-m4a','audio/mp4','audio/ogg','audio/webm','audio/flac'];
 const MAX_SIZE_BYTES = 100 * 1024 * 1024;
 
-function UploadZone({ workspaceId, orgSlug }: { workspaceId: string; orgSlug: string }) {
+function UploadZone({ orgSlug }: { orgSlug: string }) {
   const [dragOver, setDragOver] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [label, setLabel] = useState('');
@@ -403,7 +509,7 @@ function UploadZone({ workspaceId, orgSlug }: { workspaceId: string; orgSlug: st
   const [progress, setProgress] = useState(0);
   const [errorMsg, setErrorMsg] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { upload } = useVoiceUpload(workspaceId);
+  const { upload } = useVoiceUpload(orgSlug);
 
   const handleFile = useCallback((f: File) => {
     if (!ALLOWED_TYPES.includes(f.type)) { setErrorMsg(`Unsupported type: ${f.type}`); return; }
@@ -420,7 +526,7 @@ function UploadZone({ workspaceId, orgSlug }: { workspaceId: string; orgSlug: st
     if (!file) return;
     setUploadState('uploading'); setProgress(0); setErrorMsg('');
     try {
-      await upload(file, label || undefined, (p) => setProgress(p));
+      await upload(file, { label: label || undefined }, (p) => setProgress(p));
       setUploadState('finalizing');
       await new Promise(r => setTimeout(r, 800));
       setUploadState('done'); setFile(null); setLabel(''); setProgress(0);
@@ -466,11 +572,13 @@ function UploadZone({ workspaceId, orgSlug }: { workspaceId: string; orgSlug: st
           </div>
         )}
       </div>
+
       {errorMsg && (
         <div style={{ marginTop: '0.75rem', padding: '0.75rem 1rem', background: '#FFF5F5', border: '1px solid #FEB2B2', borderRadius: '0.5rem', color: C.red, fontSize: '0.875rem' }}>
           {errorMsg}
         </div>
       )}
+
       {file && uploadState === 'idle' && (
         <div style={{ marginTop: '1rem' }}>
           <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: C.navy, marginBottom: '0.35rem' }}>Label (optional)</label>
@@ -486,6 +594,7 @@ function UploadZone({ workspaceId, orgSlug }: { workspaceId: string; orgSlug: st
           </div>
         </div>
       )}
+
       {(uploadState === 'uploading' || uploadState === 'finalizing') && (
         <div style={{ marginTop: '1rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: C.muted, marginBottom: '0.35rem' }}>
@@ -497,14 +606,16 @@ function UploadZone({ workspaceId, orgSlug }: { workspaceId: string; orgSlug: st
           </div>
         </div>
       )}
+
       {uploadState === 'done' && (
         <div style={{ marginTop: '0.75rem', padding: '0.875rem 1rem', background: '#D4EDDA', border: '1px solid #C3E6CB', borderRadius: '0.5rem', color: '#155724', fontSize: '0.875rem', display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0, marginTop: 2 }}><polyline points="20 6 9 17 4 12" /></svg>
           <div>
-            <strong>Upload complete.</strong> Transcription has been queued. Once finished, the AI will automatically extract pain points, feature requests, and sentiment — and attempt to link the feedback to an existing theme.
+            <strong>Upload complete.</strong> Transcription has been queued. Once finished, the AI will automatically extract pain points, feature requests, urgency signals, and sentiment — and attempt to link the feedback to an existing theme.
           </div>
         </div>
       )}
+
       {file && uploadState === 'idle' && (
         <div style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem' }}>
           <button
@@ -532,7 +643,7 @@ function VoicePageInner() {
   const { role } = useCurrentMemberRole();
   const canUpload = role === WorkspaceRole.ADMIN || role === WorkspaceRole.EDITOR;
   const { data, isLoading, isError, refetch } = useVoiceUploads(orgSlug);
-  const uploads: VoiceUploadListItem[] = (data?.data ?? []) as VoiceUploadListItem[];
+  const uploads: VoiceUploadListItem[] = data?.data ?? [];
 
   return (
     <div>
@@ -541,7 +652,7 @@ function VoicePageInner() {
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: C.navy, margin: 0 }}>Voice Feedback</h1>
           <p style={{ color: C.muted, marginTop: '0.35rem', fontSize: '0.9rem', maxWidth: 560 }}>
-            Upload audio recordings to automatically transcribe them and extract structured product intelligence — pain points, feature requests, sentiment, and theme suggestions.
+            Upload audio recordings to automatically transcribe them and extract structured product intelligence — pain points, feature requests, urgency signals, and theme suggestions.
           </p>
         </div>
         <button
@@ -558,7 +669,7 @@ function VoicePageInner() {
           <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
         </svg>
         <div style={{ fontSize: '0.85rem', color: C.navy, lineHeight: 1.6 }}>
-          <strong>How it works:</strong> Upload an audio file → Whisper transcribes it → GPT-4.1-mini extracts pain points, feature requests, sentiment, and a call summary → the feedback is automatically linked to the closest matching theme in your workspace.
+          <strong>How it works:</strong> Upload an audio file → Whisper transcribes it → GPT-4.1-mini extracts pain points, feature requests, urgency &amp; churn signals, and a call summary → the feedback is automatically linked to the closest matching theme and CIQ scores are updated.
         </div>
       </div>
 
@@ -566,7 +677,7 @@ function VoicePageInner() {
       {canUpload && (
         <section style={{ marginBottom: '2rem' }}>
           <SectionLabel>New Upload</SectionLabel>
-          <UploadZone workspaceId={orgSlug} orgSlug={orgSlug} />
+          <UploadZone orgSlug={orgSlug} />
         </section>
       )}
 

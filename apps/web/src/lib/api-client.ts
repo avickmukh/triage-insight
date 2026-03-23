@@ -648,7 +648,7 @@ const apiClient = {
      */
     finalize: (
       workspaceId: string,
-      data: { key: string; bucket: string; fileName: string; mimeType: string; sizeBytes: number; label?: string }
+      data: { s3Key: string; s3Bucket?: string; fileName: string; mimeType: string; sizeBytes: number; label?: string; customerId?: string; dealId?: string }
     ): Promise<VoiceFinalizeResponse> =>
       api.post(`/workspaces/${workspaceId}/voice/finalize`, data).then(handleResponse),
     /**
@@ -666,6 +666,24 @@ const apiClient = {
      */
     getById: (workspaceId: string, uploadId: string): Promise<VoiceUploadDetail> =>
       api.get(`/workspaces/${workspaceId}/voice/${uploadId}`).then(handleResponse),
+    /**
+     * POST /workspaces/:id/voice/:uploadId/reprocess
+     * Re-enqueues the transcription pipeline for an existing upload.
+     */
+    reprocess: (workspaceId: string, uploadId: string): Promise<VoiceFinalizeResponse> =>
+      api.post(`/workspaces/${workspaceId}/voice/${uploadId}/reprocess`).then(handleResponse),
+    /**
+     * POST /workspaces/:id/voice/:uploadId/link-theme
+     * Manually links the voice upload's feedback to a theme.
+     */
+    linkTheme: (workspaceId: string, uploadId: string, themeId: string): Promise<{ uploadAssetId: string; themeId: string; feedbackId: string | null }> =>
+      api.post(`/workspaces/${workspaceId}/voice/${uploadId}/link-theme`, { themeId }).then(handleResponse),
+    /**
+     * POST /workspaces/:id/voice/:uploadId/link-customer
+     * Associates the voice upload with a customer record.
+     */
+    linkCustomer: (workspaceId: string, uploadId: string, customerId: string): Promise<{ uploadAssetId: string; customerId: string; feedbackId: string | null }> =>
+      api.post(`/workspaces/${workspaceId}/voice/${uploadId}/link-customer`, { customerId }).then(handleResponse),
   },
 
   themeRevenue: {

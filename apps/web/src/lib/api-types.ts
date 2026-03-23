@@ -1042,7 +1042,7 @@ export interface UpdateDealPayload extends Partial<CreateDealPayload> {}
 
 // ─── Voice / Audio Upload ─────────────────────────────────────────────────────
 
-export type VoiceJobStatus = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+export type VoiceJobStatus = 'QUEUED' | 'RUNNING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
 
 export interface VoiceIntelligenceOutput {
   summary: string | null;
@@ -1052,16 +1052,23 @@ export interface VoiceIntelligenceOutput {
   sentiment: number | null;
   confidenceScore: number | null;
   linkedThemeId: string | null;
+  /** Urgency signal score 0-100 extracted by AI */
+  urgencySignal?: number | null;
+  /** Churn risk signal score 0-100 extracted by AI */
+  churnSignal?: number | null;
 }
-
 export interface VoiceUploadListItem {
   id: string;
   workspaceId: string;
   fileName: string;
+  /** Human-readable label / title for the recording */
+  label: string | null;
   s3Key: string;
   s3Bucket: string;
   mimeType: string;
   sizeBytes: number;
+  /** Duration of the audio in seconds */
+  durationSeconds: number | null;
   createdAt: string;
   jobStatus: VoiceJobStatus | null;
   jobId: string | null;
@@ -1074,8 +1081,16 @@ export interface VoiceUploadListItem {
   summary: string | null;
   sentiment: number | null;
   confidenceScore: number | null;
+  /** Urgency signal score 0-100 extracted by AI */
+  urgencySignal: number | null;
+  /** Churn risk signal score 0-100 extracted by AI */
+  churnSignal: number | null;
   keyTopics: string[];
   linkedThemeId: string | null;
+  /** Linked customer (if any) */
+  customer: { id: string; name: string; companyName: string | null; arrValue: number | null; churnRisk: number | null } | null;
+  /** Linked deal (if any) */
+  deal: { id: string; title: string; stage: string; annualValue: number } | null;
 }
 
 export interface VoiceUploadDetail extends VoiceUploadListItem {
@@ -1089,7 +1104,7 @@ export interface VoiceUploadDetail extends VoiceUploadListItem {
     sentiment: number | null;
     impactScore: number | null;
     createdAt: string;
-    themes: Array<{ id: string; title: string; status: string }>;
+    themes: Array<{ id: string; title: string; status: string; priorityScore: number | null }>;
   } | null;
   intelligence: VoiceIntelligenceOutput | null;
 }

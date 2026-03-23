@@ -29,6 +29,16 @@ export interface VoiceIntelligenceResult {
   confidenceScore: number;
   /** One-sentence title suitable for use as the Feedback.title. */
   title: string;
+  /**
+   * Urgency signal in [0, 1].
+   * 0 = no urgency, 1 = extremely urgent / time-sensitive request or complaint.
+   */
+  urgencySignal: number;
+  /**
+   * Whether the transcript contains churn risk indicators
+   * (e.g. "thinking of cancelling", "switching to competitor", "disappointed").
+   */
+  churnSignal: boolean;
 }
 
 @Injectable()
@@ -64,7 +74,9 @@ Respond ONLY with a valid JSON object matching this exact schema:
   "featureRequests": ["<feature request 1>", "<feature request 2>"],
   "keyTopics": ["<topic 1>", "<topic 2>"],
   "sentiment": <float between -1.0 and 1.0>,
-  "confidenceScore": <float between 0.0 and 1.0>
+  "confidenceScore": <float between 0.0 and 1.0>,
+  "urgencySignal": <float between 0.0 and 1.0>,
+  "churnSignal": <true or false>
 }
 
 Rules:
@@ -73,6 +85,8 @@ Rules:
 - keyTopics: high-level product areas or themes (max 5)
 - sentiment: -1 = very negative, 0 = neutral, +1 = very positive
 - confidenceScore: 0 = no actionable signal, 1 = very clear and specific product feedback
+- urgencySignal: 0 = no urgency, 1 = extremely urgent / time-sensitive request or complaint
+- churnSignal: true if the speaker mentions cancellation, switching to a competitor, or strong dissatisfaction that implies leaving
 - Do not invent information not present in the transcript
 - If the transcript is too short or unclear, set confidenceScore below 0.3`;
 
@@ -88,12 +102,12 @@ Rules:
           { role: 'user', content: userPrompt },
         ],
         temperature: 0.1,
-        max_tokens: 800,
+        max_tokens: 900,
         response_format: { type: 'json_object' },
       });
 
       const raw = response.choices[0].message.content?.trim() ?? '{}';
-      const parsed = JSON.parse(raw) as Partial<VoiceIntelligenceResult>;
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
 
       return this.normalizeResult(parsed, transcript, label);
     } catch (err) {
@@ -108,7 +122,7 @@ Rules:
   // ─── Private helpers ────────────────────────────────────────────────────────
 
   private normalizeResult(
-    parsed: Partial<VoiceIntelligenceResult>,
+    parsed: Record<string, unknown>,
     transcript: string,
     label?: string,
   ): VoiceIntelligenceResult {
@@ -134,6 +148,12 @@ Rules:
         0,
         1,
       ),
+      urgencySignal: this.clamp(
+        typeof parsed.urgencySignal === 'number' ? parsed.urgencySignal : 0,
+        0,
+        1,
+      ),
+      churnSignal: typeof parsed.churnSignal === 'boolean' ? parsed.churnSignal : false,
     };
   }
 
@@ -146,6 +166,8 @@ Rules:
       keyTopics: [],
       sentiment: 0,
       confidenceScore: 0.2,
+      urgencySignal: 0,
+      churnSignal: false,
     };
   }
 
