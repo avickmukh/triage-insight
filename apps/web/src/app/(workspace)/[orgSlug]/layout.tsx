@@ -200,6 +200,7 @@ function AuthenticatedShell({
             <NavLink href={r.voice} pathname={pathname}>Voice</NavLink>
             <NavLink href={r.surveys} pathname={pathname}>Surveys</NavLink>
             <NavLink href={r.dashboard} pathname={pathname}>Dashboard</NavLink>
+            <NavLink href={r.reports} pathname={pathname}>Reports</NavLink>
 
             {/* Admin-only separator + links */}
             {isAdmin && (

@@ -1883,3 +1883,89 @@ export interface ExecutiveDashboard {
   refreshedAt:       string;
   cached:            boolean;
 }
+
+// ─── Reporting ────────────────────────────────────────────────────────────────
+
+export interface ThemeTrendPoint {
+  themeId: string;
+  title: string;
+  feedbackCount: number;
+  ciqScore: number | null;
+  revenueScore: number | null;
+  urgencyScore: number | null;
+  priorityScore: number | null;
+  createdAt: string;
+}
+
+export interface ThemeTrendsReport {
+  themes: ThemeTrendPoint[];
+  totalActiveThemes: number;
+  generatedAt: string;
+}
+
+export interface PriorityBucket {
+  label: string;
+  min: number;
+  max: number;
+  count: number;
+  avgCiqScore: number;
+  totalFeedback: number;
+}
+
+export interface PriorityDistributionReport {
+  buckets: PriorityBucket[];
+  totalScored: number;
+  totalUnscored: number;
+  avgCiqScore: number;
+  generatedAt: string;
+}
+
+export interface RevenueImpactTheme {
+  themeId: string;
+  title: string;
+  revenueInfluence: number;
+  revenueScore: number | null;
+  ciqScore: number | null;
+  feedbackCount: number;
+  customerCount: number;
+  dealCount: number;
+  totalDealValue: number;
+}
+
+export interface RevenueImpactReport {
+  topThemes: RevenueImpactTheme[];
+  totalArrInfluenced: number;
+  totalDealValue: number;
+  generatedAt: string;
+}
+
+export interface RoadmapProgressBucket {
+  status: string;
+  count: number;
+  avgPriorityScore: number | null;
+  avgRevenueImpact: number | null;
+  totalSignalCount: number;
+}
+
+export interface RoadmapProgressReport {
+  byStatus: RoadmapProgressBucket[];
+  totalItems: number;
+  shippedCount: number;
+  committedCount: number;
+  shippedFraction: number;
+  generatedAt: string;
+}
+
+export interface FeedbackVolumePoint {
+  date: string;
+  total: number;
+  bySource: Record<string, number>;
+}
+
+export interface FeedbackVolumeReport {
+  series: FeedbackVolumePoint[];
+  totalFeedback: number;
+  avgPerDay: number;
+  topSource: string | null;
+  generatedAt: string;
+}

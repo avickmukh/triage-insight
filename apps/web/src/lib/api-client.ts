@@ -97,6 +97,11 @@ import {
   VoiceSentimentSignal,
   SupportPressureIndicator,
   RoadmapHealthPanel,
+  ThemeTrendsReport,
+  PriorityDistributionReport,
+  RevenueImpactReport,
+  RoadmapProgressReport,
+  FeedbackVolumeReport,
 } from "@/lib/api-types";
 
 const getApiBaseUrl = () => {
@@ -872,6 +877,74 @@ const apiClient = {
       api.get(`/workspaces/${workspaceId}/dashboard/roadmap-health`).then(handleResponse),
     refresh: (workspaceId: string): Promise<{ message: string; workspaceId: string }> =>
       api.post(`/workspaces/${workspaceId}/dashboard/refresh`).then(handleResponse),
+  },
+
+  // ─── Enterprise Reporting ──────────────────────────────────────────────────
+  reports: {
+    getThemeTrends: (
+      workspaceId: string,
+      filter?: { from?: string; to?: string },
+      limit = 20,
+    ): Promise<ThemeTrendsReport> =>
+      api
+        .get(`/workspaces/${workspaceId}/reports/theme-trends`, {
+          params: { from: filter?.from, to: filter?.to, limit },
+        })
+        .then(handleResponse),
+
+    getPriorityDistribution: (
+      workspaceId: string,
+      filter?: { from?: string; to?: string },
+    ): Promise<PriorityDistributionReport> =>
+      api
+        .get(`/workspaces/${workspaceId}/reports/priority-distribution`, {
+          params: { from: filter?.from, to: filter?.to },
+        })
+        .then(handleResponse),
+
+    getRevenueImpact: (
+      workspaceId: string,
+      filter?: { from?: string; to?: string },
+      limit = 10,
+    ): Promise<RevenueImpactReport> =>
+      api
+        .get(`/workspaces/${workspaceId}/reports/revenue-impact`, {
+          params: { from: filter?.from, to: filter?.to, limit },
+        })
+        .then(handleResponse),
+
+    getRoadmapProgress: (
+      workspaceId: string,
+      filter?: { from?: string; to?: string },
+    ): Promise<RoadmapProgressReport> =>
+      api
+        .get(`/workspaces/${workspaceId}/reports/roadmap-progress`, {
+          params: { from: filter?.from, to: filter?.to },
+        })
+        .then(handleResponse),
+
+    getFeedbackVolume: (
+      workspaceId: string,
+      filter?: { from?: string; to?: string },
+    ): Promise<FeedbackVolumeReport> =>
+      api
+        .get(`/workspaces/${workspaceId}/reports/feedback-volume`, {
+          params: { from: filter?.from, to: filter?.to },
+        })
+        .then(handleResponse),
+
+    exportUrl: (
+      workspaceId: string,
+      report: string,
+      format: 'csv' | 'json',
+      filter?: { from?: string; to?: string },
+    ): string => {
+      const base = (api.defaults.baseURL ?? '').replace(/\/$/, '');
+      const params = new URLSearchParams({ format });
+      if (filter?.from) params.set('from', filter.from);
+      if (filter?.to)   params.set('to', filter.to);
+      return `${base}/workspaces/${workspaceId}/reports/export/${report}?${params.toString()}`;
+    },
   },
 };
 
