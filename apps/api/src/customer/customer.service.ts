@@ -408,16 +408,24 @@ export class CustomerService {
 
   async triggerAggregation(workspaceId: string, customerId?: string) {
     if (customerId) {
+      try {
       await this.signalAggregationQueue.add(
         { type: 'AGGREGATE_CUSTOMER', workspaceId, customerId },
         { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
       );
+      } catch (queueErr) {
+        console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+      }
       return { queued: true, scope: 'customer', customerId };
     }
+    try {
     await this.signalAggregationQueue.add(
       { type: 'AGGREGATE_WORKSPACE', workspaceId },
       { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
     );
+    } catch (queueErr) {
+      console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+    }
     return { queued: true, scope: 'workspace' };
   }
 

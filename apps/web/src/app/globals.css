@@ -1,3 +1,50 @@
+/* ─── shadcn/ui CSS Variables (required for all shadcn components) ──────────── */
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 215 50% 15%;
+    --card: 0 0% 100%;
+    --card-foreground: 215 50% 15%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 50% 15%;
+    --primary: 180 67% 38%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 17% 96%;
+    --secondary-foreground: 215 50% 15%;
+    --muted: 210 17% 96%;
+    --muted-foreground: 215 10% 45%;
+    --accent: 180 67% 38%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 6 75% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 13% 91%;
+    --input: 214 13% 91%;
+    --ring: 180 67% 38%;
+    --radius: 0.5rem;
+  }
+  .dark {
+    --background: 215 50% 8%;
+    --foreground: 0 0% 98%;
+    --card: 215 50% 10%;
+    --card-foreground: 0 0% 98%;
+    --popover: 215 50% 10%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 180 67% 45%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 215 40% 18%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 215 40% 18%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 215 40% 18%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 6 62% 50%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 215 40% 18%;
+    --input: 215 40% 18%;
+    --ring: 180 67% 45%;
+  }
+}
+
 /*
  * TriageInsight Landing Page — styles.css
  * Design: "Dark Signal" — Deep Focus Blue hero (#0A2540) → Clean white body

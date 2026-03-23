@@ -43,7 +43,11 @@ export class ThemeService {
 
     // Trigger CIQ scoring if feedback was linked at creation
     if (feedbackIds && feedbackIds.length > 0) {
+      try {
       await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId: theme.id });
+      } catch (queueErr) {
+        console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+      }
     }
 
     return theme;
@@ -131,7 +135,11 @@ export class ThemeService {
     await this.auditService.logAction(workspaceId, userId, AuditLogAction.THEME_UPDATE, { themeId: id, changes: updateThemeDto });
 
     // Re-score theme when its metadata changes (status, title, etc.)
+    try {
     await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId: id });
+    } catch (queueErr) {
+      console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+    }
 
     return updatedTheme;
   }
@@ -212,7 +220,11 @@ export class ThemeService {
     });
 
     // Re-score theme now that a new feedback signal was added
+    try {
     await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId });
+    } catch (queueErr) {
+      console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+    }
 
     return { success: true };
   }
@@ -242,7 +254,11 @@ export class ThemeService {
     });
 
     // Re-score theme after signal removal
+    try {
     await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId });
+    } catch (queueErr) {
+      console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+    }
 
     return { success: true };
   }
@@ -265,7 +281,11 @@ export class ThemeService {
         feedbackIds,
       });
       // Re-score source theme
+      try {
       await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId: sourceThemeId });
+      } catch (queueErr) {
+        console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+      }
     }
 
     if (targetThemeId) {
@@ -278,7 +298,11 @@ export class ThemeService {
         feedbackIds,
       });
       // Re-score target theme
+      try {
       await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId: targetThemeId });
+      } catch (queueErr) {
+        console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+      }
     }
 
     return { success: true };
@@ -322,7 +346,11 @@ export class ThemeService {
     });
 
     // Re-score merged theme
+    try {
     await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId: targetThemeId });
+    } catch (queueErr) {
+      console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+    }
 
     return result;
   }
@@ -366,8 +394,16 @@ export class ThemeService {
     });
 
     // Re-score both themes after split
+    try {
     await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId: sourceThemeId });
+    } catch (queueErr) {
+      console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+    }
+    try {
     await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId: newTheme.id });
+    } catch (queueErr) {
+      console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+    }
 
     return newTheme;
   }
@@ -404,7 +440,11 @@ export class ThemeService {
       });
     }
 
+    try {
     await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId });
+    } catch (queueErr) {
+      console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+    }
     return { success: true, message: 'Customer linked to theme.' };
   }
 
@@ -418,14 +458,22 @@ export class ThemeService {
     if (!signal) throw new NotFoundException('No manual customer link found for this theme');
 
     await this.prisma.customerSignal.delete({ where: { id: signal.id } });
+    try {
     await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId });
+    } catch (queueErr) {
+      console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+    }
     return { success: true, message: 'Customer unlinked from theme.' };
   }
 
   // ─── Reclustering ─────────────────────────────────────────────────────────
 
   async triggerReclustering(workspaceId: string) {
+    try {
     const job = await this.clusteringQueue.add({ workspaceId });
+    } catch (queueErr) {
+      console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+    }
     return { message: 'Theme reclustering job dispatched.', jobId: job.id };
   }
 }

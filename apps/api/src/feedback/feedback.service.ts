@@ -57,15 +57,23 @@ export class FeedbackService {
       },
     });
 
-    // Dispatch async AI analysis job (embedding + duplicate detection + theme clustering)
-    await this.analysisQueue.add({ feedbackId: newFeedback.id });
+    // Dispatch async AI analysis job — wrapped so Redis unavailability doesn't 500
+    try {
+      await this.analysisQueue.add({ feedbackId: newFeedback.id });
+    } catch (e) {
+      console.warn('[FeedbackService] analysisQueue unavailable — skipping', (e as Error).message);
+    }
 
-    // Dispatch CIQ scoring job (feedback-level impact score)
-    await this.ciqQueue.add({
-      type: 'FEEDBACK_SCORED',
-      workspaceId,
-      feedbackId: newFeedback.id,
-    });
+    // Dispatch CIQ scoring job — wrapped so Redis unavailability doesn't 500
+    try {
+      await this.ciqQueue.add({
+        type: 'FEEDBACK_SCORED',
+        workspaceId,
+        feedbackId: newFeedback.id,
+      });
+    } catch (e) {
+      console.warn('[FeedbackService] ciqQueue unavailable — skipping', (e as Error).message);
+    }
 
     return newFeedback;
   }
@@ -184,11 +192,15 @@ export class FeedbackService {
       select: { themeId: true },
     });
     for (const link of themeLinks) {
-      await this.ciqQueue.add({
-        type: 'THEME_SCORED',
-        workspaceId,
-        themeId: link.themeId,
-      });
+      try {
+        await this.ciqQueue.add({
+          type: 'THEME_SCORED',
+          workspaceId,
+          themeId: link.themeId,
+        });
+      } catch (e) {
+        console.warn('[FeedbackService] ciqQueue unavailable — skipping rescore', (e as Error).message);
+      }
     }
   }
 

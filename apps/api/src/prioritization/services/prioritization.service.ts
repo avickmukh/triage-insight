@@ -96,10 +96,14 @@ export class PrioritizationService {
    * Returns immediately with a job reference.
    */
   async enqueueFullRecompute(workspaceId: string, userId: string) {
+    try {
     const job = await this.prioritizationQueue.add(
       { type: 'WORKSPACE_RECOMPUTE', workspaceId, userId },
       { attempts: 3, backoff: { type: 'exponential', delay: 3000 }, removeOnComplete: 50 },
     );
+    } catch (queueErr) {
+      console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+    }
     await this.auditService.logAction(
       workspaceId,
       userId,
@@ -168,10 +172,14 @@ export class PrioritizationService {
    * Enqueue an async CIQ scoring job for a single theme.
    */
   async enqueueThemeRescore(workspaceId: string, themeId: string) {
+    try {
     const job = await this.ciqQueue.add(
       { type: "THEME_SCORED", workspaceId, themeId },
       { attempts: 3, backoff: { type: "exponential", delay: 2000 } },
     );
+    } catch (queueErr) {
+      console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+    }
     return { jobId: job.id, message: "CIQ scoring job enqueued" };
   }
 
