@@ -70,6 +70,12 @@ import {
   VoiceFinalizeResponse,
   VoiceUploadListResponse,
   VoiceUploadDetail,
+  Survey,
+  SurveyListResponse,
+  SurveyResponseListResponse,
+  CreateSurveyPayload,
+  AddQuestionPayload,
+  SubmitSurveyResponsePayload,
 } from "@/lib/api-types";
 
 const getApiBaseUrl = () => {
@@ -637,6 +643,40 @@ const apiClient = {
     /** GET /workspaces/:id/themes/:themeId/revenue-intelligence */
     getByTheme: (workspaceId: string, themeId: string): Promise<ThemeRevenueIntelligence> =>
       api.get(`/workspaces/${workspaceId}/themes/${themeId}/revenue-intelligence`).then(handleResponse),
+  },
+
+  surveys: {
+    list: (workspaceId: string, params?: { status?: string; search?: string; page?: number; limit?: number }): Promise<SurveyListResponse> =>
+      api.get(`/workspaces/${workspaceId}/surveys`, { params }).then(handleResponse),
+    getById: (workspaceId: string, surveyId: string): Promise<Survey> =>
+      api.get(`/workspaces/${workspaceId}/surveys/${surveyId}`).then(handleResponse),
+    create: (workspaceId: string, data: CreateSurveyPayload): Promise<Survey> =>
+      api.post(`/workspaces/${workspaceId}/surveys`, data).then(handleResponse),
+    update: (workspaceId: string, surveyId: string, data: Partial<CreateSurveyPayload>): Promise<Survey> =>
+      api.patch(`/workspaces/${workspaceId}/surveys/${surveyId}`, data).then(handleResponse),
+    publish: (workspaceId: string, surveyId: string): Promise<Survey> =>
+      api.post(`/workspaces/${workspaceId}/surveys/${surveyId}/publish`).then(handleResponse),
+    unpublish: (workspaceId: string, surveyId: string): Promise<Survey> =>
+      api.post(`/workspaces/${workspaceId}/surveys/${surveyId}/unpublish`).then(handleResponse),
+    close: (workspaceId: string, surveyId: string): Promise<Survey> =>
+      api.post(`/workspaces/${workspaceId}/surveys/${surveyId}/close`).then(handleResponse),
+    delete: (workspaceId: string, surveyId: string): Promise<void> =>
+      api.delete(`/workspaces/${workspaceId}/surveys/${surveyId}`).then(handleResponse),
+    addQuestion: (workspaceId: string, surveyId: string, data: AddQuestionPayload): Promise<Survey> =>
+      api.post(`/workspaces/${workspaceId}/surveys/${surveyId}/questions`, data).then(handleResponse),
+    deleteQuestion: (workspaceId: string, surveyId: string, questionId: string): Promise<Survey> =>
+      api.delete(`/workspaces/${workspaceId}/surveys/${surveyId}/questions/${questionId}`).then(handleResponse),
+    getResponses: (workspaceId: string, surveyId: string, params?: { page?: number; limit?: number }): Promise<SurveyResponseListResponse> =>
+      api.get(`/workspaces/${workspaceId}/surveys/${surveyId}/responses`, { params }).then(handleResponse),
+  },
+
+  portalSurveys: {
+    list: (orgSlug: string): Promise<Survey[]> =>
+      api.get(`/portal/${orgSlug}/surveys`).then(handleResponse),
+    getById: (orgSlug: string, surveyId: string): Promise<Survey> =>
+      api.get(`/portal/${orgSlug}/surveys/${surveyId}`).then(handleResponse),
+    submit: (orgSlug: string, surveyId: string, data: SubmitSurveyResponsePayload): Promise<{ thankYouMessage: string | null; redirectUrl: string | null; feedbackId: string | null }> =>
+      api.post(`/portal/${orgSlug}/surveys/${surveyId}/responses`, data).then(handleResponse),
   },
 
   domain: {

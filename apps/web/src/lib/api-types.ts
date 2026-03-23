@@ -1034,3 +1034,116 @@ export interface VoiceFinalizeResponse {
   aiJobLogId: string;
   status: VoiceJobStatus;
 }
+
+// ─── Survey Engine ─────────────────────────────────────────────────────────────
+
+export enum SurveyStatus {
+  DRAFT     = 'DRAFT',
+  PUBLISHED = 'PUBLISHED',
+  CLOSED    = 'CLOSED',
+}
+
+export enum SurveyQuestionType {
+  SHORT_TEXT      = 'SHORT_TEXT',
+  LONG_TEXT       = 'LONG_TEXT',
+  SINGLE_CHOICE   = 'SINGLE_CHOICE',
+  MULTIPLE_CHOICE = 'MULTIPLE_CHOICE',
+  RATING          = 'RATING',
+  NPS             = 'NPS',
+}
+
+export interface SurveyQuestion {
+  id: string;
+  surveyId: string;
+  type: SurveyQuestionType;
+  label: string;
+  placeholder: string | null;
+  required: boolean;
+  order: number;
+  options: string[] | null;
+  ratingMin: number | null;
+  ratingMax: number | null;
+  createdAt: string;
+}
+
+export interface Survey {
+  id: string;
+  workspaceId: string;
+  title: string;
+  description: string | null;
+  status: SurveyStatus;
+  convertToFeedback: boolean;
+  thankYouMessage: string | null;
+  redirectUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+  questions?: SurveyQuestion[];
+  _count?: { questions: number; responses: number };
+}
+
+export interface SurveyAnswer {
+  id: string;
+  responseId: string;
+  questionId: string;
+  textValue: string | null;
+  numericValue: number | null;
+  choiceValues: string[] | null;
+  question?: SurveyQuestion;
+}
+
+export interface SurveyResponse {
+  id: string;
+  surveyId: string;
+  portalUserId: string | null;
+  respondentEmail: string | null;
+  respondentName: string | null;
+  submittedAt: string;
+  feedbackId: string | null;
+  answers: SurveyAnswer[];
+  portalUser?: { id: string; email: string; name: string | null } | null;
+}
+
+export interface SurveyListResponse {
+  data: Survey[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface SurveyResponseListResponse {
+  data: SurveyResponse[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface CreateSurveyPayload {
+  title: string;
+  description?: string;
+  convertToFeedback?: boolean;
+  thankYouMessage?: string;
+  redirectUrl?: string;
+}
+
+export interface AddQuestionPayload {
+  type: SurveyQuestionType;
+  label: string;
+  placeholder?: string;
+  required?: boolean;
+  options?: string[];
+  ratingMin?: number;
+  ratingMax?: number;
+}
+
+export interface SubmitSurveyResponsePayload {
+  respondentEmail?: string;
+  respondentName?: string;
+  answers: Array<{
+    questionId: string;
+    textValue?: string;
+    numericValue?: number;
+    choiceValues?: string[];
+  }>;
+}

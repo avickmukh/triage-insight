@@ -77,6 +77,7 @@ enum FeedbackSourceType {
   SLACK
   CSV_IMPORT
   VOICE
+  SURVEY
   API
 }
 
@@ -334,9 +335,9 @@ model Workspace {
   churnScores           CustomerChurnScore[]
   portalUsers           PortalUser[]
   invites               WorkspaceInvite[]
-  customerSignals       CustomerSignal[]
+   customerSignals       CustomerSignal[]
+  surveys               Survey[]
 }
-
 model WorkspaceMember {
   id          String        @id @default(uuid())
   role        WorkspaceRole @default(VIEWER)
@@ -462,6 +463,7 @@ model PortalUser {
   feedbacks        Feedback[]
   feedbackVotes   FeedbackVote[]
   feedbackComments FeedbackComment[]
+  surveyResponses  SurveyResponse[]
 
   @@index([workspaceId])
   @@index([customerId])
@@ -1013,4 +1015,103 @@ model Plan {
   isDefault           Boolean     @default(false)
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
+}
+
+// ─── Survey Engine ─────────────────────────────────────────────────────────────
+
+enum SurveyStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+}
+
+enum SurveyQuestionType {
+  SHORT_TEXT
+  LONG_TEXT
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  RATING
+  NPS
+}
+
+/// A workspace-scoped survey that can be published to the public portal.
+model Survey {
+  id                String        @id @default(uuid())
+  workspaceId       String
+  title             String
+  description       String?
+  status            SurveyStatus  @default(DRAFT)
+  isPublic          Boolean       @default(false)
+  convertToFeedback Boolean       @default(true)
+  thankYouMessage   String?
+  redirectUrl       String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  workspace         Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  questions         SurveyQuestion[]
+  responses         SurveyResponse[]
+
+  @@index([workspaceId])
+  @@index([status])
+}
+
+/// A single question within a survey.
+model SurveyQuestion {
+  id          String             @id @default(uuid())
+  surveyId    String
+  workspaceId String
+  type        SurveyQuestionType
+  label       String
+  placeholder String?
+  required    Boolean            @default(false)
+  order       Int                @default(1)
+  options     Json?
+  ratingMin   Int?               @default(1)
+  ratingMax   Int?               @default(5)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  survey      Survey             @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  answers     SurveyAnswer[]
+
+  @@index([surveyId])
+  @@index([workspaceId])
+}
+
+/// A single survey submission.
+model SurveyResponse {
+  id              String    @id @default(uuid())
+  surveyId        String
+  workspaceId     String
+  portalUserId    String?
+  respondentEmail String?
+  respondentName  String?
+  feedbackId      String?
+  metadata        Json?
+  submittedAt     DateTime  @default(now())
+
+  survey          Survey     @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  portalUser      PortalUser? @relation(fields: [portalUserId], references: [id], onDelete: SetNull)
+  answers         SurveyAnswer[]
+
+  @@index([surveyId])
+  @@index([workspaceId])
+  @@index([portalUserId])
+}
+
+/// A single answer within a survey response.
+model SurveyAnswer {
+  id           String         @id @default(uuid())
+  responseId   String
+  questionId   String
+  textValue    String?
+  numericValue Float?
+  choiceValues Json?
+
+  response     SurveyResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  question     SurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([responseId])
+  @@index([questionId])
 }

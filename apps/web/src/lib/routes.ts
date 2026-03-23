@@ -35,6 +35,8 @@ export const appRoutes = (slug: string) => ({
   roadmap:    `/${slug}/app/roadmap`,
   roadmapItem: (id: string) => `/${slug}/app/roadmap/${id}`,
   voice:      `/${slug}/app/voice`,
+  surveys:    `/${slug}/app/surveys`,
+  surveyItem: (id: string) => `/${slug}/app/surveys/${id}`,
   digest:     `/${slug}/app/digest`,
   support: {
     tickets: `/${slug}/app/support/tickets`,

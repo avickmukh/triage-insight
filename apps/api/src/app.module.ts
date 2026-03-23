@@ -20,6 +20,8 @@ import { BillingModule } from './billing/billing.module';
 import { PlatformModule } from './platform/platform.module';
 import { CustomerModule } from './customer/customer.module';
 import { DealModule } from './deal/deal.module';
+import { VoiceModule } from './voice/voice.module';
+import { SurveyModule } from './survey/survey.module';
 import { validationSchema } from './config/validation';
 
 @Module({
@@ -47,6 +49,8 @@ import { validationSchema } from './config/validation';
     PlatformModule,
     CustomerModule,
     DealModule,
+    VoiceModule,
+    SurveyModule,
   ],
 })
 export class AppModule {}
