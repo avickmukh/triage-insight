@@ -216,12 +216,20 @@ enum DigestFrequency {
 enum AiJobType {
   FEEDBACK_SUMMARY
   FEEDBACK_DUPLICATE_DETECTION
+  FEEDBACK_EMBEDDING
   THEME_CLUSTERING
+  CIQ_SCORING_FEEDBACK
+  CIQ_SCORING_THEME
+  CIQ_SCORING_ROADMAP
+  CIQ_SCORING_DEAL
   VOICE_TRANSCRIPTION
   VOICE_EXTRACTION
   SUPPORT_CLUSTERING
+  SUPPORT_SPIKE_DETECTION
   SUPPORT_CORRELATION
+  SURVEY_INTELLIGENCE
   CHURN_SCORING
+  CUSTOMER_SIGNAL_AGGREGATION
 }
 
 enum AiJobStatus {
@@ -229,6 +237,7 @@ enum AiJobStatus {
   RUNNING
   COMPLETED
   FAILED
+  DEAD_LETTERED
 }
 
 enum PublicPortalVisibility {
@@ -1011,6 +1020,11 @@ model AiJobLog {
   input             Json?
   output            Json?
   error             String?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  durationMs        Int?
+  attempts          Int         @default(0)
+  dedupeKey         String?
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
 
@@ -1019,6 +1033,7 @@ model AiJobLog {
   @@index([workspaceId])
   @@index([jobType])
   @@index([status])
+  @@index([dedupeKey])
 }
 
 model AuditLog {

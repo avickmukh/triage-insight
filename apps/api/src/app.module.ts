@@ -24,6 +24,7 @@ import { VoiceModule } from './voice/voice.module';
 import { SurveyModule } from './survey/survey.module';
 import { CiqModule } from './ciq/ciq.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { CommonModule } from './common/common.module';
 import { validationSchema } from './config/validation';
 
 @Module({
@@ -55,6 +56,7 @@ import { validationSchema } from './config/validation';
     SurveyModule,
     CiqModule,
     DashboardModule,
+    CommonModule,
   ],
 })
 export class AppModule {}
