@@ -96,11 +96,13 @@ export class PrioritizationService {
    * Returns immediately with a job reference.
    */
   async enqueueFullRecompute(workspaceId: string, userId: string) {
+    let jobId: string | undefined;
     try {
-    const job = await this.prioritizationQueue.add(
-      { type: 'WORKSPACE_RECOMPUTE', workspaceId, userId },
-      { attempts: 3, backoff: { type: 'exponential', delay: 3000 }, removeOnComplete: 50 },
-    );
+      const job = await this.prioritizationQueue.add(
+        { type: 'WORKSPACE_RECOMPUTE', workspaceId, userId },
+        { attempts: 3, backoff: { type: 'exponential', delay: 3000 }, removeOnComplete: 50 },
+      );
+      jobId = String(job.id);
     } catch (queueErr) {
       console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
     }
@@ -108,9 +110,9 @@ export class PrioritizationService {
       workspaceId,
       userId,
       AuditLogAction.PRIORITIZATION_SETTINGS_UPDATE,
-      { action: 'full_recompute_enqueued', jobId: job.id },
+      { action: 'full_recompute_enqueued', jobId },
     );
-    return { jobId: job.id, message: 'Full prioritization recompute enqueued' };
+    return { jobId, message: 'Full prioritization recompute enqueued' };
   }
 
   /**
@@ -172,15 +174,17 @@ export class PrioritizationService {
    * Enqueue an async CIQ scoring job for a single theme.
    */
   async enqueueThemeRescore(workspaceId: string, themeId: string) {
+    let jobId: string | undefined;
     try {
-    const job = await this.ciqQueue.add(
-      { type: "THEME_SCORED", workspaceId, themeId },
-      { attempts: 3, backoff: { type: "exponential", delay: 2000 } },
-    );
+      const job = await this.ciqQueue.add(
+        { type: "THEME_SCORED", workspaceId, themeId },
+        { attempts: 3, backoff: { type: "exponential", delay: 2000 } },
+      );
+      jobId = String(job.id);
     } catch (queueErr) {
       console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
     }
-    return { jobId: job.id, message: "CIQ scoring job enqueued" };
+    return { jobId, message: "CIQ scoring job enqueued" };
   }
 
   /**

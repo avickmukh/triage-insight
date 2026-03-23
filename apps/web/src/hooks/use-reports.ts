@@ -42,7 +42,7 @@ export function useThemeTrendsReport(filter?: ReportDateFilter, limit = 20) {
     queryFn:   () => apiClient.reports.getThemeTrends(workspaceId, filter, limit),
     enabled:   !!workspaceId,
     staleTime: 5 * 60 * 1000,
-    retry:     2,
+    // retry handled globally in providers.tsx
   });
 }
 
@@ -56,7 +56,7 @@ export function usePriorityDistributionReport(filter?: ReportDateFilter) {
     queryFn:   () => apiClient.reports.getPriorityDistribution(workspaceId, filter),
     enabled:   !!workspaceId,
     staleTime: 5 * 60 * 1000,
-    retry:     2,
+    // retry handled globally in providers.tsx
   });
 }
 
@@ -70,7 +70,7 @@ export function useRevenueImpactReport(filter?: ReportDateFilter, limit = 10) {
     queryFn:   () => apiClient.reports.getRevenueImpact(workspaceId, filter, limit),
     enabled:   !!workspaceId,
     staleTime: 5 * 60 * 1000,
-    retry:     2,
+    // retry handled globally in providers.tsx
   });
 }
 
@@ -84,7 +84,7 @@ export function useRoadmapProgressReport(filter?: ReportDateFilter) {
     queryFn:   () => apiClient.reports.getRoadmapProgress(workspaceId, filter),
     enabled:   !!workspaceId,
     staleTime: 5 * 60 * 1000,
-    retry:     2,
+    // retry handled globally in providers.tsx
   });
 }
 
@@ -98,6 +98,6 @@ export function useFeedbackVolumeReport(filter?: ReportDateFilter) {
     queryFn:   () => apiClient.reports.getFeedbackVolume(workspaceId, filter),
     enabled:   !!workspaceId,
     staleTime: 5 * 60 * 1000,
-    retry:     2,
+    // retry handled globally in providers.tsx
   });
 }

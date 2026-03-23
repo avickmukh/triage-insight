@@ -48,7 +48,7 @@ export class VoiceIntelligenceService {
 
   constructor(private readonly configService: ConfigService) {
     this.openai = new OpenAI({
-      apiKey: this.configService.getOrThrow<string>('OPENAI_API_KEY'),
+      apiKey: this.configService.get<string>('OPENAI_API_KEY', ''),
     });
   }
 
