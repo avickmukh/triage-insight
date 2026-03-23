@@ -113,6 +113,8 @@ function AuthenticatedShell({
     <div
       style={{
         minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
         background: '#F8F9FA',
         fontFamily: "Inter, 'Helvetica Neue', Arial, sans-serif",
         color: '#0A2540',
@@ -239,9 +241,12 @@ function AuthenticatedShell({
       {/* ── Main Content ────────────────────────────────────────────────── */}
       <main
         style={{
+          flex: 1,
+          width: '100%',
           maxWidth: 1200,
           margin: '0 auto',
           padding: '2rem 1.5rem',
+          boxSizing: 'border-box',
         }}
       >
         {children}
