@@ -19,7 +19,16 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import apiClient from "@/lib/api-client";
-import { CiqScoreOutput, PrioritizationSettings, Theme, ThemeRevenueIntelligence } from "@/lib/api-types";
+import {
+  CiqScoreOutput,
+  PrioritizationSettings,
+  Theme,
+  ThemeRevenueIntelligence,
+  FeatureRankingItem,
+  ThemeRankingItem,
+  CustomerRankingItem,
+  StrategicSignalsOutput,
+} from "@/lib/api-types";
 import { useWorkspace } from "./use-workspace";
 
 const CIQ_KEY = "ciq";
@@ -259,5 +268,82 @@ export const useUnlinkCustomerFromTheme = () => {
       queryClient.invalidateQueries({ queryKey: [REVENUE_KEY, workspaceId, themeId] });
       queryClient.invalidateQueries({ queryKey: [CIQ_KEY, workspaceId, "theme", themeId] });
     },
+  });
+};
+
+// ─── CIQ Engine Hooks (Full Scoring Engine) ───────────────────────────────────
+
+const CIQ_ENGINE_KEY = "ciq-engine";
+
+/**
+ * Fetch feedback items ranked by CIQ score (6-dimension composite).
+ * Calls GET /workspaces/:id/ciq/feature-ranking
+ */
+export const useCiqFeatureRanking = (limit = 50) => {
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id;
+  return useQuery<FeatureRankingItem[], Error>({
+    queryKey: [CIQ_ENGINE_KEY, workspaceId, "feature-ranking", limit],
+    queryFn: () => {
+      if (!workspaceId) throw new Error("Workspace ID is not available");
+      return apiClient.ciqEngine.getFeatureRanking(workspaceId, limit);
+    },
+    enabled: !!workspaceId,
+    staleTime: 2 * 60 * 1000,
+  });
+};
+
+/**
+ * Fetch ACTIVE themes ranked by CIQ score (voice + survey + support enriched).
+ * Calls GET /workspaces/:id/ciq/theme-ranking
+ */
+export const useCiqThemeRanking = (limit = 50) => {
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id;
+  return useQuery<ThemeRankingItem[], Error>({
+    queryKey: [CIQ_ENGINE_KEY, workspaceId, "theme-ranking", limit],
+    queryFn: () => {
+      if (!workspaceId) throw new Error("Workspace ID is not available");
+      return apiClient.ciqEngine.getThemeRanking(workspaceId, limit);
+    },
+    enabled: !!workspaceId,
+    staleTime: 2 * 60 * 1000,
+  });
+};
+
+/**
+ * Fetch customers ranked by CIQ influence score (ARR × segment weighted).
+ * Calls GET /workspaces/:id/ciq/customer-ranking
+ */
+export const useCiqCustomerRanking = (limit = 50) => {
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id;
+  return useQuery<CustomerRankingItem[], Error>({
+    queryKey: [CIQ_ENGINE_KEY, workspaceId, "customer-ranking", limit],
+    queryFn: () => {
+      if (!workspaceId) throw new Error("Workspace ID is not available");
+      return apiClient.ciqEngine.getCustomerRanking(workspaceId, limit);
+    },
+    enabled: !!workspaceId,
+    staleTime: 2 * 60 * 1000,
+  });
+};
+
+/**
+ * Fetch workspace-level strategic intelligence:
+ * roadmap recommendations, voice/survey/support summaries, and signal feed.
+ * Calls GET /workspaces/:id/ciq/strategic-signals
+ */
+export const useCiqStrategicSignals = () => {
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id;
+  return useQuery<StrategicSignalsOutput, Error>({
+    queryKey: [CIQ_ENGINE_KEY, workspaceId, "strategic-signals"],
+    queryFn: () => {
+      if (!workspaceId) throw new Error("Workspace ID is not available");
+      return apiClient.ciqEngine.getStrategicSignals(workspaceId);
+    },
+    enabled: !!workspaceId,
+    staleTime: 3 * 60 * 1000,
   });
 };

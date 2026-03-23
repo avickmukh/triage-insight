@@ -441,6 +441,8 @@ model Deal {
   expectedCloseDate   DateTime?
   /// Weight multiplier (0–1) for how strongly this deal influences theme priority
   influenceWeight     Float      @default(1.0)
+  /// CIQ deal influence score (0–100); derived from annualValue × stage weight
+  ciqScore            Float?     @default(0)
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
 
@@ -518,6 +520,8 @@ model Feedback {
   status          FeedbackStatus      @default(NEW)
   sentiment       Float?
   impactScore     Float?
+  /// CIQ composite score (0–100); set by CiqScoringProcessor after ingestion
+  ciqScore        Float?   @default(0)
   /// Arbitrary source-specific metadata (e.g. Slack channel, email headers, CSV row index)
   metadata        Json?
   createdAt       DateTime            @default(now())
@@ -650,6 +654,8 @@ model Theme {
   revenueInfluence Float?               @default(0)
   /// Per-factor CIQ signal breakdown (JSON) for explainability UI
   signalBreakdown  Json?
+  /// CIQ composite score alias (mirrors priorityScore; set by CiqScoringProcessor)
+  ciqScore         Float?   @default(0)
 
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt

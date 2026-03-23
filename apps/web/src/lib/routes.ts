@@ -47,6 +47,11 @@ export const appRoutes = (slug: string) => ({
   riskItem:   (id: string) => `/${slug}/app/risk/${id}`,
   customers:  `/${slug}/app/customers`,
   customerItem: (id: string) => `/${slug}/app/customers/${id}`,
+  customersAnalytics: `/${slug}/app/customers/analytics`,
+  intelligence: `/${slug}/app/intelligence`,
+  intelligenceThemes: `/${slug}/app/intelligence/themes`,
+  intelligenceFeatures: `/${slug}/app/intelligence/features`,
+  intelligenceCustomers: `/${slug}/app/intelligence/customers`,
   profile:    `/${slug}/app/profile`,
   upgrade:    `/${slug}/app/upgrade`,
 });

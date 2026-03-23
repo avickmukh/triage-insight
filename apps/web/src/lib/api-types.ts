@@ -1378,3 +1378,105 @@ export interface PrioritizationSettings {
   dealStageClosedWon: number;
   updatedAt: string;
 }
+
+// ─── CIQ Engine Types (Full Scoring Engine) ───────────────────────────────────
+
+export interface CiqScoreBreakdown {
+  value: number;
+  weight: number;
+  contribution: number;
+  label: string;
+}
+
+/** Returned by GET /workspaces/:id/ciq/feature-ranking */
+export interface FeatureRankingItem {
+  feedbackId: string;
+  title: string;
+  ciqScore: number;
+  impactScore: number | null;
+  voteCount: number;
+  sentiment: number | null;
+  customerName: string | null;
+  customerArr: number;
+  themeCount: number;
+  breakdown: Record<string, CiqScoreBreakdown>;
+}
+
+/** Returned by GET /workspaces/:id/ciq/theme-ranking */
+export interface ThemeRankingItem {
+  themeId: string;
+  title: string;
+  status: string;
+  ciqScore: number;
+  priorityScore: number | null;
+  revenueInfluence: number;
+  feedbackCount: number;
+  uniqueCustomerCount: number;
+  dealInfluenceValue: number;
+  voiceSignalScore: number;
+  surveySignalScore: number;
+  supportSignalScore: number;
+  lastScoredAt: string | null;
+  breakdown: Record<string, CiqScoreBreakdown>;
+}
+
+/** Returned by GET /workspaces/:id/ciq/customer-ranking */
+export interface CustomerRankingItem {
+  customerId: string;
+  name: string;
+  companyName: string | null;
+  segment: string | null;
+  arrValue: number;
+  ciqScore: number;
+  ciqInfluenceScore: number;
+  featureDemandScore: number;
+  supportIntensityScore: number;
+  healthScore: number;
+  dealCount: number;
+  feedbackCount: number;
+  churnRisk: number;
+  breakdown: Record<string, CiqScoreBreakdown>;
+}
+
+export interface StrategicSignal {
+  type: 'theme' | 'feedback' | 'deal' | 'customer' | 'voice' | 'survey' | 'support';
+  entityId: string;
+  entityTitle: string;
+  signal: string;
+  strength: number;
+  detail: string;
+  detectedAt: string;
+}
+
+/** Returned by GET /workspaces/:id/ciq/strategic-signals */
+export interface StrategicSignalsOutput {
+  topThemes: Array<{
+    themeId: string;
+    title: string;
+    ciqScore: number;
+    roadmapLinked: boolean;
+  }>;
+  roadmapRecommendations: Array<{
+    themeId: string;
+    title: string;
+    ciqScore: number;
+    currentStatus: string | null;
+    recommendation: 'promote_to_planned' | 'promote_to_committed' | 'already_committed' | 'monitor';
+    rationale: string;
+  }>;
+  signals: StrategicSignal[];
+  voiceSentimentSummary: {
+    avgSentiment: number;
+    urgentCount: number;
+    complaintCount: number;
+  };
+  surveyDemandSummary: {
+    avgCiqWeight: number;
+    validationCount: number;
+    featureValidationCount: number;
+  };
+  supportSpikeSummary: {
+    spikeCount: number;
+    negativeSentimentCount: number;
+  };
+}

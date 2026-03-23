@@ -80,6 +80,10 @@ import {
   AddQuestionPayload,
   SubmitSurveyResponsePayload,
   PrioritizationSettings,
+  FeatureRankingItem,
+  ThemeRankingItem,
+  CustomerRankingItem,
+  StrategicSignalsOutput,
 } from "@/lib/api-types";
 
 const getApiBaseUrl = () => {
@@ -752,6 +756,33 @@ const apiClient = {
       api.get(`/portal/${orgSlug}/surveys/${surveyId}`).then(handleResponse),
     submit: (orgSlug: string, surveyId: string, data: SubmitSurveyResponsePayload): Promise<{ thankYouMessage: string | null; redirectUrl: string | null; feedbackId: string | null }> =>
       api.post(`/portal/${orgSlug}/surveys/${surveyId}/responses`, data).then(handleResponse),
+  },
+
+  ciqEngine: {
+    /**
+     * GET /workspaces/:id/ciq/feature-ranking
+     * Returns feedback items ranked by CIQ score (6-dimension composite).
+     */
+    getFeatureRanking: (workspaceId: string, limit = 50): Promise<FeatureRankingItem[]> =>
+      api.get(`/workspaces/${workspaceId}/ciq/feature-ranking`, { params: { limit } }).then(handleResponse),
+    /**
+     * GET /workspaces/:id/ciq/theme-ranking
+     * Returns ACTIVE themes ranked by CIQ score (voice + survey + support enriched).
+     */
+    getThemeRanking: (workspaceId: string, limit = 50): Promise<ThemeRankingItem[]> =>
+      api.get(`/workspaces/${workspaceId}/ciq/theme-ranking`, { params: { limit } }).then(handleResponse),
+    /**
+     * GET /workspaces/:id/ciq/customer-ranking
+     * Returns customers ranked by CIQ influence score.
+     */
+    getCustomerRanking: (workspaceId: string, limit = 50): Promise<CustomerRankingItem[]> =>
+      api.get(`/workspaces/${workspaceId}/ciq/customer-ranking`, { params: { limit } }).then(handleResponse),
+    /**
+     * GET /workspaces/:id/ciq/strategic-signals
+     * Returns workspace-level strategic intelligence and roadmap recommendations.
+     */
+    getStrategicSignals: (workspaceId: string): Promise<StrategicSignalsOutput> =>
+      api.get(`/workspaces/${workspaceId}/ciq/strategic-signals`).then(handleResponse),
   },
 
   domain: {

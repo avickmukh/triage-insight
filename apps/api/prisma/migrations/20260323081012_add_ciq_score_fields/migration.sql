@@ -1,0 +1,8 @@
+-- AlterTable
+ALTER TABLE "Deal" ADD COLUMN     "ciqScore" DOUBLE PRECISION DEFAULT 0;
+
+-- AlterTable
+ALTER TABLE "Feedback" ADD COLUMN     "ciqScore" DOUBLE PRECISION DEFAULT 0;
+
+-- AlterTable
+ALTER TABLE "Theme" ADD COLUMN     "ciqScore" DOUBLE PRECISION DEFAULT 0;

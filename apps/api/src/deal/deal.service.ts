@@ -10,6 +10,10 @@ import {
   CUSTOMER_REVENUE_SIGNAL_QUEUE,
   type CustomerRevenueSignalJobPayload,
 } from '../customer/processors/customer-revenue-signal.processor';
+import {
+  CIQ_SCORING_QUEUE,
+  type CiqJobPayload,
+} from '../ai/processors/ciq-scoring.processor';
 
 type DealSortField = 'createdAt' | 'updatedAt' | 'annualValue';
 
@@ -38,6 +42,8 @@ export class DealService {
     private readonly prisma: PrismaService,
     @InjectQueue(CUSTOMER_REVENUE_SIGNAL_QUEUE)
     private readonly revenueSignalQueue: Queue<CustomerRevenueSignalJobPayload>,
+    @InjectQueue(CIQ_SCORING_QUEUE)
+    private readonly ciqQueue: Queue<CiqJobPayload>,
   ) {}
 
   // ─── Create ────────────────────────────────────────────────────────────────
@@ -75,8 +81,24 @@ export class DealService {
             { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, delay: 2000 },
           )
           .catch(() => { /* non-critical */ });
+
+        // Also trigger CIQ re-scoring for each linked theme
+        await this.ciqQueue
+          .add(
+            { type: 'THEME_SCORED', workspaceId, themeId },
+            { attempts: 3, backoff: { type: 'exponential', delay: 3000 }, delay: 3000 },
+          )
+          .catch(() => { /* non-critical */ });
       }
     }
+
+    // Enqueue CIQ deal scoring
+    await this.ciqQueue
+      .add(
+        { type: 'DEAL_SCORED', workspaceId, dealId: deal.id },
+        { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, delay: 1000 },
+      )
+      .catch(() => { /* non-critical */ });
 
     return deal;
   }
@@ -176,7 +198,23 @@ export class DealService {
             { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, delay: 2000 },
           )
           .catch(() => { /* non-critical */ });
+
+        // CIQ re-score the theme too
+        await this.ciqQueue
+          .add(
+            { type: 'THEME_SCORED', workspaceId, themeId },
+            { attempts: 3, backoff: { type: 'exponential', delay: 3000 }, delay: 3000 },
+          )
+          .catch(() => { /* non-critical */ });
       }
+
+      // Re-score the deal itself
+      await this.ciqQueue
+        .add(
+          { type: 'DEAL_SCORED', workspaceId, dealId: deal.id },
+          { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, delay: 1000 },
+        )
+        .catch(() => { /* non-critical */ });
     }
 
     return deal;
@@ -194,6 +232,14 @@ export class DealService {
         .add(
           { type: 'RECOMPUTE_THEME_REVENUE', workspaceId, themeId: tl.theme.id },
           { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, delay: 2000 },
+        )
+        .catch(() => { /* non-critical */ });
+
+      // CIQ re-score the theme after deal removal
+      await this.ciqQueue
+        .add(
+          { type: 'THEME_SCORED', workspaceId, themeId: tl.theme.id },
+          { attempts: 3, backoff: { type: 'exponential', delay: 3000 }, delay: 3000 },
         )
         .catch(() => { /* non-critical */ });
     }
@@ -223,6 +269,14 @@ export class DealService {
       )
       .catch(() => { /* non-critical */ });
 
+    // CIQ re-score the theme
+    await this.ciqQueue
+      .add(
+        { type: 'THEME_SCORED', workspaceId, themeId },
+        { attempts: 3, backoff: { type: 'exponential', delay: 3000 }, delay: 2000 },
+      )
+      .catch(() => { /* non-critical */ });
+
     return { success: true };
   }
 
@@ -243,6 +297,14 @@ export class DealService {
       .add(
         { type: 'RECOMPUTE_THEME_REVENUE', workspaceId, themeId },
         { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, delay: 1000 },
+      )
+      .catch(() => { /* non-critical */ });
+
+    // CIQ re-score the theme
+    await this.ciqQueue
+      .add(
+        { type: 'THEME_SCORED', workspaceId, themeId },
+        { attempts: 3, backoff: { type: 'exponential', delay: 3000 }, delay: 2000 },
       )
       .catch(() => { /* non-critical */ });
 

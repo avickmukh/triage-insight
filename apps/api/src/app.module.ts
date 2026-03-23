@@ -22,6 +22,7 @@ import { CustomerModule } from './customer/customer.module';
 import { DealModule } from './deal/deal.module';
 import { VoiceModule } from './voice/voice.module';
 import { SurveyModule } from './survey/survey.module';
+import { CiqModule } from './ciq/ciq.module';
 import { validationSchema } from './config/validation';
 
 @Module({
@@ -51,6 +52,7 @@ import { validationSchema } from './config/validation';
     DealModule,
     VoiceModule,
     SurveyModule,
+    CiqModule,
   ],
 })
 export class AppModule {}

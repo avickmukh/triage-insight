@@ -13,6 +13,9 @@ import { AiController } from './ai.controller';
 import { DuplicateSuggestionsController } from './controllers/duplicate-suggestions.controller';
 import { MergeService } from './services/merge.service';
 import { AuditService } from './services/audit.service';
+// CiqEngineService is provided here so CiqScoringProcessor can inject it
+// without creating a circular dependency (CiqModule → AiModule → CiqModule)
+import { CiqEngineService } from '../ciq/ciq-engine.service';
 
 @Module({
   imports: [
@@ -24,6 +27,7 @@ import { AuditService } from './services/audit.service';
   providers: [
     AiAnalysisProcessor,
     CiqScoringProcessor,
+    CiqEngineService,
     EmbeddingService,
     SummarizationService,
     DuplicateDetectionService,
@@ -34,6 +38,7 @@ import { AuditService } from './services/audit.service';
     AuditService,
   ],
   exports: [
+    CiqEngineService,
     EmbeddingService,
     SummarizationService,
     DuplicateDetectionService,
