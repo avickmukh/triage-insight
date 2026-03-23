@@ -5,6 +5,7 @@ import { useParams, useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { workspaceAuthRoutes } from "@/lib/routes";
+import apiClient from "@/lib/api-client";
 
 interface RequestFormValues { email: string; }
 interface ConfirmFormValues { password: string; confirmPassword: string; }
@@ -44,23 +45,35 @@ export default function ResetPasswordPage() {
   const onRequestSubmit = async (values: RequestFormValues) => {
     setRequestError(null);
     try {
-      await new Promise((r) => setTimeout(r, 400));
-      void values;
+      await apiClient.auth.forgotPassword({ email: values.email });
+    } catch {
+      // Always show the success state to prevent user enumeration
+    } finally {
       setRequestSent(true);
-    } catch { setRequestError("Something went wrong. Please try again."); }
+    }
   };
 
   const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [resetSuccess, setResetSuccess] = useState(false);
   const { register: regConf, handleSubmit: handleConf, watch, formState: { errors: confErrors, isSubmitting: confSubmitting } } = useForm<ConfirmFormValues>();
   const passwordValue = watch("password");
 
   const onConfirmSubmit = async (values: ConfirmFormValues) => {
     setConfirmError(null);
+    if (!token) {
+      setConfirmError("Reset token is missing. Please use the link from your email.");
+      return;
+    }
     try {
-      await new Promise((r) => setTimeout(r, 400));
-      void values;
-      router.push(wa.login);
-    } catch { setConfirmError("Reset failed. The link may have expired."); }
+      await apiClient.auth.resetPassword({ token, password: values.password });
+      setResetSuccess(true);
+      setTimeout(() => router.push(wa.login), 2000);
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        "Reset failed. The link may have expired.";
+      setConfirmError(message);
+    }
   };
 
   const bg: React.CSSProperties = {
@@ -89,6 +102,15 @@ export default function ResetPasswordPage() {
         </div>
         <div style={card}>
           {token ? (
+            resetSuccess ? (
+              <>
+                <div style={{ width: "3rem", height: "3rem", borderRadius: "50%", background: "rgba(32,164,164,0.15)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "1.25rem" }}>
+                  <span style={{ fontSize: "1.5rem", color: "#20A4A4" }}>✓</span>
+                </div>
+                <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#fff", marginBottom: "0.5rem" }}>Password updated</h1>
+                <p style={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.55)", marginBottom: "2rem" }}>Your password has been reset. Redirecting you to sign in…</p>
+              </>
+            ) : (
             <>
               <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#fff", marginBottom: "0.375rem" }}>Set new password</h1>
               <p style={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.55)", marginBottom: "2rem" }}>Choose a strong password for your account.</p>
@@ -111,6 +133,7 @@ export default function ResetPasswordPage() {
                 <button type="submit" disabled={confSubmitting} style={btn(confSubmitting)}>{confSubmitting ? "Saving…" : "Set password"}</button>
               </form>
             </>
+            )
           ) : requestSent ? (
             <>
               <div style={{ width: "3rem", height: "3rem", borderRadius: "50%", background: "rgba(32,164,164,0.15)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "1.25rem" }}>

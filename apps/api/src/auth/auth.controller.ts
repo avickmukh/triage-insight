@@ -6,6 +6,8 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { SetupPasswordDto } from './dto/setup-password.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 interface AuthenticatedRequest {
@@ -57,6 +59,29 @@ export class AuthController {
   changePassword(@Req() req: AuthenticatedRequest, @Body() dto: ChangePasswordDto) {
     return this.authService.changePassword(req.user.sub, dto);
   }
+
+  // ─── Password Reset Flow ──────────────────────────────────────────────────
+
+  /**
+   * Public — initiate a password reset.
+   * Always returns HTTP 200 with a generic message to prevent user enumeration.
+   * In production the token is delivered via email; in dev it is returned in the body.
+   */
+  @Post('forgot-password')
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  /**
+   * Public — complete a password reset.
+   * The token is invalidated after first use. All active sessions are revoked.
+   */
+  @Post('reset-password')
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
+  }
+
+  // ─── Invite Flow ──────────────────────────────────────────────────────────
 
   /** Public — validate an invite token before the user fills in their password */
   @Get('invite')
