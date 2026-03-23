@@ -114,7 +114,7 @@ export class SurveyIntelligenceService {
     private readonly prisma: PrismaService,
   ) {
     this.openai = new OpenAI({
-      apiKey: this.configService.getOrThrow<string>('OPENAI_API_KEY'),
+      apiKey: this.configService.get<string>('OPENAI_API_KEY', ''),
     });
   }
 

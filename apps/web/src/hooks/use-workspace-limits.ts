@@ -25,7 +25,7 @@ export const useWorkspaceLimits = () => {
     queryKey: ['workspace', 'limits'],
     queryFn: apiClient.workspace.getLimits,
     staleTime: 30_000, // 30s — usage counts change frequently
-    retry: 1,
+    // retry handled globally in providers.tsx
   });
 
   return { limits, isLoading, isError, error, refetch };

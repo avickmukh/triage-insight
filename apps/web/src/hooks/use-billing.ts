@@ -35,7 +35,7 @@ export const useBilling = () => {
     queryKey: [BILLING_KEY, 'status'],
     queryFn: apiClient.billing.getStatus,
     staleTime: 60_000, // 1 min — billing state changes infrequently
-    retry: 1,
+    // retry handled globally in providers.tsx
   });
 
   return { billing, isLoading, isError, error, refetch };
@@ -58,7 +58,7 @@ export const usePlans = () => {
     queryKey: [BILLING_KEY, 'plans'],
     queryFn: apiClient.billing.listPlans,
     staleTime: 5 * 60_000, // 5 min — plan config changes rarely
-    retry: 1,
+    // retry handled globally in providers.tsx
   });
 
   return { plans: plans ?? [], isLoading, isError, error };

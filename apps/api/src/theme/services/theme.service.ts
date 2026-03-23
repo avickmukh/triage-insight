@@ -469,11 +469,13 @@ export class ThemeService {
   // ─── Reclustering ─────────────────────────────────────────────────────────
 
   async triggerReclustering(workspaceId: string) {
+    let jobId: string | undefined;
     try {
-    const job = await this.clusteringQueue.add({ workspaceId });
+      const job = await this.clusteringQueue.add({ workspaceId });
+      jobId = String(job.id);
     } catch (queueErr) {
       console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
     }
-    return { message: 'Theme reclustering job dispatched.', jobId: job.id };
+    return { message: 'Theme reclustering job dispatched.', jobId };
   }
 }

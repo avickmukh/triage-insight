@@ -72,7 +72,7 @@ export const useCurrentMemberRole = () => {
     queryKey: ["user", "me"],
     queryFn: apiClient.auth.getMe,
     staleTime: 1000 * 60 * 5,
-    retry: 1,
+    // retry handled globally in providers.tsx
   });
 
   // 3. Members list – only enabled once we have both ids

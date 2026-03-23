@@ -29,7 +29,7 @@ export function useExecutiveDashboard() {
     queryFn:   () => apiClient.dashboard.getExecutive(workspaceId),
     enabled:   !!workspaceId,
     staleTime: 5 * 60 * 1000, // 5 minutes
-    retry:     2,
+    // retry handled globally in providers.tsx
   });
 }
 
@@ -43,7 +43,7 @@ export function useDashboardThemes() {
     queryFn:   () => apiClient.dashboard.getThemes(workspaceId),
     enabled:   !!workspaceId,
     staleTime: 5 * 60 * 1000,
-    retry:     2,
+    // retry handled globally in providers.tsx
   });
 }
 
@@ -57,7 +57,7 @@ export function useDashboardRevenueRisk() {
     queryFn:   () => apiClient.dashboard.getRevenueRisk(workspaceId),
     enabled:   !!workspaceId,
     staleTime: 5 * 60 * 1000,
-    retry:     2,
+    // retry handled globally in providers.tsx
   });
 }
 
@@ -71,7 +71,7 @@ export function useDashboardVoiceSignals() {
     queryFn:   () => apiClient.dashboard.getVoiceSignals(workspaceId),
     enabled:   !!workspaceId,
     staleTime: 5 * 60 * 1000,
-    retry:     2,
+    // retry handled globally in providers.tsx
   });
 }
 
@@ -85,7 +85,7 @@ export function useDashboardRoadmapHealth() {
     queryFn:   () => apiClient.dashboard.getRoadmapHealth(workspaceId),
     enabled:   !!workspaceId,
     staleTime: 5 * 60 * 1000,
-    retry:     2,
+    // retry handled globally in providers.tsx
   });
 }
 

@@ -45,14 +45,8 @@ export const QUEUE_NAMES = {
           port:                 configService.get<number>('REDIS_PORT', 6379),
           // ── Graceful degradation: don't block the app if Redis is down ──
           enableOfflineQueue:   false,
-          maxRetriesPerRequest: 0,
           lazyConnect:          true,
-          connectTimeout:       5000,
-          retryStrategy:        (times: number) => {
-            // Give up after 3 attempts; return null to stop retrying
-            if (times > 3) return null;
-            return Math.min(times * 500, 2000);
-          },
+          connectTimeout:       1000,
         },
         /** Global default job options applied to every queue */
         defaultJobOptions: {

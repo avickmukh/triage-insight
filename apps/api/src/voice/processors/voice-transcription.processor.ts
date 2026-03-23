@@ -29,12 +29,12 @@ export class VoiceTranscriptionProcessor {
     @InjectQueue(VOICE_EXTRACTION_QUEUE)
     private readonly extractionQueue: Queue<VoiceExtractionJobPayload>,
   ) {
-    this.bucket = this.configService.getOrThrow<string>('AWS_S3_BUCKET');
+    this.bucket = this.configService.get<string>('AWS_S3_BUCKET', '');
     this.s3Client = new S3Client({
-      region: this.configService.getOrThrow<string>('AWS_S3_REGION'),
+      region: this.configService.get<string>('AWS_S3_REGION', 'us-east-1'),
       credentials: {
-        accessKeyId: this.configService.getOrThrow<string>('AWS_ACCESS_KEY_ID'),
-        secretAccessKey: this.configService.getOrThrow<string>('AWS_SECRET_ACCESS_KEY'),
+        accessKeyId: this.configService.get<string>('AWS_ACCESS_KEY_ID', ''),
+        secretAccessKey: this.configService.get<string>('AWS_SECRET_ACCESS_KEY', ''),
       },
     });
   }

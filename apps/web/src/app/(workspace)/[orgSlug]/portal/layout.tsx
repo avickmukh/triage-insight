@@ -58,8 +58,8 @@ export default async function PublicLayout({
             </span>
           </div>
           <nav style={{ display: "flex", gap: "1.5rem" }}>
-            <a href={`/${orgSlug}/feedback`} style={{ color: "rgba(255,255,255,0.7)", fontSize: "0.875rem", fontWeight: 500 }}>Feedback</a>
-            <a href={`/${orgSlug}/roadmap`} style={{ color: "rgba(255,255,255,0.7)", fontSize: "0.875rem", fontWeight: 500 }}>Roadmap</a>
+            <a href={`/${orgSlug}/portal/feedback`} style={{ color: "rgba(255,255,255,0.7)", fontSize: "0.875rem", fontWeight: 500 }}>Feedback</a>
+            <a href={`/${orgSlug}/portal/roadmap`} style={{ color: "rgba(255,255,255,0.7)", fontSize: "0.875rem", fontWeight: 500 }}>Roadmap</a>
           </nav>
         </div>
       </header>
