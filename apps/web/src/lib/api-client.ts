@@ -88,6 +88,12 @@ import {
   OpportunitiesResponse,
   RoadmapRecommendationsResponse,
   ThemePriorityItem,
+  ExecutiveDashboard,
+  EmergingThemeRadar,
+  RevenueRiskIndicator,
+  VoiceSentimentSignal,
+  SupportPressureIndicator,
+  RoadmapHealthPanel,
 } from "@/lib/api-types";
 
 const getApiBaseUrl = () => {
@@ -837,6 +843,22 @@ const apiClient = {
      */
     remove: (): Promise<DomainSettings> =>
       api.delete('/workspace/current/domain').then(handleResponse),
+  },
+
+  // ─── Executive Dashboard Intelligence ─────────────────────────────────────
+  dashboard: {
+    getExecutive: (workspaceId: string): Promise<ExecutiveDashboard> =>
+      api.get(`/workspaces/${workspaceId}/dashboard/executive`).then(handleResponse),
+    getThemes: (workspaceId: string): Promise<{ data: EmergingThemeRadar; cached: boolean }> =>
+      api.get(`/workspaces/${workspaceId}/dashboard/themes`).then(handleResponse),
+    getRevenueRisk: (workspaceId: string): Promise<{ data: RevenueRiskIndicator; cached: boolean }> =>
+      api.get(`/workspaces/${workspaceId}/dashboard/revenue-risk`).then(handleResponse),
+    getVoiceSignals: (workspaceId: string): Promise<{ data: VoiceSentimentSignal; cached: boolean }> =>
+      api.get(`/workspaces/${workspaceId}/dashboard/voice-signals`).then(handleResponse),
+    getRoadmapHealth: (workspaceId: string): Promise<{ data: RoadmapHealthPanel; cached: boolean }> =>
+      api.get(`/workspaces/${workspaceId}/dashboard/roadmap-health`).then(handleResponse),
+    refresh: (workspaceId: string): Promise<{ message: string; workspaceId: string }> =>
+      api.post(`/workspaces/${workspaceId}/dashboard/refresh`).then(handleResponse),
   },
 };
 

@@ -1589,3 +1589,174 @@ export interface RoadmapRecommendationsResponse {
   computedAt:  string;
   cached:      boolean;
 }
+
+// ─── Executive Dashboard Intelligence Types ───────────────────────────────────
+
+export interface ProductDirectionFeature {
+  feedbackId:        string;
+  title:             string;
+  ciqScore:          number;
+  confidenceScore:   number;
+  revenueInfluence:  number;
+  voteCount:         number;
+  themeTitle:        string | null;
+  rationale:         string;
+}
+
+export interface ProductDirectionSummary {
+  topFeatures:         ProductDirectionFeature[];
+  totalFeedbackCount:  number;
+  scoredFeedbackCount: number;
+  lastComputedAt:      string;
+}
+
+export interface EmergingThemeItem {
+  themeId:          string;
+  title:            string;
+  velocityScore:    number;
+  feedbackDelta7d:  number;
+  feedbackDelta30d: number;
+  totalFeedback:    number;
+  isNew:            boolean;
+  urgencyScore:     number;
+  signal:           string;
+}
+
+export interface DashboardSpikeEvent {
+  clusterId:    string;
+  clusterTitle: string;
+  ticketCount:  number;
+  zScore:       number;
+  windowStart:  string;
+}
+
+export interface EmergingThemeRadar {
+  emergingThemes:    EmergingThemeItem[];
+  spikeEvents:       DashboardSpikeEvent[];
+  totalActiveThemes: number;
+}
+
+export interface AtRiskCustomer {
+  customerId:        string;
+  name:              string;
+  arrValue:          number;
+  churnRisk:         number;
+  topFeatureRequest: string | null;
+  accountPriority:   string;
+  signalCount:       number;
+}
+
+export interface ChurnLinkedFeature {
+  feedbackId:      string;
+  title:           string;
+  churnLinkedArr:  number;
+  customerCount:   number;
+  urgencySignal:   number;
+}
+
+export interface RevenueRiskIndicator {
+  totalArrAtRisk:        number;
+  criticalCustomers:     AtRiskCustomer[];
+  featuresLinkedToChurn: ChurnLinkedFeature[];
+  arrExposureBySegment:  { segment: string; arrAtRisk: number; customerCount: number }[];
+  totalCustomersAtRisk:  number;
+}
+
+export interface SentimentTheme {
+  themeId:          string;
+  title:            string;
+  avgSentiment:     number;
+  negativeFraction: number;
+  feedbackCount:    number;
+}
+
+export interface NegativeSignal {
+  feedbackId:   string;
+  title:        string;
+  sentiment:    number;
+  urgency:      number;
+  customerName: string | null;
+  createdAt:    string;
+}
+
+export interface VoiceSentimentSignal {
+  overallSentimentScore:  number;
+  sentimentTrend:         'improving' | 'declining' | 'stable';
+  negativeTrendIndicator: boolean;
+  unresolvedPainSummary:  string;
+  sentimentByTheme:       SentimentTheme[];
+  recentNegativeSignals:  NegativeSignal[];
+  voiceCallCount:         number;
+  negativeFraction:       number;
+}
+
+export interface SupportPressureCluster {
+  clusterId:   string;
+  title:       string;
+  ticketCount: number;
+  arrExposure: number;
+  themeTitle:  string | null;
+  isSpike:     boolean;
+}
+
+export interface SupportPressureIndicator {
+  openTicketCount:     number;
+  ticketTrend:         'increasing' | 'stable' | 'decreasing';
+  ticketDelta7d:       number;
+  activeSpikeCount:    number;
+  topPressureClusters: SupportPressureCluster[];
+  estimatedArrAtRisk:  number;
+}
+
+export interface DelayedRoadmapItem {
+  roadmapItemId:  string;
+  title:          string;
+  status:         string;
+  themeTitle:     string | null;
+  priorityScore:  number;
+  daysInStatus:   number;
+  recommendation: string;
+}
+
+export interface OpportunityGap {
+  themeId:        string;
+  title:          string;
+  priorityScore:  number;
+  revenueScore:   number;
+  hasRoadmapItem: boolean;
+  gap:            string;
+}
+
+export interface RoadmapHealthPanel {
+  shippedCount:         number;
+  plannedCount:         number;
+  committedCount:       number;
+  backlogCount:         number;
+  shippedRatio:         number;
+  delayedCriticalItems: DelayedRoadmapItem[];
+  opportunityGaps:      OpportunityGap[];
+  healthScore:          number;
+  healthLabel:          'healthy' | 'at_risk' | 'critical';
+}
+
+export interface ExecutiveSummary {
+  generatedAt:          string;
+  weekSummary:          string;
+  keyInsights:          string[];
+  topAction:            string;
+  riskAlert:            string | null;
+  momentumSignal:       string;
+  productDirectionNote: string;
+}
+
+export interface ExecutiveDashboard {
+  productDirection:  ProductDirectionSummary;
+  emergingThemes:    EmergingThemeRadar;
+  revenueRisk:       RevenueRiskIndicator;
+  voiceSentiment:    VoiceSentimentSignal;
+  supportPressure:   SupportPressureIndicator;
+  roadmapHealth:     RoadmapHealthPanel;
+  executiveSummary:  ExecutiveSummary;
+  refreshedAt:       string;
+  cached:            boolean;
+}
