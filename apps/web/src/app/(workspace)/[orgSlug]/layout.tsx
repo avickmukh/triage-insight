@@ -11,62 +11,85 @@ import { appRoutes, orgAdminRoutes } from '@/lib/routes';
  * /:orgSlug/* — Root workspace layout
  *
  * Renders the workspace top-nav for all authenticated workspace pages.
+ *
  * Auth pages (login, signup, etc.) are nested under /:orgSlug/(auth)/ which
- * has its own layout that overrides this one — so this header is only shown
- * for authenticated app and admin pages.
+ * has its own layout — so this header is only shown for authenticated app and
+ * admin pages.
+ *
+ * Portal pages (/:orgSlug/portal/*) have their own layout under the /portal
+ * segment and must NOT trigger any authenticated API calls here.
  *
  * Role-aware nav:
  *   ADMIN  → Inbox · Themes · Roadmap · Dashboard | Members · Billing · Settings · Logout
  *   EDITOR/VIEWER → Inbox · Themes · Roadmap · Dashboard | Profile · Logout
- *
- * Portal pages (/:orgSlug/feedback, /:orgSlug/roadmap) have their own layout
- * and do not render this header.
  */
 export default function OrgSlugLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { workspace, isLoading: wsLoading } = useWorkspace();
-  const { role, isLoading: roleLoading } = useCurrentMemberRole();
-  const { logout } = useAuth();
-  const router = useRouter();
-  const params = useParams();
   const pathname = usePathname();
-
+  const params = useParams();
   const slug =
     (Array.isArray(params.orgSlug) ? params.orgSlug[0] : params.orgSlug) ?? '';
 
-  const r = appRoutes(slug);
-  const ra = orgAdminRoutes(slug);
-
-  // ── Auth route detection ───────────────────────────────────────────────────
-  // Auth pages have their own layout that overrides this one. As a safety net,
-  // suppress the nav if we're on an auth path.
+  // ── Auth route detection ─────────────────────────────────────────────────
   const isAuthRoute =
     pathname.endsWith('/login') ||
     pathname.endsWith('/signup') ||
     pathname.includes('/reset-password') ||
     pathname.includes('/verify');
 
-  // ── Portal route detection ─────────────────────────────────────────────────
-  // Portal pages have their own layout under /:orgSlug/portal/
+  // ── Portal route detection ───────────────────────────────────────────────
+  // Portal pages live under /:orgSlug/portal/* (e.g. /avickteam/portal/feedback)
+  // The old public routes were /:orgSlug/feedback and /:orgSlug/roadmap (no /portal prefix).
+  // Match both patterns so neither triggers authenticated API calls.
   const isPortalRoute =
-    pathname.includes('/feedback') || pathname.includes('/roadmap');
+    pathname.includes('/portal/') ||
+    // Legacy public portal routes: exactly /:slug/feedback* or /:slug/roadmap (no /app/ segment)
+    (pathname.includes('/feedback') && !pathname.includes('/app/')) ||
+    (pathname === `/${slug}/roadmap`);
 
-  // ── Workspace status redirect ──────────────────────────────────────────────
+  // ── Suppress header + auth hooks for portal / auth routes ───────────────
+  // IMPORTANT: hooks that call authenticated APIs (useWorkspace, useCurrentMemberRole)
+  // must NOT run on portal pages. We achieve this by rendering a separate
+  // AuthenticatedShell component only for non-portal, non-auth routes.
+  if (isAuthRoute || isPortalRoute) {
+    return <>{children}</>;
+  }
+
+  return <AuthenticatedShell slug={slug} pathname={pathname}>{children}</AuthenticatedShell>;
+}
+
+/**
+ * Inner shell rendered only for authenticated staff pages.
+ * All authenticated API hooks live here so they never fire on portal pages.
+ */
+function AuthenticatedShell({
+  slug,
+  pathname,
+  children,
+}: {
+  slug: string;
+  pathname: string;
+  children: React.ReactNode;
+}) {
+  const { workspace, isLoading: wsLoading } = useWorkspace();
+  const { role, isLoading: roleLoading } = useCurrentMemberRole();
+  const { logout } = useAuth();
+  const router = useRouter();
+
+  const r = appRoutes(slug);
+  const ra = orgAdminRoutes(slug);
+
+  // ── Workspace status redirect ────────────────────────────────────────────
   useEffect(() => {
     if (!wsLoading && workspace && workspace.status !== WorkspaceStatus.ACTIVE) {
       router.push('/activation');
     }
   }, [workspace, wsLoading, router]);
 
-  // ── Suppress header for auth / portal routes ───────────────────────────────
-  if (isAuthRoute || isPortalRoute) {
-    return <>{children}</>;
-  }
-
-  // ── Loading state ──────────────────────────────────────────────────────────
+  // ── Loading state ────────────────────────────────────────────────────────
   if (wsLoading || roleLoading) {
     return (
       <div
@@ -95,7 +118,7 @@ export default function OrgSlugLayout({
         color: '#0A2540',
       }}
     >
-      {/* ── Top Navigation ─────────────────────────────────────────────── */}
+      {/* ── Top Navigation ──────────────────────────────────────────────── */}
       <header
         style={{
           background: '#0A2540',
@@ -159,7 +182,7 @@ export default function OrgSlugLayout({
             </span>
           </Link>
 
-          {/* ── Navigation links ─────────────────────────────────────── */}
+          {/* ── Navigation links ──────────────────────────────────────── */}
           <nav
             style={{
               display: 'flex',
@@ -167,13 +190,14 @@ export default function OrgSlugLayout({
               alignItems: 'center',
             }}
           >
-            {/* ── App nav (all roles) ── */}
+            {/* App nav (all roles) */}
             <NavLink href={r.inbox} pathname={pathname}>Inbox</NavLink>
             <NavLink href={r.themes} pathname={pathname}>Themes</NavLink>
             <NavLink href={r.roadmap} pathname={pathname}>Roadmap</NavLink>
+            <NavLink href={r.customers} pathname={pathname}>Customers</NavLink>
             <NavLink href={r.dashboard} pathname={pathname}>Dashboard</NavLink>
 
-            {/* ── Admin-only separator + links ── */}
+            {/* Admin-only separator + links */}
             {isAdmin && (
               <>
                 <Divider />
@@ -183,7 +207,7 @@ export default function OrgSlugLayout({
               </>
             )}
 
-            {/* ── Non-admin: profile link ── */}
+            {/* Non-admin: profile link */}
             {!isAdmin && role !== undefined && (
               <>
                 <Divider />
@@ -191,7 +215,7 @@ export default function OrgSlugLayout({
               </>
             )}
 
-            {/* ── Logout ── */}
+            {/* Logout */}
             <button
               onClick={logout}
               style={{
@@ -212,7 +236,7 @@ export default function OrgSlugLayout({
         </div>
       </header>
 
-      {/* ── Main Content ───────────────────────────────────────────────── */}
+      {/* ── Main Content ────────────────────────────────────────────────── */}
       <main
         style={{
           maxWidth: 1200,
@@ -222,6 +246,27 @@ export default function OrgSlugLayout({
       >
         {children}
       </main>
+
+      {/* ── Footer ──────────────────────────────────────────────────────── */}
+      <footer
+        style={{
+          borderTop: '1px solid #e9ecef',
+          padding: '1.25rem 1.5rem',
+          textAlign: 'center',
+          color: '#adb5bd',
+          fontSize: '0.78rem',
+          background: '#fff',
+          marginTop: '2rem',
+        }}
+      >
+        <span>
+          Powered by{' '}
+          <a href="/" style={{ color: '#20A4A4', fontWeight: 600, textDecoration: 'none' }}>
+            TriageInsight
+          </a>
+          {' '}· {new Date().getFullYear()}
+        </span>
+      </footer>
     </div>
   );
 }
