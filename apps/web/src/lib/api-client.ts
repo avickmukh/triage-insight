@@ -433,6 +433,30 @@ const apiClient = {
       api.post(`/workspaces/${workspaceId}/integrations/slack/connect`, data).then(handleResponse),
 
     /**
+     * GET /workspaces/:id/integrations/slack/channels
+     * Lists all Slack channels available to the connected bot token.
+     */
+    listSlackChannels: (workspaceId: string): Promise<{ channels: Array<{ id: string; name: string; memberCount?: number }> }> =>
+      api.get(`/workspaces/${workspaceId}/integrations/slack/channels`).then(handleResponse),
+
+    /**
+     * POST /workspaces/:id/integrations/slack/channels
+     * Saves the selected channels into IntegrationConnection.metadata.
+     */
+    configureSlackChannels: (
+      workspaceId: string,
+      data: { channels: Array<{ id: string; name: string }> },
+    ): Promise<IntegrationStatus> =>
+      api.post(`/workspaces/${workspaceId}/integrations/slack/channels`, data).then(handleResponse),
+
+    /**
+     * POST /workspaces/:id/integrations/slack/sync
+     * Triggers an immediate Slack ingestion job.
+     */
+    syncSlack: (workspaceId: string): Promise<{ message: string }> =>
+      api.post(`/workspaces/${workspaceId}/integrations/slack/sync`).then(handleResponse),
+
+    /**
      * DELETE /workspaces/:id/integrations/:provider
      * Disconnects (removes) an integration. Returns 204 No Content.
      */

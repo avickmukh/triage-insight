@@ -155,3 +155,70 @@ export const useSyncIntegrations = () => {
     },
   });
 };
+
+/**
+ * useSlackChannels
+ *
+ * Fetches the list of Slack channels available to the connected bot token.
+ * Only runs when a Slack integration is connected.
+ */
+export const useSlackChannels = () => {
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id;
+
+  const { data, isLoading, isError, error } = useQuery<
+    { channels: Array<{ id: string; name: string; memberCount?: number }> },
+    Error
+  >({
+    queryKey: ['slack-channels', workspaceId],
+    queryFn: () => {
+      if (!workspaceId) throw new Error('Workspace ID not available');
+      return apiClient.integrations.listSlackChannels(workspaceId);
+    },
+    enabled: !!workspaceId,
+    staleTime: 60_000, // 1 min — channel list changes infrequently
+  });
+
+  return { channels: data?.channels ?? [], isLoading, isError, error };
+};
+
+/**
+ * useConfigureSlackChannels
+ *
+ * Mutation to save the selected Slack channels into IntegrationConnection.metadata.
+ * Invalidates the integrations list on success.
+ */
+export const useConfigureSlackChannels = () => {
+  const { workspace } = useWorkspace();
+  const queryClient = useQueryClient();
+
+  return useMutation<IntegrationStatus, Error, { channels: Array<{ id: string; name: string }> }>({
+    mutationFn: (data) => {
+      if (!workspace?.id) throw new Error('Workspace ID not available');
+      return apiClient.integrations.configureSlackChannels(workspace.id, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [INTEGRATIONS_KEY, workspace?.id] });
+    },
+  });
+};
+
+/**
+ * useSyncSlack
+ *
+ * Mutation to trigger an immediate Slack ingestion job.
+ */
+export const useSyncSlack = () => {
+  const { workspace } = useWorkspace();
+  const queryClient = useQueryClient();
+
+  return useMutation<{ message: string }, Error, void>({
+    mutationFn: () => {
+      if (!workspace?.id) throw new Error('Workspace ID not available');
+      return apiClient.integrations.syncSlack(workspace.id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [INTEGRATIONS_KEY, workspace?.id] });
+    },
+  });
+};

@@ -17,8 +17,11 @@ import { PrismaService } from "../prisma/prisma.service";
 import { ConnectZendeskDto } from './dto/connect-zendesk.dto';
 import { ConnectIntercomDto } from './dto/connect-intercom.dto';
 import { ConnectSlackDto } from './dto/connect-slack.dto';
-import { InjectQueue } from "@nestjs/bull";
-import type { Queue } from "bull";
+import { InjectQueue } from '@nestjs/bull';
+import type { Queue } from 'bull';
+import { SlackService } from './providers/slack.service';
+import { SlackIngestionService } from './services/slack-ingestion.service';
+import { SLACK_INGESTION_QUEUE } from './processors/slack-ingestion.processor';
 
 /**
  * Shape returned by GET /workspaces/:workspaceId/integrations
@@ -52,7 +55,10 @@ const KNOWN_PROVIDERS: IntegrationProvider[] = [
 export class IntegrationsController {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly slackService: SlackService,
+    private readonly slackIngestionService: SlackIngestionService,
     @InjectQueue('support-sync') private readonly syncQueue: Queue,
+    @InjectQueue(SLACK_INGESTION_QUEUE) private readonly slackQueue: Queue,
   ) {}
 
   // ─── GET /workspaces/:workspaceId/integrations ────────────────────────────
@@ -181,6 +187,61 @@ export class IntegrationsController {
       metadata: Object.keys(metadata).length > 0 ? metadata : null,
       createdAt: conn.createdAt.toISOString(),
     };
+  }
+
+  // ─── GET /workspaces/:workspaceId/integrations/slack/channels ───────────────
+  /**
+   * Lists all Slack channels available to the bot token.
+   * Used by the frontend channel selector.
+   */
+  @Get('slack/channels')
+  @Roles(WorkspaceRole.ADMIN)
+  async listSlackChannels(@Param('workspaceId') workspaceId: string) {
+    const conn = await this.prisma.integrationConnection.findUnique({
+      where: { workspaceId_provider: { workspaceId, provider: IntegrationProvider.SLACK } },
+    });
+    if (!conn) return { channels: [] };
+    const channels = await this.slackService.listChannels(conn.accessToken);
+    return { channels };
+  }
+
+  // ─── POST /workspaces/:workspaceId/integrations/slack/channels ───────────────
+  /**
+   * Saves the selected channels into IntegrationConnection.metadata.
+   */
+  @Post('slack/channels')
+  @Roles(WorkspaceRole.ADMIN)
+  async configureSlackChannels(
+    @Param('workspaceId') workspaceId: string,
+    @Body() body: { channels: Array<{ id: string; name: string }> },
+  ) {
+    const conn = await this.prisma.integrationConnection.findUnique({
+      where: { workspaceId_provider: { workspaceId, provider: IntegrationProvider.SLACK } },
+    });
+    if (!conn) throw new Error('Slack not connected');
+    const existing = (conn.metadata ?? {}) as Record<string, unknown>;
+    const updated = await this.prisma.integrationConnection.update({
+      where: { workspaceId_provider: { workspaceId, provider: IntegrationProvider.SLACK } },
+      data: { metadata: { ...existing, channels: body.channels } },
+    });
+    return {
+      provider: updated.provider,
+      connected: true,
+      lastSyncedAt: updated.lastSyncedAt?.toISOString() ?? null,
+      metadata: updated.metadata as Record<string, unknown>,
+      createdAt: updated.createdAt.toISOString(),
+    };
+  }
+
+  // ─── POST /workspaces/:workspaceId/integrations/slack/sync ───────────────────
+  /**
+   * Triggers an immediate Slack ingestion job for this workspace.
+   */
+  @Post('slack/sync')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  async syncSlack(@Param('workspaceId') workspaceId: string) {
+    await this.slackQueue.add({ workspaceId });
+    return { message: 'Slack ingestion job queued.' };
   }
 
   // ─── DELETE /workspaces/:workspaceId/integrations/:provider ───────────────

@@ -7,9 +7,11 @@ import {
   useConnectIntercom,
   useDisconnectIntegration,
   useSyncIntegrations,
+  useSlackChannels,
+  useConfigureSlackChannels,
+  useSyncSlack,
 } from '@/hooks/use-integrations';
 import { IntegrationProvider, IntegrationStatus } from '@/lib/api-types';
-import { PlanGate } from '@/components/shared/plan-gate';
 
 // ── Design tokens (matches existing admin design system) ──────────────────
 const CARD: React.CSSProperties = {
@@ -318,6 +320,89 @@ function IntercomModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ── Slack channel configuration modal ───────────────────────────────────────
+function SlackChannelModal({ onClose }: { onClose: () => void }) {
+  const { channels, isLoading } = useSlackChannels();
+  const { mutate: configure, isPending, isError, error } = useConfigureSlackChannels();
+  const [selected, setSelected] = useState<Array<{ id: string; name: string }>>([]);
+
+  const toggle = (ch: { id: string; name: string }) => {
+    setSelected((prev) =>
+      prev.some((s) => s.id === ch.id) ? prev.filter((s) => s.id !== ch.id) : [...prev, ch],
+    );
+  };
+
+  const handleSave = () => {
+    configure({ channels: selected }, { onSuccess: onClose });
+  };
+
+  return (
+    <div style={OVERLAY} onClick={onClose}>
+      <div style={{ ...MODAL, maxWidth: '480px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
+        <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0A2540', marginBottom: '0.25rem' }}>Configure Slack Channels</h2>
+        <p style={{ fontSize: '0.85rem', color: '#6C757D', marginBottom: '1.25rem' }}>
+          Select the channels TriageInsight should monitor for feedback messages.
+        </p>
+        {isLoading ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1 }}>
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} style={{ height: '2.5rem', background: '#f1f3f5', borderRadius: '0.4rem' }} />
+            ))}
+          </div>
+        ) : channels.length === 0 ? (
+          <p style={{ fontSize: '0.85rem', color: '#6C757D', textAlign: 'center', padding: '2rem 0' }}>
+            No channels found. Ensure the bot has been added to at least one channel.
+          </p>
+        ) : (
+          <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '1rem' }}>
+            {channels.map((ch) => {
+              const isSelected = selected.some((s) => s.id === ch.id);
+              return (
+                <label
+                  key={ch.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    padding: '0.6rem 0.75rem',
+                    borderRadius: '0.5rem',
+                    border: `1px solid ${isSelected ? '#0ea5e9' : '#e9ecef'}`,
+                    background: isSelected ? '#f0f9ff' : '#fff',
+                    cursor: 'pointer',
+                    fontSize: '0.88rem',
+                    color: '#0A2540',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => toggle(ch)}
+                    style={{ accentColor: '#0ea5e9', width: '1rem', height: '1rem' }}
+                  />
+                  <span style={{ fontWeight: 500 }}>#{ch.name}</span>
+                  <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: '#6C757D' }}>{ch.id}</span>
+                </label>
+              );
+            })}
+          </div>
+        )}
+        {isError && <p style={{ fontSize: '0.82rem', color: '#dc3545', marginBottom: '0.5rem' }}>{(error as Error)?.message ?? 'Failed to save channels.'}</p>}
+        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', paddingTop: '0.5rem', borderTop: '1px solid #e9ecef' }}>
+          <button type="button" style={BTN_SECONDARY} onClick={onClose}>Cancel</button>
+          <button
+            type="button"
+            style={isPending || selected.length === 0 ? BTN_DISABLED : BTN_PRIMARY}
+            disabled={isPending || selected.length === 0}
+            onClick={handleSave}
+          >
+            {isPending ? 'Saving…' : `Save ${selected.length > 0 ? `(${selected.length})` : ''}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Disconnect confirm modal ───────────────────────────────────────────
 function DisconnectModal({ label, onConfirm, onClose, isPending }: { label: string; onConfirm: () => void; onClose: () => void; isPending: boolean }) {
   return (
@@ -342,9 +427,12 @@ function DisconnectModal({ label, onConfirm, onClose, isPending }: { label: stri
 function ProviderCard({ meta, status }: { meta: ProviderMeta; status: IntegrationStatus | undefined }) {
   const [showConnect, setShowConnect] = useState(false);
   const [showDisconnect, setShowDisconnect] = useState(false);
+  const [showChannels, setShowChannels] = useState(false);
   const { mutate: disconnect, isPending: isDisconnecting } = useDisconnectIntegration();
+  const { mutate: syncSlack, isPending: isSyncingSlack, isSuccess: slackSyncSuccess } = useSyncSlack();
 
   const connected = status?.connected ?? false;
+  const isSlack = meta.provider === IntegrationProvider.SLACK;
 
   const handleDisconnect = () => {
     disconnect(meta.provider, { onSuccess: () => setShowDisconnect(false) });
@@ -354,8 +442,13 @@ function ProviderCard({ meta, status }: { meta: ProviderMeta; status: Integratio
     ? new Date(status.lastSyncedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
     : null;
 
-  const metaEntries = status?.metadata
-    ? Object.entries(status.metadata).filter(([k]) => k !== 'teamId')
+  // For Slack, extract configured channels from metadata
+  const slackMeta = isSlack && status?.metadata ? status.metadata as Record<string, unknown> : null;
+  const configuredChannels = slackMeta?.channels as Array<{ id: string; name: string }> | undefined;
+  const slackTeamName = slackMeta?.teamName as string | undefined;
+
+  const metaEntries = status?.metadata && !isSlack
+    ? Object.entries(status.metadata as Record<string, string>).filter(([k]) => k !== 'teamId')
     : [];
 
   return (
@@ -385,7 +478,33 @@ function ProviderCard({ meta, status }: { meta: ProviderMeta; status: Integratio
             )}
           </div>
         </div>
-        {connected && metaEntries.length > 0 && (
+
+        {/* Slack-specific: team name + configured channels */}
+        {isSlack && connected && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+            {slackTeamName && (
+              <p style={{ fontSize: '0.78rem', color: '#0A2540', margin: 0 }}>
+                <strong>Workspace:</strong> {slackTeamName}
+              </p>
+            )}
+            {configuredChannels && configuredChannels.length > 0 ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                {configuredChannels.map((ch) => (
+                  <span key={ch.id} style={{ fontSize: '0.72rem', color: '#0369a1', background: '#e0f2fe', border: '1px solid #bae6fd', borderRadius: '0.4rem', padding: '0.1rem 0.45rem', fontWeight: 500 }}>
+                    #{ch.name}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p style={{ fontSize: '0.75rem', color: '#f59e0b', margin: 0 }}>
+                No channels configured — click "Configure Channels" to select which channels to monitor.
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Non-Slack metadata */}
+        {!isSlack && connected && metaEntries.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
             {metaEntries.map(([k, v]) => (
               <span key={k} style={{ fontSize: '0.75rem', color: '#0A2540', background: '#f8f9fa', border: '1px solid #e9ecef', borderRadius: '0.4rem', padding: '0.15rem 0.5rem' }}>
@@ -394,12 +513,34 @@ function ProviderCard({ meta, status }: { meta: ProviderMeta; status: Integratio
             ))}
           </div>
         )}
+
         {connected && lastSynced && (
           <p style={{ fontSize: '0.75rem', color: '#6C757D', margin: 0 }}>Last synced: {lastSynced}</p>
         )}
-        <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.25rem' }}>
+
+        {slackSyncSuccess && (
+          <p style={{ fontSize: '0.75rem', color: '#065f46', background: '#d1fae5', borderRadius: '0.4rem', padding: '0.3rem 0.6rem', margin: 0 }}>
+            Slack sync job queued. New messages will appear in your inbox shortly.
+          </p>
+        )}
+
+        <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.25rem', flexWrap: 'wrap' }}>
           {connected ? (
-            <button style={BTN_DANGER} onClick={() => setShowDisconnect(true)}>Disconnect</button>
+            <>
+              {isSlack && (
+                <>
+                  <button style={BTN_SECONDARY} onClick={() => setShowChannels(true)}>Configure Channels</button>
+                  <button
+                    style={isSyncingSlack ? BTN_DISABLED : BTN_PRIMARY}
+                    disabled={isSyncingSlack}
+                    onClick={() => syncSlack()}
+                  >
+                    {isSyncingSlack ? 'Syncing…' : 'Sync Now'}
+                  </button>
+                </>
+              )}
+              <button style={BTN_DANGER} onClick={() => setShowDisconnect(true)}>Disconnect</button>
+            </>
           ) : meta.hasConnectFlow ? (
             <button style={BTN_PRIMARY} onClick={() => setShowConnect(true)}>Connect</button>
           ) : (
@@ -410,6 +551,7 @@ function ProviderCard({ meta, status }: { meta: ProviderMeta; status: Integratio
       {showConnect && meta.provider === IntegrationProvider.SLACK && <SlackModal onClose={() => setShowConnect(false)} />}
       {showConnect && meta.provider === IntegrationProvider.ZENDESK && <ZendeskModal onClose={() => setShowConnect(false)} />}
       {showConnect && meta.provider === IntegrationProvider.INTERCOM && <IntercomModal onClose={() => setShowConnect(false)} />}
+      {showChannels && isSlack && <SlackChannelModal onClose={() => setShowChannels(false)} />}
       {showDisconnect && (
         <DisconnectModal label={meta.label} onConfirm={handleDisconnect} onClose={() => setShowDisconnect(false)} isPending={isDisconnecting} />
       )}
