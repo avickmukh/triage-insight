@@ -12,6 +12,7 @@ import {
   useSyncSlack,
 } from '@/hooks/use-integrations';
 import { IntegrationProvider, IntegrationStatus } from '@/lib/api-types';
+import { PlanGate } from '@/components/shared/plan-gate';
 
 // ── Design tokens (matches existing admin design system) ──────────────────
 const CARD: React.CSSProperties = {

@@ -117,7 +117,7 @@ export default function SupportTicketsPage() {
                     <StatusBadge label={ticket.status} style={STATUS_COLORS[ticket.status] ?? { bg: '#e9ecef', color: '#495057' }} />
                   </td>
                   <td style={{ padding: '0.875rem 1rem' }}>
-                    <StatusBadge label={ticket.priority} style={PRIORITY_COLORS[ticket.priority] ?? { bg: '#e9ecef', color: '#495057' }} />
+                    <StatusBadge label={ticket.priority ?? '—'} style={PRIORITY_COLORS[ticket.priority ?? ''] ?? { bg: '#e9ecef', color: '#495057' }} />
                   </td>
                   <td style={{ padding: '0.875rem 1rem', fontSize: '0.8rem', color: '#6C757D' }}>{ticket.source}</td>
                   <td style={{ padding: '0.875rem 1rem', fontSize: '0.8rem', color: '#6C757D', whiteSpace: 'nowrap' }}>

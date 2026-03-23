@@ -32,7 +32,7 @@ export function FeedbackDetail({ data }: FeedbackDetailProps) {
                 </div>
                 <div>
                   <p className="font-medium">ARR</p>
-                  <p>${data.customer.arr.toLocaleString()}</p>
+                  <p>${(data.customer.arrValue ?? 0).toLocaleString()}</p>
                 </div>
               </>
             )}

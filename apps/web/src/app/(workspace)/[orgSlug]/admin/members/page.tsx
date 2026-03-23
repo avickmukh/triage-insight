@@ -226,9 +226,9 @@ export default function MembersPage() {
   // ── Plan limits ────────────────────────────────────────────────────────────
   const { limits } = useWorkspaceLimits();
   const seatUsed = limits?.seats.used ?? members.length;
-  const seatMax = limits?.seats.limit;
+  const seatMax = limits?.seats.limit ?? null;
   const adminUsed = limits?.admins.used ?? members.filter((m) => m.role === WorkspaceRole.ADMIN).length;
-  const adminMax = limits?.admins.limit;
+  const adminMax = limits?.admins.limit ?? null;
 
   // ── Render ─────────────────────────────────────────────────────────────────
 

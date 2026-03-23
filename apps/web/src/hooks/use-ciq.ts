@@ -23,6 +23,7 @@ import {
   CiqScoreOutput,
   PrioritizationSettings,
   Theme,
+  ThemePriorityItem,
   ThemeRevenueIntelligence,
   FeatureRankingItem,
   ThemeRankingItem,
@@ -67,7 +68,7 @@ export const usePrioritizedThemes = (params?: { page?: number; limit?: number })
   const { workspace } = useWorkspace();
   const workspaceId = workspace?.id;
 
-  return useQuery<{ data: Theme[]; total: number; page: number; limit: number }, Error>({
+  return useQuery<{ data: ThemePriorityItem[]; total: number; page: number; limit: number }, Error>({
     queryKey: [CIQ_KEY, workspaceId, "prioritized-themes", params],
     queryFn: () => {
       if (!workspaceId) throw new Error("Workspace ID is not available");

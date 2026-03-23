@@ -457,7 +457,7 @@ export default function ThemeDetailPage() {
   const linkedFeedback = theme.linkedFeedback ?? [];
   const filteredFeedback = feedbackSearch.trim()
     ? linkedFeedback.filter((f) =>
-        f.title.toLowerCase().includes(feedbackSearch.toLowerCase()) ||
+        (f.title ?? '').toLowerCase().includes(feedbackSearch.toLowerCase()) ||
         f.description?.toLowerCase().includes(feedbackSearch.toLowerCase())
       )
     : linkedFeedback;
@@ -808,7 +808,7 @@ export default function ThemeDetailPage() {
             {filteredFeedback.map((item) => (
               <FeedbackRow
                 key={item.id}
-                item={item}
+                item={item as ThemeLinkedFeedback}
                 themeId={themeId}
                 canEdit={canEdit}
                 orgSlug={slug}

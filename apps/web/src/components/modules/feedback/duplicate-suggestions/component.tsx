@@ -63,13 +63,21 @@ function SuggestionRow({
 }) {
   const r = appRoutes(orgSlug);
   // Show the "other" feedback — the one that is not the current page
+  // Use sourceId alias if present, fall back to sourceFeedbackId
+  const sourceId = suggestion.sourceId ?? suggestion.sourceFeedbackId;
   const other =
-    suggestion.sourceId === currentFeedbackId
+    sourceId === currentFeedbackId
       ? suggestion.targetFeedback
       : suggestion.sourceFeedback;
 
+  // Guard: if the related feedback wasn't expanded, skip rendering
+  if (!other) return null;
+
+  // Use similarity alias if present, fall back to similarityScore
+  const similarityScore = suggestion.similarity ?? suggestion.similarityScore ?? 0;
+
   const sc = STATUS_COLORS[other.status] ?? { bg: '#f0f4f8', color: '#6C757D' };
-  const conf = confidenceLabel(suggestion.similarity);
+  const conf = confidenceLabel(similarityScore);
   const isBusy = isActing && actionId === suggestion.id;
 
   return (
@@ -130,7 +138,7 @@ function SuggestionRow({
               fontWeight: 600,
             }}
           >
-            {conf.label} match ({Math.round(suggestion.similarity * 100)}%)
+            {conf.label} match ({Math.round(similarityScore * 100)}%)
           </span>
           {/* Date */}
           <span style={{ fontSize: '0.72rem', color: '#adb5bd' }}>
