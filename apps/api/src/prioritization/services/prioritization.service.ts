@@ -1,13 +1,22 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectQueue } from "@nestjs/bull";
 import type { Queue } from "bull";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuditService } from "../../ai/services/audit.service";
 import { CiqService } from "../../ai/services/ciq.service";
+import { AggregationService } from "./aggregation.service";
+import { PrioritizationCacheService } from "./prioritization-cache.service";
 import { UpdateSettingsDto } from "../dto/update-settings.dto";
 import { QueryPrioritizationDto } from "../dto/query-prioritization.dto";
 import { AuditLogAction, ThemeStatus } from "@prisma/client";
 import { CIQ_SCORING_QUEUE } from "../../ai/processors/ciq-scoring.processor";
+import { PRIORITIZATION_QUEUE } from "../workers/prioritization.worker";
+
+export interface SetManualOverrideDto {
+  manualOverrideScore: number | null;
+  strategicTag?: string | null;
+  overrideReason?: string | null;
+}
 
 @Injectable()
 export class PrioritizationService {
@@ -15,14 +24,15 @@ export class PrioritizationService {
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
     private readonly ciqService: CiqService,
+    private readonly aggregationService: AggregationService,
+    private readonly cacheService: PrioritizationCacheService,
     @InjectQueue(CIQ_SCORING_QUEUE) private readonly ciqQueue: Queue,
+    @InjectQueue(PRIORITIZATION_QUEUE) private readonly prioritizationQueue: Queue,
   ) {}
 
   /**
    * Return all ACTIVE themes ordered by their stored priorityScore (desc).
    * Themes that have never been scored appear last (null score).
-   * Also returns the live CIQ score for the first page so the UI can display
-   * the full scoreExplanation without a second round-trip.
    */
   async getPrioritizedThemes(workspaceId: string, query: QueryPrioritizationDto) {
     const { page = 1, limit = 20 } = query;
@@ -46,15 +56,116 @@ export class PrioritizationService {
 
   /**
    * Return the stored score for a single theme plus a live CIQ computation.
-   * The live computation is returned in scoreExplanation for the explainability UI.
    */
   async getThemeScoreExplanation(workspaceId: string, themeId: string) {
     return this.ciqService.scoreTheme(workspaceId, themeId);
   }
 
   /**
-   * Enqueue an async CIQ scoring job for a single theme.
+   * GET /prioritization/features — ranked feature list from cache or live compute.
+   */
+  async getPrioritizedFeatures(workspaceId: string, limit = 50) {
+    const cached = this.cacheService.get(workspaceId);
+    if (cached) return { data: cached.features.slice(0, limit), total: cached.features.length, computedAt: cached.computedAt, cached: true };
+    const features = await this.aggregationService.getFeaturePriorityRanking(workspaceId, limit);
+    return { data: features, total: features.length, computedAt: new Date(), cached: false };
+  }
+
+  /**
+   * GET /prioritization/opportunities — revenue opportunity list from cache or live compute.
+   */
+  async getOpportunities(workspaceId: string, limit = 20) {
+    const cached = this.cacheService.get(workspaceId);
+    if (cached) return { data: cached.opportunities.slice(0, limit), total: cached.opportunities.length, computedAt: cached.computedAt, cached: true };
+    const opportunities = await this.aggregationService.getOpportunities(workspaceId, limit);
+    return { data: opportunities, total: opportunities.length, computedAt: new Date(), cached: false };
+  }
+
+  /**
+   * GET /prioritization/roadmap — roadmap recommendations from cache or live compute.
+   */
+  async getRoadmapRecommendations(workspaceId: string, limit = 30) {
+    const cached = this.cacheService.get(workspaceId);
+    if (cached) return { data: cached.roadmap.slice(0, limit), total: cached.roadmap.length, computedAt: cached.computedAt, cached: true };
+    const roadmap = await this.aggregationService.getRoadmapRecommendations(workspaceId, limit);
+    return { data: roadmap, total: roadmap.length, computedAt: new Date(), cached: false };
+  }
+
+  /**
+   * POST /prioritization/recompute — enqueue a full workspace recompute job.
    * Returns immediately with a job reference.
+   */
+  async enqueueFullRecompute(workspaceId: string, userId: string) {
+    const job = await this.prioritizationQueue.add(
+      { type: 'WORKSPACE_RECOMPUTE', workspaceId, userId },
+      { attempts: 3, backoff: { type: 'exponential', delay: 3000 }, removeOnComplete: 50 },
+    );
+    await this.auditService.logAction(
+      workspaceId,
+      userId,
+      AuditLogAction.PRIORITIZATION_SETTINGS_UPDATE,
+      { action: 'full_recompute_enqueued', jobId: job.id },
+    );
+    return { jobId: job.id, message: 'Full prioritization recompute enqueued' };
+  }
+
+  /**
+   * POST /prioritization/themes/:themeId/override — set or clear a manual override score.
+   * ADMIN only.
+   */
+  async setManualOverride(workspaceId: string, themeId: string, userId: string, dto: SetManualOverrideDto) {
+    const theme = await this.prisma.theme.findFirst({ where: { id: themeId, workspaceId } });
+    if (!theme) throw new NotFoundException('Theme not found');
+
+    const updated = await this.prisma.theme.update({
+      where: { id: themeId },
+      data: {
+        manualOverrideScore: dto.manualOverrideScore,
+        strategicTag:        dto.strategicTag ?? theme.strategicTag,
+        overrideReason:      dto.overrideReason ?? null,
+        lastScoredAt:        new Date(),
+      },
+    });
+
+    await this.auditService.logAction(
+      workspaceId,
+      userId,
+      AuditLogAction.PRIORITIZATION_SETTINGS_UPDATE,
+      { action: 'manual_override', themeId, overrideScore: dto.manualOverrideScore, reason: dto.overrideReason },
+    );
+
+    // Invalidate cache so next read reflects the override
+    this.cacheService.invalidate(workspaceId);
+
+    return updated;
+  }
+
+  /**
+   * PATCH /prioritization/themes/:themeId/strategic-tag — set strategic tag only.
+   * ADMIN only.
+   */
+  async setStrategicTag(workspaceId: string, themeId: string, userId: string, strategicTag: string | null) {
+    const theme = await this.prisma.theme.findFirst({ where: { id: themeId, workspaceId } });
+    if (!theme) throw new NotFoundException('Theme not found');
+
+    const updated = await this.prisma.theme.update({
+      where: { id: themeId },
+      data: { strategicTag },
+    });
+
+    await this.auditService.logAction(
+      workspaceId,
+      userId,
+      AuditLogAction.PRIORITIZATION_SETTINGS_UPDATE,
+      { action: 'strategic_tag_update', themeId, strategicTag },
+    );
+
+    this.cacheService.invalidate(workspaceId);
+    return updated;
+  }
+
+  /**
+   * Enqueue an async CIQ scoring job for a single theme.
    */
   async enqueueThemeRescore(workspaceId: string, themeId: string) {
     const job = await this.ciqQueue.add(
@@ -66,7 +177,6 @@ export class PrioritizationService {
 
   /**
    * Enqueue CIQ scoring jobs for ALL active themes in a workspace.
-   * Used by the "Recalculate All" button in the AI settings panel.
    */
   async enqueueWorkspaceRescore(workspaceId: string, userId: string) {
     const themes = await this.prisma.theme.findMany({
@@ -94,9 +204,7 @@ export class PrioritizationService {
   }
 
   async getSettings(workspaceId: string) {
-    let settings = await this.prisma.prioritizationSettings.findUnique({
-      where: { workspaceId },
-    });
+    let settings = await this.prisma.prioritizationSettings.findUnique({ where: { workspaceId } });
     if (!settings) {
       settings = await this.prisma.prioritizationSettings.create({ data: { workspaceId } });
     }
@@ -114,8 +222,11 @@ export class PrioritizationService {
       workspaceId,
       userId,
       AuditLogAction.PRIORITIZATION_SETTINGS_UPDATE,
-      { changes: dto }
+      { changes: dto },
     );
+
+    // Settings change invalidates cache
+    this.cacheService.invalidate(workspaceId);
 
     return updatedSettings;
   }

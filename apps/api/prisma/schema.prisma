@@ -522,6 +522,10 @@ model Feedback {
   impactScore     Float?
   /// CIQ composite score (0–100); set by CiqScoringProcessor after ingestion
   ciqScore        Float?   @default(0)
+  /// Urgency signal (0–1): composite of voice urgency, churn risk, and support spike correlation
+  urgencySignal   Float?   @default(0)
+  /// Vote velocity: votes per day (rolling 30d window); used in demand strength dimension
+  voteVelocity    Float?   @default(0)
   /// Arbitrary source-specific metadata (e.g. Slack channel, email headers, CSV row index)
   metadata        Json?
   createdAt       DateTime            @default(now())
@@ -656,6 +660,16 @@ model Theme {
   signalBreakdown  Json?
   /// CIQ composite score alias (mirrors priorityScore; set by CiqScoringProcessor)
   ciqScore         Float?   @default(0)
+  /// Normalised 0–100 revenue impact score (ARR × deal influence × enterprise weighting)
+  revenueScore     Float?   @default(0)
+  /// Urgency score (0–100): support spike + negative voice trend + escalation flags
+  urgencyScore     Float?   @default(0)
+  /// Admin manual override score (0–100); when set, overrides computed priorityScore
+  manualOverrideScore Float?
+  /// Admin-set strategic tag: 'strategic' | 'core' | 'nice-to-have' | 'deprioritised'
+  strategicTag     String?
+  /// Free-text reason for the manual override (audit trail)
+  overrideReason   String?
 
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
@@ -776,6 +790,12 @@ model PrioritizationSettings {
   dealStageProposal         Float @default(0.6)
   dealStageNegotiation      Float @default(0.8)
   dealStageClosedWon        Float @default(1.0)
+
+  /// 4-dimension top-level weights for the Prioritization Engine
+  demandStrengthWeight      Float @default(0.30)
+  revenueImpactWeight       Float @default(0.35)
+  strategicImportanceWeight Float @default(0.20)
+  urgencySignalWeight       Float @default(0.15)
 
   updatedAt                 DateTime @updatedAt
 

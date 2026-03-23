@@ -45,4 +45,17 @@ export class UpdateSettingsDto {
 
   @IsOptional() @IsNumber() @Min(0) @Max(1)
   dealStageClosedWon?: number;
+
+  // ─── 4-dimension top-level weights ────────────────────────────────────────
+  @IsOptional() @IsNumber() @Min(0) @Max(1)
+  demandStrengthWeight?: number;
+
+  @IsOptional() @IsNumber() @Min(0) @Max(1)
+  revenueImpactWeight?: number;
+
+  @IsOptional() @IsNumber() @Min(0) @Max(1)
+  strategicImportanceWeight?: number;
+
+  @IsOptional() @IsNumber() @Min(0) @Max(1)
+  urgencySignalWeight?: number;
 }

@@ -84,6 +84,10 @@ import {
   ThemeRankingItem,
   CustomerRankingItem,
   StrategicSignalsOutput,
+  FeaturePriorityResponse,
+  OpportunitiesResponse,
+  RoadmapRecommendationsResponse,
+  ThemePriorityItem,
 } from "@/lib/api-types";
 
 const getApiBaseUrl = () => {
@@ -284,7 +288,7 @@ const apiClient = {
 
   prioritization: {
     /** GET /workspaces/:id/prioritization/themes — weighted priority list */
-    getThemes: (workspaceId: string, params?: { page?: number; limit?: number; sortBy?: string }): Promise<{ data: Theme[]; total: number; page: number; limit: number }> =>
+    getThemes: (workspaceId: string, params?: { page?: number; limit?: number; sortBy?: string }): Promise<{ data: ThemePriorityItem[]; total: number; page: number; limit: number }> =>
       api.get(`/workspaces/${workspaceId}/prioritization/themes`, { params }).then(handleResponse),
     /** GET /workspaces/:id/prioritization/themes/:themeId/ciq — real CIQ score */
     getThemeCiq: (workspaceId: string, themeId: string): Promise<CiqScoreOutput> =>
@@ -301,6 +305,24 @@ const apiClient = {
     /** PATCH /workspaces/:id/prioritization/settings */
     updateSettings: (workspaceId: string, data: Partial<PrioritizationSettings>): Promise<PrioritizationSettings> =>
       api.patch(`/workspaces/${workspaceId}/prioritization/settings`, data).then(handleResponse),
+    /** GET /workspaces/:id/prioritization/features — feature priority ranking */
+    getFeatures: (workspaceId: string, limit?: number): Promise<FeaturePriorityResponse> =>
+      api.get(`/workspaces/${workspaceId}/prioritization/features`, { params: { limit } }).then(handleResponse),
+    /** GET /workspaces/:id/prioritization/opportunities — revenue opportunities */
+    getOpportunities: (workspaceId: string, limit?: number): Promise<OpportunitiesResponse> =>
+      api.get(`/workspaces/${workspaceId}/prioritization/opportunities`, { params: { limit } }).then(handleResponse),
+    /** GET /workspaces/:id/prioritization/roadmap — roadmap recommendations */
+    getRoadmapRecommendations: (workspaceId: string, limit?: number): Promise<RoadmapRecommendationsResponse> =>
+      api.get(`/workspaces/${workspaceId}/prioritization/roadmap`, { params: { limit } }).then(handleResponse),
+    /** POST /workspaces/:id/prioritization/recompute — full workspace recompute */
+    recompute: (workspaceId: string): Promise<{ jobId: string | number; message: string }> =>
+      api.post(`/workspaces/${workspaceId}/prioritization/recompute`).then(handleResponse),
+    /** POST /workspaces/:id/prioritization/themes/:themeId/override — manual override */
+    setThemeOverride: (workspaceId: string, themeId: string, data: { manualOverrideScore: number | null; strategicTag?: string | null; overrideReason?: string | null }): Promise<Theme> =>
+      api.post(`/workspaces/${workspaceId}/prioritization/themes/${themeId}/override`, data).then(handleResponse),
+    /** PATCH /workspaces/:id/prioritization/themes/:themeId/strategic-tag */
+    setStrategicTag: (workspaceId: string, themeId: string, strategicTag: string | null): Promise<Theme> =>
+      api.patch(`/workspaces/${workspaceId}/prioritization/themes/${themeId}/strategic-tag`, { strategicTag }).then(handleResponse),
   },
 
   support: {

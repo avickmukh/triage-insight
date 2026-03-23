@@ -1480,3 +1480,112 @@ export interface StrategicSignalsOutput {
     negativeSentimentCount: number;
   };
 }
+
+// ─── Prioritization Engine (4-Dimension) ──────────────────────────────────────
+
+export interface PrioritizationDimensionScore {
+  raw: number;
+  normalised: number;
+  weight: number;
+  contribution: number;
+  label: string;
+  factors: Record<string, number>;
+}
+
+export interface PrioritizationScoreBreakdown {
+  demandStrength:       PrioritizationDimensionScore;
+  revenueImpact:        PrioritizationDimensionScore;
+  strategicImportance:  PrioritizationDimensionScore;
+  urgencySignal:        PrioritizationDimensionScore;
+}
+
+export interface FeaturePriorityItem {
+  feedbackId:              string;
+  title:                   string;
+  featurePriorityRank:     number;
+  priorityScore:           number;
+  urgencyScore:            number;
+  revenueOpportunityScore: number;
+  voteCount:               number;
+  voteVelocity:            number;
+  sentiment:               number | null;
+  customerName:            string | null;
+  customerArr:             number;
+  themeCount:              number;
+  breakdown:               PrioritizationScoreBreakdown;
+}
+
+export interface ThemePriorityItem {
+  themeId:                 string;
+  title:                   string;
+  status:                  string;
+  themePriorityRank:       number;
+  priorityScore:           number;
+  revenueScore:            number;
+  urgencyScore:            number;
+  revenueOpportunityScore: number;
+  feedbackCount:           number;
+  uniqueCustomerCount:     number;
+  revenueInfluence:        number;
+  dealInfluenceValue:      number;
+  strategicTag:            string | null;
+  manualOverrideScore:     number | null;
+  hasManualOverride:       boolean;
+  lastScoredAt:            string | null;
+  breakdown:               PrioritizationScoreBreakdown;
+}
+
+export type RoadmapRecommendationType =
+  | 'promote_to_committed'
+  | 'promote_to_planned'
+  | 'keep_current'
+  | 'deprioritise'
+  | 'already_shipped';
+
+export interface RoadmapRecommendationItem {
+  roadmapItemId:              string;
+  title:                      string;
+  status:                     string;
+  themeId:                    string | null;
+  themeTitle:                 string | null;
+  roadmapRecommendationScore: number;
+  urgencyScore:               number;
+  revenueOpportunityScore:    number;
+  priorityScore:              number;
+  recommendation:             RoadmapRecommendationType;
+  rationale:                  string;
+  breakdown:                  PrioritizationScoreBreakdown;
+}
+
+export interface PrioritizationOpportunity {
+  type:                    'theme' | 'feature' | 'roadmap';
+  entityId:                string;
+  title:                   string;
+  opportunityScore:        number;
+  revenueOpportunityScore: number;
+  urgencyScore:            number;
+  reason:                  string;
+  arrAtRisk:               number;
+  dealCount:               number;
+}
+
+export interface FeaturePriorityResponse {
+  data:        FeaturePriorityItem[];
+  total:       number;
+  computedAt:  string;
+  cached:      boolean;
+}
+
+export interface OpportunitiesResponse {
+  data:        PrioritizationOpportunity[];
+  total:       number;
+  computedAt:  string;
+  cached:      boolean;
+}
+
+export interface RoadmapRecommendationsResponse {
+  data:        RoadmapRecommendationItem[];
+  total:       number;
+  computedAt:  string;
+  cached:      boolean;
+}

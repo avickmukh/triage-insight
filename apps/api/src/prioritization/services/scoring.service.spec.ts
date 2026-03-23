@@ -23,6 +23,10 @@ describe("ScoringService", () => {
     dealStageNegotiation: 0.8,
     dealStageClosedWon: 1.0,
     updatedAt: new Date(),
+    demandStrengthWeight: 0.30,
+    revenueImpactWeight: 0.35,
+    strategicImportanceWeight: 0.20,
+    urgencySignalWeight: 0.15,
   };
 
   const mockThemeData: ThemeData = {
