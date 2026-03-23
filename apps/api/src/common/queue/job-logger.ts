@@ -13,6 +13,7 @@ export interface JobContext {
   workspaceId: string;
   entityId?: string;
   jobId?: string | number;
+  [key: string]: unknown;
 }
 
 export interface JobLogPayload extends JobContext {

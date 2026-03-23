@@ -29,6 +29,7 @@ interface AnalysisJobPayload {
   workspaceId: string;
   /** Injected by idempotency service for lifecycle tracking */
   __logId?: string;
+  [key: string]: unknown;
 }
 
 @Injectable()

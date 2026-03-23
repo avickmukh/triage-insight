@@ -31,6 +31,7 @@ export interface CiqJobPayload {
   dealId?: string;
   /** Injected by idempotency service */
   __logId?: string;
+  [key: string]: unknown;
 }
 
 @Injectable()
@@ -102,9 +103,9 @@ export class CiqScoringProcessor {
           // ── Score overwrite protection ──────────────────────────────────
           const existing = await this.prisma.theme.findUnique({
             where: { id: themeId },
-            select: { prioritizationScore: true },
+            select: { priorityScore: true },
           });
-          const existingScore = existing?.prioritizationScore ?? 0;
+          const existingScore = existing?.priorityScore ?? 0;
           if (score.priorityScore > existingScore || existingScore === 0) {
             await this.ciqService.persistThemeScore(themeId, score);
             await this.ciqService.persistThemeScoreToRoadmap(workspaceId, themeId, score);
@@ -177,10 +178,10 @@ export class CiqScoringProcessor {
 
   private toAiJobType(type: CiqJobType): AiJobType {
     switch (type) {
-      case 'FEEDBACK_SCORED': return AiJobType.CIQ_SCORING;
-      case 'THEME_SCORED':    return AiJobType.CIQ_SCORING;
-      case 'ROADMAP_SCORED':  return AiJobType.CIQ_SCORING;
-      case 'DEAL_SCORED':     return AiJobType.CIQ_SCORING;
+      case 'FEEDBACK_SCORED': return AiJobType.CIQ_SCORING_FEEDBACK;
+      case 'THEME_SCORED':    return AiJobType.CIQ_SCORING_THEME;
+      case 'ROADMAP_SCORED':  return AiJobType.CIQ_SCORING_ROADMAP;
+      case 'DEAL_SCORED':     return AiJobType.CIQ_SCORING_DEAL;
     }
   }
 

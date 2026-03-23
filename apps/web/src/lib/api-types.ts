@@ -186,12 +186,25 @@ export interface Feedback {
   attachments?: FeedbackAttachment[];
   themes?: ThemeFeedback[];
   customer?: FeedbackCustomerSnippet | null;
+  comments?: FeedbackComment[];
+  confidence?: number | null;
+  assignedBy?: string | null;
 }
 
 export interface ThemeFeedback {
+  id?: string;
   themeId: string;
   feedbackId: string;
   theme?: Theme;
+  /** Feedback fields present when theme linked feedback is expanded */
+  title?: string;
+  description?: string | null;
+  status?: string;
+  sourceType?: string;
+  workspaceId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  submittedAt?: string;
 }
 
 export interface FeedbackListResponse {
@@ -206,10 +219,19 @@ export interface FeedbackComment {
   feedbackId: string;
   workspaceId: string;
   content: string;
+  /** Alias for content — some components use body */
+  body?: string;
   authorId?: string | null;
   portalUserId?: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Populated author object when expanded */
+  author?: {
+    id: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    email?: string | null;
+  } | null;
 }
 
 export interface Theme {
@@ -221,7 +243,7 @@ export interface Theme {
   status: ThemeStatus;
   pinned: boolean;
   aggregatedPriorityScore?: number | null;
-  linkedFeedback?: ThemeFeedback[];
+  linkedFeedback?: (ThemeFeedback | Feedback)[];
   /** Present on detail endpoint (findOne) */
   feedbackCount?: number;
   /** Present on list endpoint (findMany) — Prisma _count include */
@@ -318,7 +340,11 @@ export interface DuplicateSuggestion {
   id: string;
   sourceFeedbackId: string;
   targetFeedbackId: string;
+  /** Alias for sourceFeedbackId — used in some components */
+  sourceId?: string;
   similarityScore: number;
+  /** Alias for similarityScore — used in some components */
+  similarity?: number;
   status: DuplicateSuggestionStatus;
   createdAt: string;
   updatedAt: string;
@@ -342,8 +368,12 @@ export interface SupportTicket {
   customerId?: string | null;
   externalId?: string | null;
   subject: string;
+  /** Alias for subject — used in some components */
+  title?: string;
   description?: string | null;
   status: string;
+  priority?: string | null;
+  source?: string | null;
   provider?: string;
   customerEmail?: string | null;
   arrValue?: number | null;
@@ -536,7 +566,7 @@ export type ThemeLinkedFeedback = Feedback;
 
 export interface CreateFeedbackDto {
   title: string;
-  description: string;
+  description?: string;
   sourceType?: FeedbackSourceType;
   sourceRef?: string;
   customerId?: string;
