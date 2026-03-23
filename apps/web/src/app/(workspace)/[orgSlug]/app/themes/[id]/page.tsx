@@ -9,7 +9,7 @@ import {
   useRemoveFeedbackFromTheme,
 } from '@/hooks/use-themes';
 import { useCurrentMemberRole } from '@/hooks/use-workspace';
-import { useThemeCiqScore, useRecalculateThemeCiq } from '@/hooks/use-ciq';
+import { useThemeCiqScore, useRecalculateThemeCiq, useThemeRevenueIntelligence } from '@/hooks/use-ciq';
 import {
   CiqScoreOutput,
   FeedbackSourceType,
@@ -386,6 +386,7 @@ export default function ThemeDetailPage() {
 
   const { data: theme, isLoading, isError, error } = useThemeDetail(themeId);
   const { data: ciqScore, isLoading: ciqLoading } = useThemeCiqScore(themeId || null);
+  const { data: revenueIntel, isLoading: revenueLoading } = useThemeRevenueIntelligence(themeId || null);
   const recalculate = useRecalculateThemeCiq();
   const [rescoreToast, setRescoreToast] = useState<string | null>(null);
 
@@ -673,6 +674,95 @@ export default function ThemeDetailPage() {
               ? 'CIQ score not yet computed. Click “Recalculate” to generate the priority score.'
               : 'Add at least 3 feedback signals to unlock CIQ scoring for this theme.'}
           </p>
+        )}
+      </div>
+
+      {/* ── Revenue Intelligence Panel ── */}
+      <div style={{ ...CARD, background: 'linear-gradient(135deg, #f0fff4 0%, #e8f8f0 100%)', border: '1px solid #a7f3d0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <div>
+            <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#0a2540', margin: '0 0 0.125rem' }}>Revenue Intelligence</h3>
+            <p style={{ fontSize: '0.78rem', color: '#6C757D', margin: 0 }}>Deal pipeline and top requesting customers</p>
+          </div>
+          {revenueIntel && revenueIntel.totalInfluence > 0 && (
+            <span style={{ background: '#d1fae5', color: '#065f46', borderRadius: '2rem', padding: '0.25rem 0.75rem', fontSize: '0.8rem', fontWeight: 600 }}>
+              ${(revenueIntel.totalInfluence / 1000).toFixed(0)}K total influence
+            </span>
+          )}
+        </div>
+        {revenueLoading ? (
+          <div style={{ display: 'flex', gap: '1rem' }}>
+            {[120, 100, 140].map((w, i) => <Skeleton key={i} style={{ height: '3rem', width: `${w}px` }} />)}
+          </div>
+        ) : revenueIntel ? (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+            {/* Deal signals */}
+            <div>
+              <h4 style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0a2540', margin: '0 0 0.625rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Deal Signals</h4>
+              {revenueIntel.deals.length === 0 ? (
+                <p style={{ fontSize: '0.8rem', color: '#adb5bd', margin: 0 }}>No deals linked yet</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  {revenueIntel.deals.slice(0, 5).map((deal) => (
+                    <div key={deal.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.45rem 0.65rem', background: '#fff', borderRadius: '0.5rem', fontSize: '0.78rem', border: '1px solid #d1fae5' }}>
+                      <div>
+                        <div style={{ fontWeight: 600, color: '#0a2540' }}>{deal.title}</div>
+                        <div style={{ color: '#6C757D', fontSize: '0.72rem' }}>{deal.customer?.name} · {deal.stage}</div>
+                      </div>
+                      <div style={{ fontWeight: 700, color: deal.status === 'OPEN' ? '#059669' : '#6C757D', fontSize: '0.8rem' }}>
+                        ${(deal.annualValue / 1000).toFixed(0)}K
+                      </div>
+                    </div>
+                  ))}
+                  {revenueIntel.deals.length > 5 && (
+                    <p style={{ fontSize: '0.72rem', color: '#adb5bd', margin: '0.2rem 0 0' }}>+{revenueIntel.deals.length - 5} more deals</p>
+                  )}
+                </div>
+              )}
+              <div style={{ marginTop: '0.75rem', display: 'flex', gap: '1.25rem' }}>
+                <div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#059669' }}>${(revenueIntel.openInfluence / 1000).toFixed(0)}K</div>
+                  <div style={{ fontSize: '0.68rem', color: '#adb5bd', textTransform: 'uppercase' }}>Open Pipeline</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0a2540' }}>{revenueIntel.dealCount}</div>
+                  <div style={{ fontSize: '0.68rem', color: '#adb5bd', textTransform: 'uppercase' }}>Total Deals</div>
+                </div>
+              </div>
+            </div>
+            {/* Top requesting customers */}
+            <div>
+              <h4 style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0a2540', margin: '0 0 0.625rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Top Requesting Customers</h4>
+              {revenueIntel.topCustomers.length === 0 ? (
+                <p style={{ fontSize: '0.8rem', color: '#adb5bd', margin: 0 }}>No customer signals yet</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  {revenueIntel.topCustomers.slice(0, 5).map((c) => (
+                    <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.45rem 0.65rem', background: '#fff', borderRadius: '0.5rem', fontSize: '0.78rem', border: '1px solid #d1fae5' }}>
+                      <div>
+                        <div style={{ fontWeight: 600, color: '#0a2540' }}>{c.name}</div>
+                        <div style={{ color: '#6C757D', fontSize: '0.72rem' }}>{c.companyName ?? c.lifecycleStage} · {c.feedbackCount} signals</div>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.15rem' }}>
+                        <span style={{ fontWeight: 700, color: '#0a2540', fontSize: '0.78rem' }}>${(c.arrValue / 1000).toFixed(0)}K ARR</span>
+                        {c.churnRisk != null && c.churnRisk > 0.6 && (
+                          <span style={{ background: '#fee2e2', color: '#dc2626', borderRadius: '0.25rem', padding: '0.1rem 0.35rem', fontSize: '0.62rem', fontWeight: 600 }}>AT RISK</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {revenueIntel.totalCustomerARR > 0 && (
+                <div style={{ marginTop: '0.75rem' }}>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0a2540' }}>${(revenueIntel.totalCustomerARR / 1000).toFixed(0)}K</div>
+                  <div style={{ fontSize: '0.68rem', color: '#adb5bd', textTransform: 'uppercase' }}>Customer ARR at Stake</div>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <p style={{ fontSize: '0.85rem', color: '#6C757D', margin: 0 }}>No revenue signals linked to this theme yet. Link deals or customers to see revenue intelligence.</p>
         )}
       </div>
 

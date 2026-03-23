@@ -1,9 +1,15 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bull';
+import type { Queue } from 'bull';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDealDto } from './dto/create-deal.dto';
 import { UpdateDealDto } from './dto/update-deal.dto';
 import { QueryDealDto } from './dto/query-deal.dto';
 import { Prisma } from '@prisma/client';
+import {
+  CUSTOMER_REVENUE_SIGNAL_QUEUE,
+  type CustomerRevenueSignalJobPayload,
+} from '../customer/processors/customer-revenue-signal.processor';
 
 type DealSortField = 'createdAt' | 'updatedAt' | 'annualValue';
 
@@ -28,7 +34,11 @@ const DEAL_INCLUDE = {
 
 @Injectable()
 export class DealService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @InjectQueue(CUSTOMER_REVENUE_SIGNAL_QUEUE)
+    private readonly revenueSignalQueue: Queue<CustomerRevenueSignalJobPayload>,
+  ) {}
 
   // ─── Create ────────────────────────────────────────────────────────────────
 
@@ -55,6 +65,18 @@ export class DealService {
       },
       include: DEAL_INCLUDE,
     });
+
+    // Enqueue revenue recomputation for each linked theme
+    if (themeIds && themeIds.length > 0) {
+      for (const themeId of themeIds) {
+        await this.revenueSignalQueue
+          .add(
+            { type: 'RECOMPUTE_THEME_REVENUE', workspaceId, themeId },
+            { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, delay: 2000 },
+          )
+          .catch(() => { /* non-critical */ });
+      }
+    }
 
     return deal;
   }
@@ -116,7 +138,7 @@ export class DealService {
   // ─── Update ────────────────────────────────────────────────────────────────
 
   async update(workspaceId: string, id: string, dto: UpdateDealDto) {
-    await this.findOne(workspaceId, id);
+    const existing = await this.findOne(workspaceId, id);
 
     const { themeIds, ...dealData } = dto;
 
@@ -134,14 +156,48 @@ export class DealService {
       include: DEAL_INCLUDE,
     });
 
+    // Recompute revenue for affected themes when value/stage/status changes
+    const valueChanged =
+      dto.annualValue !== undefined ||
+      dto.stage !== undefined ||
+      dto.status !== undefined ||
+      dto.influenceWeight !== undefined;
+
+    if (valueChanged) {
+      // Collect theme IDs from both old and new links
+      const affectedThemeIds = new Set<string>([
+        ...existing.themeLinks.map((tl) => tl.theme.id),
+        ...(themeIds ?? []),
+      ]);
+      for (const themeId of affectedThemeIds) {
+        await this.revenueSignalQueue
+          .add(
+            { type: 'RECOMPUTE_THEME_REVENUE', workspaceId, themeId },
+            { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, delay: 2000 },
+          )
+          .catch(() => { /* non-critical */ });
+      }
+    }
+
     return deal;
   }
 
   // ─── Delete ────────────────────────────────────────────────────────────────
 
   async remove(workspaceId: string, id: string) {
-    await this.findOne(workspaceId, id);
+    const deal = await this.findOne(workspaceId, id);
     await this.prisma.deal.delete({ where: { id } });
+
+    // Recompute revenue for previously linked themes
+    for (const tl of deal.themeLinks) {
+      await this.revenueSignalQueue
+        .add(
+          { type: 'RECOMPUTE_THEME_REVENUE', workspaceId, themeId: tl.theme.id },
+          { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, delay: 2000 },
+        )
+        .catch(() => { /* non-critical */ });
+    }
+
     return { success: true };
   }
 
@@ -159,6 +215,14 @@ export class DealService {
       update: {},
     });
 
+    // Recompute revenue influence for the newly linked theme
+    await this.revenueSignalQueue
+      .add(
+        { type: 'RECOMPUTE_THEME_REVENUE', workspaceId, themeId },
+        { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, delay: 1000 },
+      )
+      .catch(() => { /* non-critical */ });
+
     return { success: true };
   }
 
@@ -173,6 +237,14 @@ export class DealService {
     await this.prisma.dealThemeLink.delete({
       where: { dealId_themeId: { dealId, themeId } },
     });
+
+    // Recompute revenue influence for the unlinked theme
+    await this.revenueSignalQueue
+      .add(
+        { type: 'RECOMPUTE_THEME_REVENUE', workspaceId, themeId },
+        { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, delay: 1000 },
+      )
+      .catch(() => { /* non-critical */ });
 
     return { success: true };
   }
@@ -205,13 +277,79 @@ export class DealService {
 
     const deals = links.map((l) => l.deal);
     const totalInfluence = deals.reduce((sum, d) => sum + d.annualValue, 0);
-    const openInfluence = deals.filter((d) => d.status === 'OPEN').reduce((sum, d) => sum + d.annualValue, 0);
+    const openInfluence = deals
+      .filter((d) => d.status === 'OPEN')
+      .reduce((sum, d) => sum + d.annualValue, 0);
+
+    // Top requesting customers (from feedback linked to this theme)
+    const feedbackLinks = await this.prisma.themeFeedback.findMany({
+      where: { themeId },
+      select: {
+        feedback: {
+          select: {
+            customerId: true,
+            customer: {
+              select: {
+                id: true,
+                name: true,
+                companyName: true,
+                arrValue: true,
+                accountPriority: true,
+                lifecycleStage: true,
+                churnRisk: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Aggregate by customer: count feedback + sum ARR
+    const customerMap = new Map<
+      string,
+      {
+        id: string;
+        name: string;
+        companyName: string | null;
+        arrValue: number;
+        accountPriority: string;
+        lifecycleStage: string;
+        churnRisk: number | null;
+        feedbackCount: number;
+      }
+    >();
+
+    for (const fl of feedbackLinks) {
+      const c = fl.feedback.customer;
+      if (!c || !fl.feedback.customerId) continue;
+      const existing = customerMap.get(fl.feedback.customerId);
+      if (existing) {
+        existing.feedbackCount += 1;
+      } else {
+        customerMap.set(fl.feedback.customerId, {
+          id: c.id,
+          name: c.name,
+          companyName: c.companyName,
+          arrValue: c.arrValue ?? 0,
+          accountPriority: c.accountPriority,
+          lifecycleStage: c.lifecycleStage,
+          churnRisk: c.churnRisk,
+          feedbackCount: 1,
+        });
+      }
+    }
+
+    const topCustomers = Array.from(customerMap.values())
+      .sort((a, b) => b.arrValue - a.arrValue || b.feedbackCount - a.feedbackCount)
+      .slice(0, 10);
 
     return {
       deals,
       totalInfluence,
       openInfluence,
       dealCount: deals.length,
+      topCustomers,
+      totalCustomerARR: topCustomers.reduce((sum, c) => sum + c.arrValue, 0),
     };
   }
 }

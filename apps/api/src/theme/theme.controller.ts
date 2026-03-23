@@ -24,9 +24,20 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../workspace/guards/roles.guard';
 import { Roles } from '../workspace/decorators/roles.decorator';
 import { WorkspaceRole } from '@prisma/client';
+import { IsString } from 'class-validator';
 
 interface AuthenticatedRequest {
   user: { sub: string; email: string };
+}
+
+class LinkDealDto {
+  @IsString()
+  dealId: string;
+}
+
+class LinkCustomerDto {
+  @IsString()
+  customerId: string;
 }
 
 @Controller('workspaces/:workspaceId/themes')
@@ -123,7 +134,7 @@ export class ThemeController {
 
   /**
    * GET /workspaces/:workspaceId/themes/:id/revenue-intelligence
-   * Returns deal influence, ARR impact, and impacted customers for a theme.
+   * Returns deal influence, ARR impact, top requesting customers, and open pipeline.
    */
   @Get(':id/revenue-intelligence')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
@@ -132,5 +143,61 @@ export class ThemeController {
     @Param('id') id: string,
   ) {
     return this.dealService.findByTheme(workspaceId, id);
+  }
+
+  /**
+   * POST /workspaces/:workspaceId/themes/:id/link-deal
+   * Link a deal to a theme and trigger revenue recomputation.
+   */
+  @Post(':id/link-deal')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  linkDeal(
+    @Param('workspaceId') workspaceId: string,
+    @Param('id') id: string,
+    @Body() body: LinkDealDto,
+  ) {
+    return this.dealService.linkTheme(workspaceId, body.dealId, id);
+  }
+
+  /**
+   * DELETE /workspaces/:workspaceId/themes/:id/link-deal/:dealId
+   * Unlink a deal from a theme and trigger revenue recomputation.
+   */
+  @Delete(':id/link-deal/:dealId')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  unlinkDeal(
+    @Param('workspaceId') workspaceId: string,
+    @Param('id') id: string,
+    @Param('dealId') dealId: string,
+  ) {
+    return this.dealService.unlinkTheme(workspaceId, dealId, id);
+  }
+
+  /**
+   * POST /workspaces/:workspaceId/themes/:id/link-customer
+   * Manually link a customer signal to a theme (creates a CustomerSignal record).
+   */
+  @Post(':id/link-customer')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  linkCustomer(
+    @Param('workspaceId') workspaceId: string,
+    @Param('id') id: string,
+    @Body() body: LinkCustomerDto,
+  ) {
+    return this.themeService.linkCustomer(workspaceId, id, body.customerId);
+  }
+
+  /**
+   * DELETE /workspaces/:workspaceId/themes/:id/link-customer/:customerId
+   * Remove a manually-linked customer signal from a theme.
+   */
+  @Delete(':id/link-customer/:customerId')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  unlinkCustomer(
+    @Param('workspaceId') workspaceId: string,
+    @Param('id') id: string,
+    @Param('customerId') customerId: string,
+  ) {
+    return this.themeService.unlinkCustomer(workspaceId, id, customerId);
   }
 }

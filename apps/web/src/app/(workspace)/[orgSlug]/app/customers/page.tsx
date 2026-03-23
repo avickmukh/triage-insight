@@ -284,6 +284,37 @@ function CustomerRow({ customer, orgSlug }: { customer: Customer & { _count?: { 
           {customer.accountPriority ?? 'MEDIUM'}
         </span>
       </td>
+      {/* Signal Intensity */}
+      <td style={{ padding: '0.875rem 1rem' }}>
+        {customer._count ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+              {Array.from({ length: 5 }).map((_, i) => {
+                const totalSignals = (customer._count?.feedbacks ?? 0) + (customer._count?.signals ?? 0);
+                const filled = i < Math.min(5, Math.ceil(totalSignals / 2));
+                return (
+                  <div key={i} style={{ width: '8px', height: '8px', borderRadius: '50%', background: filled ? '#20A4A4' : '#e9ecef' }} />
+                );
+              })}
+            </div>
+            <span style={{ fontSize: '0.7rem', color: '#6C757D' }}>{customer._count.feedbacks}f · {customer._count.signals}s</span>
+          </div>
+        ) : <span style={{ color: '#adb5bd' }}>—</span>}
+      </td>
+      {/* Churn Risk */}
+      <td style={{ padding: '0.875rem 1rem' }}>
+        {customer.churnRisk != null ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <div style={{ flex: 1, height: '6px', background: '#e9ecef', borderRadius: '3px', maxWidth: '60px' }}>
+              <div style={{ width: `${Math.round(customer.churnRisk * 100)}%`, height: '100%', background: customer.churnRisk > 0.6 ? '#dc2626' : customer.churnRisk > 0.3 ? '#f59e0b' : '#059669', borderRadius: '3px' }} />
+            </div>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: customer.churnRisk > 0.6 ? '#dc2626' : customer.churnRisk > 0.3 ? '#f59e0b' : '#059669' }}>
+              {Math.round(customer.churnRisk * 100)}%
+            </span>
+          </div>
+        ) : <span style={{ color: '#adb5bd', fontSize: '0.8rem' }}>—</span>}
+      </td>
+      {/* Activity */}
       <td style={{ padding: '0.875rem 1rem', fontSize: '0.8rem', color: '#6C757D' }}>
         {customer._count ? (
           <span>{customer._count.feedbacks} feedback · {customer._count.deals} deals</span>
@@ -420,7 +451,7 @@ export default function CustomersPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#f8f9fa', borderBottom: '1px solid #e9ecef' }}>
-                  {['Customer', 'ARR', 'Segment', 'Stage', 'Priority', 'Activity', ''].map((h) => (
+                  {['Customer', 'ARR', 'Segment', 'Stage', 'Priority', 'Signals', 'Churn Risk', 'Activity', ''].map((h) => (
                     <th key={h} style={{ padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 600, color: '#6C757D', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
                       {h}
                     </th>

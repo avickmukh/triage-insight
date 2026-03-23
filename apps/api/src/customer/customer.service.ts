@@ -1,22 +1,40 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bull';
+import type { Queue } from 'bull';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { QueryCustomerDto } from './dto/query-customer.dto';
 import { Prisma } from '@prisma/client';
+import {
+  CUSTOMER_REVENUE_SIGNAL_QUEUE,
+  type CustomerRevenueSignalJobPayload,
+} from './processors/customer-revenue-signal.processor';
 
 type CustomerSortField = 'createdAt' | 'updatedAt' | 'arrValue' | 'name';
 
 @Injectable()
 export class CustomerService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @InjectQueue(CUSTOMER_REVENUE_SIGNAL_QUEUE)
+    private readonly revenueSignalQueue: Queue<CustomerRevenueSignalJobPayload>,
+  ) {}
 
   // ─── Create ────────────────────────────────────────────────────────────────
 
   async create(workspaceId: string, dto: CreateCustomerDto) {
-    return this.prisma.customer.create({
+    const customer = await this.prisma.customer.create({
       data: { workspaceId, ...dto },
     });
+    // Enqueue workspace-wide revenue recomputation so new customer ARR is reflected
+    await this.revenueSignalQueue
+      .add(
+        { type: 'RECOMPUTE_WORKSPACE', workspaceId },
+        { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, delay: 5000 },
+      )
+      .catch(() => { /* non-critical */ });
+    return customer;
   }
 
   // ─── List (paginated, filterable) ─────────────────────────────────────────
@@ -95,7 +113,15 @@ export class CustomerService {
             submittedAt: true,
             themes: {
               select: {
-                theme: { select: { id: true, title: true, status: true } },
+                theme: {
+                  select: {
+                    id: true,
+                    title: true,
+                    status: true,
+                    priorityScore: true,
+                    revenueInfluence: true,
+                  },
+                },
               },
             },
           },
@@ -136,9 +162,26 @@ export class CustomerService {
 
     // Unique themes influenced by this customer's feedback
     const influencedThemeIds = new Set<string>();
+    const influencedThemes: Array<{
+      id: string;
+      title: string;
+      status: string;
+      priorityScore: number | null;
+      revenueInfluence: number | null;
+    }> = [];
+
     for (const fb of customer.feedbacks) {
       for (const tf of fb.themes) {
-        influencedThemeIds.add(tf.theme.id);
+        if (!influencedThemeIds.has(tf.theme.id)) {
+          influencedThemeIds.add(tf.theme.id);
+          influencedThemes.push({
+            id: tf.theme.id,
+            title: tf.theme.title,
+            status: tf.theme.status,
+            priorityScore: tf.theme.priorityScore ?? null,
+            revenueInfluence: tf.theme.revenueInfluence ?? null,
+          });
+        }
       }
     }
 
@@ -166,6 +209,7 @@ export class CustomerService {
       ...customer,
       revenueIntelligence: {
         arrValue: customer.arrValue ?? 0,
+        mrrValue: customer.mrrValue ?? 0,
         openDealValue,
         totalDealValue,
         feedbackCount: customer._count.feedbacks,
@@ -174,6 +218,7 @@ export class CustomerService {
         influencedThemeCount: influencedThemeIds.size,
         influencedRoadmapCount: roadmapItems.length,
       },
+      influencedThemes,
       influencedRoadmapItems: roadmapItems,
     };
   }
@@ -182,10 +227,20 @@ export class CustomerService {
 
   async update(workspaceId: string, id: string, dto: UpdateCustomerDto) {
     await this.findOne(workspaceId, id);
-    return this.prisma.customer.update({
+    const customer = await this.prisma.customer.update({
       where: { id },
       data: dto,
     });
+    // If ARR/MRR changed, recompute revenue influence for all themes in workspace
+    if (dto.arrValue !== undefined || dto.mrrValue !== undefined) {
+      await this.revenueSignalQueue
+        .add(
+          { type: 'RECOMPUTE_WORKSPACE', workspaceId },
+          { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, delay: 3000 },
+        )
+        .catch(() => { /* non-critical */ });
+    }
+    return customer;
   }
 
   // ─── Delete ────────────────────────────────────────────────────────────────

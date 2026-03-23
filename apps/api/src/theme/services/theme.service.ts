@@ -372,6 +372,56 @@ export class ThemeService {
     return newTheme;
   }
 
+  // ─── Customer linking ─────────────────────────────────────────────────────
+
+  /**
+   * Manually link a customer to a theme by creating a CustomerSignal record.
+   * This is used when a PM wants to explicitly associate a customer with a theme
+   * outside of the normal feedback-driven flow.
+   */
+  async linkCustomer(workspaceId: string, themeId: string, customerId: string) {
+    const [theme, customer] = await Promise.all([
+      this.prisma.theme.findFirst({ where: { id: themeId, workspaceId } }),
+      this.prisma.customer.findFirst({ where: { id: customerId, workspaceId } }),
+    ]);
+    if (!theme) throw new NotFoundException(`Theme ${themeId} not found`);
+    if (!customer) throw new NotFoundException(`Customer ${customerId} not found`);
+
+    // Upsert a MANUAL signal so we don't create duplicates
+    const existing = await this.prisma.customerSignal.findFirst({
+      where: { workspaceId, customerId, themeId, signalType: 'MANUAL' },
+    });
+
+    if (!existing) {
+      await this.prisma.customerSignal.create({
+        data: {
+          workspaceId,
+          customerId,
+          themeId,
+          signalType: 'MANUAL',
+          strength: 1.0,
+        },
+      });
+    }
+
+    await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId });
+    return { success: true, message: 'Customer linked to theme.' };
+  }
+
+  /**
+   * Remove a manually-linked customer signal from a theme.
+   */
+  async unlinkCustomer(workspaceId: string, themeId: string, customerId: string) {
+    const signal = await this.prisma.customerSignal.findFirst({
+      where: { workspaceId, customerId, themeId, signalType: 'MANUAL' },
+    });
+    if (!signal) throw new NotFoundException('No manual customer link found for this theme');
+
+    await this.prisma.customerSignal.delete({ where: { id: signal.id } });
+    await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId });
+    return { success: true, message: 'Customer unlinked from theme.' };
+  }
+
   // ─── Reclustering ─────────────────────────────────────────────────────────
 
   async triggerReclustering(workspaceId: string) {

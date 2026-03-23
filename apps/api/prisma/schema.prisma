@@ -383,11 +383,19 @@ model Customer {
   email            String?
   segment          CustomerSegment?
   arrValue         Float?                  @default(0)
+  /// Monthly Recurring Revenue (optional; derived from ARR/12 if not set)
+  mrrValue         Float?                  @default(0)
   currency         String?                 @default("USD")
   accountPriority  AccountPriority         @default(MEDIUM)
   lifecycleStage   CustomerLifecycleStage  @default(PROSPECT)
+  /// Churn risk score 0–100; populated by Churn Intelligence layer
+  churnRisk        Float?                  @default(0)
+  /// CRM owner / account manager name or email
+  accountOwner     String?
   locale           String?
   countryCode      String?
+  /// External CRM identifier (e.g. Salesforce Account ID, HubSpot Contact ID)
+  externalId       String?
   externalRef      String?
   createdAt        DateTime                @default(now())
   updatedAt        DateTime                @updatedAt
@@ -408,17 +416,21 @@ model Customer {
 }
 
 model Deal {
-  id          String     @id @default(uuid())
-  workspaceId String
-  customerId  String
-  title       String
-  annualValue Float      @default(0)
-  currency    String     @default("USD")
-  stage       DealStage
-  status      DealStatus @default(OPEN)
-  notes       String?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id                  String     @id @default(uuid())
+  workspaceId         String
+  customerId          String
+  title               String
+  annualValue         Float      @default(0)
+  currency            String     @default("USD")
+  stage               DealStage
+  status              DealStatus @default(OPEN)
+  notes               String?
+  /// Expected close date for pipeline forecasting
+  expectedCloseDate   DateTime?
+  /// Weight multiplier (0–1) for how strongly this deal influences theme priority
+  influenceWeight     Float      @default(1.0)
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
 
   workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   customer    Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)

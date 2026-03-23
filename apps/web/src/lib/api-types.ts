@@ -150,6 +150,18 @@ export interface FeedbackAttachment {
   createdAt: string;
 }
 
+export interface FeedbackCustomerSnippet {
+  id: string;
+  name: string;
+  companyName?: string | null;
+  segment?: CustomerSegment | null;
+  arrValue?: number | null;
+  mrrValue?: number | null;
+  accountPriority: AccountPriority;
+  lifecycleStage: CustomerLifecycleStage;
+  churnRisk?: number | null;
+}
+
 export interface Feedback {
   id: string;
   workspaceId: string;
@@ -173,6 +185,7 @@ export interface Feedback {
   submittedAt: string;
   attachments?: FeedbackAttachment[];
   themes?: ThemeFeedback[];
+  customer?: FeedbackCustomerSnippet | null;
 }
 
 export interface ThemeFeedback {
@@ -852,9 +865,13 @@ export interface Customer {
   email?: string | null;
   segment?: CustomerSegment | null;
   arrValue?: number | null;
+  mrrValue?: number | null;
   currency?: string | null;
   accountPriority: AccountPriority;
   lifecycleStage: CustomerLifecycleStage;
+  churnRisk?: number | null;
+  accountOwner?: string | null;
+  externalId?: string | null;
   locale?: string | null;
   countryCode?: string | null;
   externalRef?: string | null;
@@ -873,8 +890,17 @@ export interface CustomerRevenueIntelligence {
   influencedRoadmapCount: number;
 }
 
+export interface CustomerInfluencedTheme {
+  id: string;
+  title: string;
+  status: string;
+  priorityScore?: number | null;
+  revenueInfluence?: number | null;
+}
+
 export interface CustomerDetail extends Customer {
   revenueIntelligence: CustomerRevenueIntelligence;
+  influencedThemes?: CustomerInfluencedTheme[];
   feedbacks: Array<{
     id: string;
     title: string;
@@ -917,6 +943,8 @@ export interface Deal {
   stage: DealStage;
   status: DealStatus;
   notes?: string | null;
+  expectedCloseDate?: string | null;
+  influenceWeight?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -943,11 +971,24 @@ export interface RevenueSummary {
   openDealValue: number;
 }
 
+export interface ThemeRevenueCustomer {
+  id: string;
+  name: string;
+  companyName?: string | null;
+  arrValue: number;
+  accountPriority: string;
+  lifecycleStage: string;
+  churnRisk?: number | null;
+  feedbackCount: number;
+}
+
 export interface ThemeRevenueIntelligence {
   deals: DealDetail[];
   totalInfluence: number;
   openInfluence: number;
   dealCount: number;
+  topCustomers: ThemeRevenueCustomer[];
+  totalCustomerARR: number;
 }
 
 export interface PaginatedCustomers {
@@ -969,10 +1010,14 @@ export interface CreateCustomerPayload {
   companyName?: string;
   email?: string;
   arrValue?: number;
+  mrrValue?: number;
   currency?: string;
   segment?: CustomerSegment;
   accountPriority?: AccountPriority;
   lifecycleStage?: CustomerLifecycleStage;
+  churnRisk?: number;
+  accountOwner?: string;
+  externalId?: string;
   locale?: string;
   countryCode?: string;
   externalRef?: string;
@@ -988,6 +1033,8 @@ export interface CreateDealPayload {
   stage: DealStage;
   status?: DealStatus;
   notes?: string;
+  expectedCloseDate?: string;
+  influenceWeight?: number;
   themeIds?: string[];
 }
 

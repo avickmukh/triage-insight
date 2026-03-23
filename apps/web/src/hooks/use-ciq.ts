@@ -19,7 +19,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import apiClient from "@/lib/api-client";
-import { CiqScoreOutput, PrioritizationSettings, Theme } from "@/lib/api-types";
+import { CiqScoreOutput, PrioritizationSettings, Theme, ThemeRevenueIntelligence } from "@/lib/api-types";
 import { useWorkspace } from "./use-workspace";
 
 const CIQ_KEY = "ciq";
@@ -162,6 +162,102 @@ export const useUpdatePrioritizationSettings = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [CIQ_KEY, workspaceId, "settings"] });
+    },
+  });
+};
+
+// ─── Theme Revenue Intelligence ───────────────────────────────────────────────
+
+const REVENUE_KEY = "theme-revenue";
+
+/**
+ * Fetch the full revenue intelligence for a theme:
+ * deals, totalInfluence, openInfluence, topCustomers, totalCustomerARR.
+ */
+export const useThemeRevenueIntelligence = (themeId: string | null) => {
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id;
+
+  return useQuery<ThemeRevenueIntelligence, Error>({
+    queryKey: [REVENUE_KEY, workspaceId, themeId],
+    queryFn: () => {
+      if (!workspaceId) throw new Error("Workspace ID is not available");
+      if (!themeId) throw new Error("Theme ID is not available");
+      return apiClient.themeRevenue.getByTheme(workspaceId, themeId);
+    },
+    enabled: !!workspaceId && !!themeId,
+    staleTime: 2 * 60 * 1000,
+  });
+};
+
+// ─── Link / unlink deal to theme ─────────────────────────────────────────────
+
+export const useLinkDealToTheme = () => {
+  const queryClient = useQueryClient();
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id;
+
+  return useMutation<{ success: boolean }, Error, { themeId: string; dealId: string }>({
+    mutationFn: ({ themeId, dealId }) => {
+      if (!workspaceId) throw new Error("Workspace ID is not available");
+      return apiClient.themeRevenue.linkDeal(workspaceId, themeId, dealId);
+    },
+    onSuccess: (_data, { themeId }) => {
+      queryClient.invalidateQueries({ queryKey: [REVENUE_KEY, workspaceId, themeId] });
+      queryClient.invalidateQueries({ queryKey: [CIQ_KEY, workspaceId, "theme", themeId] });
+    },
+  });
+};
+
+export const useUnlinkDealFromTheme = () => {
+  const queryClient = useQueryClient();
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id;
+
+  return useMutation<{ success: boolean }, Error, { themeId: string; dealId: string }>({
+    mutationFn: ({ themeId, dealId }) => {
+      if (!workspaceId) throw new Error("Workspace ID is not available");
+      return apiClient.themeRevenue.unlinkDeal(workspaceId, themeId, dealId);
+    },
+    onSuccess: (_data, { themeId }) => {
+      queryClient.invalidateQueries({ queryKey: [REVENUE_KEY, workspaceId, themeId] });
+      queryClient.invalidateQueries({ queryKey: [CIQ_KEY, workspaceId, "theme", themeId] });
+    },
+  });
+};
+
+// ─── Link / unlink customer to theme ─────────────────────────────────────────
+
+export const useLinkCustomerToTheme = () => {
+  const queryClient = useQueryClient();
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id;
+
+  return useMutation<{ success: boolean }, Error, { themeId: string; customerId: string }>({
+    mutationFn: ({ themeId, customerId }) => {
+      if (!workspaceId) throw new Error("Workspace ID is not available");
+      return apiClient.themeRevenue.linkCustomer(workspaceId, themeId, customerId);
+    },
+    onSuccess: (_data, { themeId }) => {
+      queryClient.invalidateQueries({ queryKey: [REVENUE_KEY, workspaceId, themeId] });
+      queryClient.invalidateQueries({ queryKey: [CIQ_KEY, workspaceId, "theme", themeId] });
+    },
+  });
+};
+
+export const useUnlinkCustomerFromTheme = () => {
+  const queryClient = useQueryClient();
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id;
+
+  return useMutation<{ success: boolean }, Error, { themeId: string; customerId: string }>({
+    mutationFn: ({ themeId, customerId }) => {
+      if (!workspaceId) throw new Error("Workspace ID is not available");
+      return apiClient.themeRevenue.unlinkCustomer(workspaceId, themeId, customerId);
+    },
+    onSuccess: (_data, { themeId }) => {
+      queryClient.invalidateQueries({ queryKey: [REVENUE_KEY, workspaceId, themeId] });
+      queryClient.invalidateQueries({ queryKey: [CIQ_KEY, workspaceId, "theme", themeId] });
     },
   });
 };

@@ -308,6 +308,43 @@ export default function CustomerDetailPage() {
             )}
           </div>
 
+          {/* Requested Themes with CIQ Influence */}
+          {customer.influencedThemes && customer.influencedThemes.length > 0 && (
+            <div style={CARD}>
+              <SectionHeader title="Requested Themes" count={customer.influencedThemes.length} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                {customer.influencedThemes
+                  .sort((a: any, b: any) => (b.priorityScore ?? 0) - (a.priorityScore ?? 0))
+                  .map((theme: any) => {
+                    const score = theme.priorityScore ?? null;
+                    const scoreColor = score != null ? (score >= 70 ? '#e63946' : score >= 40 ? '#f4a261' : '#20A4A4') : '#adb5bd';
+                    return (
+                      <div key={theme.id} style={{ padding: '0.625rem 0.75rem', background: '#f8f9fa', borderRadius: '0.5rem', border: '1px solid #e9ecef', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <Link href={r.themeItem(theme.id)} style={{ fontWeight: 600, fontSize: '0.875rem', color: '#0a2540', textDecoration: 'none' }}>
+                            {theme.title}
+                          </Link>
+                          <div style={{ fontSize: '0.72rem', color: '#6C757D', marginTop: '0.1rem' }}>{theme.status.replace('_', ' ')}</div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexShrink: 0 }}>
+                          {theme.revenueInfluence != null && theme.revenueInfluence > 0 && (
+                            <span style={{ background: '#d1fae5', color: '#065f46', borderRadius: '1rem', padding: '0.15rem 0.5rem', fontSize: '0.7rem', fontWeight: 600 }}>
+                              ${(theme.revenueInfluence / 1000).toFixed(0)}K ARR
+                            </span>
+                          )}
+                          {score != null && (
+                            <span style={{ background: '#f0f7ff', color: scoreColor, borderRadius: '1rem', padding: '0.15rem 0.5rem', fontSize: '0.7rem', fontWeight: 700, border: `1px solid ${scoreColor}22` }}>
+                              CIQ {Math.round(score)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
+
           {/* Influenced Roadmap Items */}
           {customer.influencedRoadmapItems && customer.influencedRoadmapItems.length > 0 && (
             <div style={CARD}>

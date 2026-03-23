@@ -672,6 +672,18 @@ const apiClient = {
     /** GET /workspaces/:id/themes/:themeId/revenue-intelligence */
     getByTheme: (workspaceId: string, themeId: string): Promise<ThemeRevenueIntelligence> =>
       api.get(`/workspaces/${workspaceId}/themes/${themeId}/revenue-intelligence`).then(handleResponse),
+    /** POST /workspaces/:id/themes/:themeId/link-deal */
+    linkDeal: (workspaceId: string, themeId: string, dealId: string): Promise<{ success: boolean }> =>
+      api.post(`/workspaces/${workspaceId}/themes/${themeId}/link-deal`, { dealId }).then(handleResponse),
+    /** DELETE /workspaces/:id/themes/:themeId/link-deal/:dealId */
+    unlinkDeal: (workspaceId: string, themeId: string, dealId: string): Promise<{ success: boolean }> =>
+      api.delete(`/workspaces/${workspaceId}/themes/${themeId}/link-deal/${dealId}`).then(handleResponse),
+    /** POST /workspaces/:id/themes/:themeId/link-customer */
+    linkCustomer: (workspaceId: string, themeId: string, customerId: string): Promise<{ success: boolean }> =>
+      api.post(`/workspaces/${workspaceId}/themes/${themeId}/link-customer`, { customerId }).then(handleResponse),
+    /** DELETE /workspaces/:id/themes/:themeId/link-customer/:customerId */
+    unlinkCustomer: (workspaceId: string, themeId: string, customerId: string): Promise<{ success: boolean }> =>
+      api.delete(`/workspaces/${workspaceId}/themes/${themeId}/link-customer/${customerId}`).then(handleResponse),
   },
 
   surveys: {

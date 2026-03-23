@@ -235,6 +235,39 @@ export default function InboxItemPage({
           {feedback.customerId && (
             <MetaField label="Customer ID" value={feedback.customerId} />
           )}
+          {feedback.customer && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', padding: '0.625rem 0.75rem', background: '#f8fafc', borderRadius: '0.5rem', border: '1px solid #e9ecef' }}>
+              <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#6C757D', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.2rem' }}>Customer Intelligence</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 700, color: '#0a2540', fontSize: '0.85rem' }}>{feedback.customer.name}</span>
+                {feedback.customer.companyName && (
+                  <span style={{ fontSize: '0.75rem', color: '#6C757D' }}>{feedback.customer.companyName}</span>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                {feedback.customer.arrValue != null && feedback.customer.arrValue > 0 && (
+                  <span style={{ background: '#d1fae5', color: '#065f46', borderRadius: '1rem', padding: '0.15rem 0.55rem', fontSize: '0.72rem', fontWeight: 600 }}>
+                    ${feedback.customer.arrValue >= 1000000 ? `${(feedback.customer.arrValue / 1000000).toFixed(1)}M` : `${(feedback.customer.arrValue / 1000).toFixed(0)}K`} ARR
+                  </span>
+                )}
+                {feedback.customer.lifecycleStage && (
+                  <span style={{ background: '#e3f2fd', color: '#1565c0', borderRadius: '1rem', padding: '0.15rem 0.55rem', fontSize: '0.72rem', fontWeight: 600 }}>
+                    {feedback.customer.lifecycleStage.replace('_', ' ')}
+                  </span>
+                )}
+                {feedback.customer.churnRisk != null && feedback.customer.churnRisk > 0.6 && (
+                  <span style={{ background: '#fee2e2', color: '#dc2626', borderRadius: '1rem', padding: '0.15rem 0.55rem', fontSize: '0.72rem', fontWeight: 700 }}>
+                    AT RISK {Math.round(feedback.customer.churnRisk * 100)}%
+                  </span>
+                )}
+                {feedback.customer.accountPriority && (
+                  <span style={{ background: feedback.customer.accountPriority === 'CRITICAL' ? '#fce4ec' : feedback.customer.accountPriority === 'HIGH' ? '#fff8e1' : '#f0f4f8', color: feedback.customer.accountPriority === 'CRITICAL' ? '#c62828' : feedback.customer.accountPriority === 'HIGH' ? '#b8860b' : '#6C757D', borderRadius: '1rem', padding: '0.15rem 0.55rem', fontSize: '0.72rem', fontWeight: 600 }}>
+                    {feedback.customer.accountPriority}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
           {feedback.portalUserId && (
             <MetaField label="Portal User" value={feedback.portalUserId} />
           )}
