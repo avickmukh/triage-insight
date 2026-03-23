@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* ─── shadcn/ui CSS Variables (required for all shadcn components) ──────────── */
 @layer base {
   :root {
