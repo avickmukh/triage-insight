@@ -99,6 +99,30 @@ const BADGE_DISCONNECTED: React.CSSProperties = {
   fontSize: '0.75rem',
   fontWeight: 600,
 };
+const BADGE_ERROR: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '0.3rem',
+  padding: '0.2rem 0.65rem',
+  borderRadius: '999px',
+  background: '#fff5f5',
+  color: '#c53030',
+  fontSize: '0.75rem',
+  fontWeight: 600,
+  border: '1px solid #feb2b2',
+};
+const BADGE_DEGRADED: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '0.3rem',
+  padding: '0.2rem 0.65rem',
+  borderRadius: '999px',
+  background: '#fffbeb',
+  color: '#92400e',
+  fontSize: '0.75rem',
+  fontWeight: 600,
+  border: '1px solid #fde68a',
+};
 const OVERLAY: React.CSSProperties = {
   position: 'fixed',
   inset: 0,
@@ -433,6 +457,12 @@ function ProviderCard({ meta, status }: { meta: ProviderMeta; status: Integratio
 
   const connected = status?.connected ?? false;
   const isSlack = meta.provider === IntegrationProvider.SLACK;
+  const isError = status?.status === 'ERROR' || status?.healthState === 'ERROR';
+  const isDegraded = status?.healthState === 'DEGRADED';
+  const errorMessage = status?.lastErrorMessage;
+  const lastErrorAt = status?.lastErrorAt
+    ? new Date(status.lastErrorAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+    : null;
 
   const handleDisconnect = () => {
     disconnect(meta.provider, { onSuccess: () => setShowDisconnect(false) });
@@ -465,7 +495,17 @@ function ProviderCard({ meta, status }: { meta: ProviderMeta; status: Integratio
             <p style={{ fontSize: '0.83rem', color: '#6C757D', margin: 0, lineHeight: 1.5 }}>{meta.description}</p>
           </div>
           <div style={{ flexShrink: 0 }}>
-            {connected ? (
+            {connected && isError ? (
+              <span style={BADGE_ERROR}>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#c53030', display: 'inline-block' }} />
+                Error
+              </span>
+            ) : connected && isDegraded ? (
+              <span style={BADGE_DEGRADED}>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }} />
+                Degraded
+              </span>
+            ) : connected ? (
               <span style={BADGE_CONNECTED}>
                 <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
                 Connected
@@ -516,6 +556,16 @@ function ProviderCard({ meta, status }: { meta: ProviderMeta; status: Integratio
 
         {connected && lastSynced && (
           <p style={{ fontSize: '0.75rem', color: '#6C757D', margin: 0 }}>Last synced: {lastSynced}</p>
+        )}
+
+        {/* Error state panel */}
+        {connected && isError && (
+          <div style={{ background: '#fff5f5', border: '1px solid #feb2b2', borderRadius: '0.5rem', padding: '0.6rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+            <p style={{ fontSize: '0.78rem', fontWeight: 600, color: '#c53030', margin: 0 }}>Connection error</p>
+            {errorMessage && <p style={{ fontSize: '0.75rem', color: '#c53030', margin: 0 }}>{errorMessage}</p>}
+            {lastErrorAt && <p style={{ fontSize: '0.72rem', color: '#9b2c2c', margin: 0 }}>Occurred: {lastErrorAt}</p>}
+            <p style={{ fontSize: '0.72rem', color: '#9b2c2c', margin: 0 }}>Reconnect or check credentials to restore the integration.</p>
+          </div>
         )}
 
         {slackSyncSuccess && (

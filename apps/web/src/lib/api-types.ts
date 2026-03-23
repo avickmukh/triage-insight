@@ -640,6 +640,8 @@ export enum IntegrationProvider {
  * Returned by GET /workspaces/:id/integrations
  * Every known provider is always present (connected: false when not wired).
  */
+export type IntegrationHealthState = 'HEALTHY' | 'DEGRADED' | 'ERROR' | 'UNKNOWN';
+
 export interface IntegrationStatus {
   provider: IntegrationProvider;
   connected: boolean;
@@ -647,6 +649,14 @@ export interface IntegrationStatus {
   /** Non-sensitive display metadata (e.g. Slack team name, Zendesk subdomain). */
   metadata: Record<string, string> | null;
   createdAt: string | null;
+  /** ACTIVE | DISCONNECTED | ERROR — reflects current connection health */
+  status?: 'ACTIVE' | 'DISCONNECTED' | 'ERROR';
+  /** Fine-grained health state for UI display */
+  healthState?: IntegrationHealthState;
+  /** Last error message if status is ERROR */
+  lastErrorMessage?: string | null;
+  /** When the last error occurred */
+  lastErrorAt?: string | null;
 }
 
 export interface ConnectZendeskDto {
