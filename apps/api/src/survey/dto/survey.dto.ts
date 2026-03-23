@@ -12,7 +12,8 @@ import {
   ArrayMinSize,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { SurveyQuestionType } from '@prisma/client';
+import { SurveyQuestionType, SurveyType } from '@prisma/client';
+import { IsDateString } from 'class-validator';
 
 // ─── Question DTOs ─────────────────────────────────────────────────────────────
 
@@ -113,6 +114,31 @@ export class CreateSurveyDto {
   @IsString()
   redirectUrl?: string;
 
+  /** Survey purpose / template type */
+  @IsOptional()
+  @IsEnum(SurveyType)
+  surveyType?: SurveyType;
+
+  /** Link this survey to a specific theme for targeted signal collection */
+  @IsOptional()
+  @IsString()
+  linkedThemeId?: string;
+
+  /** Link this survey to a roadmap item for validation */
+  @IsOptional()
+  @IsString()
+  linkedRoadmapItemId?: string;
+
+  /** Target customer segment (e.g. "ENTERPRISE", "SMB") */
+  @IsOptional()
+  @IsString()
+  customerSegment?: string;
+
+  /** When the survey should automatically close */
+  @IsOptional()
+  @IsDateString()
+  expiresAt?: string;
+
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
@@ -140,6 +166,26 @@ export class UpdateSurveyDto {
   @IsOptional()
   @IsString()
   redirectUrl?: string;
+
+  @IsOptional()
+  @IsEnum(SurveyType)
+  surveyType?: SurveyType;
+
+  @IsOptional()
+  @IsString()
+  linkedThemeId?: string;
+
+  @IsOptional()
+  @IsString()
+  linkedRoadmapItemId?: string;
+
+  @IsOptional()
+  @IsString()
+  customerSegment?: string;
+
+  @IsOptional()
+  @IsDateString()
+  expiresAt?: string;
 }
 
 // ─── Response DTOs ────────────────────────────────────────────────────────────
@@ -175,6 +221,16 @@ export class SubmitSurveyResponseDto {
   @IsString()
   portalUserId?: string;
 
+  /** Anonymous session identifier for deduplication */
+  @IsOptional()
+  @IsString()
+  anonymousId?: string;
+
+  /** Link response to a known customer */
+  @IsOptional()
+  @IsString()
+  customerId?: string;
+
   @IsArray()
   @ValidateNested({ each: true })
   @ArrayMinSize(1)
@@ -188,6 +244,10 @@ export class SurveyQueryDto {
   @IsOptional()
   @IsString()
   status?: string;
+
+  @IsOptional()
+  @IsEnum(SurveyType)
+  surveyType?: SurveyType;
 
   @IsOptional()
   @IsString()

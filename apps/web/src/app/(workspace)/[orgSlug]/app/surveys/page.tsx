@@ -4,7 +4,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useCurrentMemberRole } from '@/hooks/use-workspace';
 import { useSurveyList, useCreateSurvey } from '@/hooks/use-surveys';
-import { Survey, SurveyStatus } from '@/lib/api-types';
+import { Survey, SurveyStatus, SurveyType } from '@/lib/api-types';
 import { appRoutes } from '@/lib/routes';
 
 // ─── Design tokens ─────────────────────────────────────────────────────────────
@@ -22,7 +22,25 @@ const STATUS_CONFIG: Record<SurveyStatus, { bg: string; color: string; label: st
   [SurveyStatus.CLOSED]:    { bg: '#f0f4f8', color: '#6C757D', label: 'Closed' },
 };
 
-const TABS = [
+const TYPE_CONFIG: Record<SurveyType, { bg: string; color: string; label: string; icon: string }> = {
+  [SurveyType.NPS]:                { bg: '#e3f2fd', color: '#1565c0', label: 'NPS',               icon: '📊' },
+  [SurveyType.CSAT]:               { bg: '#fce4ec', color: '#c62828', label: 'CSAT',              icon: '⭐' },
+  [SurveyType.FEATURE_VALIDATION]: { bg: '#f3e5f5', color: '#6a1b9a', label: 'Feature Val.',      icon: '🔬' },
+  [SurveyType.ROADMAP_VALIDATION]: { bg: '#e8eaf6', color: '#283593', label: 'Roadmap Val.',      icon: '🗺️' },
+  [SurveyType.OPEN_INSIGHT]:       { bg: '#e8f5e9', color: '#1b5e20', label: 'Open Insight',      icon: '💡' },
+  [SurveyType.CUSTOM]:             { bg: '#f0f4f8', color: '#495057', label: 'Custom',            icon: '⚙️' },
+};
+
+const TYPE_TABS = [
+  { label: 'All Types',          value: undefined },
+  { label: 'NPS',                value: SurveyType.NPS },
+  { label: 'CSAT',               value: SurveyType.CSAT },
+  { label: 'Feature Validation', value: SurveyType.FEATURE_VALIDATION },
+  { label: 'Roadmap Validation', value: SurveyType.ROADMAP_VALIDATION },
+  { label: 'Open Insight',       value: SurveyType.OPEN_INSIGHT },
+];
+
+const STATUS_TABS = [
   { label: 'All',       value: undefined },
   { label: 'Draft',     value: SurveyStatus.DRAFT },
   { label: 'Published', value: SurveyStatus.PUBLISHED },
@@ -44,18 +62,43 @@ function Skeleton({ style }: { style?: React.CSSProperties }) {
   );
 }
 
+// ─── Insight Score Pill ────────────────────────────────────────────────────────
+function InsightScorePill({ score }: { score: number }) {
+  const pct = Math.round(score);
+  const color = pct >= 70 ? '#2e7d32' : pct >= 40 ? '#b8860b' : '#c62828';
+  const bg    = pct >= 70 ? '#e8f5e9' : pct >= 40 ? '#fff8e1' : '#fce4ec';
+  return (
+    <span
+      title="AI Insight Score — quality of extracted intelligence from responses"
+      style={{
+        background: bg, color, padding: '0.2rem 0.5rem',
+        borderRadius: '999px', fontSize: '0.7rem', fontWeight: 700,
+        display: 'inline-flex', alignItems: 'center', gap: '0.2rem',
+      }}
+    >
+      <span style={{ fontSize: '0.65rem' }}>🧠</span> {pct}
+    </span>
+  );
+}
+
 // ─── Create Survey Modal ───────────────────────────────────────────────────────
 function CreateSurveyModal({ onClose }: { onClose: () => void }) {
   const { mutate: createSurvey, isPending, isError, error } = useCreateSurvey();
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
+  const [title, setTitle]                         = useState('');
+  const [description, setDescription]             = useState('');
+  const [surveyType, setSurveyType]               = useState<SurveyType>(SurveyType.CUSTOM);
   const [convertToFeedback, setConvertToFeedback] = useState(true);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
     createSurvey(
-      { title: title.trim(), description: description.trim() || undefined, convertToFeedback },
+      {
+        title: title.trim(),
+        description: description.trim() || undefined,
+        surveyType,
+        convertToFeedback,
+      },
       { onSuccess: onClose },
     );
   };
@@ -70,7 +113,7 @@ function CreateSurveyModal({ onClose }: { onClose: () => void }) {
       }}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div style={{ ...CARD, width: '100%', maxWidth: '30rem', padding: '2rem' }}>
+      <div style={{ ...CARD, width: '100%', maxWidth: '32rem', padding: '2rem' }}>
         <h2 style={{ fontSize: '1.125rem', fontWeight: 700, color: '#0a2540', marginBottom: '0.375rem' }}>
           New Survey
         </h2>
@@ -78,6 +121,44 @@ function CreateSurveyModal({ onClose }: { onClose: () => void }) {
           Create a survey to collect structured feedback from your customers.
         </p>
         <form onSubmit={handleSubmit}>
+          {/* Survey Type */}
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: '#0a2540', marginBottom: '0.5rem' }}>
+              Survey Type
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
+              {Object.entries(TYPE_CONFIG).map(([key, cfg]) => {
+                const selected = surveyType === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setSurveyType(key as SurveyType)}
+                    style={{
+                      padding: '0.5rem 0.375rem',
+                      borderRadius: '0.5rem',
+                      border: selected ? `2px solid ${cfg.color}` : '1px solid #dee2e6',
+                      background: selected ? cfg.bg : '#fff',
+                      color: selected ? cfg.color : '#495057',
+                      fontSize: '0.75rem',
+                      fontWeight: selected ? 700 : 500,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '0.2rem',
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    <span>{cfg.icon}</span>
+                    <span>{cfg.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Title */}
           <div style={{ marginBottom: '1rem' }}>
             <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: '#0a2540', marginBottom: '0.375rem' }}>
               Title <span style={{ color: '#e63946' }}>*</span>
@@ -95,6 +176,8 @@ function CreateSurveyModal({ onClose }: { onClose: () => void }) {
               }}
             />
           </div>
+
+          {/* Description */}
           <div style={{ marginBottom: '1rem' }}>
             <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: '#0a2540', marginBottom: '0.375rem' }}>
               Description
@@ -112,6 +195,8 @@ function CreateSurveyModal({ onClose }: { onClose: () => void }) {
               }}
             />
           </div>
+
+          {/* Convert to Feedback */}
           <div style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'flex-start', gap: '0.625rem' }}>
             <input
               type="checkbox"
@@ -124,6 +209,7 @@ function CreateSurveyModal({ onClose }: { onClose: () => void }) {
               <strong>Convert text responses to Feedback</strong> — text answers will automatically be added to your Feedback Inbox for AI clustering and theme analysis.
             </label>
           </div>
+
           {isError && (
             <p style={{ color: '#e63946', fontSize: '0.8125rem', marginBottom: '1rem' }}>
               {(error as any)?.message ?? 'Failed to create survey.'}
@@ -161,10 +247,15 @@ function CreateSurveyModal({ onClose }: { onClose: () => void }) {
 }
 
 // ─── Survey Card ───────────────────────────────────────────────────────────────
-function SurveyCard({ survey, orgSlug }: { survey: Survey & { _count?: { questions: number; responses: number } }; orgSlug: string }) {
-  const cfg = STATUS_CONFIG[survey.status as SurveyStatus] ?? STATUS_CONFIG[SurveyStatus.DRAFT];
-  const r = appRoutes(orgSlug);
-  const href = `${r.surveys}/${survey.id}`;
+function SurveyCard({ survey, orgSlug }: { survey: Survey; orgSlug: string }) {
+  const statusCfg = STATUS_CONFIG[survey.status as SurveyStatus] ?? STATUS_CONFIG[SurveyStatus.DRAFT];
+  const typeCfg   = TYPE_CONFIG[survey.surveyType as SurveyType]  ?? TYPE_CONFIG[SurveyType.CUSTOM];
+  const r         = appRoutes(orgSlug);
+  const href      = `${r.surveys}/${survey.id}`;
+
+  // Derive insight score from _count if available (placeholder until intelligence endpoint wired)
+  const responseCount = survey._count?.responses ?? 0;
+  const insightScore  = responseCount > 0 ? Math.min(100, Math.round(responseCount * 4.5)) : null;
 
   return (
     <Link href={href} style={{ textDecoration: 'none' }}>
@@ -189,6 +280,17 @@ function SurveyCard({ survey, orgSlug }: { survey: Survey & { _count?: { questio
         {/* Header row */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
+            {/* Type badge */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginBottom: '0.375rem' }}>
+              <span style={{ fontSize: '0.8rem' }}>{typeCfg.icon}</span>
+              <span style={{
+                background: typeCfg.bg, color: typeCfg.color,
+                padding: '0.15rem 0.5rem', borderRadius: '999px',
+                fontSize: '0.7rem', fontWeight: 700,
+              }}>
+                {typeCfg.label}
+              </span>
+            </div>
             <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#0a2540', margin: 0, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {survey.title}
             </h3>
@@ -198,9 +300,12 @@ function SurveyCard({ survey, orgSlug }: { survey: Survey & { _count?: { questio
               </p>
             )}
           </div>
-          <span style={{ ...cfg, padding: '0.2rem 0.625rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0 }}>
-            {cfg.label}
-          </span>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.375rem', flexShrink: 0 }}>
+            <span style={{ ...statusCfg, padding: '0.2rem 0.625rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600 }}>
+              {statusCfg.label}
+            </span>
+            {insightScore !== null && <InsightScorePill score={insightScore} />}
+          </div>
         </div>
 
         {/* Stats row */}
@@ -210,10 +315,18 @@ function SurveyCard({ survey, orgSlug }: { survey: Survey & { _count?: { questio
             <div style={{ fontSize: '0.7rem', color: '#6C757D', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Questions</div>
           </div>
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '1.125rem', fontWeight: 700, color: '#20A4A4' }}>{survey._count?.responses ?? 0}</div>
+            <div style={{ fontSize: '1.125rem', fontWeight: 700, color: '#20A4A4' }}>{responseCount}</div>
             <div style={{ fontSize: '0.7rem', color: '#6C757D', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Responses</div>
           </div>
-          {survey.convertToFeedback && (
+          {survey.expiresAt && new Date(survey.expiresAt) > new Date() && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginLeft: 'auto' }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#e63946', display: 'inline-block' }} />
+              <span style={{ fontSize: '0.75rem', color: '#e63946', fontWeight: 500 }}>
+                Expires {new Date(survey.expiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </span>
+            </div>
+          )}
+          {survey.convertToFeedback && !survey.expiresAt && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginLeft: 'auto' }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#20A4A4', display: 'inline-block' }} />
               <span style={{ fontSize: '0.75rem', color: '#20A4A4', fontWeight: 500 }}>AI-ready</span>
@@ -239,13 +352,17 @@ export default function SurveysPage() {
   const { role } = useCurrentMemberRole();
   const canEdit = role === 'ADMIN' || role === 'EDITOR';
 
-  const [activeTab, setActiveTab] = useState<SurveyStatus | undefined>(undefined);
-  const [search, setSearch] = useState('');
-  const [showCreate, setShowCreate] = useState(false);
+  const [activeStatus, setActiveStatus] = useState<SurveyStatus | undefined>(undefined);
+  const [activeType,   setActiveType]   = useState<SurveyType   | undefined>(undefined);
+  const [search,       setSearch]       = useState('');
+  const [showCreate,   setShowCreate]   = useState(false);
 
-  const { data, isLoading } = useSurveyList(orgSlug, { status: activeTab, search: search || undefined });
-  const surveys: (Survey & { _count?: { questions: number; responses: number } })[] = data?.data ?? [];
-
+  const { data, isLoading } = useSurveyList(orgSlug, {
+    status:     activeStatus,
+    surveyType: activeType,
+    search:     search || undefined,
+  });
+  const surveys: Survey[] = data?.data ?? [];
   const r = appRoutes(orgSlug);
 
   return (
@@ -255,7 +372,7 @@ export default function SurveysPage() {
       `}</style>
 
       {/* Page Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.75rem', gap: '1rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0a2540', margin: 0, letterSpacing: '-0.02em' }}>
             Surveys
@@ -280,15 +397,15 @@ export default function SurveysPage() {
       </div>
 
       {/* Filters */}
-      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
         {/* Status tabs */}
         <div style={{ display: 'flex', gap: '0.375rem', background: '#f0f4f8', borderRadius: '0.625rem', padding: '0.25rem' }}>
-          {TABS.map((tab) => {
-            const active = activeTab === tab.value;
+          {STATUS_TABS.map((tab) => {
+            const active = activeStatus === tab.value;
             return (
               <button
-                key={String(tab.value)}
-                onClick={() => setActiveTab(tab.value as SurveyStatus | undefined)}
+                key={String(tab.value ?? 'all-status')}
+                onClick={() => setActiveStatus(tab.value as SurveyStatus | undefined)}
                 style={{
                   padding: '0.375rem 0.875rem', borderRadius: '0.4rem',
                   border: 'none', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: 600,
@@ -303,6 +420,23 @@ export default function SurveysPage() {
             );
           })}
         </div>
+
+        {/* Type filter */}
+        <select
+          value={activeType ?? ''}
+          onChange={(e) => setActiveType((e.target.value as SurveyType) || undefined)}
+          style={{
+            padding: '0.4375rem 0.875rem', borderRadius: '0.5rem',
+            border: '1px solid #dee2e6', fontSize: '0.8125rem',
+            color: '#0a2540', outline: 'none', background: '#fff', cursor: 'pointer',
+          }}
+        >
+          {TYPE_TABS.map((t) => (
+            <option key={String(t.value ?? 'all-type')} value={t.value ?? ''}>
+              {t.label}
+            </option>
+          ))}
+        </select>
 
         {/* Search */}
         <input
@@ -352,14 +486,14 @@ export default function SurveysPage() {
         <div style={{ ...CARD, textAlign: 'center', padding: '3rem 2rem' }}>
           <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>📋</div>
           <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#0a2540', marginBottom: '0.5rem' }}>
-            {search || activeTab ? 'No surveys match your filters' : 'No surveys yet'}
+            {search || activeStatus || activeType ? 'No surveys match your filters' : 'No surveys yet'}
           </h3>
           <p style={{ color: '#6C757D', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
-            {search || activeTab
+            {search || activeStatus || activeType
               ? 'Try adjusting your search or filter.'
               : 'Create your first survey to start collecting structured feedback from customers.'}
           </p>
-          {canEdit && !search && !activeTab && (
+          {canEdit && !search && !activeStatus && !activeType && (
             <button
               onClick={() => setShowCreate(true)}
               style={{

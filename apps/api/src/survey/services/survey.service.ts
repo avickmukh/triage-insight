@@ -7,7 +7,7 @@ import {
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
 import { PrismaService } from '../../prisma/prisma.service';
-import { SurveyStatus, FeedbackSourceType, FeedbackStatus } from '@prisma/client';
+import { SurveyStatus, SurveyType, FeedbackSourceType, FeedbackStatus } from '@prisma/client';
 import { SURVEY_INTELLIGENCE_QUEUE } from '../processors/survey-intelligence.processor';
 import {
   CreateSurveyDto,
@@ -54,9 +54,14 @@ export class SurveyService {
         workspaceId,
         title: dto.title,
         description: dto.description ?? null,
+        surveyType: dto.surveyType ?? SurveyType.CUSTOM,
         convertToFeedback: dto.convertToFeedback ?? true,
         thankYouMessage: dto.thankYouMessage ?? null,
         redirectUrl: dto.redirectUrl ?? null,
+        linkedThemeId: dto.linkedThemeId ?? null,
+        linkedRoadmapItemId: dto.linkedRoadmapItemId ?? null,
+        customerSegment: dto.customerSegment ?? null,
+        expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
         status: SurveyStatus.DRAFT,
         isPublic: false,
         questions: dto.questions?.length
@@ -93,6 +98,7 @@ export class SurveyService {
 
     const where: any = { workspaceId };
     if (query.status) where.status = query.status;
+    if (query.surveyType) where.surveyType = query.surveyType;
     if (query.search) {
       where.OR = [
         { title: { contains: query.search, mode: 'insensitive' } },
@@ -143,9 +149,14 @@ export class SurveyService {
       data: {
         title: dto.title,
         description: dto.description,
+        surveyType: dto.surveyType,
         convertToFeedback: dto.convertToFeedback,
         thankYouMessage: dto.thankYouMessage,
         redirectUrl: dto.redirectUrl,
+        linkedThemeId: dto.linkedThemeId,
+        linkedRoadmapItemId: dto.linkedRoadmapItemId,
+        customerSegment: dto.customerSegment,
+        expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
       },
       include: {
         questions: { orderBy: { order: 'asc' } },
@@ -412,6 +423,8 @@ export class SurveyService {
           portalUserId,
           respondentEmail: dto.respondentEmail ?? null,
           respondentName: dto.respondentName ?? null,
+          anonymousId: dto.anonymousId ?? null,
+          customerId: dto.customerId ?? null,
           metadata: { userAgent: null },
           answers: {
             create: dto.answers.map((a) => ({

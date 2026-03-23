@@ -705,7 +705,7 @@ const apiClient = {
   },
 
   surveys: {
-    list: (workspaceId: string, params?: { status?: string; search?: string; page?: number; limit?: number }): Promise<SurveyListResponse> =>
+    list: (workspaceId: string, params?: { status?: string; surveyType?: string; search?: string; page?: number; limit?: number }): Promise<SurveyListResponse> =>
       api.get(`/workspaces/${workspaceId}/surveys`, { params }).then(handleResponse),
     getById: (workspaceId: string, surveyId: string): Promise<Survey> =>
       api.get(`/workspaces/${workspaceId}/surveys/${surveyId}`).then(handleResponse),

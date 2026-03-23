@@ -14,7 +14,7 @@ import {
   useSurveyResponses,
   useSurveyIntelligence,
 } from '@/hooks/use-surveys';
-import { SurveyStatus, SurveyQuestionType } from '@/lib/api-types';
+import { SurveyStatus, SurveyQuestionType, SurveyType } from '@/lib/api-types';
 import { appRoutes } from '@/lib/routes';
 
 // ─── Design tokens ─────────────────────────────────────────────────────────────
@@ -168,6 +168,15 @@ export default function SurveyDetailPage() {
   }
 
   const cfg = STATUS_CONFIG[survey.status as SurveyStatus] ?? STATUS_CONFIG[SurveyStatus.DRAFT];
+
+  const TYPE_LABELS: Record<SurveyType, string> = {
+    [SurveyType.NPS]:                'NPS',
+    [SurveyType.CSAT]:               'CSAT',
+    [SurveyType.FEATURE_VALIDATION]: 'Feature Validation',
+    [SurveyType.ROADMAP_VALIDATION]: 'Roadmap Validation',
+    [SurveyType.OPEN_INSIGHT]:       'Open Insight',
+    [SurveyType.CUSTOM]:             'Custom',
+  };
   const portalUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/${orgSlug}/surveys/${surveyId}`;
 
   return (
@@ -182,9 +191,14 @@ export default function SurveyDetailPage() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.5rem', gap: '1rem', flexWrap: 'wrap' }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.375rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.375rem', flexWrap: 'wrap' }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0a2540', margin: 0 }}>{survey.title}</h1>
             <span style={{ ...cfg, padding: '0.2rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600 }}>{cfg.label}</span>
+            {survey.surveyType && (
+              <span style={{ background: '#e3f2fd', color: '#1565c0', padding: '0.2rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600 }}>
+                {TYPE_LABELS[survey.surveyType as SurveyType] ?? survey.surveyType}
+              </span>
+            )}
           </div>
           {survey.description && (
             <p style={{ color: '#6C757D', fontSize: '0.9rem', margin: 0 }}>{survey.description}</p>
@@ -433,6 +447,75 @@ export default function SurveyDetailPage() {
                   </div>
                 ))}
               </div>
+
+              {/* Insight Score + Sentiment Distribution */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                {/* Insight Score */}
+                {intelligence.insightScore != null && (
+                  <div style={{ ...CARD }}>
+                    <h3 style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0a2540', marginBottom: '0.75rem' }}>🧠 AI Insight Score</h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                      <div style={{ fontSize: '2.5rem', fontWeight: 800, color: intelligence.insightScore >= 70 ? '#2e7d32' : intelligence.insightScore >= 40 ? '#b8860b' : '#e63946' }}>
+                        {Math.round(intelligence.insightScore)}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ height: '0.5rem', background: '#f0f4f8', borderRadius: '999px', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${intelligence.insightScore}%`, background: intelligence.insightScore >= 70 ? '#2e7d32' : intelligence.insightScore >= 40 ? '#b8860b' : '#e63946', borderRadius: '999px', transition: 'width 0.5s' }} />
+                        </div>
+                        <p style={{ fontSize: '0.75rem', color: '#6C757D', margin: '0.375rem 0 0' }}>Quality of extracted intelligence from responses</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Sentiment Distribution */}
+                {intelligence.sentimentDistribution && (
+                  <div style={{ ...CARD }}>
+                    <h3 style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0a2540', marginBottom: '0.75rem' }}>Sentiment Distribution</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      {[
+                        { label: 'Positive', value: intelligence.sentimentDistribution.positive, color: '#2e7d32', bg: '#e8f5e9' },
+                        { label: 'Neutral',  value: intelligence.sentimentDistribution.neutral,  color: '#b8860b', bg: '#fff8e1' },
+                        { label: 'Negative', value: intelligence.sentimentDistribution.negative, color: '#c62828', bg: '#fce4ec' },
+                      ].map((row) => (
+                        <div key={row.label} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: row.color, width: '4.5rem', flexShrink: 0 }}>{row.label}</span>
+                          <div style={{ flex: 1, height: '0.5rem', background: '#f0f4f8', borderRadius: '999px', overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${row.value}%`, background: row.color, borderRadius: '999px', transition: 'width 0.5s' }} />
+                          </div>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: row.color, width: '2.5rem', textAlign: 'right' }}>{row.value}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Top Feature Requests + Pain Points */}
+              {((intelligence.topFeatureRequests ?? []).length > 0 || (intelligence.topPainPoints ?? []).length > 0) && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  {(intelligence.topFeatureRequests ?? []).length > 0 && (
+                    <div style={{ ...CARD }}>
+                      <h3 style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0a2540', marginBottom: '0.75rem' }}>🔬 Top Feature Requests</h3>
+                      <ul style={{ margin: 0, padding: '0 0 0 1.125rem', display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                        {(intelligence.topFeatureRequests ?? []).map((req: string, i: number) => (
+                          <li key={i} style={{ fontSize: '0.8125rem', color: '#495057', lineHeight: 1.5 }}>{req}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {(intelligence.topPainPoints ?? []).length > 0 && (
+                    <div style={{ ...CARD }}>
+                      <h3 style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0a2540', marginBottom: '0.75rem' }}>⚠️ Top Pain Points</h3>
+                      <ul style={{ margin: 0, padding: '0 0 0 1.125rem', display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                        {(intelligence.topPainPoints ?? []).map((pt: string, i: number) => (
+                          <li key={i} style={{ fontSize: '0.8125rem', color: '#495057', lineHeight: 1.5 }}>{pt}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Key Topics */}
               {intelligence.keyTopics?.length > 0 && (

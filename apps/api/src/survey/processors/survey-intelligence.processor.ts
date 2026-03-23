@@ -1,9 +1,11 @@
 import { Process, Processor } from '@nestjs/bull';
+import { InjectQueue } from '@nestjs/bull';
 import { Logger } from '@nestjs/common';
-import type { Job } from 'bull';
+import type { Job, Queue } from 'bull';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SurveyIntelligenceService } from '../services/survey-intelligence.service';
 import { ThemeClusteringService } from '../../ai/services/theme-clustering.service';
+import { CIQ_SCORING_QUEUE, type CiqJobPayload } from '../../ai/processors/ciq-scoring.processor';
 
 export const SURVEY_INTELLIGENCE_QUEUE = 'survey-intelligence';
 
@@ -22,6 +24,7 @@ export class SurveyIntelligenceProcessor {
     private readonly prisma: PrismaService,
     private readonly intelligenceService: SurveyIntelligenceService,
     private readonly themeClusteringService: ThemeClusteringService,
+    @InjectQueue(CIQ_SCORING_QUEUE) private readonly ciqQueue: Queue,
   ) {}
 
   @Process()
@@ -111,10 +114,25 @@ export class SurveyIntelligenceProcessor {
         }
 
         // ── 6. Trigger theme clustering for the feedback ───────────────────────
+        let clusteredThemeId: string | null = null;
         try {
-          await this.themeClusteringService.assignFeedbackToTheme(workspaceId, feedbackId);
+          const clusterResult = await this.themeClusteringService.assignFeedbackToTheme(workspaceId, feedbackId);
+          clusteredThemeId = (clusterResult as any)?.themeId ?? null;
         } catch (err) {
           this.logger.warn(`Theme clustering failed for feedback ${feedbackId}: ${(err as Error).message}`);
+        }
+
+        // ── 6b. Enqueue CIQ re-scoring for the clustered theme ────────────────
+        if (clusteredThemeId) {
+          this.ciqQueue
+            .add({ type: 'THEME_SCORED', workspaceId, themeId: clusteredThemeId } as CiqJobPayload, {
+              attempts: 3,
+              backoff: { type: 'exponential', delay: 2000 },
+              removeOnComplete: true,
+            })
+            .catch((err: Error) => {
+              this.logger.warn(`Failed to enqueue CIQ re-scoring for theme ${clusteredThemeId}: ${err.message}`);
+            });
         }
       }
 

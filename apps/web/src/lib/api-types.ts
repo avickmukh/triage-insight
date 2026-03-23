@@ -1137,6 +1137,15 @@ export enum SurveyStatus {
   CLOSED    = 'CLOSED',
 }
 
+export enum SurveyType {
+  NPS                = 'NPS',
+  CSAT               = 'CSAT',
+  FEATURE_VALIDATION = 'FEATURE_VALIDATION',
+  ROADMAP_VALIDATION = 'ROADMAP_VALIDATION',
+  OPEN_INSIGHT       = 'OPEN_INSIGHT',
+  CUSTOM             = 'CUSTOM',
+}
+
 export enum SurveyQuestionType {
   SHORT_TEXT      = 'SHORT_TEXT',
   LONG_TEXT       = 'LONG_TEXT',
@@ -1165,10 +1174,15 @@ export interface Survey {
   workspaceId: string;
   title: string;
   description: string | null;
+  surveyType: SurveyType;
   status: SurveyStatus;
   convertToFeedback: boolean;
   thankYouMessage: string | null;
   redirectUrl: string | null;
+  linkedThemeId: string | null;
+  linkedRoadmapItemId: string | null;
+  customerSegment: string | null;
+  expiresAt: string | null;
   createdAt: string;
   updatedAt: string;
   questions?: SurveyQuestion[];
@@ -1216,9 +1230,14 @@ export interface SurveyResponseListResponse {
 export interface CreateSurveyPayload {
   title: string;
   description?: string;
+  surveyType?: SurveyType;
   convertToFeedback?: boolean;
   thankYouMessage?: string;
   redirectUrl?: string;
+  linkedThemeId?: string;
+  linkedRoadmapItemId?: string;
+  customerSegment?: string;
+  expiresAt?: string;
 }
 
 export interface AddQuestionPayload {
@@ -1234,6 +1253,8 @@ export interface AddQuestionPayload {
 export interface SubmitSurveyResponsePayload {
   respondentEmail?: string;
   respondentName?: string;
+  anonymousId?: string;
+  customerId?: string;
   answers: Array<{
     questionId: string;
     textValue?: string;
@@ -1257,6 +1278,10 @@ export interface SurveyIntelligence {
   npsResponseCount: number;
   ratingResponseCount: number;
   textResponseCount: number;
+  insightScore?: number | null;
+  sentimentDistribution?: { positive: number; neutral: number; negative: number } | null;
+  topFeatureRequests?: string[];
+  topPainPoints?: string[];
 }
 
 // ─── Prioritization Settings ───────────────────────────────────────────────────

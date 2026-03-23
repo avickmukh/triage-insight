@@ -22,7 +22,7 @@ import type {
  */
 export function useSurveyList(
   _orgSlugOrIgnored?: string,
-  params?: { status?: string; search?: string; page?: number; limit?: number },
+  params?: { status?: string; surveyType?: string; search?: string; page?: number; limit?: number },
 ) {
   const { workspace } = useWorkspace();
   const workspaceId = workspace?.id ?? '';
