@@ -10,6 +10,7 @@ import { Prisma } from '@prisma/client';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
 import { AI_ANALYSIS_QUEUE } from '../ai/processors/analysis.processor';
+import { CIQ_SCORING_QUEUE } from '../ai/processors/ciq-scoring.processor';
 
 @Injectable()
 export class FeedbackService {
@@ -17,6 +18,7 @@ export class FeedbackService {
     private readonly prisma: PrismaService,
     private readonly s3: S3Service,
     @InjectQueue(AI_ANALYSIS_QUEUE) private readonly analysisQueue: Queue,
+    @InjectQueue(CIQ_SCORING_QUEUE) private readonly ciqQueue: Queue,
     private readonly planLimit: PlanLimitService,
   ) {}
 
@@ -55,8 +57,15 @@ export class FeedbackService {
       },
     });
 
-    // Dispatch async AI analysis job (embedding + duplicate detection)
+    // Dispatch async AI analysis job (embedding + duplicate detection + theme clustering)
     await this.analysisQueue.add({ feedbackId: newFeedback.id });
+
+    // Dispatch CIQ scoring job (feedback-level impact score)
+    await this.ciqQueue.add({
+      type: 'FEEDBACK_SCORED',
+      workspaceId,
+      feedbackId: newFeedback.id,
+    });
 
     return newFeedback;
   }
@@ -135,6 +144,24 @@ export class FeedbackService {
         sizeBytes,
       },
     });
+  }
+
+  /**
+   * Trigger CIQ re-scoring for all themes linked to a feedback item.
+   * Called after feedback is merged or its customer ARR changes.
+   */
+  async triggerThemeCiqRescore(workspaceId: string, feedbackId: string): Promise<void> {
+    const themeLinks = await this.prisma.themeFeedback.findMany({
+      where: { feedbackId },
+      select: { themeId: true },
+    });
+    for (const link of themeLinks) {
+      await this.ciqQueue.add({
+        type: 'THEME_SCORED',
+        workspaceId,
+        themeId: link.themeId,
+      });
+    }
   }
 
   /**

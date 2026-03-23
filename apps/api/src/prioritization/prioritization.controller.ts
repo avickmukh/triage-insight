@@ -1,5 +1,6 @@
-import { Controller, Get, Patch, Body, Param, Query, UseGuards, Req } from "@nestjs/common";
+import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Req } from "@nestjs/common";
 import { PrioritizationService } from "./services/prioritization.service";
+import { CiqService } from "../ai/services/ciq.service";
 import { UpdateSettingsDto } from "./dto/update-settings.dto";
 import { QueryPrioritizationDto } from "./dto/query-prioritization.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
@@ -14,7 +15,10 @@ interface AuthenticatedRequest {
 @Controller("workspaces/:workspaceId/prioritization")
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class PrioritizationController {
-  constructor(private readonly prioritizationService: PrioritizationService) {}
+  constructor(
+    private readonly prioritizationService: PrioritizationService,
+    private readonly ciqService: CiqService,
+  ) {}
 
   @Get("themes")
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
@@ -32,6 +36,34 @@ export class PrioritizationController {
     @Param("themeId") themeId: string
   ) {
     return this.prioritizationService.getThemeScoreExplanation(workspaceId, themeId);
+  }
+
+  /**
+   * GET /workspaces/:workspaceId/prioritization/themes/:themeId/ciq
+   * Real CIQ score for a theme using actual DB data (ARR, deals, signals).
+   * Returns full scoreExplanation map for explainability UI.
+   */
+  @Get("themes/:themeId/ciq")
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
+  getThemeCiqScore(
+    @Param("workspaceId") workspaceId: string,
+    @Param("themeId") themeId: string
+  ) {
+    return this.ciqService.scoreTheme(workspaceId, themeId);
+  }
+
+  /**
+   * POST /workspaces/:workspaceId/prioritization/themes/:themeId/recalculate
+   * Synchronously recalculates CIQ score for a theme.
+   * ADMIN / EDITOR only.
+   */
+  @Post("themes/:themeId/recalculate")
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  recalculateThemeCiq(
+    @Param("workspaceId") workspaceId: string,
+    @Param("themeId") themeId: string
+  ) {
+    return this.ciqService.scoreTheme(workspaceId, themeId);
   }
 
   @Get("settings")

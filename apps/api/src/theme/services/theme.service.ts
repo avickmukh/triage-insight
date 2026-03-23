@@ -10,6 +10,7 @@ import { QueryThemeDto } from '../dto/query-theme.dto';
 import { SplitThemeDto } from '../dto/split-theme.dto';
 import { MoveFeedbackDto } from '../dto/move-feedback.dto';
 import { AuditLogAction } from '@prisma/client';
+import { CIQ_SCORING_QUEUE } from '../../ai/processors/ciq-scoring.processor';
 
 export const AI_CLUSTERING_QUEUE = 'ai-clustering';
 
@@ -20,6 +21,7 @@ export class ThemeService {
     private readonly themeRepository: ThemeRepository,
     private readonly auditService: AuditService,
     @InjectQueue(AI_CLUSTERING_QUEUE) private readonly clusteringQueue: Queue,
+    @InjectQueue(CIQ_SCORING_QUEUE) private readonly ciqQueue: Queue,
   ) {}
 
   // ─── CRUD ─────────────────────────────────────────────────────────────────
@@ -38,6 +40,12 @@ export class ThemeService {
     });
 
     await this.auditService.logAction(workspaceId, userId, AuditLogAction.THEME_CREATE, { themeId: theme.id, title });
+
+    // Trigger CIQ scoring if feedback was linked at creation
+    if (feedbackIds && feedbackIds.length > 0) {
+      await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId: theme.id });
+    }
+
     return theme;
   }
 
@@ -121,6 +129,10 @@ export class ThemeService {
     await this.findOne(workspaceId, id);
     const updatedTheme = await this.themeRepository.update(id, updateThemeDto);
     await this.auditService.logAction(workspaceId, userId, AuditLogAction.THEME_UPDATE, { themeId: id, changes: updateThemeDto });
+
+    // Re-score theme when its metadata changes (status, title, etc.)
+    await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId: id });
+
     return updatedTheme;
   }
 
@@ -199,6 +211,9 @@ export class ThemeService {
       feedbackIds: [feedbackId],
     });
 
+    // Re-score theme now that a new feedback signal was added
+    await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId });
+
     return { success: true };
   }
 
@@ -226,6 +241,9 @@ export class ThemeService {
       feedbackIds: [feedbackId],
     });
 
+    // Re-score theme after signal removal
+    await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId });
+
     return { success: true };
   }
 
@@ -246,6 +264,8 @@ export class ThemeService {
         themeId: sourceThemeId,
         feedbackIds,
       });
+      // Re-score source theme
+      await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId: sourceThemeId });
     }
 
     if (targetThemeId) {
@@ -257,6 +277,8 @@ export class ThemeService {
         themeId: targetThemeId,
         feedbackIds,
       });
+      // Re-score target theme
+      await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId: targetThemeId });
     }
 
     return { success: true };
@@ -269,10 +291,8 @@ export class ThemeService {
       throw new BadRequestException('Cannot merge a theme into itself.');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       // For each source theme, re-link its feedback to the target theme.
-      // Use upsert to avoid @@id constraint violations when a feedback item
-      // is already linked to the target theme.
       const sourceLinks = await tx.themeFeedback.findMany({
         where: { themeId: { in: sourceThemeIds } },
       });
@@ -286,14 +306,11 @@ export class ThemeService {
             assignedBy: link.assignedBy,
             confidence: link.confidence,
           },
-          update: {}, // keep existing link unchanged if already present
+          update: {},
         });
       }
 
-      // Delete source theme feedback links (now migrated)
       await tx.themeFeedback.deleteMany({ where: { themeId: { in: sourceThemeIds } } });
-
-      // Delete the source themes
       await tx.theme.deleteMany({ where: { id: { in: sourceThemeIds }, workspaceId } });
 
       await this.auditService.logAction(workspaceId, userId, AuditLogAction.THEME_MERGE, {
@@ -303,27 +320,30 @@ export class ThemeService {
 
       return this.findOne(workspaceId, targetThemeId);
     });
+
+    // Re-score merged theme
+    await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId: targetThemeId });
+
+    return result;
   }
 
   async split(workspaceId: string, userId: string, sourceThemeId: string, splitThemeDto: SplitThemeDto) {
     const { newThemeTitle, newThemeDescription, feedbackIdsToMove } = splitThemeDto;
 
-    return this.prisma.$transaction(async (tx) => {
-      // 1. Create the new theme
-      const newTheme = await tx.theme.create({
+    const newTheme = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.theme.create({
         data: { workspaceId, title: newThemeTitle, description: newThemeDescription },
       });
 
-      // 2. Re-link selected feedback to the new theme using upsert
       const sourceLinks = await tx.themeFeedback.findMany({
         where: { themeId: sourceThemeId, feedbackId: { in: feedbackIdsToMove } },
       });
 
       for (const link of sourceLinks) {
         await tx.themeFeedback.upsert({
-          where: { themeId_feedbackId: { themeId: newTheme.id, feedbackId: link.feedbackId } },
+          where: { themeId_feedbackId: { themeId: created.id, feedbackId: link.feedbackId } },
           create: {
-            themeId: newTheme.id,
+            themeId: created.id,
             feedbackId: link.feedbackId,
             assignedBy: link.assignedBy,
             confidence: link.confidence,
@@ -332,19 +352,24 @@ export class ThemeService {
         });
       }
 
-      // 3. Remove from source
       await tx.themeFeedback.deleteMany({
         where: { themeId: sourceThemeId, feedbackId: { in: feedbackIdsToMove } },
       });
 
       await this.auditService.logAction(workspaceId, userId, AuditLogAction.THEME_SPLIT, {
         sourceThemeId,
-        newThemeId: newTheme.id,
+        newThemeId: created.id,
         feedbackIdsToMove,
       });
 
-      return newTheme;
+      return created;
     });
+
+    // Re-score both themes after split
+    await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId: sourceThemeId });
+    await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId: newTheme.id });
+
+    return newTheme;
   }
 
   // ─── Reclustering ─────────────────────────────────────────────────────────

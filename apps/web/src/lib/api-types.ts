@@ -702,3 +702,73 @@ export interface WorkspaceLimitSummary {
     priceMonthly: number;
   };
 }
+
+// ─── CIQ (Customer Intelligence Quotient) Types ──────────────────────────────
+
+/**
+ * A single factor in the CIQ score breakdown.
+ * Returned by /ciq-explanation and /prioritization/themes/:id/ciq endpoints.
+ */
+export interface CiqScoreComponent {
+  /** Raw normalised input value (0–100) before weight is applied */
+  value: number;
+  /** Configured weight (0–1) from PrioritizationSettings */
+  weight: number;
+  /** Weighted contribution to the final score: value × weight */
+  contribution: number;
+  /** Human-readable label for explainability UI */
+  label: string;
+}
+
+/**
+ * Full CIQ score output for a theme or roadmap item.
+ * Returned by:
+ *   GET  /workspaces/:id/roadmap/:itemId/ciq-explanation
+ *   GET  /workspaces/:id/prioritization/themes/:themeId/ciq
+ *   POST /workspaces/:id/prioritization/themes/:themeId/recalculate
+ *   POST /workspaces/:id/roadmap/:itemId/refresh-intelligence
+ */
+export interface CiqScoreOutput {
+  /** Final normalised priority score (0–100) */
+  priorityScore: number;
+  /** Confidence in the score (0–1): rises with more data signals */
+  confidenceScore: number;
+  /** Normalised revenue impact (0–100) derived from ARR + deal pipeline */
+  revenueImpactScore: number;
+  /** Raw ARR sum from linked customers */
+  revenueImpactValue: number;
+  /** Raw deal influence value from linked deals */
+  dealInfluenceValue: number;
+  /** Count of non-MERGED feedback items linked to this theme */
+  feedbackCount: number;
+  /** Count of CustomerSignal rows linked to this theme */
+  signalCount: number;
+  /** Number of distinct customers who submitted linked feedback */
+  uniqueCustomerCount: number;
+  /**
+   * Per-factor breakdown for explainability.
+   * Keys: requestFrequency | customerCount | arrValue | accountPriority |
+   *       dealInfluence | signalStrength | storedRevenue
+   */
+  scoreExplanation: Record<string, CiqScoreComponent>;
+  /** True when the score was derived from a linked theme (vs. stored values only) */
+  themeScored?: boolean;
+}
+
+/**
+ * Lightweight CIQ score for a single feedback item.
+ * Returned by feedback-level scoring (internal use; not yet a public endpoint).
+ */
+export interface CiqFeedbackScore {
+  /** Normalised 0–100 impact estimate for a single feedback item */
+  impactScore: number;
+  /** Confidence 0–1 based on available signals */
+  confidenceScore: number;
+  /** ARR of the submitting customer (0 if unknown) */
+  customerArrValue: number;
+  /** Numeric account priority (1–4) */
+  accountPriorityValue: number;
+  /** Sentiment: negative values increase urgency */
+  sentiment: number | null;
+  scoreExplanation: Record<string, CiqScoreComponent>;
+}

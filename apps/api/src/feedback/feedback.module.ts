@@ -10,6 +10,7 @@ import { EmailIngestionService } from './ingestion/email.service';
 import { SlackIngestionService } from './ingestion/slack.service';
 import { VoiceIngestionService } from './ingestion/voice.service';
 import { AI_ANALYSIS_QUEUE } from '../ai/processors/analysis.processor';
+import { CIQ_SCORING_QUEUE } from '../ai/processors/ciq-scoring.processor';
 import { PlanLimitService } from '../billing/plan-limit.service';
 
 @Module({
@@ -17,6 +18,7 @@ import { PlanLimitService } from '../billing/plan-limit.service';
     PrismaModule,
     UploadsModule,
     BullModule.registerQueue({ name: AI_ANALYSIS_QUEUE }),
+    BullModule.registerQueue({ name: CIQ_SCORING_QUEUE }),
   ],
   controllers: [FeedbackController, PublicFeedbackController],
   providers: [
@@ -28,5 +30,6 @@ import { PlanLimitService } from '../billing/plan-limit.service';
     VoiceIngestionService,
     PlanLimitService,
   ],
+  exports: [FeedbackService],
 })
 export class FeedbackModule {}

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import apiClient from "@/lib/api-client";
 import {
+  CiqScoreOutput,
   CreateRoadmapItemDto,
   RoadmapBoardResponse,
   RoadmapItem,
@@ -45,6 +46,29 @@ export const useRoadmapItem = (itemId: string | null) => {
   });
 };
 
+// ─── CIQ explanation (full score breakdown) ───────────────────────────────────
+
+/**
+ * Fetch the full CIQ score explanation for a roadmap item.
+ * Enabled only when itemId is provided.
+ * Returns { priorityScore, confidenceScore, revenueImpactScore, scoreExplanation, ... }
+ */
+export const useRoadmapItemCiqExplanation = (itemId: string | null) => {
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id;
+
+  return useQuery<CiqScoreOutput, Error>({
+    queryKey: [ROADMAP_KEY, workspaceId, "ciq", itemId],
+    queryFn: () => {
+      if (!workspaceId) throw new Error("Workspace ID is not available");
+      if (!itemId) throw new Error("Item ID is not available");
+      return apiClient.roadmap.getCiqExplanation(workspaceId, itemId);
+    },
+    enabled: !!workspaceId && !!itemId,
+    staleTime: 5 * 60 * 1000, // 5 min — CIQ scores change only on queue events
+  });
+};
+
 // ─── Refresh intelligence ─────────────────────────────────────────────────────
 
 export const useRefreshIntelligence = () => {
@@ -52,7 +76,7 @@ export const useRefreshIntelligence = () => {
   const { workspace } = useWorkspace();
   const workspaceId = workspace?.id;
 
-  return useMutation<RoadmapItem, Error, string>({
+  return useMutation<RoadmapItem & { scoreExplanation?: CiqScoreOutput["scoreExplanation"] }, Error, string>({
     mutationFn: (itemId) => {
       if (!workspaceId) throw new Error("Workspace ID is not available");
       return apiClient.roadmap.refreshIntelligence(workspaceId, itemId);
@@ -60,6 +84,8 @@ export const useRefreshIntelligence = () => {
     onSuccess: (updated) => {
       queryClient.invalidateQueries({ queryKey: [ROADMAP_KEY, workspaceId, "board"] });
       queryClient.invalidateQueries({ queryKey: [ROADMAP_KEY, workspaceId, "item", updated.id] });
+      // Invalidate CIQ explanation cache so next fetch gets fresh data
+      queryClient.invalidateQueries({ queryKey: [ROADMAP_KEY, workspaceId, "ciq", updated.id] });
     },
   });
 };

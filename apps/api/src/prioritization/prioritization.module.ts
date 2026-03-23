@@ -10,5 +10,7 @@ import { ScoringService } from "./services/scoring.service";
   imports: [PrismaModule, AiModule],
   controllers: [PrioritizationController],
   providers: [PrioritizationService, AggregationService, ScoringService],
+  // CiqService is provided and exported by AiModule — no re-declaration needed here
+  exports: [PrioritizationService, AggregationService, ScoringService],
 })
 export class PrioritizationModule {}

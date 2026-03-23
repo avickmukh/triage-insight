@@ -54,6 +54,7 @@ import {
   DomainSettings,
   SetDomainDto,
   WorkspaceLimitSummary,
+  CiqScoreOutput,
 } from "@/lib/api-types";
 
 const getApiBaseUrl = () => {
@@ -226,9 +227,12 @@ const apiClient = {
     /** GET /workspaces/:id/roadmap/:itemId — full detail with linkedFeedback + signalSummary */
     getById: (workspaceId: string, itemId: string): Promise<RoadmapItemDetail> =>
       api.get(`/workspaces/${workspaceId}/roadmap/${itemId}`).then(handleResponse),
-    /** POST /workspaces/:id/roadmap/:itemId/refresh-intelligence */
-    refreshIntelligence: (workspaceId: string, itemId: string): Promise<RoadmapItem> =>
+    /** POST /workspaces/:id/roadmap/:itemId/refresh-intelligence — synchronous CIQ rescore */
+    refreshIntelligence: (workspaceId: string, itemId: string): Promise<RoadmapItem & { scoreExplanation?: CiqScoreOutput['scoreExplanation'] }> =>
       api.post(`/workspaces/${workspaceId}/roadmap/${itemId}/refresh-intelligence`).then(handleResponse),
+    /** GET /workspaces/:id/roadmap/:itemId/ciq-explanation — full CIQ breakdown */
+    getCiqExplanation: (workspaceId: string, itemId: string): Promise<CiqScoreOutput> =>
+      api.get(`/workspaces/${workspaceId}/roadmap/${itemId}/ciq-explanation`).then(handleResponse),
     /** POST /workspaces/:id/roadmap */
     create: (workspaceId: string, data: CreateRoadmapItemDto): Promise<RoadmapItem> =>
       api.post(`/workspaces/${workspaceId}/roadmap`, data).then(handleResponse),
@@ -247,6 +251,24 @@ const apiClient = {
       api
         .post(`/workspaces/${workspaceId}/roadmap/from-theme/${themeId}`)
         .then(handleResponse),
+  },
+
+  prioritization: {
+    /** GET /workspaces/:id/prioritization/themes — weighted priority list */
+    getThemes: (workspaceId: string, params?: { page?: number; limit?: number }): Promise<{ data: unknown[]; total: number; page: number; limit: number }> =>
+      api.get(`/workspaces/${workspaceId}/prioritization/themes`, { params }).then(handleResponse),
+    /** GET /workspaces/:id/prioritization/themes/:themeId/ciq — real CIQ score */
+    getThemeCiq: (workspaceId: string, themeId: string): Promise<CiqScoreOutput> =>
+      api.get(`/workspaces/${workspaceId}/prioritization/themes/${themeId}/ciq`).then(handleResponse),
+    /** POST /workspaces/:id/prioritization/themes/:themeId/recalculate — force rescore */
+    recalculateThemeCiq: (workspaceId: string, themeId: string): Promise<CiqScoreOutput> =>
+      api.post(`/workspaces/${workspaceId}/prioritization/themes/${themeId}/recalculate`).then(handleResponse),
+    /** GET /workspaces/:id/prioritization/settings */
+    getSettings: (workspaceId: string): Promise<unknown> =>
+      api.get(`/workspaces/${workspaceId}/prioritization/settings`).then(handleResponse),
+    /** PATCH /workspaces/:id/prioritization/settings */
+    updateSettings: (workspaceId: string, data: Record<string, number>): Promise<unknown> =>
+      api.patch(`/workspaces/${workspaceId}/prioritization/settings`, data).then(handleResponse),
   },
 
   support: {

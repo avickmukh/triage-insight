@@ -1,5 +1,6 @@
 import { Controller, Delete, Get, Post, Body, Patch, Param, Query, UseGuards, Req, HttpCode, HttpStatus } from "@nestjs/common";
 import { RoadmapService } from "./services/roadmap.service";
+import { CiqService } from "../ai/services/ciq.service";
 import { CreateRoadmapItemDto } from "./dto/create-roadmap-item.dto";
 import { UpdateRoadmapItemDto } from "./dto/update-roadmap-item.dto";
 import { QueryRoadmapDto } from "./dto/query-roadmap.dto";
@@ -15,7 +16,10 @@ interface AuthenticatedRequest {
 @Controller("workspaces/:workspaceId/roadmap")
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class RoadmapController {
-  constructor(private readonly roadmapService: RoadmapService) {}
+  constructor(
+    private readonly roadmapService: RoadmapService,
+    private readonly ciqService: CiqService,
+  ) {}
 
   @Post()
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
@@ -56,6 +60,11 @@ export class RoadmapController {
     return this.roadmapService.update(workspaceId, req.user.sub, id, dto);
   }
 
+  /**
+   * POST /workspaces/:workspaceId/roadmap/:id/refresh-intelligence
+   * Synchronously re-runs CIQ scoring and persists results.
+   * ADMIN / EDITOR only.
+   */
   @Post(":id/refresh-intelligence")
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
   refreshIntelligence(
@@ -63,6 +72,21 @@ export class RoadmapController {
     @Param("id") id: string
   ) {
     return this.roadmapService.refreshIntelligence(workspaceId, id);
+  }
+
+  /**
+   * GET /workspaces/:workspaceId/roadmap/:id/ciq-explanation
+   * Returns the full CIQ score breakdown (scoreExplanation map) for a roadmap item.
+   * Read-only; all roles may access.
+   * Shape supports future "why is this score high?" UI without additional API changes.
+   */
+  @Get(":id/ciq-explanation")
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
+  getCiqExplanation(
+    @Param("workspaceId") workspaceId: string,
+    @Param("id") id: string
+  ) {
+    return this.ciqService.scoreRoadmapItem(workspaceId, id);
   }
 
   @Delete(":id")
