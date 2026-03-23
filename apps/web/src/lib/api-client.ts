@@ -42,6 +42,9 @@ import {
   RoadmapListResponse,
   SignUpDto,
   SupportTicketListResponse,
+  SupportOverview,
+  SupportCluster,
+  SupportSpike,
   Theme,
   ThemeListResponse,
   UpdateFeedbackDto,
@@ -332,13 +335,23 @@ const apiClient = {
   },
 
   support: {
+    getOverview: (workspaceId: string): Promise<SupportOverview> =>
+      api.get(`/workspaces/${workspaceId}/support/overview`).then(handleResponse),
     listTickets: (
       workspaceId: string,
-      params?: any
+      params?: { page?: number; limit?: number; status?: string; search?: string }
     ): Promise<SupportTicketListResponse> =>
       api
         .get(`/workspaces/${workspaceId}/support/tickets`, { params })
         .then(handleResponse),
+    getClusters: (workspaceId: string, limit?: number): Promise<SupportCluster[]> =>
+      api.get(`/workspaces/${workspaceId}/support/clusters`, { params: { limit } }).then(handleResponse),
+    getSpikes: (workspaceId: string): Promise<SupportSpike[]> =>
+      api.get(`/workspaces/${workspaceId}/support/spikes`).then(handleResponse),
+    triggerSync: (workspaceId: string): Promise<{ message: string; workspaceId: string }> =>
+      api.post(`/workspaces/${workspaceId}/support/sync`).then(handleResponse),
+    triggerRecluster: (workspaceId: string): Promise<{ message: string; workspaceId: string }> =>
+      api.post(`/workspaces/${workspaceId}/support/recluster`).then(handleResponse),
   },
 
   public: {

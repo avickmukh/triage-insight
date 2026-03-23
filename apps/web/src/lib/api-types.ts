@@ -332,23 +332,87 @@ export enum DuplicateSuggestionStatus {
   REJECTED = 'REJECTED',
 }
 
+// ─── Support Intelligence MVP ─────────────────────────────────────────────────
+
+export type SpikeSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
 export interface SupportTicket {
   id: string;
   workspaceId: string;
   customerId?: string | null;
   externalId?: string | null;
   subject: string;
-  body?: string | null;
+  description?: string | null;
   status: string;
+  provider?: string;
+  customerEmail?: string | null;
+  arrValue?: number | null;
+  tags?: string[];
+  createdAt: string;
+  updatedAt: string;
+  externalCreatedAt?: string | null;
+  cluster?: { id: string; title: string; themeId: string | null } | null;
+}
+
+export interface SupportTicketListResponse {
+  items: SupportTicket[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface SupportCluster {
+  id: string;
+  title: string;
+  description: string | null;
+  ticketCount: number;
+  arrExposure: number;
+  themeId: string | null;
+  themeTitle: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
-export interface SupportTicketListResponse {
-  data: SupportTicket[];
-  total: number;
-  page: number;
-  limit: number;
+export interface SupportSpike {
+  id: string;
+  clusterId: string;
+  clusterTitle: string;
+  ticketCount: number;
+  baseline: number;
+  zScore: number;
+  severity: SpikeSeverity;
+  arrExposure: number;
+  windowStart: string;
+  windowEnd: string;
+  themeId: string | null;
+  themeTitle: string | null;
+}
+
+export interface SupportOverviewSummary {
+  totalTickets: number;
+  openTickets: number;
+  resolvedTickets: number;
+  totalClusters: number;
+  linkedClusters: number;
+  totalArrExposure: number;
+  activeSpikes: number;
+  criticalSpikes: number;
+}
+
+export interface SupportRecentTicket {
+  id: string;
+  subject: string;
+  status: string;
+  createdAt: string;
+  customerEmail: string | null;
+}
+
+export interface SupportOverview {
+  summary: SupportOverviewSummary;
+  topClusters: SupportCluster[];
+  activeSpikes: SupportSpike[];
+  recentTickets: SupportRecentTicket[];
 }
 
 // --- Public Portal ---

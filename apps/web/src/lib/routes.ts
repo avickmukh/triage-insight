@@ -40,8 +40,11 @@ export const appRoutes = (slug: string) => ({
   surveyItem: (id: string) => `/${slug}/app/surveys/${id}`,
   digest:     `/${slug}/app/digest`,
   support: {
-    tickets: `/${slug}/app/support/tickets`,
-    calls:   `/${slug}/app/support/calls`,
+    overview: `/${slug}/app/support`,
+    tickets:  `/${slug}/app/support/tickets`,
+    clusters: `/${slug}/app/support/clusters`,
+    spikes:   `/${slug}/app/support/spikes`,
+    calls:    `/${slug}/app/support/calls`,
   },
   risk:       `/${slug}/app/risk`,
   riskItem:   (id: string) => `/${slug}/app/risk/${id}`,

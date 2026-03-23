@@ -18,7 +18,7 @@ export function Sidebar({ orgSlug: orgSlugProp }: { orgSlug?: string }) {
     { href: r.inbox,           icon: Package,    label: "Inbox" },
     { href: r.themes,          icon: Users2,     label: "Themes" },
     { href: r.roadmap,         icon: LineChart,  label: "Roadmap" },
-    { href: r.support.tickets, icon: Headphones, label: "Support" },
+    { href: r.support.overview, icon: Headphones, label: "Support" },
     { href: r.customers,        icon: Building2,  label: "Customers" },
     { href: r.intelligence,      icon: Sparkles,   label: "Intelligence" },
     { href: r.prioritization,     icon: BarChart2,  label: "Prioritization" },
