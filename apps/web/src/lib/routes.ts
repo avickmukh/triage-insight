@@ -42,6 +42,8 @@ export const appRoutes = (slug: string) => ({
   },
   risk:       `/${slug}/app/risk`,
   riskItem:   (id: string) => `/${slug}/app/risk/${id}`,
+  customers:  `/${slug}/app/customers`,
+  customerItem: (id: string) => `/${slug}/app/customers/${id}`,
   profile:    `/${slug}/app/profile`,
   upgrade:    `/${slug}/app/upgrade`,
 });

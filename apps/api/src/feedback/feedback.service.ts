@@ -91,7 +91,20 @@ export class FeedbackService {
         skip: (page - 1) * limit,
         take: limit,
         orderBy: { createdAt: 'desc' },
-        include: { attachments: true },
+        include: {
+          attachments: true,
+          customer: {
+            select: {
+              id: true,
+              name: true,
+              companyName: true,
+              segment: true,
+              arrValue: true,
+              accountPriority: true,
+              lifecycleStage: true,
+            },
+          },
+        },
       }),
       this.prisma.feedback.count({ where }),
     ]);
@@ -102,7 +115,20 @@ export class FeedbackService {
   async findOne(workspaceId: string, id: string) {
     const feedback = await this.prisma.feedback.findFirst({
       where: { id, workspaceId },
-      include: { attachments: true },
+      include: {
+        attachments: true,
+        customer: {
+          select: {
+            id: true,
+            name: true,
+            companyName: true,
+            segment: true,
+            arrValue: true,
+            accountPriority: true,
+            lifecycleStage: true,
+          },
+        },
+      },
     });
     if (!feedback) {
       throw new NotFoundException('Feedback not found');

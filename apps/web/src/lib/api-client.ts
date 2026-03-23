@@ -55,6 +55,17 @@ import {
   SetDomainDto,
   WorkspaceLimitSummary,
   CiqScoreOutput,
+  Customer,
+  CustomerDetail,
+  PaginatedCustomers,
+  PaginatedDeals,
+  RevenueSummary,
+  ThemeRevenueIntelligence,
+  CreateCustomerPayload,
+  UpdateCustomerPayload,
+  CreateDealPayload,
+  UpdateDealPayload,
+  DealDetail,
 } from "@/lib/api-types";
 
 const getApiBaseUrl = () => {
@@ -513,6 +524,79 @@ const apiClient = {
      */
     requestPlanChange: (data: RequestPlanChangeDto): Promise<RequestPlanChangeResponse> =>
       api.post('/billing/request-plan-change', data).then(handleResponse),
+  },
+
+  customers: {
+    /** GET /workspaces/:id/customers/revenue-summary */
+    getRevenueSummary: (workspaceId: string): Promise<RevenueSummary> =>
+      api.get(`/workspaces/${workspaceId}/customers/revenue-summary`).then(handleResponse),
+    /** GET /workspaces/:id/customers */
+    list: (
+      workspaceId: string,
+      params?: {
+        search?: string;
+        segment?: string;
+        accountPriority?: string;
+        lifecycleStage?: string;
+        sortBy?: string;
+        sortOrder?: 'asc' | 'desc';
+        page?: number;
+        limit?: number;
+      }
+    ): Promise<PaginatedCustomers> =>
+      api.get(`/workspaces/${workspaceId}/customers`, { params }).then(handleResponse),
+    /** GET /workspaces/:id/customers/:customerId */
+    getById: (workspaceId: string, customerId: string): Promise<CustomerDetail> =>
+      api.get(`/workspaces/${workspaceId}/customers/${customerId}`).then(handleResponse),
+    /** POST /workspaces/:id/customers */
+    create: (workspaceId: string, data: CreateCustomerPayload): Promise<Customer> =>
+      api.post(`/workspaces/${workspaceId}/customers`, data).then(handleResponse),
+    /** PATCH /workspaces/:id/customers/:customerId */
+    update: (workspaceId: string, customerId: string, data: UpdateCustomerPayload): Promise<Customer> =>
+      api.patch(`/workspaces/${workspaceId}/customers/${customerId}`, data).then(handleResponse),
+    /** DELETE /workspaces/:id/customers/:customerId */
+    remove: (workspaceId: string, customerId: string): Promise<void> =>
+      api.delete(`/workspaces/${workspaceId}/customers/${customerId}`).then(handleResponse),
+  },
+
+  deals: {
+    /** GET /workspaces/:id/deals */
+    list: (
+      workspaceId: string,
+      params?: {
+        search?: string;
+        stage?: string;
+        status?: string;
+        customerId?: string;
+        page?: number;
+        limit?: number;
+      }
+    ): Promise<PaginatedDeals> =>
+      api.get(`/workspaces/${workspaceId}/deals`, { params }).then(handleResponse),
+    /** GET /workspaces/:id/deals/:dealId */
+    getById: (workspaceId: string, dealId: string): Promise<DealDetail> =>
+      api.get(`/workspaces/${workspaceId}/deals/${dealId}`).then(handleResponse),
+    /** POST /workspaces/:id/deals */
+    create: (workspaceId: string, data: CreateDealPayload): Promise<DealDetail> =>
+      api.post(`/workspaces/${workspaceId}/deals`, data).then(handleResponse),
+    /** PATCH /workspaces/:id/deals/:dealId */
+    update: (workspaceId: string, dealId: string, data: UpdateDealPayload): Promise<DealDetail> =>
+      api.patch(`/workspaces/${workspaceId}/deals/${dealId}`, data).then(handleResponse),
+    /** DELETE /workspaces/:id/deals/:dealId */
+    remove: (workspaceId: string, dealId: string): Promise<void> =>
+      api.delete(`/workspaces/${workspaceId}/deals/${dealId}`).then(handleResponse),
+    /** POST /workspaces/:id/deals/:dealId/themes/:themeId */
+    linkTheme: (workspaceId: string, dealId: string, themeId: string): Promise<{ success: boolean }> =>
+      api.post(`/workspaces/${workspaceId}/deals/${dealId}/themes/${themeId}`).then(handleResponse),
+    /** DELETE /workspaces/:id/deals/:dealId/themes/:themeId */
+    unlinkTheme: (workspaceId: string, dealId: string, themeId: string): Promise<void> =>
+      api.delete(`/workspaces/${workspaceId}/deals/${dealId}/themes/${themeId}`).then(handleResponse),
+  },
+
+  themeRevenue: {
+    /** GET /workspaces/:id/themes/:themeId/revenue-intelligence */
+    getByTheme: (workspaceId: string, themeId: string): Promise<ThemeRevenueIntelligence> =>
+      api.get(`/workspaces/${workspaceId}/themes/${themeId}/revenue-intelligence`).then(handleResponse),
   },
 
   domain: {

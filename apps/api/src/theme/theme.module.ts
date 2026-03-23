@@ -7,6 +7,7 @@ import { ThemeController } from './theme.controller';
 import { ThemeRepository } from './repositories/theme.repository';
 import { ThemeClusteringProcessor } from './processors/theme-clustering.processor';
 import { CIQ_SCORING_QUEUE } from '../ai/processors/ciq-scoring.processor';
+import { DealModule } from '../deal/deal.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { CIQ_SCORING_QUEUE } from '../ai/processors/ciq-scoring.processor';
     AiModule,
     BullModule.registerQueue({ name: AI_CLUSTERING_QUEUE }),
     BullModule.registerQueue({ name: CIQ_SCORING_QUEUE }),
+    DealModule,
   ],
   controllers: [ThemeController],
   providers: [ThemeService, ThemeRepository, ThemeClusteringProcessor],

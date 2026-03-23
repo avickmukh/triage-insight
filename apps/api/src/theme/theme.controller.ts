@@ -13,6 +13,7 @@ import {
   DefaultValuePipe,
 } from '@nestjs/common';
 import { ThemeService } from './services/theme.service';
+import { DealService } from '../deal/deal.service';
 import { CreateThemeDto } from './dto/create-theme.dto';
 import { UpdateThemeDto } from './dto/update-theme.dto';
 import { QueryThemeDto } from './dto/query-theme.dto';
@@ -31,7 +32,10 @@ interface AuthenticatedRequest {
 @Controller('workspaces/:workspaceId/themes')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ThemeController {
-  constructor(private readonly themeService: ThemeService) {}
+  constructor(
+    private readonly themeService: ThemeService,
+    private readonly dealService: DealService,
+  ) {}
 
   @Post()
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
@@ -115,5 +119,18 @@ export class ThemeController {
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
   splitTheme(@Param('workspaceId') workspaceId: string, @Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() splitThemeDto: SplitThemeDto) {
     return this.themeService.split(workspaceId, req.user.sub, id, splitThemeDto);
+  }
+
+  /**
+   * GET /workspaces/:workspaceId/themes/:id/revenue-intelligence
+   * Returns deal influence, ARR impact, and impacted customers for a theme.
+   */
+  @Get(':id/revenue-intelligence')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
+  getRevenueIntelligence(
+    @Param('workspaceId') workspaceId: string,
+    @Param('id') id: string,
+  ) {
+    return this.dealService.findByTheme(workspaceId, id);
   }
 }

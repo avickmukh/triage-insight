@@ -772,3 +772,191 @@ export interface CiqFeedbackScore {
   sentiment: number | null;
   scoreExplanation: Record<string, CiqScoreComponent>;
 }
+
+// ─── Customer Intelligence / Revenue Types ────────────────────────────────────
+
+export enum CustomerSegment {
+  SMB         = 'SMB',
+  MID_MARKET  = 'MID_MARKET',
+  ENTERPRISE  = 'ENTERPRISE',
+}
+
+export enum AccountPriority {
+  LOW      = 'LOW',
+  MEDIUM   = 'MEDIUM',
+  HIGH     = 'HIGH',
+  CRITICAL = 'CRITICAL',
+}
+
+export enum CustomerLifecycleStage {
+  LEAD      = 'LEAD',
+  PROSPECT  = 'PROSPECT',
+  ACTIVE    = 'ACTIVE',
+  EXPANDING = 'EXPANDING',
+  AT_RISK   = 'AT_RISK',
+  CHURNED   = 'CHURNED',
+}
+
+export enum DealStage {
+  PROSPECTING = 'PROSPECTING',
+  QUALIFYING  = 'QUALIFYING',
+  PROPOSAL    = 'PROPOSAL',
+  NEGOTIATION = 'NEGOTIATION',
+  CLOSED_WON  = 'CLOSED_WON',
+  CLOSED_LOST = 'CLOSED_LOST',
+}
+
+export enum DealStatus {
+  OPEN = 'OPEN',
+  WON  = 'WON',
+  LOST = 'LOST',
+}
+
+export interface Customer {
+  id: string;
+  workspaceId: string;
+  name: string;
+  companyName?: string | null;
+  email?: string | null;
+  segment?: CustomerSegment | null;
+  arrValue?: number | null;
+  currency?: string | null;
+  accountPriority: AccountPriority;
+  lifecycleStage: CustomerLifecycleStage;
+  locale?: string | null;
+  countryCode?: string | null;
+  externalRef?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustomerRevenueIntelligence {
+  arrValue: number;
+  openDealValue: number;
+  totalDealValue: number;
+  feedbackCount: number;
+  dealCount: number;
+  signalCount: number;
+  influencedThemeCount: number;
+  influencedRoadmapCount: number;
+}
+
+export interface CustomerDetail extends Customer {
+  revenueIntelligence: CustomerRevenueIntelligence;
+  feedbacks: Array<{
+    id: string;
+    title: string;
+    description: string;
+    status: FeedbackStatus;
+    sourceType: string;
+    sentiment?: number | null;
+    impactScore?: number | null;
+    createdAt: string;
+    submittedAt: string;
+    themes: Array<{ theme: { id: string; title: string; status: string } }>;
+  }>;
+  deals: DealDetail[];
+  signals: Array<{
+    id: string;
+    signalType: string;
+    strength: number;
+    createdAt: string;
+    themeId?: string | null;
+  }>;
+  influencedRoadmapItems: Array<{
+    id: string;
+    title: string;
+    status: RoadmapStatus;
+    priorityScore?: number | null;
+    confidenceScore?: number | null;
+    isPublic: boolean;
+    targetQuarter?: string | null;
+    targetYear?: number | null;
+  }>;
+}
+
+export interface Deal {
+  id: string;
+  workspaceId: string;
+  customerId: string;
+  title: string;
+  annualValue: number;
+  currency: string;
+  stage: DealStage;
+  status: DealStatus;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DealDetail extends Deal {
+  customer: {
+    id: string;
+    name: string;
+    companyName?: string | null;
+    segment?: CustomerSegment | null;
+    arrValue?: number | null;
+    accountPriority: AccountPriority;
+    lifecycleStage: CustomerLifecycleStage;
+  };
+  themeLinks: Array<{
+    theme: { id: string; title: string; status: string };
+  }>;
+}
+
+export interface RevenueSummary {
+  totalCustomers: number;
+  totalARR: number;
+  openDealCount: number;
+  openDealValue: number;
+}
+
+export interface ThemeRevenueIntelligence {
+  deals: DealDetail[];
+  totalInfluence: number;
+  openInfluence: number;
+  dealCount: number;
+}
+
+export interface PaginatedCustomers {
+  data: (Customer & { _count?: { feedbacks: number; deals: number; signals: number } })[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface PaginatedDeals {
+  data: DealDetail[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface CreateCustomerPayload {
+  name: string;
+  companyName?: string;
+  email?: string;
+  arrValue?: number;
+  currency?: string;
+  segment?: CustomerSegment;
+  accountPriority?: AccountPriority;
+  lifecycleStage?: CustomerLifecycleStage;
+  locale?: string;
+  countryCode?: string;
+  externalRef?: string;
+}
+
+export interface UpdateCustomerPayload extends Partial<CreateCustomerPayload> {}
+
+export interface CreateDealPayload {
+  customerId: string;
+  title: string;
+  annualValue?: number;
+  currency?: string;
+  stage: DealStage;
+  status?: DealStatus;
+  notes?: string;
+  themeIds?: string[];
+}
+
+export interface UpdateDealPayload extends Partial<CreateDealPayload> {}

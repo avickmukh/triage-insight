@@ -18,6 +18,8 @@ import { PublicPortalModule } from './public/public-portal.module';
 import { PortalModule } from './portal/portal.module';
 import { BillingModule } from './billing/billing.module';
 import { PlatformModule } from './platform/platform.module';
+import { CustomerModule } from './customer/customer.module';
+import { DealModule } from './deal/deal.module';
 import { validationSchema } from './config/validation';
 
 @Module({
@@ -43,6 +45,8 @@ import { validationSchema } from './config/validation';
     PortalModule,
     BillingModule,
     PlatformModule,
+    CustomerModule,
+    DealModule,
   ],
 })
 export class AppModule {}
