@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import {
   useRoadmapBoard,
   useCreateRoadmapItem,
@@ -17,7 +18,6 @@ import {
   WorkspaceRole,
 } from '@/lib/api-types';
 import { publicRoutes, appRoutes } from '@/lib/routes';
-import { useParams } from 'next/navigation';
 
 // ─── Design tokens ─────────────────────────────────────────────────────────────
 const CARD: React.CSSProperties = {
@@ -28,21 +28,55 @@ const CARD: React.CSSProperties = {
   boxShadow: '0 1px 4px rgba(10,37,64,0.06)',
 };
 
-const COLUMNS: { status: RoadmapStatus; label: string; accent: string; bg: string }[] = [
-  { status: RoadmapStatus.BACKLOG,    label: 'Backlog',    accent: '#adb5bd', bg: '#f8f9fa' },
-  { status: RoadmapStatus.EXPLORING,  label: 'Exploring',  accent: '#b8860b', bg: '#fffdf0' },
-  { status: RoadmapStatus.PLANNED,    label: 'Planned',    accent: '#1a56db', bg: '#f0f5ff' },
-  { status: RoadmapStatus.COMMITTED,  label: 'Committed',  accent: '#7c3aed', bg: '#faf5ff' },
-  { status: RoadmapStatus.SHIPPED,    label: 'Shipped',    accent: '#20A4A4', bg: '#f0fafa' },
+const COLUMNS: {
+  status: RoadmapStatus;
+  label: string;
+  accent: string;
+  bg: string;
+  border: string;
+}[] = [
+  { status: RoadmapStatus.BACKLOG,   label: 'Backlog',   accent: '#6C757D', bg: '#f8f9fa', border: '#dee2e6' },
+  { status: RoadmapStatus.EXPLORING, label: 'Exploring', accent: '#b8860b', bg: '#fffdf0', border: '#f0e6b0' },
+  { status: RoadmapStatus.PLANNED,   label: 'Planned',   accent: '#1a56db', bg: '#f0f5ff', border: '#c7d9fb' },
+  { status: RoadmapStatus.COMMITTED, label: 'Committed', accent: '#7c3aed', bg: '#faf5ff', border: '#ddd6fe' },
+  { status: RoadmapStatus.SHIPPED,   label: 'Shipped',   accent: '#20A4A4', bg: '#f0fafa', border: '#b2e4e4' },
 ];
 
-// ─── Skeleton ──────────────────────────────────────────────────────────────────
+// ─── Skeleton shimmer ─────────────────────────────────────────────────────────
 function SkeletonCard() {
   return (
-    <div style={{ background: '#fff', borderRadius: '0.6rem', padding: '0.875rem', border: '1px solid #e9ecef' }}>
+    <div style={{ background: '#fff', borderRadius: '0.625rem', padding: '0.875rem', border: '1px solid #e9ecef' }}>
       <div style={{ height: '0.75rem', background: '#e9ecef', borderRadius: '0.25rem', width: '70%', marginBottom: '0.5rem' }} />
-      <div style={{ height: '0.6rem', background: '#f0f4f8', borderRadius: '0.25rem', width: '50%' }} />
+      <div style={{ height: '0.6rem', background: '#f0f4f8', borderRadius: '0.25rem', width: '50%', marginBottom: '0.75rem' }} />
+      <div style={{ display: 'flex', gap: '0.375rem' }}>
+        <div style={{ height: '1.1rem', width: '3rem', background: '#f0f4f8', borderRadius: '999px' }} />
+        <div style={{ height: '1.1rem', width: '2.5rem', background: '#f0f4f8', borderRadius: '999px' }} />
+      </div>
     </div>
+  );
+}
+
+// ─── Priority pill ────────────────────────────────────────────────────────────
+function PriorityPill({ score }: { score: number | null | undefined }) {
+  if (score == null) return null;
+  const pct = Math.min(100, Math.round(score * 100));
+  const color = pct >= 70 ? '#e63946' : pct >= 40 ? '#f4a261' : '#20A4A4';
+  const bg    = pct >= 70 ? '#fdecea' : pct >= 40 ? '#fff3e8' : '#e8f7f7';
+  return (
+    <span title="AI Priority Score" style={{ fontSize: '0.68rem', fontWeight: 700, color, background: bg, padding: '0.1rem 0.45rem', borderRadius: '999px' }}>
+      P {pct}
+    </span>
+  );
+}
+
+// ─── Confidence pill ──────────────────────────────────────────────────────────
+function ConfidencePill({ score }: { score: number | null | undefined }) {
+  if (score == null || score === 0) return null;
+  const pct = Math.min(100, Math.round(score * 100));
+  return (
+    <span title="Confidence Score" style={{ fontSize: '0.68rem', fontWeight: 600, color: '#1a56db', background: '#f0f5ff', padding: '0.1rem 0.45rem', borderRadius: '999px' }}>
+      C {pct}%
+    </span>
   );
 }
 
@@ -53,7 +87,6 @@ interface ItemCardProps {
   onEdit: (item: RoadmapItem) => void;
   onMove: (item: RoadmapItem, newStatus: RoadmapStatus) => void;
 }
-
 function ItemCard({ item, canEdit, onEdit, onMove }: ItemCardProps) {
   const [showMoveMenu, setShowMoveMenu] = useState(false);
   const { orgSlug } = useParams<{ orgSlug: string }>();
@@ -62,40 +95,86 @@ function ItemCard({ item, canEdit, onEdit, onMove }: ItemCardProps) {
     <div
       style={{
         background: '#fff',
-        borderRadius: '0.6rem',
+        borderRadius: '0.625rem',
         padding: '0.875rem',
         border: '1px solid #e9ecef',
         boxShadow: '0 1px 3px rgba(10,37,64,0.04)',
         position: 'relative',
+        transition: 'box-shadow 0.15s, transform 0.15s',
+      }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLDivElement).style.boxShadow = '0 3px 10px rgba(10,37,64,0.1)';
+        (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-1px)';
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLDivElement).style.boxShadow = '0 1px 3px rgba(10,37,64,0.04)';
+        (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)';
       }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+      {/* Title row */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.375rem' }}>
         <p
-          style={{ fontSize: '0.88rem', fontWeight: 600, color: '#0A2540', marginBottom: '0.25rem', lineHeight: 1.4, flex: 1, cursor: 'pointer' }}
+          style={{
+            fontSize: '0.875rem', fontWeight: 700, color: '#0A2540',
+            lineHeight: 1.4, flex: 1, cursor: canEdit ? 'pointer' : 'default', margin: 0,
+          }}
           onClick={() => canEdit && onEdit(item)}
         >
           {item.title}
         </p>
-        <Link
-          href={appRoutes(orgSlug).roadmapItem(item.id)}
-          style={{ fontSize: '0.68rem', color: '#1a56db', textDecoration: 'none', flexShrink: 0, marginTop: '0.1rem' }}
-          title="View detail"
-        >
-          Detail →
-        </Link>
+        {canEdit && (
+          <div style={{ position: 'relative', flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setShowMoveMenu((v) => !v)}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: '#adb5bd', fontSize: '1.1rem', padding: '0 0.2rem',
+                lineHeight: 1, borderRadius: '0.25rem',
+              }}
+              title="Move to column"
+            >
+              ⋯
+            </button>
+            {showMoveMenu && (
+              <div style={{
+                position: 'absolute', top: '1.5rem', right: 0, zIndex: 50,
+                background: '#fff', border: '1px solid #e9ecef', borderRadius: '0.5rem',
+                boxShadow: '0 4px 16px rgba(10,37,64,0.12)', minWidth: '150px', overflow: 'hidden',
+              }}>
+                {COLUMNS.filter((c) => c.status !== item.status).map((c) => (
+                  <button
+                    key={c.status}
+                    onClick={() => { onMove(item, c.status); setShowMoveMenu(false); }}
+                    style={{
+                      display: 'block', width: '100%', textAlign: 'left',
+                      padding: '0.55rem 0.875rem', background: 'none', border: 'none',
+                      fontSize: '0.82rem', color: '#0A2540', cursor: 'pointer',
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = '#f8f9fa')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                  >
+                    → {c.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
+      {/* Description */}
       {item.description && (
         <p style={{
-          fontSize: '0.78rem', color: '#6C757D', marginBottom: '0.5rem',
+          fontSize: '0.78rem', color: '#6C757D', margin: '0 0 0.5rem',
           overflow: 'hidden', display: '-webkit-box',
-          WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+          WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.5,
         }}>
           {item.description}
         </p>
       )}
 
-      <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center', marginTop: '0.5rem' }}>
+      {/* Badges */}
+      <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', alignItems: 'center', marginTop: '0.5rem' }}>
         {item.isPublic && (
           <span style={{ fontSize: '0.68rem', fontWeight: 600, color: '#20A4A4', background: '#e8f7f7', padding: '0.1rem 0.45rem', borderRadius: '999px' }}>
             Public
@@ -106,72 +185,35 @@ function ItemCard({ item, canEdit, onEdit, onMove }: ItemCardProps) {
             {item.theme.title}
           </span>
         )}
+        <PriorityPill score={item.priorityScore} />
+        <ConfidencePill score={item.confidenceScore} />
         {(item.feedbackCount ?? 0) > 0 && (
-          <span style={{ fontSize: '0.68rem', color: '#adb5bd' }}>
+          <span style={{ fontSize: '0.68rem', color: '#6C757D', background: '#f0f4f8', padding: '0.1rem 0.45rem', borderRadius: '999px' }}>
             {item.feedbackCount} fb
           </span>
         )}
         {(item.signalCount ?? 0) > 0 && (
-          <span style={{ fontSize: '0.68rem', color: '#6C757D', background: '#f8f9fa', padding: '0.1rem 0.45rem', borderRadius: '999px' }}>
+          <span style={{ fontSize: '0.68rem', color: '#6C757D', background: '#f0f4f8', padding: '0.1rem 0.45rem', borderRadius: '999px' }}>
             {item.signalCount} sig
           </span>
         )}
-        {item.priorityScore != null && (
-          <span style={{ fontSize: '0.68rem', color: '#b8860b', background: '#fffdf0', padding: '0.1rem 0.45rem', borderRadius: '999px' }} title="AI Priority Score">
-            P {item.priorityScore.toFixed(0)}
-          </span>
-        )}
-        {item.confidenceScore != null && (
-          <span style={{ fontSize: '0.68rem', color: '#20A4A4', background: '#e8f7f7', padding: '0.1rem 0.45rem', borderRadius: '999px' }} title="Confidence Score">
-            C {(item.confidenceScore * 100).toFixed(0)}%
-          </span>
-        )}
         {item.targetQuarter && item.targetYear && (
-          <span style={{ fontSize: '0.68rem', color: '#6C757D' }}>
+          <span style={{ fontSize: '0.68rem', color: '#adb5bd' }}>
             {item.targetQuarter} {item.targetYear}
           </span>
         )}
       </div>
 
-      {canEdit && (
-        <div
-          style={{ position: 'absolute', top: '0.6rem', right: '0.6rem' }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            onClick={() => setShowMoveMenu((v) => !v)}
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: '#adb5bd', fontSize: '1rem', padding: '0.15rem 0.35rem',
-              borderRadius: '0.3rem',
-            }}
-            title="Move to column"
+      {/* Detail link */}
+      {orgSlug && (
+        <div style={{ marginTop: '0.625rem', borderTop: '1px solid #f0f4f8', paddingTop: '0.5rem' }}>
+          <Link
+            href={appRoutes(orgSlug).roadmapItem(item.id)}
+            style={{ fontSize: '0.72rem', fontWeight: 600, color: '#1a56db', textDecoration: 'none' }}
+            onClick={(e) => e.stopPropagation()}
           >
-            ...
-          </button>
-          {showMoveMenu && (
-            <div style={{
-              position: 'absolute', top: '1.6rem', right: 0, zIndex: 50,
-              background: '#fff', border: '1px solid #e9ecef', borderRadius: '0.5rem',
-              boxShadow: '0 4px 16px rgba(10,37,64,0.12)', minWidth: '140px', overflow: 'hidden',
-            }}>
-              {COLUMNS.filter((c) => c.status !== item.status).map((c) => (
-                <button
-                  key={c.status}
-                  onClick={() => { onMove(item, c.status); setShowMoveMenu(false); }}
-                  style={{
-                    display: 'block', width: '100%', textAlign: 'left',
-                    padding: '0.55rem 0.875rem', background: 'none', border: 'none',
-                    fontSize: '0.82rem', color: '#0A2540', cursor: 'pointer',
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = '#f8f9fa')}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
-                >
-                  Move to {c.label}
-                </button>
-              ))}
-            </div>
-          )}
+            View detail →
+          </Link>
         </div>
       )}
     </div>
@@ -187,15 +229,14 @@ interface ItemModalProps {
   isSaving: boolean;
   isDeleting?: boolean;
 }
-
 function ItemModal({ item, onClose, onSave, onDelete, isSaving, isDeleting }: ItemModalProps) {
   const isEdit = !!item;
-  const [title, setTitle] = useState(item?.title ?? '');
-  const [description, setDescription] = useState(item?.description ?? '');
-  const [status, setStatus] = useState<RoadmapStatus>(item?.status ?? RoadmapStatus.PLANNED);
-  const [isPublic, setIsPublic] = useState(item?.isPublic ?? false);
+  const [title, setTitle]                 = useState(item?.title ?? '');
+  const [description, setDescription]     = useState(item?.description ?? '');
+  const [status, setStatus]               = useState<RoadmapStatus>(item?.status ?? RoadmapStatus.PLANNED);
+  const [isPublic, setIsPublic]           = useState(item?.isPublic ?? false);
   const [targetQuarter, setTargetQuarter] = useState(item?.targetQuarter ?? '');
-  const [targetYear, setTargetYear] = useState(item?.targetYear?.toString() ?? '');
+  const [targetYear, setTargetYear]       = useState(item?.targetYear?.toString() ?? '');
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -219,49 +260,44 @@ function ItemModal({ item, onClose, onSave, onDelete, isSaving, isDeleting }: It
   const INPUT: React.CSSProperties = {
     width: '100%', padding: '0.65rem 0.9rem', borderRadius: '0.5rem',
     border: '1px solid #dee2e6', fontSize: '0.9rem', outline: 'none',
-    boxSizing: 'border-box', color: '#0A2540',
+    boxSizing: 'border-box', color: '#0A2540', background: '#fff',
   };
 
   return (
     <div
       style={{
         position: 'fixed', inset: 0, zIndex: 100,
-        background: 'rgba(10,37,64,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'rgba(10,37,64,0.4)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem',
       }}
-      onClick={onClose}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
-        style={{ ...CARD, width: '100%', maxWidth: '520px', maxHeight: '90vh', overflowY: 'auto' }}
+        style={{ ...CARD, width: '100%', maxWidth: '520px', maxHeight: '90vh', overflowY: 'auto', padding: '2rem' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-          <h2 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0A2540' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+          <h2 style={{ fontSize: '1.125rem', fontWeight: 800, color: '#0A2540', margin: 0 }}>
             {isEdit ? 'Edit Roadmap Item' : 'New Roadmap Item'}
           </h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', color: '#adb5bd' }}>x</button>
+          <button
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.25rem', color: '#adb5bd', lineHeight: 1, padding: '0.25rem' }}
+          >
+            ×
+          </button>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.125rem' }}>
           <div>
-            <label style={LABEL}>Title *</label>
-            <input
-              value={title} onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Bulk CSV import" required
-              style={INPUT}
-            />
+            <label style={LABEL}>Title <span style={{ color: '#e63946' }}>*</span></label>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Bulk CSV import" required style={INPUT} />
           </div>
-
           <div>
             <label style={LABEL}>Description</label>
-            <textarea
-              value={description} onChange={(e) => setDescription(e.target.value)}
-              placeholder="What problem does this solve?"
-              rows={3}
-              style={{ ...INPUT, resize: 'vertical' }}
-            />
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What problem does this solve?" rows={3} style={{ ...INPUT, resize: 'vertical' }} />
           </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.875rem' }}>
             <div>
               <label style={LABEL}>Status</label>
               <select value={status} onChange={(e) => setStatus(e.target.value as RoadmapStatus)} style={INPUT}>
@@ -269,22 +305,21 @@ function ItemModal({ item, onClose, onSave, onDelete, isSaving, isDeleting }: It
               </select>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', paddingBottom: '0.1rem' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.88rem', color: '#0A2540', fontWeight: 600 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.875rem', color: '#0A2540', fontWeight: 600 }}>
                 <input
                   type="checkbox" checked={isPublic}
                   onChange={(e) => setIsPublic(e.target.checked)}
-                  style={{ width: '1rem', height: '1rem', cursor: 'pointer' }}
+                  style={{ width: '1rem', height: '1rem', cursor: 'pointer', accentColor: '#20A4A4' }}
                 />
                 Visible on public portal
               </label>
             </div>
           </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.875rem' }}>
             <div>
               <label style={LABEL}>Target Quarter</label>
               <select value={targetQuarter} onChange={(e) => setTargetQuarter(e.target.value)} style={INPUT}>
-                <option value="">-</option>
+                <option value="">—</option>
                 <option value="Q1">Q1</option>
                 <option value="Q2">Q2</option>
                 <option value="Q3">Q3</option>
@@ -303,43 +338,20 @@ function ItemModal({ item, onClose, onSave, onDelete, isSaving, isDeleting }: It
             </div>
           </div>
 
-          {isEdit && item && (item.theme || item.feedbackCount > 0 || item.priorityScore != null) && (
-            <div style={{ background: '#f8f9fa', borderRadius: '0.6rem', padding: '0.875rem', display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
-              {item.theme && (
-                <div>
-                  <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#6C757D', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Theme</span>
-                  <p style={{ fontSize: '0.85rem', color: '#7c3aed', fontWeight: 600, marginTop: '0.2rem' }}>{item.theme.title}</p>
-                </div>
-              )}
-              {item.feedbackCount > 0 && (
-                <div>
-                  <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#6C757D', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Feedback Signals</span>
-                  <p style={{ fontSize: '0.85rem', color: '#0A2540', fontWeight: 600, marginTop: '0.2rem' }}>{item.feedbackCount}</p>
-                </div>
-              )}
-              {item.priorityScore != null && (
-                <div>
-                  <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#6C757D', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Priority Score</span>
-                  <p style={{ fontSize: '0.85rem', color: '#b8860b', fontWeight: 600, marginTop: '0.2rem' }}>{item.priorityScore.toFixed(1)}</p>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem', paddingTop: '1rem', borderTop: '1px solid #f0f4f8' }}>
             {isEdit && onDelete ? (
               confirmDelete ? (
                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.82rem', color: '#dc3545' }}>Delete this item?</span>
+                  <span style={{ fontSize: '0.82rem', color: '#dc3545', fontWeight: 600 }}>Are you sure?</span>
                   <button
                     type="button" onClick={onDelete} disabled={isDeleting}
-                    style={{ padding: '0.4rem 0.875rem', borderRadius: '0.4rem', border: 'none', background: '#dc3545', color: '#fff', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer' }}
+                    style={{ padding: '0.35rem 0.75rem', borderRadius: '0.4rem', border: 'none', background: '#dc3545', color: '#fff', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer' }}
                   >
-                    {isDeleting ? 'Deleting...' : 'Confirm'}
+                    {isDeleting ? 'Deleting…' : 'Yes, delete'}
                   </button>
                   <button
                     type="button" onClick={() => setConfirmDelete(false)}
-                    style={{ padding: '0.4rem 0.875rem', borderRadius: '0.4rem', border: '1px solid #dee2e6', background: '#fff', color: '#0A2540', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer' }}
+                    style={{ padding: '0.35rem 0.75rem', borderRadius: '0.4rem', border: '1px solid #dee2e6', background: '#fff', color: '#0A2540', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer' }}
                   >
                     Cancel
                   </button>
@@ -355,19 +367,23 @@ function ItemModal({ item, onClose, onSave, onDelete, isSaving, isDeleting }: It
             ) : (
               <span />
             )}
-
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', gap: '0.625rem' }}>
               <button
                 type="button" onClick={onClose}
-                style={{ padding: '0.55rem 1.1rem', borderRadius: '0.5rem', border: '1px solid #dee2e6', background: '#fff', color: '#0A2540', fontWeight: 600, fontSize: '0.88rem', cursor: 'pointer' }}
+                style={{ padding: '0.55rem 1.1rem', borderRadius: '0.5rem', border: '1px solid #dee2e6', background: '#fff', color: '#0A2540', fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer' }}
               >
                 Cancel
               </button>
               <button
-                type="submit" disabled={isSaving}
-                style={{ padding: '0.55rem 1.25rem', borderRadius: '0.5rem', border: 'none', background: '#0A2540', color: '#fff', fontWeight: 700, fontSize: '0.88rem', cursor: isSaving ? 'not-allowed' : 'pointer' }}
+                type="submit" disabled={isSaving || !title.trim()}
+                style={{
+                  padding: '0.55rem 1.25rem', borderRadius: '0.5rem', border: 'none',
+                  background: isSaving || !title.trim() ? '#adb5bd' : '#0a2540',
+                  color: '#fff', fontWeight: 700, fontSize: '0.875rem',
+                  cursor: isSaving || !title.trim() ? 'not-allowed' : 'pointer',
+                }}
               >
-                {isSaving ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Item'}
+                {isSaving ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Item'}
               </button>
             </div>
           </div>
@@ -380,161 +396,248 @@ function ItemModal({ item, onClose, onSave, onDelete, isSaving, isDeleting }: It
 // ─── Page ──────────────────────────────────────────────────────────────────────
 export default function RoadmapPage() {
   const params = useParams();
-  const orgSlug = params?.orgSlug as string;
+  const orgSlug = (Array.isArray(params?.orgSlug) ? params.orgSlug[0] : params?.orgSlug) ?? '';
+  const r = appRoutes(orgSlug);
 
   const { data: board, isLoading, isError, error } = useRoadmapBoard();
-  const createMutation  = useCreateRoadmapItem();
-  const updateMutation  = useUpdateRoadmapItem();
-  const deleteMutation  = useDeleteRoadmapItem();
+  const createMutation = useCreateRoadmapItem();
+  const updateMutation = useUpdateRoadmapItem();
+  const deleteMutation = useDeleteRoadmapItem();
   const { role } = useCurrentMemberRole();
-
   const canEdit = role === WorkspaceRole.ADMIN || role === WorkspaceRole.EDITOR;
 
   const [showCreate, setShowCreate] = useState(false);
-  const [editItem, setEditItem] = useState<RoadmapItem | null>(null);
+  const [editItem, setEditItem]     = useState<RoadmapItem | null>(null);
 
-  const handleCreate = useCallback((data: CreateRoadmapItemDto | UpdateRoadmapItemDto) => {
-    createMutation.mutate(data as CreateRoadmapItemDto, {
-      onSuccess: () => setShowCreate(false),
-    });
-  }, [createMutation]);
-
-  const handleUpdate = useCallback((data: CreateRoadmapItemDto | UpdateRoadmapItemDto) => {
+  const handleCreate = (data: CreateRoadmapItemDto) => {
+    createMutation.mutate(data, { onSuccess: () => setShowCreate(false) });
+  };
+  const handleUpdate = (data: UpdateRoadmapItemDto) => {
     if (!editItem) return;
-    updateMutation.mutate({ itemId: editItem.id, data }, {
-      onSuccess: () => setEditItem(null),
-    });
-  }, [editItem, updateMutation]);
-
-  const handleMove = useCallback((item: RoadmapItem, newStatus: RoadmapStatus) => {
+    updateMutation.mutate({ itemId: editItem.id, data }, { onSuccess: () => setEditItem(null) });
+  };
+  const handleDelete = () => {
+    if (!editItem) return;
+    deleteMutation.mutate(editItem.id, { onSuccess: () => setEditItem(null) });
+  };
+  const handleMove = (item: RoadmapItem, newStatus: RoadmapStatus) => {
     updateMutation.mutate({ itemId: item.id, data: { status: newStatus } });
-  }, [updateMutation]);
+  };
 
-  const handleDelete = useCallback(() => {
-    if (!editItem) return;
-    deleteMutation.mutate(editItem.id, {
-      onSuccess: () => setEditItem(null),
-    });
-  }, [editItem, deleteMutation]);
+  const totalItems = board
+    ? Object.values(board).reduce((sum, col) => sum + (col?.length ?? 0), 0)
+    : 0;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem' }}>
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0A2540', marginBottom: '0.25rem' }}>Roadmap</h1>
-          <p style={{ fontSize: '0.9rem', color: '#6C757D' }}>Plan, track, and ship product improvements powered by feedback signals.</p>
-        </div>
-        {canEdit && (
-          <button
-            onClick={() => setShowCreate(true)}
-            style={{ padding: '0.55rem 1.25rem', borderRadius: '0.6rem', border: 'none', background: '#FFC832', color: '#0A2540', fontWeight: 700, fontSize: '0.88rem', cursor: 'pointer', flexShrink: 0 }}
-          >
-            + Add Item
-          </button>
-        )}
-      </div>
+    <>
+      <style>{`
+        @keyframes shimmer {
+          0%   { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+      `}</style>
 
-      {/* Public portal link */}
-      <div style={{ ...CARD, padding: '0.875rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
-        <div>
-          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0A2540' }}>Public Portal Roadmap</span>
-          <span style={{ fontSize: '0.78rem', color: '#6C757D', marginLeft: '0.5rem' }}>Only items marked &ldquo;Public&rdquo; are visible to customers.</span>
-        </div>
-        {orgSlug && (
-          <Link
-            href={publicRoutes(orgSlug).roadmap}
-            target="_blank"
-            style={{ fontSize: '0.82rem', fontWeight: 600, color: '#20A4A4', textDecoration: 'none' }}
-          >
-            View public roadmap
-          </Link>
-        )}
-      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
-      {/* Error */}
-      {isError && (
-        <div style={{ ...CARD, borderLeft: '3px solid #dc3545', padding: '1rem 1.25rem' }}>
-          <p style={{ fontSize: '0.88rem', color: '#dc3545', fontWeight: 600 }}>Failed to load roadmap</p>
-          <p style={{ fontSize: '0.82rem', color: '#6C757D', marginTop: '0.25rem' }}>{(error as Error)?.message}</p>
-        </div>
-      )}
-
-      {/* Kanban Board */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(5, minmax(180px, 1fr))',
-        gap: '1rem',
-        alignItems: 'start',
-        overflowX: 'auto',
-      }}>
-        {COLUMNS.map((col) => {
-          const items: RoadmapItem[] = board?.[col.status] ?? [];
-
-          return (
-            <div
-              key={col.status}
-              style={{ background: col.bg, borderRadius: '0.875rem', padding: '1rem', border: '1px solid #e9ecef', minWidth: '180px' }}
+        {/* ── Page Header ── */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+          <div>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0a2540', margin: 0 }}>
+              Roadmap
+            </h1>
+            <p style={{ fontSize: '0.875rem', color: '#6C757D', margin: '0.25rem 0 0' }}>
+              Plan, track, and ship product improvements powered by feedback signals.
+            </p>
+          </div>
+          {canEdit && (
+            <button
+              onClick={() => setShowCreate(true)}
+              style={{
+                padding: '0.55rem 1.25rem', borderRadius: '0.5rem',
+                border: 'none', background: '#0a2540',
+                color: '#fff', fontSize: '0.875rem', cursor: 'pointer', fontWeight: 600,
+                flexShrink: 0,
+              }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.875rem' }}>
-                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: col.accent, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              + Add Item
+            </button>
+          )}
+        </div>
+
+        {/* ── Status summary chips ── */}
+        <div style={{ display: 'flex', gap: '0.625rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          {COLUMNS.map((col) => {
+            const count = board?.[col.status]?.length ?? 0;
+            return (
+              <div
+                key={col.status}
+                style={{
+                  background: col.bg, border: `1px solid ${col.border}`,
+                  borderRadius: '0.625rem', padding: '0.4rem 0.875rem',
+                  display: 'flex', alignItems: 'center', gap: '0.5rem',
+                }}
+              >
+                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: col.accent, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   {col.label}
                 </span>
-                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#adb5bd', background: '#fff', border: '1px solid #e9ecef', borderRadius: '999px', padding: '0.1rem 0.5rem' }}>
-                  {isLoading ? '-' : items.length}
+                <span style={{
+                  fontSize: '0.72rem', fontWeight: 700, color: '#fff',
+                  background: col.accent, borderRadius: '999px',
+                  padding: '0.05rem 0.45rem', minWidth: '1.25rem', textAlign: 'center',
+                }}>
+                  {isLoading ? '—' : count}
                 </span>
               </div>
+            );
+          })}
+          {!isLoading && totalItems > 0 && (
+            <span style={{ fontSize: '0.8rem', color: '#adb5bd', marginLeft: 'auto' }}>
+              {totalItems} item{totalItems !== 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-                {isLoading ? (
-                  <>
-                    <SkeletonCard />
-                    <SkeletonCard />
-                  </>
-                ) : items.length === 0 ? (
-                  <p style={{ fontSize: '0.78rem', color: '#adb5bd', textAlign: 'center', padding: '1.25rem 0' }}>No items</p>
-                ) : (
-                  items.map((item) => (
-                    <ItemCard
-                      key={item.id}
-                      item={item}
-                      canEdit={canEdit}
-                      onEdit={setEditItem}
-                      onMove={handleMove}
-                    />
-                  ))
-                )}
-
-                {canEdit && !isLoading && (
-                  <button
-                    onClick={() => setShowCreate(true)}
-                    style={{
-                      background: 'none', border: '1px dashed #dee2e6', borderRadius: '0.5rem',
-                      padding: '0.5rem', cursor: 'pointer', color: '#adb5bd', fontSize: '0.78rem',
-                      textAlign: 'center', marginTop: '0.25rem',
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.borderColor = col.accent)}
-                    onMouseLeave={(e) => (e.currentTarget.style.borderColor = '#dee2e6')}
-                  >
-                    + Add
-                  </button>
-                )}
-              </div>
+        {/* ── Public portal banner ── */}
+        <div style={{
+          ...CARD, padding: '0.875rem 1.25rem',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          flexWrap: 'wrap', gap: '0.5rem', background: '#f8f9fa',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+            <span style={{ fontSize: '1rem' }}>🌐</span>
+            <div>
+              <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0A2540' }}>Public Portal Roadmap</span>
+              <span style={{ fontSize: '0.78rem', color: '#6C757D', marginLeft: '0.5rem' }}>
+                Only items marked &ldquo;Public&rdquo; are visible to customers.
+              </span>
             </div>
-          );
-        })}
+          </div>
+          {orgSlug && (
+            <Link
+              href={publicRoutes(orgSlug).roadmap}
+              target="_blank"
+              style={{ fontSize: '0.82rem', fontWeight: 600, color: '#20A4A4', textDecoration: 'none' }}
+            >
+              View public roadmap ↗
+            </Link>
+          )}
+        </div>
+
+        {/* ── Error state ── */}
+        {isError && (
+          <div style={{ ...CARD, borderLeft: '4px solid #dc3545', padding: '1rem 1.25rem', background: '#fff5f5' }}>
+            <p style={{ fontSize: '0.875rem', color: '#dc3545', fontWeight: 700, margin: '0 0 0.25rem' }}>
+              Failed to load roadmap
+            </p>
+            <p style={{ fontSize: '0.82rem', color: '#6C757D', margin: 0 }}>
+              {(error as Error)?.message ?? 'An unexpected error occurred. Please try again.'}
+            </p>
+          </div>
+        )}
+
+        {/* ── Kanban Board ── */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(5, minmax(200px, 1fr))',
+          gap: '1rem',
+          alignItems: 'start',
+          overflowX: 'auto',
+          paddingBottom: '1rem',
+        }}>
+          {COLUMNS.map((col) => {
+            const items: RoadmapItem[] = board?.[col.status] ?? [];
+            return (
+              <div
+                key={col.status}
+                style={{
+                  background: col.bg,
+                  borderRadius: '0.875rem',
+                  padding: '1rem',
+                  border: `1px solid ${col.border}`,
+                  minWidth: '200px',
+                }}
+              >
+                {/* Column header */}
+                <div style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  marginBottom: '0.875rem', paddingBottom: '0.625rem',
+                  borderBottom: `2px solid ${col.border}`,
+                }}>
+                  <span style={{
+                    fontSize: '0.72rem', fontWeight: 800, color: col.accent,
+                    textTransform: 'uppercase', letterSpacing: '0.07em',
+                  }}>
+                    {col.label}
+                  </span>
+                  <span style={{
+                    fontSize: '0.72rem', fontWeight: 700, color: col.accent,
+                    background: '#fff', border: `1px solid ${col.border}`,
+                    borderRadius: '999px', padding: '0.1rem 0.5rem',
+                    minWidth: '1.5rem', textAlign: 'center',
+                  }}>
+                    {isLoading ? '—' : items.length}
+                  </span>
+                </div>
+
+                {/* Items */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+                  {isLoading ? (
+                    <>
+                      <SkeletonCard />
+                      <SkeletonCard />
+                    </>
+                  ) : items.length === 0 ? (
+                    <div style={{
+                      padding: '1.5rem 0.5rem', textAlign: 'center',
+                      border: '1px dashed #dee2e6', borderRadius: '0.5rem',
+                      background: 'rgba(255,255,255,0.5)',
+                    }}>
+                      <p style={{ fontSize: '0.78rem', color: '#adb5bd', margin: 0 }}>No items</p>
+                    </div>
+                  ) : (
+                    items.map((item) => (
+                      <ItemCard
+                        key={item.id}
+                        item={item}
+                        canEdit={canEdit}
+                        onEdit={setEditItem}
+                        onMove={handleMove}
+                      />
+                    ))
+                  )}
+
+                  {canEdit && !isLoading && (
+                    <button
+                      onClick={() => setShowCreate(true)}
+                      style={{
+                        background: 'rgba(255,255,255,0.7)', border: `1px dashed ${col.border}`,
+                        borderRadius: '0.5rem', padding: '0.5rem',
+                        cursor: 'pointer', color: col.accent, fontSize: '0.78rem',
+                        textAlign: 'center', marginTop: '0.125rem', fontWeight: 600,
+                        transition: 'background 0.15s',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = '#fff')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.7)')}
+                    >
+                      + Add
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
       </div>
 
-      {/* Create Modal */}
+      {/* ── Modals ── */}
       {showCreate && (
         <ItemModal
           onClose={() => setShowCreate(false)}
-          onSave={handleCreate}
+          onSave={handleCreate as (data: CreateRoadmapItemDto | UpdateRoadmapItemDto) => void}
           isSaving={createMutation.isPending}
         />
       )}
-
-      {/* Edit Modal */}
       {editItem && (
         <ItemModal
           item={editItem}
@@ -545,6 +648,6 @@ export default function RoadmapPage() {
           isDeleting={deleteMutation.isPending}
         />
       )}
-    </div>
+    </>
   );
 }
