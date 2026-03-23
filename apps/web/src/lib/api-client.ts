@@ -73,6 +73,7 @@ import {
   Survey,
   SurveyListResponse,
   SurveyResponseListResponse,
+  SurveyIntelligence,
   CreateSurveyPayload,
   AddQuestionPayload,
   SubmitSurveyResponsePayload,
@@ -668,6 +669,8 @@ const apiClient = {
       api.delete(`/workspaces/${workspaceId}/surveys/${surveyId}/questions/${questionId}`).then(handleResponse),
     getResponses: (workspaceId: string, surveyId: string, params?: { page?: number; limit?: number }): Promise<SurveyResponseListResponse> =>
       api.get(`/workspaces/${workspaceId}/surveys/${surveyId}/responses`, { params }).then(handleResponse),
+    getIntelligence: (workspaceId: string, surveyId: string): Promise<SurveyIntelligence> =>
+      api.get(`/workspaces/${workspaceId}/surveys/${surveyId}/intelligence`).then(handleResponse),
   },
 
   portalSurveys: {

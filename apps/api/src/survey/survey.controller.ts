@@ -152,6 +152,16 @@ export class SurveyController {
   ) {
     return this.surveyService.listResponses(workspaceId, surveyId, Number(page) || 1, Number(limit) || 20);
   }
+
+  // ─── Intelligence ───────────────────────────────────────────────────────────
+
+  @Get(':surveyId/intelligence')
+  intelligence(
+    @Param('workspaceId') workspaceId: string,
+    @Param('surveyId') surveyId: string,
+  ) {
+    return this.surveyService.getSurveyIntelligence(workspaceId, surveyId);
+  }
 }
 
 // ─── Public portal survey endpoints (no auth) ────────────────────────────────

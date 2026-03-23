@@ -12,6 +12,7 @@ import {
   useAddQuestion,
   useDeleteQuestion,
   useSurveyResponses,
+  useSurveyIntelligence,
 } from '@/hooks/use-surveys';
 import { SurveyStatus, SurveyQuestionType } from '@/lib/api-types';
 import { appRoutes } from '@/lib/routes';
@@ -150,7 +151,10 @@ export default function SurveyDetailPage() {
   const { mutate: deleteSurvey } = useDeleteSurvey('', surveyId);
   const { mutate: deleteQuestion } = useDeleteQuestion('', surveyId);
 
-  const [activeTab, setActiveTab] = useState<'questions' | 'responses'>('questions');
+  const [activeTab, setActiveTab] = useState<'questions' | 'responses' | 'intelligence'>('questions');
+
+  // Intelligence
+  const { data: intelligence, isLoading: loadingIntel } = useSurveyIntelligence('', surveyId);
   const [showAddQuestion, setShowAddQuestion] = useState(false);
 
   const r = appRoutes(orgSlug);
@@ -252,7 +256,7 @@ export default function SurveyDetailPage() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '0', borderBottom: '2px solid #e9ecef', marginBottom: '1.5rem' }}>
-        {(['questions', 'responses'] as const).map((tab) => (
+        {(['questions', 'responses', 'intelligence'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -265,7 +269,8 @@ export default function SurveyDetailPage() {
               textTransform: 'capitalize',
             }}
           >
-            {tab} {tab === 'responses' && responsesData ? `(${responsesData.total})` : ''}
+            {tab === 'intelligence' ? 'Intelligence' : tab}
+            {tab === 'responses' && responsesData ? ` (${responsesData.total})` : ''}
           </button>
         ))}
       </div>
@@ -375,6 +380,98 @@ export default function SurveyDetailPage() {
                   )}
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Intelligence tab */}
+      {activeTab === 'intelligence' && (
+        <div>
+          {loadingIntel ? (
+            <div style={{ ...CARD, padding: '2rem', textAlign: 'center', color: '#6C757D' }}>Loading intelligence…</div>
+          ) : !intelligence ? (
+            <div style={{ ...CARD, textAlign: 'center', padding: '2.5rem' }}>
+              <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>🧠</div>
+              <p style={{ color: '#6C757D', fontSize: '0.875rem' }}>No intelligence data yet. Intelligence is generated automatically after each response is submitted.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              {/* KPI row */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem' }}>
+                {[
+                  { label: 'Total Responses', value: intelligence.totalResponses, color: '#0a2540' },
+                  { label: 'Processed', value: intelligence.processedCount, color: '#20A4A4' },
+                  {
+                    label: 'Avg Sentiment',
+                    value: intelligence.avgSentiment != null
+                      ? `${intelligence.avgSentiment > 0 ? '+' : ''}${intelligence.avgSentiment.toFixed(2)}`
+                      : '—',
+                    color: intelligence.avgSentiment == null ? '#6C757D'
+                      : intelligence.avgSentiment > 0.1 ? '#2e7d32'
+                      : intelligence.avgSentiment < -0.1 ? '#e63946'
+                      : '#b8860b',
+                  },
+                  {
+                    label: 'NPS Score',
+                    value: intelligence.npsScore != null ? `${intelligence.npsScore > 0 ? '+' : ''}${intelligence.npsScore}` : '—',
+                    color: intelligence.npsScore == null ? '#6C757D'
+                      : intelligence.npsScore >= 30 ? '#2e7d32'
+                      : intelligence.npsScore >= 0 ? '#b8860b'
+                      : '#e63946',
+                  },
+                  {
+                    label: 'Avg Rating',
+                    value: intelligence.avgRating != null ? `${intelligence.avgRating.toFixed(1)}/5` : '—',
+                    color: intelligence.avgRating == null ? '#6C757D' : '#0a2540',
+                  },
+                  { label: 'Linked Themes', value: intelligence.linkedThemeIds?.length ?? 0, color: '#7c3aed' },
+                ].map((kpi) => (
+                  <div key={kpi.label} style={{ ...CARD, padding: '1rem', textAlign: 'center' }}>
+                    <div style={{ fontSize: '1.375rem', fontWeight: 800, color: kpi.color }}>{kpi.value}</div>
+                    <div style={{ fontSize: '0.7rem', color: '#6C757D', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '0.25rem' }}>{kpi.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Key Topics */}
+              {intelligence.keyTopics?.length > 0 && (
+                <div style={{ ...CARD }}>
+                  <h3 style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0a2540', marginBottom: '0.875rem' }}>Key Topics</h3>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    {intelligence.keyTopics.map((topic: string) => (
+                      <span key={topic} style={{ background: '#e0f7fa', color: '#00838f', padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.8125rem', fontWeight: 500 }}>
+                        {topic}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Linked Themes */}
+              {intelligence.linkedThemeIds?.length > 0 && (
+                <div style={{ ...CARD }}>
+                  <h3 style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0a2540', marginBottom: '0.875rem' }}>Linked Themes</h3>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    {intelligence.linkedThemeIds.map((themeId: string) => (
+                      <a
+                        key={themeId}
+                        href={`/${orgSlug}/app/themes/${themeId}`}
+                        style={{ background: '#ede9fe', color: '#7c3aed', padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.8125rem', fontWeight: 500, textDecoration: 'none' }}
+                      >
+                        Theme ↗
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* How it works */}
+              <div style={{ background: '#f0f4f8', border: '1px solid #dee2e6', borderRadius: '0.75rem', padding: '1rem 1.25rem' }}>
+                <p style={{ fontSize: '0.8125rem', color: '#495057', margin: 0 }}>
+                  <strong>How intelligence works:</strong> After each response is submitted, TriageInsight automatically extracts sentiment, key topics, pain points, and feature requests from text answers using GPT-4.1-mini. Rating and NPS answers are converted to normalised signals and stored as Customer Signals for CIQ scoring. Text responses are linked to the most relevant theme via semantic clustering.
+                </p>
+              </div>
             </div>
           )}
         </div>

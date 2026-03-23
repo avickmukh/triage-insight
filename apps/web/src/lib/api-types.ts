@@ -1147,3 +1147,20 @@ export interface SubmitSurveyResponsePayload {
     choiceValues?: string[];
   }>;
 }
+
+// ─── Survey Intelligence ───────────────────────────────────────────────────────
+
+export interface SurveyIntelligence {
+  surveyId: string;
+  totalResponses: number;
+  processedCount: number;
+  avgSentiment: number | null;
+  avgNps: number | null;
+  avgRating: number | null;
+  npsScore: number | null;
+  linkedThemeIds: string[];
+  keyTopics: string[];
+  npsResponseCount: number;
+  ratingResponseCount: number;
+  textResponseCount: number;
+}

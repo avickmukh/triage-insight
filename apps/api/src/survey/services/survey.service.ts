@@ -4,8 +4,11 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bull';
+import type { Queue } from 'bull';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SurveyStatus, FeedbackSourceType, FeedbackStatus } from '@prisma/client';
+import { SURVEY_INTELLIGENCE_QUEUE } from '../processors/survey-intelligence.processor';
 import {
   CreateSurveyDto,
   UpdateSurveyDto,
@@ -17,7 +20,10 @@ import {
 
 @Injectable()
 export class SurveyService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @InjectQueue(SURVEY_INTELLIGENCE_QUEUE) private readonly intelligenceQueue: Queue,
+  ) {}
 
   // ─── Private helpers ────────────────────────────────────────────────────────
 
@@ -466,12 +472,136 @@ export class SurveyService {
       return resp;
     });
 
+    // ── Enqueue async intelligence extraction (fire-and-forget) ──────────────
+    const feedbackId = (response as any).feedbackId ?? null;
+    this.intelligenceQueue
+      .add({
+        workspaceId: workspace.id,
+        surveyId,
+        responseId: response.id,
+        feedbackId,
+      })
+      .catch(() => { /* non-critical — intelligence enrichment is best-effort */ });
+
     return {
       success: true,
       responseId: response.id,
-      feedbackId: (response as any).feedbackId ?? null,
+      feedbackId,
       thankYouMessage: survey.thankYouMessage ?? 'Thank you for your response!',
       redirectUrl: survey.redirectUrl ?? null,
+    };
+  }
+
+  // ─── Survey Intelligence Summary ─────────────────────────────────────────────
+
+  /**
+   * Returns aggregated intelligence for a survey:
+   * - response volume
+   * - average sentiment (from processed responses)
+   * - average NPS / rating
+   * - linked theme IDs (from feedback linked to this survey)
+   * - key topics (merged from processed responses)
+   */
+  async getSurveyIntelligence(workspaceId: string, surveyId: string) {
+    await this.resolveSurvey(workspaceId, surveyId);
+
+    const responses = await this.prisma.surveyResponse.findMany({
+      where: { surveyId, workspaceId },
+      select: {
+        id: true,
+        metadata: true,
+        feedbackId: true,
+        answers: {
+          select: {
+            numericValue: true,
+            question: { select: { type: true } },
+          },
+        },
+      },
+    });
+
+    const totalResponses = responses.length;
+
+    // Aggregate sentiment from processed responses
+    const sentiments: number[] = [];
+    const allKeyTopics: string[] = [];
+    for (const r of responses) {
+      const meta = r.metadata as Record<string, any> | null;
+      const intel = meta?.intelligence;
+      if (intel && typeof intel.aggregateSentiment === 'number') {
+        sentiments.push(intel.aggregateSentiment);
+      }
+      if (intel && Array.isArray(intel.keyTopics)) {
+        allKeyTopics.push(...intel.keyTopics);
+      }
+    }
+    const avgSentiment = sentiments.length > 0
+      ? sentiments.reduce((a, b) => a + b, 0) / sentiments.length
+      : null;
+
+    // Aggregate NPS / rating answers
+    const npsValues: number[] = [];
+    const ratingValues: number[] = [];
+    for (const r of responses) {
+      for (const a of r.answers) {
+        if (a.numericValue != null) {
+          if (a.question.type === 'NPS') npsValues.push(a.numericValue);
+          if (a.question.type === 'RATING') ratingValues.push(a.numericValue);
+        }
+      }
+    }
+    const avgNps = npsValues.length > 0
+      ? npsValues.reduce((a, b) => a + b, 0) / npsValues.length
+      : null;
+    const avgRating = ratingValues.length > 0
+      ? ratingValues.reduce((a, b) => a + b, 0) / ratingValues.length
+      : null;
+
+    // NPS score: % promoters - % detractors
+    let npsScore: number | null = null;
+    if (npsValues.length > 0) {
+      const promoters = npsValues.filter((v) => v >= 9).length;
+      const detractors = npsValues.filter((v) => v <= 6).length;
+      npsScore = Math.round(((promoters - detractors) / npsValues.length) * 100);
+    }
+
+    // Linked themes from feedback
+    const feedbackIds = responses.map((r) => r.feedbackId).filter(Boolean) as string[];
+    const linkedThemeIds: string[] = [];
+    if (feedbackIds.length > 0) {
+      const themeFeedbacks = await this.prisma.themeFeedback.findMany({
+        where: { feedbackId: { in: feedbackIds } },
+        select: { themeId: true },
+      });
+      const uniqueThemeIds = [...new Set(themeFeedbacks.map((tf) => tf.themeId))];
+      linkedThemeIds.push(...uniqueThemeIds);
+    }
+
+    // Top key topics
+    const topicCounts = new Map<string, number>();
+    for (const topic of allKeyTopics) {
+      topicCounts.set(topic, (topicCounts.get(topic) ?? 0) + 1);
+    }
+    const keyTopics = [...topicCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([topic]) => topic);
+
+    const processedCount = sentiments.length;
+
+    return {
+      surveyId,
+      totalResponses,
+      processedCount,
+      avgSentiment: avgSentiment !== null ? parseFloat(avgSentiment.toFixed(3)) : null,
+      avgNps: avgNps !== null ? parseFloat(avgNps.toFixed(2)) : null,
+      avgRating: avgRating !== null ? parseFloat(avgRating.toFixed(2)) : null,
+      npsScore,
+      linkedThemeIds,
+      keyTopics,
+      npsResponseCount: npsValues.length,
+      ratingResponseCount: ratingValues.length,
+      textResponseCount: feedbackIds.length,
     };
   }
 }

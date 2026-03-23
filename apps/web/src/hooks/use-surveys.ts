@@ -7,6 +7,7 @@ import type {
   Survey,
   SurveyListResponse,
   SurveyResponseListResponse,
+  SurveyIntelligence,
   CreateSurveyPayload,
   AddQuestionPayload,
   SubmitSurveyResponsePayload,
@@ -247,6 +248,25 @@ export function usePortalSurveyDetail(orgSlug: string, surveyId: string | null) 
 
 /** Alias for portal pages */
 export const usePublicSurveyDetail = usePortalSurveyDetail;
+
+/**
+ * Get aggregated intelligence for a survey.
+ * First arg (_workspaceId) is accepted for call-site compatibility but ignored.
+ */
+export function useSurveyIntelligence(
+  _workspaceIdOrSurveyId: string,
+  surveyIdArg?: string,
+) {
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id ?? '';
+  const surveyId = surveyIdArg ?? _workspaceIdOrSurveyId;
+  return useQuery<SurveyIntelligence>({
+    queryKey: ['survey-intelligence', workspaceId, surveyId],
+    queryFn: () => apiClient.surveys.getIntelligence(workspaceId, surveyId!),
+    enabled: !!workspaceId && !!surveyId,
+    staleTime: 60_000,
+  });
+}
 
 export function useSubmitSurveyResponse(orgSlug: string, surveyId: string) {
   const qc = useQueryClient();
