@@ -289,11 +289,14 @@ model User {
   feedbackComments    FeedbackComment[]
   digestSubscriptions DigestSubscription[]
   invitesSent         WorkspaceInvite[]   @relation("InvitedByUser")
+  passwordResetTokens PasswordResetToken[]
 }
 
 model RefreshToken {
   id         String   @id @default(uuid())
   token      String   @unique
+  /// SHA-256 hash of the raw token — canonical lookup key.
+  tokenHash  String?  @unique
   userId     String
   expiresAt  DateTime
   revoked    Boolean  @default(false)
@@ -1275,4 +1278,19 @@ model SurveyAnswer {
 
   @@index([responseId])
   @@index([questionId])
+}
+
+/// Secure password reset token.
+/// The raw token is sent to the user via email; only the SHA-256 hash is stored.
+/// Tokens expire after 1 hour and are invalidated after first use.
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  /// SHA-256 hash of the raw token sent to the user.
+  tokenHash String    @unique
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
 }
