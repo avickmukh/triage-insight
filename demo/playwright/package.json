@@ -1,0 +1,16 @@
+{
+  "name": "triage-insight-demo-recorder",
+  "version": "1.0.0",
+  "description": "Playwright automation script for recording the TriageInsight product demo",
+  "private": true,
+  "scripts": {
+    "record": "node demo.js",
+    "install:browsers": "npx playwright install chromium"
+  },
+  "dependencies": {
+    "playwright": "^1.42.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
