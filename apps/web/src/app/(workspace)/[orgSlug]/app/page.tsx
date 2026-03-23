@@ -1,22 +1,18 @@
 'use client';
 /**
- * Executive Intelligence Dashboard — /:orgSlug/app
+ * Home Dashboard — /:orgSlug/app
  *
- * A decision intelligence surface for executives. Not a metrics dashboard.
- * Surfaces 7 AI-powered intelligence cards:
- *   1. Executive Weekly Summary
- *   2. Product Direction Summary
- *   3. Emerging Theme Radar
- *   4. Revenue Risk Indicator
- *   5. Voice Sentiment Signal
- *   6. Support Pressure Indicator
- *   7. Roadmap Health Panel
+ * A simple, founder-friendly overview of what is happening across your product.
+ * No jargon. No metric clutter. Just the things you need to act on today.
  *
- * Design principles:
- *   - Calm, intelligent, executive-grade
- *   - Minimal noise, high clarity
- *   - Narrative tone, not metric clutter
- *   - Drilldown navigation to detailed surfaces
+ * Sections:
+ *   1. Today's Summary   — one plain-English sentence about what matters most
+ *   2. Quick Actions     — 4 large buttons to the two power features
+ *   3. What customers are asking about  (Emerging Themes)
+ *   4. Customers at risk                (Revenue Risk)
+ *   5. Support pressure                 (Support Pressure)
+ *   6. Roadmap health                   (Roadmap Health)
+ *   7. Voice & survey sentiment         (Voice Sentiment)
  */
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -28,6 +24,7 @@ import {
   RevenueRiskIndicator,
   VoiceSentimentSignal,
   SupportPressureIndicator,
+  SupportPressureCluster,
   RoadmapHealthPanel,
   ExecutiveSummary,
 } from '@/lib/api-types';
@@ -44,13 +41,12 @@ const GREEN  = '#2e7d32';
 const GREEN_L= '#e8f5e9';
 const GRAY   = '#6C757D';
 const BORDER = '#e9ecef';
-const BG     = '#F8F9FA';
 
 const CARD: React.CSSProperties = {
   background: '#fff',
   border: `1px solid ${BORDER}`,
   borderRadius: '0.875rem',
-  padding: '1.5rem',
+  padding: '1.25rem 1.5rem',
   boxShadow: '0 1px 4px rgba(10,37,64,0.06)',
 };
 
@@ -117,113 +113,107 @@ function SectionHeader({
   );
 }
 
-// ─── 1. Executive Weekly Summary ──────────────────────────────────────────────
-function ExecutiveSummaryCard({ summary }: { summary: ExecutiveSummary }) {
+// ─── 1. Today's Summary ───────────────────────────────────────────────────────
+function TodaySummaryCard({ summary }: { summary: ExecutiveSummary | undefined }) {
+  if (!summary) return null;
   return (
-    <div style={{ ...CARD, borderTop: `3px solid ${TEAL}` }}>
-      <SectionHeader label="Executive Intelligence" />
-      <p style={{ fontSize: '0.95rem', color: NAVY, lineHeight: 1.65, marginBottom: '1.25rem', fontWeight: 400 }}>
-        {summary.weekSummary}
-      </p>
-
-      {summary.riskAlert && (
-        <div style={{ background: RED_L, border: `1px solid ${RED}22`, borderRadius: '0.6rem', padding: '0.75rem 1rem', marginBottom: '1rem', display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
-          <span style={{ color: RED, fontWeight: 700, fontSize: '0.8rem', flexShrink: 0 }}>⚠ Risk Alert</span>
-          <p style={{ fontSize: '0.85rem', color: RED, margin: 0 }}>{summary.riskAlert}</p>
-        </div>
-      )}
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.25rem' }}>
-        {summary.keyInsights.map((insight, i) => (
-          <div key={i} style={{ display: 'flex', gap: '0.6rem', alignItems: 'flex-start' }}>
-            <span style={{ color: TEAL, fontWeight: 700, fontSize: '0.85rem', flexShrink: 0, marginTop: '0.05rem' }}>→</span>
-            <p style={{ fontSize: '0.875rem', color: NAVY, margin: 0, lineHeight: 1.55 }}>{insight}</p>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ background: TEAL_L, borderRadius: '0.6rem', padding: '0.75rem 1rem' }}>
-        <p style={{ fontSize: '0.8rem', fontWeight: 700, color: TEAL, marginBottom: '0.25rem' }}>Top Action</p>
-        <p style={{ fontSize: '0.875rem', color: NAVY, margin: 0 }}>{summary.topAction}</p>
-      </div>
-
-      <p style={{ fontSize: '0.78rem', color: GRAY, marginTop: '1rem', margin: '1rem 0 0' }}>
-        {summary.momentumSignal}
-      </p>
-    </div>
-  );
-}
-
-// ─── 2. Product Direction Summary ─────────────────────────────────────────────
-function ProductDirectionCard({
-  data, href,
-}: { data: ProductDirectionSummary; href: string }) {
-  return (
-    <div style={cardAccent(TEAL)}>
-      <SectionHeader label="Product Direction" href={href} accent={TEAL} />
-      {data.topFeatures.length === 0 ? (
-        <p style={{ fontSize: '0.875rem', color: GRAY }}>No scored features yet. Run a CIQ recompute to generate recommendations.</p>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
-          {data.topFeatures.map((f, i) => (
-            <div key={f.feedbackId} style={{ display: 'flex', gap: '0.875rem', alignItems: 'flex-start' }}>
-              <div style={{
-                width: '1.75rem', height: '1.75rem', borderRadius: '50%', flexShrink: 0,
-                background: i === 0 ? TEAL : i === 1 ? '#e8f7f7' : '#f0f4f8',
-                color: i === 0 ? '#fff' : NAVY,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '0.75rem', fontWeight: 700,
-              }}>
-                {i + 1}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: '0.9rem', fontWeight: 700, color: NAVY, margin: '0 0 0.2rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {f.title}
-                </p>
-                <p style={{ fontSize: '0.78rem', color: GRAY, margin: '0 0 0.35rem' }}>{f.rationale}</p>
-                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                  <Badge label={`CIQ ${f.ciqScore}`} bg={TEAL_L} color={TEAL} />
-                  <Badge label={`${f.confidenceScore}% confidence`} bg="#f0f4f8" color={NAVY} />
-                  {f.revenueInfluence > 0 && (
-                    <Badge label={`$${Math.round(f.revenueInfluence / 1000)}k ARR`} bg={AMBER_L} color={AMBER} />
-                  )}
-                  {f.themeTitle && (
-                    <Badge label={f.themeTitle} bg="#f0f4f8" color={GRAY} />
-                  )}
-                </div>
-              </div>
-            </div>
+    <div style={{ ...CARD, borderLeft: `3px solid ${TEAL}`, background: TEAL_L }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
+        <div style={{ fontSize: '1.25rem', flexShrink: 0 }}>📋</div>
+        <div style={{ flex: 1 }}>
+          <p style={{ fontSize: '0.95rem', fontWeight: 600, color: NAVY, margin: '0 0 0.4rem', lineHeight: 1.5 }}>
+            {summary.weekSummary}
+          </p>
+          {summary.keyInsights?.slice(0, 2).map((b: string, i: number) => (
+            <p key={i} style={{ fontSize: '0.85rem', color: '#374151', margin: '0 0 0.2rem', lineHeight: 1.5 }}>
+              → {b}
+            </p>
           ))}
+          {summary.topAction && (
+            <div style={{ marginTop: '0.75rem', background: '#fff', border: `1px solid ${TEAL}33`, borderRadius: '0.5rem', padding: '0.5rem 0.875rem' }}>
+              <p style={{ fontSize: '0.75rem', fontWeight: 700, color: TEAL, margin: '0 0 0.15rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Suggested next step
+              </p>
+              <p style={{ fontSize: '0.875rem', color: NAVY, margin: 0 }}>{summary.topAction}</p>
+            </div>
+          )}
         </div>
-      )}
-      <p style={{ fontSize: '0.75rem', color: GRAY, marginTop: '1rem' }}>
-        {data.scoredFeedbackCount} of {data.totalFeedbackCount} requests scored
-      </p>
+      </div>
     </div>
   );
 }
 
-// ─── 3. Emerging Theme Radar ──────────────────────────────────────────────────
-function EmergingThemeCard({
-  data, href,
-}: { data: EmergingThemeRadar; href: string }) {
+// ─── 2. Quick Actions ─────────────────────────────────────────────────────────
+function QuickActions({ r }: { r: ReturnType<typeof appRoutes> }) {
+  const actions = [
+    {
+      href: r.intelligence,
+      emoji: '🧠',
+      label: 'Intelligence Hub',
+      desc: 'See what your customers really want — ranked by revenue impact',
+      accent: TEAL,
+      bg: TEAL_L,
+    },
+    {
+      href: r.prioritization,
+      emoji: '🎯',
+      label: 'Prioritization Engine',
+      desc: 'Score every feature request and decide what to build next',
+      accent: '#7c3aed',
+      bg: '#faf5ff',
+    },
+    {
+      href: r.intelligenceFeatures,
+      emoji: '📊',
+      label: 'Feature Ranking',
+      desc: 'All feature requests ranked by customer demand and revenue',
+      accent: '#0369a1',
+      bg: '#f0f9ff',
+    },
+    {
+      href: r.prioritizationOpportunities,
+      emoji: '💡',
+      label: 'Opportunities',
+      desc: 'High-value features not yet on your roadmap',
+      accent: AMBER,
+      bg: AMBER_L,
+    },
+  ];
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.875rem' }}>
+      {actions.map((a) => (
+        <Link key={a.href} href={a.href} style={{
+          ...CARD, textDecoration: 'none', display: 'flex', flexDirection: 'column', gap: '0.4rem',
+          borderLeft: `3px solid ${a.accent}`, background: a.bg, transition: 'box-shadow 0.15s ease',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ fontSize: '1.1rem' }}>{a.emoji}</span>
+            <p style={{ fontSize: '0.875rem', fontWeight: 700, color: NAVY, margin: 0 }}>{a.label}</p>
+          </div>
+          <p style={{ fontSize: '0.78rem', color: GRAY, margin: 0, lineHeight: 1.5 }}>{a.desc}</p>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+// ─── 3. What customers are asking about ──────────────────────────────────────
+function ThemesCard({ data, href }: { data: EmergingThemeRadar; href: string }) {
   return (
     <div style={cardAccent('#7c3aed')}>
-      <SectionHeader label="Emerging Themes" href={href} accent="#7c3aed" />
-
+      <SectionHeader label="What customers are asking about" href={href} accent="#7c3aed" />
       {data.spikeEvents.length > 0 && (
         <div style={{ background: AMBER_L, border: `1px solid ${AMBER}33`, borderRadius: '0.6rem', padding: '0.6rem 0.875rem', marginBottom: '0.875rem' }}>
           <p style={{ fontSize: '0.78rem', fontWeight: 700, color: AMBER, margin: '0 0 0.2rem' }}>
-            ⚡ {data.spikeEvents.length} Active Support Spike{data.spikeEvents.length > 1 ? 's' : ''}
+            ⚡ {data.spikeEvents.length} sudden spike{data.spikeEvents.length > 1 ? 's' : ''} in support tickets
           </p>
           <p style={{ fontSize: '0.8rem', color: NAVY, margin: 0 }}>
-            {data.spikeEvents[0].clusterTitle} — {data.spikeEvents[0].ticketCount} tickets (z={data.spikeEvents[0].zScore})
+            {data.spikeEvents[0].clusterTitle} — {data.spikeEvents[0].ticketCount} tickets this week
           </p>
         </div>
       )}
-
       {data.emergingThemes.length === 0 ? (
-        <p style={{ fontSize: '0.875rem', color: GRAY }}>No emerging themes detected this week.</p>
+        <p style={{ fontSize: '0.875rem', color: GRAY }}>No new themes this week. Add more feedback to detect patterns.</p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
           {data.emergingThemes.slice(0, 4).map((t) => (
@@ -252,58 +242,52 @@ function EmergingThemeCard({
   );
 }
 
-// ─── 4. Revenue Risk Indicator ────────────────────────────────────────────────
-function RevenueRiskCard({
-  data, href,
-}: { data: RevenueRiskIndicator; href: string }) {
+// ─── 4. Customers at risk ─────────────────────────────────────────────────────
+function CustomersAtRiskCard({ data, href }: { data: RevenueRiskIndicator; href: string }) {
   const arrFormatted = data.totalArrAtRisk >= 1_000_000
     ? `$${(data.totalArrAtRisk / 1_000_000).toFixed(1)}M`
     : data.totalArrAtRisk >= 1000
     ? `$${Math.round(data.totalArrAtRisk / 1000)}k`
     : `$${Math.round(data.totalArrAtRisk)}`;
-
   return (
     <div style={cardAccent(RED)}>
-      <SectionHeader label="Revenue Risk" href={href} accent={RED} />
-
+      <SectionHeader label="Customers at risk of leaving" href={href} accent={RED} />
       <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '1.25rem' }}>
         <div>
           <p style={{ fontSize: '1.5rem', fontWeight: 800, color: data.totalArrAtRisk > 0 ? RED : GREEN, margin: 0 }}>
             {arrFormatted}
           </p>
-          <p style={{ fontSize: '0.75rem', color: GRAY, margin: 0 }}>ARR at risk</p>
+          <p style={{ fontSize: '0.75rem', color: GRAY, margin: 0 }}>revenue at risk</p>
         </div>
         <div>
           <p style={{ fontSize: '1.5rem', fontWeight: 800, color: NAVY, margin: 0 }}>
             {data.totalCustomersAtRisk}
           </p>
-          <p style={{ fontSize: '0.75rem', color: GRAY, margin: 0 }}>at-risk accounts</p>
+          <p style={{ fontSize: '0.75rem', color: GRAY, margin: 0 }}>accounts flagged</p>
         </div>
       </div>
-
       {data.criticalCustomers.length === 0 ? (
-        <p style={{ fontSize: '0.875rem', color: GREEN }}>No customers at high churn risk.</p>
+        <p style={{ fontSize: '0.875rem', color: GREEN }}>✓ No customers at high churn risk right now.</p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
           {data.criticalCustomers.slice(0, 3).map((c) => (
-            <div key={c.customerId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.6rem 0.875rem', background: RED_L, borderRadius: '0.5rem' }}>
+            <div key={c.customerId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '0.6rem 0.875rem', background: RED_L, borderRadius: '0.5rem' }}>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <p style={{ fontSize: '0.875rem', fontWeight: 600, color: NAVY, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {c.name}
                 </p>
                 {c.topFeatureRequest && (
                   <p style={{ fontSize: '0.75rem', color: GRAY, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    Wants: {c.topFeatureRequest}
+                    They want: {c.topFeatureRequest}
                   </p>
                 )}
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: '0.75rem' }}>
-                <p style={{ fontSize: '0.8rem', fontWeight: 700, color: RED, margin: 0 }}>
-                  {Math.round(c.churnRisk * 100)}% risk
+                <p style={{ fontSize: '0.85rem', fontWeight: 700, color: RED, margin: 0 }}>
+                  ${c.arrValue >= 1000 ? `${Math.round(c.arrValue / 1000)}k` : c.arrValue}
                 </p>
-                <p style={{ fontSize: '0.7rem', color: GRAY, margin: 0 }}>
-                  ${Math.round(c.arrValue / 1000)}k ARR
-                </p>
+                <p style={{ fontSize: '0.7rem', color: GRAY, margin: 0 }}>ARR</p>
               </div>
             </div>
           ))}
@@ -313,73 +297,14 @@ function RevenueRiskCard({
   );
 }
 
-// ─── 5. Voice Sentiment Signal ────────────────────────────────────────────────
-function VoiceSentimentCard({
-  data, href,
-}: { data: VoiceSentimentSignal; href: string }) {
-  const trendColor = data.sentimentTrend === 'improving' ? GREEN : data.sentimentTrend === 'declining' ? RED : AMBER;
-  const trendLabel = data.sentimentTrend === 'improving' ? '↑ Improving' : data.sentimentTrend === 'declining' ? '↓ Declining' : '→ Stable';
-  const trendBg    = data.sentimentTrend === 'improving' ? GREEN_L : data.sentimentTrend === 'declining' ? RED_L : AMBER_L;
-
+// ─── 5. Support pressure ──────────────────────────────────────────────────────
+function SupportPressureCard({ data, href }: { data: SupportPressureIndicator; href: string }) {
+  const delta = data.ticketDelta7d;
+  const deltaColor = delta > 0 ? RED : delta < 0 ? GREEN : GRAY;
+  const deltaLabel = delta > 0 ? `+${delta} vs last week` : delta < 0 ? `${delta} vs last week` : 'Same as last week';
   return (
-    <div style={cardAccent(trendColor)}>
-      <SectionHeader label="Voice & Sentiment" href={href} accent={trendColor} />
-
-      <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '1.25rem', alignItems: 'center' }}>
-        <div>
-          <p style={{ fontSize: '1.5rem', fontWeight: 800, color: NAVY, margin: 0 }}>
-            {data.overallSentimentScore.toFixed(0)}<span style={{ fontSize: '0.9rem', fontWeight: 400, color: GRAY }}>/100</span>
-          </p>
-          <p style={{ fontSize: '0.75rem', color: GRAY, margin: 0 }}>sentiment score</p>
-        </div>
-        <Badge label={trendLabel} bg={trendBg} color={trendColor} />
-        {data.negativeTrendIndicator && (
-          <Badge label={`${Math.round(data.negativeFraction * 100)}% negative`} bg={RED_L} color={RED} />
-        )}
-      </div>
-
-      <div style={{ background: data.negativeTrendIndicator ? RED_L : TEAL_L, borderRadius: '0.6rem', padding: '0.75rem 1rem', marginBottom: '1rem' }}>
-        <p style={{ fontSize: '0.85rem', color: NAVY, margin: 0, lineHeight: 1.55 }}>
-          {data.unresolvedPainSummary}
-        </p>
-      </div>
-
-      {data.sentimentByTheme.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-          {data.sentimentByTheme.slice(0, 3).map((t) => (
-            <div key={t.themeId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <p style={{ fontSize: '0.8rem', color: NAVY, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                {t.title}
-              </p>
-              <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0, marginLeft: '0.5rem' }}>
-                <Badge
-                  label={t.avgSentiment >= 0 ? 'Positive' : 'Negative'}
-                  bg={t.avgSentiment >= 0 ? GREEN_L : RED_L}
-                  color={t.avgSentiment >= 0 ? GREEN : RED}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <p style={{ fontSize: '0.75rem', color: GRAY, marginTop: '1rem' }}>
-        {data.voiceCallCount} voice recordings analysed
-      </p>
-    </div>
-  );
-}
-
-// ─── 6. Support Pressure Indicator ───────────────────────────────────────────
-function SupportPressureCard({
-  data, href,
-}: { data: SupportPressureIndicator; href: string }) {
-  const trendColor = data.ticketTrend === 'increasing' ? RED : data.ticketTrend === 'decreasing' ? GREEN : AMBER;
-
-  return (
-    <div style={cardAccent(trendColor)}>
-      <SectionHeader label="Support Pressure" href={href} accent={trendColor} />
-
+    <div style={cardAccent(AMBER)}>
+      <SectionHeader label="Support pressure" href={href} accent={AMBER} />
       <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '1.25rem' }}>
         <div>
           <p style={{ fontSize: '1.5rem', fontWeight: 800, color: NAVY, margin: 0 }}>
@@ -388,169 +313,150 @@ function SupportPressureCard({
           <p style={{ fontSize: '0.75rem', color: GRAY, margin: 0 }}>open tickets</p>
         </div>
         <div>
-          <p style={{ fontSize: '1.5rem', fontWeight: 800, color: trendColor, margin: 0 }}>
-            {data.ticketDelta7d > 0 ? '+' : ''}{data.ticketDelta7d}
+          <p style={{ fontSize: '1.25rem', fontWeight: 700, color: deltaColor, margin: 0 }}>
+            {deltaLabel}
           </p>
-          <p style={{ fontSize: '0.75rem', color: GRAY, margin: 0 }}>vs last week</p>
         </div>
-        {data.activeSpikeCount > 0 && (
-          <div>
-            <p style={{ fontSize: '1.5rem', fontWeight: 800, color: RED, margin: 0 }}>
-              {data.activeSpikeCount}
-            </p>
-            <p style={{ fontSize: '0.75rem', color: GRAY, margin: 0 }}>active spikes</p>
-          </div>
-        )}
       </div>
-
       {data.topPressureClusters.length === 0 ? (
-        <p style={{ fontSize: '0.875rem', color: GRAY }}>No support clusters detected.</p>
+        <p style={{ fontSize: '0.875rem', color: GRAY }}>No support clusters detected yet.</p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          {data.topPressureClusters.slice(0, 3).map((c) => (
-            <div key={c.clusterId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem', background: c.isSpike ? RED_L : BG, borderRadius: '0.5rem', border: `1px solid ${c.isSpike ? RED + '33' : BORDER}` }}>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <p style={{ fontSize: '0.85rem', fontWeight: 600, color: NAVY, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {c.title}
-                </p>
-                {c.themeTitle && (
-                  <p style={{ fontSize: '0.72rem', color: GRAY, margin: 0 }}>Theme: {c.themeTitle}</p>
-                )}
-              </div>
-              <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: '0.75rem' }}>
-                <p style={{ fontSize: '0.8rem', fontWeight: 700, color: c.isSpike ? RED : NAVY, margin: 0 }}>
-                  {c.ticketCount} tickets
-                </p>
-                {c.isSpike && <Badge label="Spike" bg={RED_L} color={RED} />}
-              </div>
+          {data.topPressureClusters.slice(0, 3).map((cl: SupportPressureCluster, i: number) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '0.5rem 0.75rem', background: AMBER_L, borderRadius: '0.5rem' }}>
+              <p style={{ fontSize: '0.85rem', color: NAVY, margin: 0, fontWeight: 500 }}>{cl.title}</p>
+              <p style={{ fontSize: '0.8rem', color: AMBER, fontWeight: 700, margin: 0, flexShrink: 0, marginLeft: '0.5rem' }}>
+                {cl.ticketCount} tickets
+              </p>
             </div>
           ))}
         </div>
-      )}
-
-      {data.estimatedArrAtRisk > 0 && (
-        <p style={{ fontSize: '0.78rem', color: RED, marginTop: '0.875rem', fontWeight: 600 }}>
-          ~${Math.round(data.estimatedArrAtRisk / 1000)}k ARR exposure from support clusters
-        </p>
       )}
     </div>
   );
 }
 
-// ─── 7. Roadmap Health Panel ──────────────────────────────────────────────────
-function RoadmapHealthCard({
-  data, href,
-}: { data: RoadmapHealthPanel; href: string }) {
-  const healthColor = data.healthLabel === 'healthy' ? GREEN : data.healthLabel === 'at_risk' ? AMBER : RED;
-  const healthBg    = data.healthLabel === 'healthy' ? GREEN_L : data.healthLabel === 'at_risk' ? AMBER_L : RED_L;
-  const healthText  = data.healthLabel === 'healthy' ? 'Healthy' : data.healthLabel === 'at_risk' ? 'At Risk' : 'Critical';
-
+// ─── 6. Roadmap health ────────────────────────────────────────────────────────
+function RoadmapHealthCard({ data, href }: { data: RoadmapHealthPanel; href: string }) {
+  const healthColor = data.healthScore >= 70 ? GREEN : data.healthScore >= 40 ? AMBER : RED;
+  const statusLabel = data.healthScore >= 70 ? 'On Track' : data.healthScore >= 40 ? 'At Risk' : 'Needs Attention';
+  const deliveryPct = data.committedCount > 0
+    ? Math.round((data.shippedCount / (data.shippedCount + data.committedCount)) * 100)
+    : 0;
   return (
     <div style={cardAccent(healthColor)}>
-      <SectionHeader label="Roadmap Health" href={href} accent={healthColor} />
-
-      <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '1.25rem', alignItems: 'center' }}>
+      <SectionHeader label="Roadmap health" href={href} accent={healthColor} />
+      <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '1rem' }}>
         <div>
           <p style={{ fontSize: '1.5rem', fontWeight: 800, color: healthColor, margin: 0 }}>
-            {data.healthScore}<span style={{ fontSize: '0.9rem', fontWeight: 400, color: GRAY }}>/100</span>
+            {data.healthScore}/100
           </p>
           <p style={{ fontSize: '0.75rem', color: GRAY, margin: 0 }}>health score</p>
         </div>
-        <Badge label={healthText} bg={healthBg} color={healthColor} />
-        <div style={{ marginLeft: 'auto' }}>
-          <p style={{ fontSize: '0.85rem', fontWeight: 700, color: GREEN, margin: 0 }}>
-            {data.shippedCount} shipped
-          </p>
-          <p style={{ fontSize: '0.72rem', color: GRAY, margin: 0 }}>
-            {Math.round(data.shippedRatio * 100)}% delivery rate
-          </p>
-        </div>
+        <Badge label={statusLabel} bg={healthColor + '18'} color={healthColor} />
       </div>
-
-      {/* Delivery bar */}
-      <div style={{ marginBottom: '1.25rem' }}>
-        <div style={{ display: 'flex', gap: '0.25rem', height: '6px', borderRadius: '3px', overflow: 'hidden' }}>
-          <div style={{ flex: data.shippedCount || 0.01, background: GREEN }} />
-          <div style={{ flex: data.committedCount || 0.01, background: TEAL }} />
-          <div style={{ flex: data.plannedCount || 0.01, background: AMBER }} />
-          <div style={{ flex: data.backlogCount || 0.01, background: BORDER }} />
-        </div>
-        <div style={{ display: 'flex', gap: '0.875rem', marginTop: '0.4rem' }}>
-          {[
-            { label: 'Shipped', count: data.shippedCount, color: GREEN },
-            { label: 'Committed', count: data.committedCount, color: TEAL },
-            { label: 'Planned', count: data.plannedCount, color: AMBER },
-            { label: 'Backlog', count: data.backlogCount, color: GRAY },
-          ].map((s) => (
-            <div key={s.label} style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
-              <div style={{ width: '8px', height: '8px', borderRadius: '2px', background: s.color }} />
-              <p style={{ fontSize: '0.7rem', color: GRAY, margin: 0 }}>{s.label} ({s.count})</p>
-            </div>
-          ))}
-        </div>
+      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.875rem' }}>
+        {[
+          { label: 'Shipped', count: data.shippedCount, color: GREEN },
+          { label: 'In Progress', count: data.committedCount, color: TEAL },
+          { label: 'Planned', count: data.plannedCount, color: '#0369a1' },
+          { label: 'Backlog', count: data.backlogCount, color: GRAY },
+        ].map((s) => (
+          <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: s.color }} />
+            <span style={{ fontSize: '0.75rem', color: GRAY }}>{s.label} ({s.count})</span>
+          </div>
+        ))}
       </div>
-
       {data.delayedCriticalItems.length > 0 && (
-        <div style={{ marginBottom: '0.875rem' }}>
-          <p style={{ fontSize: '0.78rem', fontWeight: 700, color: AMBER, marginBottom: '0.4rem' }}>
-            {data.delayedCriticalItems.length} Delayed Critical Item{data.delayedCriticalItems.length > 1 ? 's' : ''}
+        <div style={{ background: AMBER_L, borderRadius: '0.5rem', padding: '0.5rem 0.75rem' }}>
+          <p style={{ fontSize: '0.78rem', fontWeight: 700, color: AMBER, margin: '0 0 0.2rem' }}>
+            {data.delayedCriticalItems.length} item{data.delayedCriticalItems.length > 1 ? 's' : ''} stalled
           </p>
-          {data.delayedCriticalItems.slice(0, 2).map((item) => (
-            <div key={item.roadmapItemId} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.4rem 0', borderBottom: `1px solid ${BORDER}` }}>
-              <p style={{ fontSize: '0.82rem', color: NAVY, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                {item.title}
-              </p>
-              <p style={{ fontSize: '0.72rem', color: AMBER, margin: 0, flexShrink: 0, marginLeft: '0.5rem' }}>
-                {item.daysInStatus}d stale
-              </p>
-            </div>
-          ))}
+          <p style={{ fontSize: '0.8rem', color: NAVY, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {data.delayedCriticalItems[0].title}
+          </p>
         </div>
       )}
+      <p style={{ fontSize: '0.75rem', color: GRAY, marginTop: '0.875rem' }}>
+        {data.shippedCount} shipped · {deliveryPct}% delivery rate
+      </p>
+    </div>
+  );
+}
 
-      {data.opportunityGaps.length > 0 && (
-        <div style={{ background: TEAL_L, borderRadius: '0.5rem', padding: '0.6rem 0.875rem' }}>
-          <p style={{ fontSize: '0.78rem', fontWeight: 700, color: TEAL, margin: '0 0 0.25rem' }}>
-            {data.opportunityGaps.length} Opportunity Gap{data.opportunityGaps.length > 1 ? 's' : ''}
+// ─── 7. Voice & survey sentiment ─────────────────────────────────────────────
+function SentimentCard({ data, href }: { data: VoiceSentimentSignal; href: string }) {
+  const sentColor = data.overallSentimentScore >= 70 ? GREEN : data.overallSentimentScore >= 40 ? AMBER : RED;
+  return (
+    <div style={cardAccent(sentColor)}>
+      <SectionHeader label="Customer sentiment" href={href} accent={sentColor} />
+      <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '1rem' }}>
+        <div>
+          <p style={{ fontSize: '1.5rem', fontWeight: 800, color: sentColor, margin: 0 }}>
+            {data.overallSentimentScore}/100
           </p>
-          <p style={{ fontSize: '0.8rem', color: NAVY, margin: 0 }}>
-            {data.opportunityGaps[0].title} — high priority, no roadmap commitment
+          <p style={{ fontSize: '0.75rem', color: GRAY, margin: 0 }}>sentiment score</p>
+        </div>
+        <Badge
+          label={data.sentimentTrend === 'improving' ? '↑ Improving' : data.sentimentTrend === 'declining' ? '↓ Declining' : '→ Stable'}
+          bg={sentColor + '18'}
+          color={sentColor}
+        />
+      </div>
+      {data.recentNegativeSignals.length === 0 ? (
+        <p style={{ fontSize: '0.875rem', color: GREEN }}>✓ No critical negative signals in the last 30 days.</p>
+      ) : (
+        <div style={{ background: RED_L, borderRadius: '0.5rem', padding: '0.6rem 0.875rem' }}>
+          <p style={{ fontSize: '0.78rem', fontWeight: 700, color: RED, margin: '0 0 0.2rem' }}>
+            {data.recentNegativeSignals.length} critical signal{data.recentNegativeSignals.length > 1 ? 's' : ''}
           </p>
+          <p style={{ fontSize: '0.8rem', color: NAVY, margin: 0 }}>{data.recentNegativeSignals[0]?.title}</p>
         </div>
       )}
+      <p style={{ fontSize: '0.75rem', color: GRAY, marginTop: '1rem' }}>
+        {data.voiceCallCount} voice recordings analysed
+      </p>
     </div>
   );
 }
 
 // ─── Empty state ──────────────────────────────────────────────────────────────
-function EmptyState({ onRefresh, isRefreshing }: { onRefresh: () => void; isRefreshing: boolean }) {
+function EmptyState({ r, onRefresh, isRefreshing }: { r: ReturnType<typeof appRoutes>; onRefresh: () => void; isRefreshing: boolean }) {
   return (
-    <div style={{ ...CARD, textAlign: 'center', padding: '3rem 2rem' }}>
-      <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>🧠</div>
-      <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: NAVY, marginBottom: '0.5rem' }}>
-        Intelligence surface is warming up
-      </h2>
-      <p style={{ fontSize: '0.9rem', color: GRAY, maxWidth: '420px', margin: '0 auto 1.5rem', lineHeight: 1.6 }}>
-        Add feedback, customers, and roadmap items to generate your first executive intelligence report.
-        Once data is available, this surface will automatically populate.
-      </p>
-      <button
-        onClick={onRefresh}
-        disabled={isRefreshing}
-        style={{
-          background: TEAL, color: '#fff', border: 'none', borderRadius: '0.5rem',
-          padding: '0.6rem 1.25rem', fontSize: '0.875rem', fontWeight: 600,
-          cursor: isRefreshing ? 'not-allowed' : 'pointer', opacity: isRefreshing ? 0.7 : 1,
-        }}
-      >
-        {isRefreshing ? 'Refreshing…' : 'Generate Intelligence'}
-      </button>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      {/* Welcome banner */}
+      <div style={{ ...CARD, borderLeft: `3px solid ${TEAL}`, background: TEAL_L, textAlign: 'center', padding: '2rem' }}>
+        <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>👋</div>
+        <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: NAVY, marginBottom: '0.5rem' }}>
+          Welcome to TriageInsight
+        </h2>
+        <p style={{ fontSize: '0.9rem', color: GRAY, maxWidth: '460px', margin: '0 auto 1.25rem', lineHeight: 1.6 }}>
+          Start by adding customer feedback, then TriageInsight will automatically group it into themes,
+          score feature requests, and tell you what to build next.
+        </p>
+        <button
+          onClick={onRefresh}
+          disabled={isRefreshing}
+          style={{
+            background: TEAL, color: '#fff', border: 'none', borderRadius: '0.5rem',
+            padding: '0.6rem 1.25rem', fontSize: '0.875rem', fontWeight: 600,
+            cursor: isRefreshing ? 'not-allowed' : 'pointer', opacity: isRefreshing ? 0.7 : 1,
+          }}
+        >
+          {isRefreshing ? 'Generating…' : 'Generate my first report'}
+        </button>
+      </div>
+
+      {/* Quick action cards always visible even when empty */}
+      <QuickActions r={r} />
     </div>
   );
 }
 
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
-export default function ExecutiveDashboardPage() {
+export default function HomeDashboardPage() {
   const params = useParams();
   const slug = Array.isArray(params.orgSlug) ? params.orgSlug[0] : params.orgSlug ?? '';
   const r = appRoutes(slug);
@@ -572,13 +478,13 @@ export default function ExecutiveDashboardPage() {
   return (
     <div>
       {/* ── Page header ──────────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.75rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
         <div>
-          <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: NAVY, margin: '0 0 0.25rem' }}>
-            Executive Intelligence
+          <h1 style={{ fontSize: '1.25rem', fontWeight: 800, color: NAVY, margin: '0 0 0.2rem' }}>
+            Home
           </h1>
           <p style={{ fontSize: '0.875rem', color: GRAY, margin: 0 }}>
-            Decision intelligence surface — not a metrics dashboard
+            What is happening across your product today
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
@@ -606,71 +512,53 @@ export default function ExecutiveDashboardPage() {
 
       {/* ── Loading state ─────────────────────────────────────────────────────── */}
       {isLoading && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.25rem' }}>
-          {[...Array(7)].map((_, i) => <CardSkeleton key={i} />)}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <CardSkeleton />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.875rem' }}>
+            {[...Array(4)].map((_, i) => <CardSkeleton key={i} />)}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.25rem' }}>
+            {[...Array(4)].map((_, i) => <CardSkeleton key={i} />)}
+          </div>
         </div>
       )}
 
       {/* ── Error state ───────────────────────────────────────────────────────── */}
       {isError && !isLoading && (
         <div style={{ ...CARD, textAlign: 'center', padding: '2rem' }}>
-          <p style={{ color: RED, fontWeight: 600, marginBottom: '0.5rem' }}>Failed to load intelligence data</p>
+          <p style={{ color: RED, fontWeight: 600, marginBottom: '0.5rem' }}>Could not load your dashboard data</p>
           <button onClick={() => refetch()} style={{ background: TEAL, color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.5rem 1rem', cursor: 'pointer', fontSize: '0.875rem' }}>
-            Retry
+            Try again
           </button>
         </div>
       )}
 
       {/* ── Empty state ───────────────────────────────────────────────────────── */}
       {!isLoading && !isError && !hasData && (
-        <EmptyState onRefresh={handleRefresh} isRefreshing={refresh.isPending} />
+        <EmptyState r={r} onRefresh={handleRefresh} isRefreshing={refresh.isPending} />
       )}
 
-      {/* ── Intelligence surfaces ─────────────────────────────────────────────── */}
+      {/* ── Dashboard with data ───────────────────────────────────────────────── */}
       {!isLoading && !isError && data && hasData && (
-        <>
-          {/* Row 1: Executive Summary (full width) */}
-          <div style={{ marginBottom: '1.25rem' }}>
-            <ExecutiveSummaryCard summary={data.executiveSummary} />
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
 
-          {/* Row 2: Product Direction + Emerging Themes */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.25rem', marginBottom: '1.25rem' }}>
-            <ProductDirectionCard data={data.productDirection} href={r.intelligenceFeatures} />
-            <EmergingThemeCard    data={data.emergingThemes}   href={r.intelligenceThemes} />
-          </div>
+          {/* Today's summary — full width */}
+          <TodaySummaryCard summary={data.executiveSummary} />
 
-          {/* Row 3: Revenue Risk + Voice Sentiment */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.25rem', marginBottom: '1.25rem' }}>
-            <RevenueRiskCard    data={data.revenueRisk}    href={r.intelligenceCustomers} />
-            <VoiceSentimentCard data={data.voiceSentiment} href={r.voice} />
-          </div>
+          {/* Quick actions — always prominent */}
+          <QuickActions r={r} />
 
-          {/* Row 4: Support Pressure + Roadmap Health */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.25rem', marginBottom: '1.25rem' }}>
+          {/* 2×2 grid of status cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.25rem' }}>
+            <ThemesCard         data={data.emergingThemes}   href={r.intelligenceThemes} />
+            <CustomersAtRiskCard data={data.revenueRisk}     href={r.intelligenceCustomers} />
             <SupportPressureCard data={data.supportPressure} href={r.support.tickets} />
             <RoadmapHealthCard   data={data.roadmapHealth}   href={r.roadmap} />
           </div>
 
-          {/* Row 5: Quick navigation to intelligence surfaces */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.875rem' }}>
-            {[
-              { href: r.intelligence,              label: 'Intelligence Hub',       desc: 'CIQ signals & strategic feed' },
-              { href: r.prioritization,            label: 'Prioritization',         desc: '4-dimension scoring engine' },
-              { href: r.intelligenceFeatures,      label: 'Feature Ranking',        desc: 'CIQ-ranked feature requests' },
-              { href: r.prioritizationOpportunities, label: 'Revenue Opportunities', desc: 'High-value unplanned features' },
-            ].map((q) => (
-              <Link
-                key={q.href}
-                href={q.href}
-                style={{ ...CARD, textDecoration: 'none', display: 'block', borderLeft: `3px solid ${TEAL}` }}
-              >
-                <p style={{ fontSize: '0.875rem', fontWeight: 700, color: NAVY, marginBottom: '0.2rem' }}>{q.label}</p>
-                <p style={{ fontSize: '0.78rem', color: GRAY, margin: 0 }}>{q.desc}</p>
-              </Link>
-            ))}
-          </div>
-        </>
+          {/* Sentiment — full width */}
+          <SentimentCard data={data.voiceSentiment} href={r.voice} />
+        </div>
       )}
 
       <style>{`

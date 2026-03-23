@@ -2,12 +2,19 @@
 /**
  * /:orgSlug/* — Root workspace layout (mobile-first)
  *
+ * Navigation structure (redesigned):
+ *   Workspace   → Home, Inbox, Themes, Roadmap
+ *   Intelligence Hub  → Overview, Features, Customers, Themes
+ *   Prioritization    → Engine, Roadmap Alignment, Opportunities
+ *   Customers   → Customers, Reports
+ *   Signals     → Voice, Surveys, Support
+ *   Admin       → Members, Billing, Integrations, Settings  (admin only)
+ *
  * Breakpoints:
  *   < 768px  → bottom tab bar (5 primary items) + hamburger drawer for full nav
- *   ≥ 768px  → collapsible left sidebar (220px expanded / 56px collapsed)
+ *   ≥ 768px  → collapsible left sidebar (232px expanded / 56px collapsed)
  *
- * Design tokens preserved:
- *   Navy  #0A2540  |  Teal  #20A4A4  |  BG  #F8F9FA  |  Border  #e9ecef
+ * Design tokens: Navy #0A2540 | Teal #20A4A4 | BG #F8F9FA | Border #e9ecef
  */
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter, useParams } from 'next/navigation';
@@ -19,7 +26,7 @@ import { appRoutes, orgAdminRoutes } from '@/lib/routes';
 
 const NAVY      = '#0A2540';
 const TEAL      = '#20A4A4';
-const SIDEBAR_W = 220;
+const SIDEBAR_W = 232;
 const SIDEBAR_C = 56;
 
 export default function OrgSlugLayout({ children }: { children: React.ReactNode }) {
@@ -89,10 +96,12 @@ function AuthenticatedShell({ slug, pathname, children }: { slug: string; pathna
   return (
     <div style={{ minHeight: '100vh', display: 'flex', fontFamily: "Inter, 'Helvetica Neue', Arial, sans-serif", background: '#F8F9FA', color: NAVY }}>
 
-      {/* Desktop Sidebar */}
+      {/* ── Desktop Sidebar ────────────────────────────────────────────────────── */}
       {!isMobile && (
         <aside style={{ width: sidebarW, minHeight: '100vh', background: NAVY, display: 'flex', flexDirection: 'column',
           position: 'fixed', top: 0, left: 0, bottom: 0, zIndex: 200, transition: 'width 0.2s ease', overflow: 'hidden' }}>
+
+          {/* Logo row */}
           <div style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             padding: sidebarOpen ? '0 1rem' : '0 0.75rem', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
             {sidebarOpen ? (
@@ -114,41 +123,66 @@ function AuthenticatedShell({ slug, pathname, children }: { slug: string; pathna
               </svg>
             </button>
           </div>
+
+          {/* Nav */}
           <nav style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '0.75rem 0' }}>
-            <NavGroup label="Product" open={sidebarOpen}>
-              <SideNavItem href={r.dashboard}        pathname={pathname} open={sidebarOpen} icon={<IconGrid/>}>Dashboard</SideNavItem>
-              <SideNavItem href={r.inbox}            pathname={pathname} open={sidebarOpen} icon={<IconInbox/>}>Inbox</SideNavItem>
-              <SideNavItem href={r.themes}           pathname={pathname} open={sidebarOpen} icon={<IconTheme/>}>Themes</SideNavItem>
-              <SideNavItem href={r.roadmap}          pathname={pathname} open={sidebarOpen} icon={<IconRoadmap/>}>Roadmap</SideNavItem>
+
+            {/* Workspace */}
+            <NavGroup label="Workspace" open={sidebarOpen}>
+              <SideNavItem href={r.dashboard} pathname={pathname} open={sidebarOpen} icon={<IconGrid/>}>Home</SideNavItem>
+              <SideNavItem href={r.inbox}     pathname={pathname} open={sidebarOpen} icon={<IconInbox/>}>Inbox</SideNavItem>
+              <SideNavItem href={r.themes}    pathname={pathname} open={sidebarOpen} icon={<IconTheme/>}>Themes</SideNavItem>
+              <SideNavItem href={r.roadmap}   pathname={pathname} open={sidebarOpen} icon={<IconRoadmap/>}>Roadmap</SideNavItem>
             </NavGroup>
-            <NavGroup label="Revenue" open={sidebarOpen}>
-              <SideNavItem href={r.customers}        pathname={pathname} open={sidebarOpen} icon={<IconCustomers/>}>Customers</SideNavItem>
-              <SideNavItem href={r.reports}          pathname={pathname} open={sidebarOpen} icon={<IconReports/>}>Reports</SideNavItem>
+
+            {/* Intelligence Hub — promoted to top-level */}
+            <NavGroup label="Intelligence Hub" open={sidebarOpen}>
+              <SideNavItem href={r.intelligence}          pathname={pathname} open={sidebarOpen} icon={<IconIntelligence/>}>CIQ Overview</SideNavItem>
+              <SideNavItem href={r.intelligenceFeatures}  pathname={pathname} open={sidebarOpen} icon={<IconFeatureRank/>}>Feature Ranking</SideNavItem>
+              <SideNavItem href={r.intelligenceCustomers} pathname={pathname} open={sidebarOpen} icon={<IconCustomerIQ/>}>Customer IQ</SideNavItem>
             </NavGroup>
+
+            {/* Prioritization Engine — promoted to top-level */}
+            <NavGroup label="Prioritization" open={sidebarOpen}>
+              <SideNavItem href={r.prioritization}              pathname={pathname} open={sidebarOpen} icon={<IconPriority/>}>Engine</SideNavItem>
+              <SideNavItem href={r.prioritizationOpportunities} pathname={pathname} open={sidebarOpen} icon={<IconOpportunity/>}>Opportunities</SideNavItem>
+              <SideNavItem href={r.prioritizationRoadmap}       pathname={pathname} open={sidebarOpen} icon={<IconRoadmapAlign/>}>Roadmap Fit</SideNavItem>
+            </NavGroup>
+
+            {/* Customers & Revenue */}
+            <NavGroup label="Customers" open={sidebarOpen}>
+              <SideNavItem href={r.customers} pathname={pathname} open={sidebarOpen} icon={<IconCustomers/>}>Customers</SideNavItem>
+              <SideNavItem href={r.reports}   pathname={pathname} open={sidebarOpen} icon={<IconReports/>}>Reports</SideNavItem>
+            </NavGroup>
+
+            {/* Signals */}
             <NavGroup label="Signals" open={sidebarOpen}>
               <SideNavItem href={r.voice}            pathname={pathname} open={sidebarOpen} icon={<IconVoice/>}>Voice</SideNavItem>
               <SideNavItem href={r.surveys}          pathname={pathname} open={sidebarOpen} icon={<IconSurveys/>}>Surveys</SideNavItem>
               <SideNavItem href={r.support.overview} pathname={pathname} open={sidebarOpen} icon={<IconSupport/>}>Support</SideNavItem>
             </NavGroup>
+
+            {/* Admin */}
             {isAdmin && (
               <NavGroup label="Admin" open={sidebarOpen}>
-                <SideNavItem href={ra.members}       pathname={pathname} open={sidebarOpen} icon={<IconMembers/>}>Members</SideNavItem>
-                <SideNavItem href={ra.billing}       pathname={pathname} open={sidebarOpen} icon={<IconBilling/>}>Billing</SideNavItem>
-                <SideNavItem href={ra.integrations}  pathname={pathname} open={sidebarOpen} icon={<IconIntegrations/>}>Integrations</SideNavItem>
-                <SideNavItem href={ra.settings}      pathname={pathname} open={sidebarOpen} icon={<IconSettings/>}>Settings</SideNavItem>
+                <SideNavItem href={ra.members}      pathname={pathname} open={sidebarOpen} icon={<IconMembers/>}>Members</SideNavItem>
+                <SideNavItem href={ra.billing}      pathname={pathname} open={sidebarOpen} icon={<IconBilling/>}>Billing</SideNavItem>
+                <SideNavItem href={ra.integrations} pathname={pathname} open={sidebarOpen} icon={<IconIntegrations/>}>Integrations</SideNavItem>
+                <SideNavItem href={ra.settings}     pathname={pathname} open={sidebarOpen} icon={<IconSettings/>}>Settings</SideNavItem>
               </NavGroup>
             )}
           </nav>
+
           <SidebarBottom workspace={workspace} sidebarOpen={sidebarOpen} r={r} logout={logout} />
         </aside>
       )}
 
-      {/* Mobile Drawer */}
+      {/* ── Mobile Drawer ──────────────────────────────────────────────────────── */}
       {isMobile && drawerOpen && (
         <>
           <div onClick={() => setDrawerOpen(false)}
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 299, backdropFilter: 'blur(2px)' }} />
-          <aside style={{ position: 'fixed', top: 0, left: 0, bottom: 0, width: 260, background: NAVY,
+          <aside style={{ position: 'fixed', top: 0, left: 0, bottom: 0, width: 268, background: NAVY,
             display: 'flex', flexDirection: 'column', zIndex: 300, overflowY: 'auto',
             boxShadow: '4px 0 24px rgba(0,0,0,0.25)' }}>
             <div style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -167,15 +201,25 @@ function AuthenticatedShell({ slug, pathname, children }: { slug: string; pathna
               </button>
             </div>
             <nav style={{ flex: 1, padding: '0.75rem 0' }}>
-              <NavGroupDrawer label="Product">
-                <DrawerNavItem href={r.dashboard}        pathname={pathname} icon={<IconGrid/>}>Dashboard</DrawerNavItem>
-                <DrawerNavItem href={r.inbox}            pathname={pathname} icon={<IconInbox/>}>Inbox</DrawerNavItem>
-                <DrawerNavItem href={r.themes}           pathname={pathname} icon={<IconTheme/>}>Themes</DrawerNavItem>
-                <DrawerNavItem href={r.roadmap}          pathname={pathname} icon={<IconRoadmap/>}>Roadmap</DrawerNavItem>
+              <NavGroupDrawer label="Workspace">
+                <DrawerNavItem href={r.dashboard} pathname={pathname} icon={<IconGrid/>}>Home</DrawerNavItem>
+                <DrawerNavItem href={r.inbox}     pathname={pathname} icon={<IconInbox/>}>Inbox</DrawerNavItem>
+                <DrawerNavItem href={r.themes}    pathname={pathname} icon={<IconTheme/>}>Themes</DrawerNavItem>
+                <DrawerNavItem href={r.roadmap}   pathname={pathname} icon={<IconRoadmap/>}>Roadmap</DrawerNavItem>
               </NavGroupDrawer>
-              <NavGroupDrawer label="Revenue">
-                <DrawerNavItem href={r.customers}        pathname={pathname} icon={<IconCustomers/>}>Customers</DrawerNavItem>
-                <DrawerNavItem href={r.reports}          pathname={pathname} icon={<IconReports/>}>Reports</DrawerNavItem>
+              <NavGroupDrawer label="Intelligence Hub">
+                <DrawerNavItem href={r.intelligence}          pathname={pathname} icon={<IconIntelligence/>}>CIQ Overview</DrawerNavItem>
+                <DrawerNavItem href={r.intelligenceFeatures}  pathname={pathname} icon={<IconFeatureRank/>}>Feature Ranking</DrawerNavItem>
+                <DrawerNavItem href={r.intelligenceCustomers} pathname={pathname} icon={<IconCustomerIQ/>}>Customer IQ</DrawerNavItem>
+              </NavGroupDrawer>
+              <NavGroupDrawer label="Prioritization">
+                <DrawerNavItem href={r.prioritization}              pathname={pathname} icon={<IconPriority/>}>Engine</DrawerNavItem>
+                <DrawerNavItem href={r.prioritizationOpportunities} pathname={pathname} icon={<IconOpportunity/>}>Opportunities</DrawerNavItem>
+                <DrawerNavItem href={r.prioritizationRoadmap}       pathname={pathname} icon={<IconRoadmapAlign/>}>Roadmap Fit</DrawerNavItem>
+              </NavGroupDrawer>
+              <NavGroupDrawer label="Customers">
+                <DrawerNavItem href={r.customers} pathname={pathname} icon={<IconCustomers/>}>Customers</DrawerNavItem>
+                <DrawerNavItem href={r.reports}   pathname={pathname} icon={<IconReports/>}>Reports</DrawerNavItem>
               </NavGroupDrawer>
               <NavGroupDrawer label="Signals">
                 <DrawerNavItem href={r.voice}            pathname={pathname} icon={<IconVoice/>}>Voice</DrawerNavItem>
@@ -184,10 +228,10 @@ function AuthenticatedShell({ slug, pathname, children }: { slug: string; pathna
               </NavGroupDrawer>
               {isAdmin && (
                 <NavGroupDrawer label="Admin">
-                  <DrawerNavItem href={ra.members}       pathname={pathname} icon={<IconMembers/>}>Members</DrawerNavItem>
-                  <DrawerNavItem href={ra.billing}       pathname={pathname} icon={<IconBilling/>}>Billing</DrawerNavItem>
-                  <DrawerNavItem href={ra.integrations}  pathname={pathname} icon={<IconIntegrations/>}>Integrations</DrawerNavItem>
-                  <DrawerNavItem href={ra.settings}      pathname={pathname} icon={<IconSettings/>}>Settings</DrawerNavItem>
+                  <DrawerNavItem href={ra.members}      pathname={pathname} icon={<IconMembers/>}>Members</DrawerNavItem>
+                  <DrawerNavItem href={ra.billing}      pathname={pathname} icon={<IconBilling/>}>Billing</DrawerNavItem>
+                  <DrawerNavItem href={ra.integrations} pathname={pathname} icon={<IconIntegrations/>}>Integrations</DrawerNavItem>
+                  <DrawerNavItem href={ra.settings}     pathname={pathname} icon={<IconSettings/>}>Settings</DrawerNavItem>
                 </NavGroupDrawer>
               )}
             </nav>
@@ -196,10 +240,11 @@ function AuthenticatedShell({ slug, pathname, children }: { slug: string; pathna
         </>
       )}
 
-      {/* Main content area */}
+      {/* ── Main content area ─────────────────────────────────────────────────── */}
       <div style={{ marginLeft: isMobile ? 0 : sidebarW, flex: 1, display: 'flex', flexDirection: 'column',
         minHeight: '100vh', paddingBottom: isMobile ? 64 : 0, transition: 'margin-left 0.2s ease',
         minWidth: 0, maxWidth: '100%' }}>
+
         {/* Top bar */}
         <header style={{ height: 56, background: '#fff', borderBottom: '1px solid #e9ecef',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -238,15 +283,15 @@ function AuthenticatedShell({ slug, pathname, children }: { slug: string; pathna
         </main>
       </div>
 
-      {/* Mobile bottom tab bar */}
+      {/* ── Mobile bottom tab bar ─────────────────────────────────────────────── */}
       {isMobile && (
         <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, height: 64, background: NAVY,
           display: 'flex', alignItems: 'stretch', zIndex: 200, borderTop: '1px solid rgba(255,255,255,0.1)',
           paddingBottom: 'env(safe-area-inset-bottom)' }}>
-          <BottomTab href={r.dashboard}        pathname={pathname} icon={<IconGrid/>}    label="Home"/>
-          <BottomTab href={r.inbox}            pathname={pathname} icon={<IconInbox/>}   label="Inbox"/>
-          <BottomTab href={r.themes}           pathname={pathname} icon={<IconTheme/>}   label="Themes"/>
-          <BottomTab href={r.roadmap}          pathname={pathname} icon={<IconRoadmap/>} label="Roadmap"/>
+          <BottomTab href={r.dashboard}   pathname={pathname} icon={<IconGrid/>}          label="Home"/>
+          <BottomTab href={r.inbox}       pathname={pathname} icon={<IconInbox/>}         label="Inbox"/>
+          <BottomTab href={r.intelligence} pathname={pathname} icon={<IconIntelligence/>} label="Intel"/>
+          <BottomTab href={r.prioritization} pathname={pathname} icon={<IconPriority/>}  label="Priority"/>
           <button onClick={() => setDrawerOpen(true)}
             style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
               gap: 3, background: 'transparent', border: 'none', cursor: 'pointer',
@@ -263,6 +308,7 @@ function AuthenticatedShell({ slug, pathname, children }: { slug: string; pathna
   );
 }
 
+// ─── Bottom tab ───────────────────────────────────────────────────────────────
 function BottomTab({ href, pathname, icon, label }: { href: string; pathname: string; icon: React.ReactNode; label: string }) {
   const isActive = pathname === href || pathname.startsWith(href + '/');
   return (
@@ -276,6 +322,7 @@ function BottomTab({ href, pathname, icon, label }: { href: string; pathname: st
   );
 }
 
+// ─── Sidebar bottom (profile + sign out) ─────────────────────────────────────
 function SidebarBottom({ workspace, sidebarOpen, r, logout }: {
   workspace: { name?: string; slug?: string } | null | undefined;
   sidebarOpen: boolean;
@@ -317,11 +364,12 @@ function SidebarBottom({ workspace, sidebarOpen, r, logout }: {
   );
 }
 
+// ─── Nav group label ──────────────────────────────────────────────────────────
 function NavGroup({ label, open, children }: { label: string; open: boolean; children: React.ReactNode }) {
   return (
     <div style={{ marginBottom: '0.25rem' }}>
       {open ? (
-        <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'rgba(255,255,255,0.3)',
+        <div style={{ fontSize: '0.63rem', fontWeight: 700, color: 'rgba(255,255,255,0.3)',
           textTransform: 'uppercase', letterSpacing: '0.08em', padding: '0.6rem 1rem 0.25rem' }}>
           {label}
         </div>
@@ -331,13 +379,14 @@ function NavGroup({ label, open, children }: { label: string; open: boolean; chi
   );
 }
 
+// ─── Desktop sidebar nav item ─────────────────────────────────────────────────
 function SideNavItem({ href, pathname, open, icon, children }: {
   href: string; pathname: string; open: boolean; icon: React.ReactNode; children: React.ReactNode;
 }) {
   const isActive = pathname === href || pathname.startsWith(href + '/');
   return (
     <Link href={href} style={{ display: 'flex', alignItems: 'center', gap: open ? '0.6rem' : 0,
-      padding: open ? '0.45rem 1rem' : '0.45rem 0', justifyContent: open ? 'flex-start' : 'center',
+      padding: open ? '0.42rem 1rem' : '0.42rem 0', justifyContent: open ? 'flex-start' : 'center',
       textDecoration: 'none', background: isActive ? 'rgba(32,164,164,0.12)' : 'transparent',
       borderLeft: isActive ? `2px solid ${TEAL}` : '2px solid transparent',
       color: isActive ? '#fff' : 'rgba(255,255,255,0.65)',
@@ -349,10 +398,11 @@ function SideNavItem({ href, pathname, open, icon, children }: {
   );
 }
 
+// ─── Mobile drawer group label ────────────────────────────────────────────────
 function NavGroupDrawer({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div style={{ marginBottom: '0.25rem' }}>
-      <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'rgba(255,255,255,0.3)',
+      <div style={{ fontSize: '0.63rem', fontWeight: 700, color: 'rgba(255,255,255,0.3)',
         textTransform: 'uppercase', letterSpacing: '0.08em', padding: '0.6rem 1rem 0.25rem' }}>
         {label}
       </div>
@@ -361,6 +411,7 @@ function NavGroupDrawer({ label, children }: { label: string; children: React.Re
   );
 }
 
+// ─── Mobile drawer nav item ───────────────────────────────────────────────────
 function DrawerNavItem({ href, pathname, icon, children }: { href: string; pathname: string; icon: React.ReactNode; children: React.ReactNode }) {
   const isActive = pathname === href || pathname.startsWith(href + '/');
   return (
@@ -374,20 +425,24 @@ function DrawerNavItem({ href, pathname, icon, children }: { href: string; pathn
   );
 }
 
+// ─── Page title (top bar) ─────────────────────────────────────────────────────
 function PageTitle({ pathname, slug }: { pathname: string; slug: string }) {
   const segments = pathname.replace(`/${slug}`, '').split('/').filter(Boolean);
-  const last     = segments[segments.length - 1] ?? 'dashboard';
+  const last     = segments[segments.length - 1] ?? 'app';
   const titles: Record<string, string> = {
-    app: 'Dashboard', inbox: 'Feedback Inbox', themes: 'Themes', roadmap: 'Roadmap',
+    app: 'Home', inbox: 'Feedback Inbox', themes: 'Themes', roadmap: 'Roadmap',
     customers: 'Customers', reports: 'Reports', voice: 'Voice', surveys: 'Surveys',
-    support: 'Support', intelligence: 'Intelligence', prioritization: 'Prioritization',
-    digest: 'Weekly Digest', risk: 'Risk', members: 'Members', billing: 'Billing',
+    support: 'Support',
+    intelligence: 'Intelligence Hub', features: 'Feature Ranking', 'customers-iq': 'Customer IQ',
+    prioritization: 'Prioritization Engine', opportunities: 'Opportunities', 'roadmap-fit': 'Roadmap Fit',
+    digest: 'Weekly Digest', risk: 'Revenue Risk', members: 'Members', billing: 'Billing',
     integrations: 'Integrations', settings: 'Settings', profile: 'Profile', 'ai-settings': 'AI Settings',
   };
   const title = titles[last] ?? (last.charAt(0).toUpperCase() + last.slice(1));
   return <h1 style={{ fontSize: '0.95rem', fontWeight: 700, color: NAVY, margin: 0, letterSpacing: '-0.01em' }}>{title}</h1>;
 }
 
+// ─── Logo mark ────────────────────────────────────────────────────────────────
 function LogoMark() {
   return (
     <div style={{ width: 26, height: 26, background: `linear-gradient(135deg, ${TEAL} 0%, #1a8f8f 100%)`,
@@ -399,16 +454,35 @@ function LogoMark() {
   );
 }
 
+// ─── Icons ────────────────────────────────────────────────────────────────────
 const ip = { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+
+// Workspace
 function IconGrid()         { return <svg {...ip}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>; }
 function IconInbox()        { return <svg {...ip}><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>; }
 function IconTheme()        { return <svg {...ip}><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>; }
 function IconRoadmap()      { return <svg {...ip}><line x1="3" y1="12" x2="21" y2="12"/><polyline points="8 8 3 12 8 16"/><polyline points="16 8 21 12 16 16"/></svg>; }
+
+// Intelligence Hub
+function IconIntelligence() { return <svg {...ip}><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 1 1 7.072 0l-.548.547A3.374 3.374 0 0 0 14 18.469V19a2 2 0 1 1-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>; }
+function IconFeatureRank()  { return <svg {...ip}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>; }
+function IconCustomerIQ()   { return <svg {...ip}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>; }
+
+// Prioritization
+function IconPriority()     { return <svg {...ip}><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>; }
+function IconOpportunity()  { return <svg {...ip}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>; }
+function IconRoadmapAlign() { return <svg {...ip}><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>; }
+
+// Customers
 function IconCustomers()    { return <svg {...ip}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>; }
 function IconReports()      { return <svg {...ip}><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>; }
+
+// Signals
 function IconVoice()        { return <svg {...ip}><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>; }
 function IconSurveys()      { return <svg {...ip}><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>; }
 function IconSupport()      { return <svg {...ip}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>; }
+
+// Admin
 function IconMembers()      { return <svg {...ip}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>; }
 function IconBilling()      { return <svg {...ip}><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>; }
 function IconIntegrations() { return <svg {...ip}><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>; }
