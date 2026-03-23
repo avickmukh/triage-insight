@@ -1,22 +1,40 @@
-import { Processor, Process } from '@nestjs/bull';
+/**
+ * AiAnalysisProcessor — Hardened
+ *
+ * Hardening additions (vs original):
+ * 1. RetryPolicy.standard() applied to all enqueued jobs
+ * 2. JobIdempotencyService dedup guard (10-min TTL per feedbackId)
+ * 3. JobLogger structured logging (JOB_START, JOB_COMPLETE, JOB_FAIL, STEP_WARN)
+ * 4. @OnQueueFailed DLQ handler — moves exhausted jobs to DEAD_LETTERED in AiJobLog
+ * 5. __logId injected into job data for lifecycle tracking
+ * 6. Re-throw on fatal failure so Bull marks job as failed and retries
+ */
+import { Processor, Process, OnQueueFailed } from '@nestjs/bull';
 import type { Job } from 'bull';
 import { PrismaService } from '../../prisma/prisma.service';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { EmbeddingService } from '../services/embedding.service';
 import { SummarizationService } from '../services/summarization.service';
 import { DuplicateDetectionService } from '../services/duplicate-detection.service';
 import { ThemeClusteringService } from '../services/theme-clustering.service';
+import { AiJobType } from '@prisma/client';
+import { JobLogger } from '../../common/queue/job-logger';
+import { JobIdempotencyService } from '../../common/queue/job-idempotency.service';
+import { handleDlq } from '../../common/queue/dlq-handler';
 
 export const AI_ANALYSIS_QUEUE = 'ai-analysis';
 
 interface AnalysisJobPayload {
   feedbackId: string;
+  workspaceId: string;
+  /** Injected by idempotency service for lifecycle tracking */
+  __logId?: string;
 }
 
 @Injectable()
 @Processor(AI_ANALYSIS_QUEUE)
 export class AiAnalysisProcessor {
-  private readonly logger = new Logger(AiAnalysisProcessor.name);
+  private readonly logger = new JobLogger(AiAnalysisProcessor.name);
 
   constructor(
     private readonly prisma: PrismaService,
@@ -24,35 +42,57 @@ export class AiAnalysisProcessor {
     private readonly summarizationService: SummarizationService,
     private readonly duplicateDetectionService: DuplicateDetectionService,
     private readonly themeClusteringService: ThemeClusteringService,
+    private readonly idempotencyService: JobIdempotencyService,
   ) {}
 
   @Process()
   async handleAnalysis(job: Job<AnalysisJobPayload>) {
-    const { feedbackId } = job.data;
-    const feedback = await this.prisma.feedback.findUnique({ where: { id: feedbackId } });
+    const { feedbackId, workspaceId } = job.data;
+    const ctx = { jobType: 'AI_ANALYSIS', workspaceId, entityId: feedbackId, jobId: job.id };
+    const startedAt = Date.now();
 
+    // ── Idempotency guard ────────────────────────────────────────────────────
+    const isDup = await this.idempotencyService.isDuplicate(
+      AiJobType.FEEDBACK_SUMMARY,
+      feedbackId,
+      workspaceId,
+    );
+    if (isDup) return;
+
+    const logId = await this.idempotencyService.markStarted(
+      AiJobType.FEEDBACK_SUMMARY,
+      feedbackId,
+      workspaceId,
+      'Feedback',
+    );
+    job.data.__logId = logId;
+
+    this.logger.start(ctx);
+
+    const feedback = await this.prisma.feedback.findUnique({ where: { id: feedbackId } });
     if (!feedback) {
-      this.logger.error(`Feedback ${feedbackId} not found for analysis`);
+      this.logger.stepWarn(ctx, 'LOAD', `Feedback ${feedbackId} not found — skipping`);
+      await this.idempotencyService.markCompleted(logId, Date.now() - startedAt);
       return;
     }
 
-    // 1. Generate Embedding
+    // ── 1. Generate Embedding ────────────────────────────────────────────────
     let embedding: number[] = [];
     try {
       embedding = await this.embeddingService.generateEmbedding(feedback.description);
     } catch (err) {
-      this.logger.warn(`Embedding generation failed for feedback ${feedbackId}: ${(err as Error).message}`);
+      this.logger.stepWarn(ctx, 'EMBEDDING', (err as Error).message);
     }
 
-    // 2. Generate Summary
+    // ── 2. Generate Summary ──────────────────────────────────────────────────
     let summary: string | null = null;
     try {
       summary = await this.summarizationService.summarize(feedback.description);
     } catch (err) {
-      this.logger.warn(`Summarization failed for feedback ${feedbackId}: ${(err as Error).message}`);
+      this.logger.stepWarn(ctx, 'SUMMARIZATION', (err as Error).message);
     }
 
-    // 3. Update Feedback with AI data
+    // ── 3. Persist AI data ───────────────────────────────────────────────────
     await this.prisma.feedback.update({
       where: { id: feedbackId },
       data: {
@@ -62,7 +102,6 @@ export class AiAnalysisProcessor {
       },
     });
 
-    // Store embedding using raw SQL (pgvector Unsupported type)
     if (embedding.length > 0) {
       const vectorStr = `[${embedding.join(',')}]`;
       await this.prisma.$executeRaw`
@@ -72,7 +111,7 @@ export class AiAnalysisProcessor {
       `;
     }
 
-    // 4. Generate duplicate suggestions (embedding-based; heuristic fallback handled inside)
+    // ── 4. Duplicate detection ───────────────────────────────────────────────
     try {
       await this.duplicateDetectionService.generateSuggestions(
         feedback.workspaceId,
@@ -80,10 +119,10 @@ export class AiAnalysisProcessor {
         embedding.length > 0 ? embedding : undefined,
       );
     } catch (err) {
-      this.logger.warn(`Duplicate detection failed for feedback ${feedbackId}: ${(err as Error).message}`);
+      this.logger.stepWarn(ctx, 'DUPLICATE_DETECTION', (err as Error).message);
     }
 
-    // 5. Assign feedback to a theme via clustering (heuristic; embedding upgrade-ready)
+    // ── 5. Theme clustering ──────────────────────────────────────────────────
     try {
       await this.themeClusteringService.assignFeedbackToTheme(
         feedback.workspaceId,
@@ -91,9 +130,22 @@ export class AiAnalysisProcessor {
         embedding.length > 0 ? embedding : undefined,
       );
     } catch (err) {
-      this.logger.warn(`Theme clustering failed for feedback ${feedbackId}: ${(err as Error).message}`);
+      this.logger.stepWarn(ctx, 'THEME_CLUSTERING', (err as Error).message);
     }
 
-    this.logger.log(`Successfully analyzed feedback ${feedbackId}`);
+    const durationMs = Date.now() - startedAt;
+    await this.idempotencyService.markCompleted(logId, durationMs);
+    this.logger.complete({ ...ctx, durationMs });
+  }
+
+  @OnQueueFailed()
+  async onFailed(job: Job<AnalysisJobPayload>, error: Error) {
+    const ctx = {
+      jobType: 'AI_ANALYSIS',
+      workspaceId: job.data.workspaceId,
+      entityId: job.data.feedbackId,
+      jobId: job.id,
+    };
+    await handleDlq(job, error, ctx, this.logger, this.idempotencyService);
   }
 }

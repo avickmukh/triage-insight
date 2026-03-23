@@ -1,5 +1,13 @@
-import { Process, Processor } from '@nestjs/bull';
-import { Logger } from '@nestjs/common';
+/**
+ * VoiceExtractionProcessor — Hardened
+ *
+ * Hardening additions (vs original):
+ * 1. JobLogger structured logging replacing raw Logger
+ * 2. @OnQueueFailed DLQ handler for exhausted jobs
+ * 3. Partial-processing guard: marks AiJobLog as DEAD_LETTERED on final failure
+ * 4. Re-throw on fatal failure so Bull retries with exponential backoff
+ */
+import { Process, Processor, OnQueueFailed } from '@nestjs/bull';
 import { InjectQueue } from '@nestjs/bull';
 import type { Job, Queue } from 'bull';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -9,27 +17,31 @@ import { ThemeClusteringService } from '../../ai/services/theme-clustering.servi
 import { EmbeddingService } from '../../ai/services/embedding.service';
 import { CIQ_SCORING_QUEUE } from '../../ai/processors/ciq-scoring.processor';
 import type { CiqJobPayload } from '../../ai/processors/ciq-scoring.processor';
+import { JobLogger } from '../../common/queue/job-logger';
+import { JobIdempotencyService } from '../../common/queue/job-idempotency.service';
+import { RetryPolicy } from '../../common/queue/retry-policy';
 
 export const VOICE_EXTRACTION_QUEUE = 'voice-extraction';
 
 export interface VoiceExtractionJobPayload {
   uploadAssetId: string;
-  aiJobLogId: string;       // The VOICE_TRANSCRIPTION job log id (already COMPLETED)
+  aiJobLogId: string;
   workspaceId: string;
-  feedbackId: string;       // The Feedback record created by the transcription step
+  feedbackId: string;
   transcript: string;
   label?: string;
 }
 
 @Processor(VOICE_EXTRACTION_QUEUE)
 export class VoiceExtractionProcessor {
-  private readonly logger = new Logger(VoiceExtractionProcessor.name);
+  private readonly logger = new JobLogger(VoiceExtractionProcessor.name);
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly intelligenceService: VoiceIntelligenceService,
     private readonly clusteringService: ThemeClusteringService,
     private readonly embeddingService: EmbeddingService,
+    private readonly idempotencyService: JobIdempotencyService,
     @InjectQueue(CIQ_SCORING_QUEUE)
     private readonly ciqQueue: Queue<CiqJobPayload>,
   ) {}
@@ -37,10 +49,10 @@ export class VoiceExtractionProcessor {
   @Process()
   async handleExtraction(job: Job<VoiceExtractionJobPayload>) {
     const { uploadAssetId, workspaceId, feedbackId, transcript, label } = job.data;
+    const ctx = { jobType: 'VOICE_EXTRACTION', workspaceId, entityId: feedbackId, jobId: job.id };
+    const startedAt = Date.now();
 
-    this.logger.log(
-      `Starting voice extraction for feedback ${feedbackId} (asset ${uploadAssetId})`,
-    );
+    this.logger.start(ctx);
 
     // ── 1. Create a new VOICE_EXTRACTION AiJobLog ─────────────────────────
     const extractionJob = await this.prisma.aiJobLog.create({
@@ -56,20 +68,15 @@ export class VoiceExtractionProcessor {
 
     try {
       // ── 2. Extract structured intelligence from the transcript ────────────
-      const intelligence = await this.intelligenceService.extractIntelligence(
-        transcript,
-        label,
-      );
-
-      this.logger.log(
-        `Intelligence extracted for feedback ${feedbackId}: ` +
-          `sentiment=${intelligence.sentiment.toFixed(2)}, ` +
-          `confidence=${intelligence.confidenceScore.toFixed(2)}, ` +
-          `urgency=${intelligence.urgencySignal.toFixed(2)}, ` +
-          `churn=${intelligence.churnSignal}, ` +
-          `painPoints=${intelligence.painPoints.length}, ` +
-          `featureRequests=${intelligence.featureRequests.length}`,
-      );
+      const intelligence = await this.intelligenceService.extractIntelligence(transcript, label);
+      this.logger.debug(ctx, 'Intelligence extracted', {
+        sentiment: intelligence.sentiment.toFixed(2),
+        confidence: intelligence.confidenceScore.toFixed(2),
+        urgency: intelligence.urgencySignal.toFixed(2),
+        churn: intelligence.churnSignal,
+        painPoints: intelligence.painPoints.length,
+        featureRequests: intelligence.featureRequests.length,
+      });
 
       // ── 3. Generate embedding for theme-matching ──────────────────────────
       let embedding: number[] | undefined;
@@ -82,9 +89,7 @@ export class VoiceExtractionProcessor {
         ].join(' ');
         embedding = await this.embeddingService.generateEmbedding(embeddingText);
       } catch (embErr) {
-        this.logger.warn(
-          `Embedding generation failed for feedback ${feedbackId}: ${(embErr as Error).message}`,
-        );
+        this.logger.stepWarn(ctx, 'EMBEDDING', (embErr as Error).message);
       }
 
       // ── 4. Enrich the Feedback record with intelligence fields ─────────────
@@ -112,7 +117,7 @@ export class VoiceExtractionProcessor {
         },
       });
 
-      // ── 5. Attempt theme linking via existing ThemeClusteringService ───────
+      // ── 5. Attempt theme linking ───────────────────────────────────────────
       let linkedThemeId: string | null = null;
       try {
         linkedThemeId = await this.clusteringService.assignFeedbackToTheme(
@@ -121,14 +126,10 @@ export class VoiceExtractionProcessor {
           embedding,
         );
         if (linkedThemeId) {
-          this.logger.log(
-            `Voice feedback ${feedbackId} linked to theme ${linkedThemeId}`,
-          );
+          this.logger.debug(ctx, 'Theme linked', { linkedThemeId });
         }
       } catch (clusterErr) {
-        this.logger.warn(
-          `Theme linking failed for feedback ${feedbackId}: ${(clusterErr as Error).message}`,
-        );
+        this.logger.stepWarn(ctx, 'THEME_LINKING', (clusterErr as Error).message);
       }
 
       // ── 6. Enqueue CIQ re-scoring for the linked theme ────────────────────
@@ -136,21 +137,10 @@ export class VoiceExtractionProcessor {
         try {
           await this.ciqQueue.add(
             { type: 'THEME_SCORED', themeId: linkedThemeId, workspaceId },
-            {
-              attempts: 3,
-              backoff: { type: 'exponential', delay: 3000 },
-              delay: 2000, // slight delay to let feedback persist
-              removeOnComplete: false,
-              removeOnFail: false,
-            },
-          );
-          this.logger.log(
-            `CIQ re-scoring enqueued for theme ${linkedThemeId} after voice extraction`,
+            RetryPolicy.critical(),
           );
         } catch (ciqErr) {
-          this.logger.warn(
-            `CIQ re-scoring enqueue failed for theme ${linkedThemeId}: ${(ciqErr as Error).message}`,
-          );
+          this.logger.stepWarn(ctx, 'CIQ_ENQUEUE', (ciqErr as Error).message);
         }
       }
 
@@ -174,22 +164,45 @@ export class VoiceExtractionProcessor {
         },
       });
 
-      this.logger.log(
-        `Voice extraction job ${extractionJob.id} completed for feedback ${feedbackId}`,
-      );
+      const durationMs = Date.now() - startedAt;
+      this.logger.complete({ ...ctx, durationMs });
+
     } catch (err) {
       const errorMessage = (err as Error).message ?? 'Unknown error';
-      this.logger.error(
-        `Voice extraction job ${extractionJob.id} failed: ${errorMessage}`,
-      );
+      const durationMs = Date.now() - startedAt;
+      this.logger.fail({ ...ctx, durationMs, failureReason: errorMessage, attempt: job.attemptsMade });
+
       await this.prisma.aiJobLog.update({
         where: { id: extractionJob.id },
-        data: {
-          status: AiJobStatus.FAILED,
-          error: errorMessage,
-        },
+        data: { status: AiJobStatus.FAILED, error: errorMessage },
       });
       throw err; // Allow Bull to retry
+    }
+  }
+
+  @OnQueueFailed()
+  async onFailed(job: Job<VoiceExtractionJobPayload>, error: Error) {
+    const ctx = {
+      jobType: 'VOICE_EXTRACTION',
+      workspaceId: job.data.workspaceId,
+      entityId: job.data.feedbackId,
+      jobId: job.id,
+    };
+    // Mark AiJobLog as DEAD_LETTERED on final failure (no idempotency service for voice — uses AiJobLog directly)
+    const maxAttempts = RetryPolicy.maxAttempts();
+    if (job.attemptsMade >= maxAttempts) {
+      this.logger.dlq({ ...ctx, failureReason: error.message, attempts: job.attemptsMade });
+      await this.prisma.aiJobLog
+        .updateMany({
+          where: {
+            workspaceId: job.data.workspaceId,
+            entityId: job.data.feedbackId,
+            jobType: AiJobType.VOICE_EXTRACTION,
+            status: AiJobStatus.FAILED,
+          },
+          data: { status: AiJobStatus.DEAD_LETTERED },
+        })
+        .catch(() => {/* best-effort */});
     }
   }
 }
