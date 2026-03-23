@@ -221,7 +221,11 @@ export class PortalService {
     });
 
     // Dispatch async AI analysis job (embedding + duplicate detection)
+    try {
     await this.analysisQueue.add({ feedbackId: feedback.id });
+    } catch (queueErr) {
+      console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+    }
 
     // Publish portal signal (non-critical)
     this.signalQueue

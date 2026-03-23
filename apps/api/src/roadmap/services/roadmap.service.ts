@@ -60,7 +60,11 @@ export class RoadmapService {
     await this.auditService.logAction(workspaceId, userId, AuditLogAction.ROADMAP_ITEM_CREATE, { id: roadmapItem.id, title: roadmapItem.title });
 
     // Dispatch async CIQ scoring
+    try {
     await this.ciqQueue.add({ type: 'ROADMAP_SCORED', workspaceId, roadmapItemId: roadmapItem.id });
+    } catch (queueErr) {
+      console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+    }
 
     const enriched = await this.enrichItem(roadmapItem);
     return enriched;
@@ -258,7 +262,11 @@ export class RoadmapService {
     }
 
     // Dispatch async CIQ re-scoring (themeId may have changed)
+    try {
     await this.ciqQueue.add({ type: 'ROADMAP_SCORED', workspaceId, roadmapItemId: id });
+    } catch (queueErr) {
+      console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+    }
 
     const enriched = await this.enrichItem(updatedItem);
     return enriched;

@@ -115,10 +115,14 @@ export class DashboardController {
   @HttpCode(HttpStatus.ACCEPTED)
   async triggerRefresh(@Param('workspaceId') workspaceId: string) {
     this.cache.invalidate(workspaceId);
+    try {
     await this.dashboardQueue.add(DASHBOARD_JOB_TYPES.REFRESH_ALL, { workspaceId }, {
       attempts: 3,
       backoff: { type: 'exponential', delay: 5000 },
     });
+    } catch (queueErr) {
+      console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+    }
     return { message: 'Dashboard refresh queued.', workspaceId };
   }
 }

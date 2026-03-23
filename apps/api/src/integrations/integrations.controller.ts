@@ -191,10 +191,14 @@ export class IntegrationsController {
   @Post('slack/sync')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
   async syncSlack(@Param('workspaceId') workspaceId: string) {
+    try {
     await this.slackQueue.add(
       { workspaceId },
       { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
     );
+    } catch (queueErr) {
+      console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+    }
     return { message: 'Slack ingestion job queued.' };
   }
 
@@ -255,10 +259,14 @@ export class IntegrationsController {
     if (body.type === 'event_callback') {
       const event = body.event as Record<string, unknown> | undefined;
       if (event?.type === 'message' && !event.subtype) {
+        try {
         await this.slackQueue.add(
           { workspaceId, event },
           { attempts: 3, backoff: { type: 'exponential', delay: 1000 } },
         );
+        } catch (queueErr) {
+          console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+        }
         this.logger.debug(
           `Slack message event queued: workspace=${workspaceId} channel=${String(event.channel)}`,
         );
@@ -292,10 +300,14 @@ export class IntegrationsController {
       select: { provider: true, lastSyncedAt: true },
     });
     for (const conn of connections) {
+      try {
       await this.syncQueue.add(
         { workspaceId, provider: conn.provider, lastSyncedAt: conn.lastSyncedAt },
         { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
       );
+      } catch (queueErr) {
+        console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+      }
     }
     return { message: `Sync jobs started for ${connections.length} active integration(s).` };
   }

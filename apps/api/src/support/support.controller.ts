@@ -169,8 +169,16 @@ export class SupportController {
   @HttpCode(HttpStatus.ACCEPTED)
   async triggerSync(@Param('workspaceId') workspaceId: string) {
     // Enqueue clustering + spike detection jobs
+    try {
     await this.clusteringQueue.add({ workspaceId }, { attempts: 3, backoff: { type: 'exponential', delay: 5000 } });
+    } catch (queueErr) {
+      console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+    }
+    try {
     await this.spikeQueue.add({ workspaceId }, { attempts: 3, backoff: { type: 'exponential', delay: 5000 } });
+    } catch (queueErr) {
+      console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+    }
     return { message: 'Support intelligence sync enqueued.', workspaceId };
   }
 
@@ -179,7 +187,11 @@ export class SupportController {
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
   @HttpCode(HttpStatus.ACCEPTED)
   async triggerRecluster(@Param('workspaceId') workspaceId: string) {
+    try {
     await this.clusteringQueue.add({ workspaceId }, { attempts: 3, backoff: { type: 'exponential', delay: 5000 } });
+    } catch (queueErr) {
+      console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+    }
     return { message: 'Clustering job enqueued.', workspaceId };
   }
 }
