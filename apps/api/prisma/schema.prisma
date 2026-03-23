@@ -616,6 +616,16 @@ model Theme {
   description      String?
   status           ThemeStatus          @default(DRAFT)
   pinned           Boolean              @default(false)
+
+  /// CIQ-computed priority score (0–100); null until first scoring run
+  priorityScore    Float?
+  /// Timestamp of the last successful CIQ scoring run for this theme
+  lastScoredAt     DateTime?
+  /// Sum of ARR from customers linked to this theme's feedback
+  revenueInfluence Float?               @default(0)
+  /// Per-factor CIQ signal breakdown (JSON) for explainability UI
+  signalBreakdown  Json?
+
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
 
@@ -629,6 +639,7 @@ model Theme {
   @@index([workspaceId])
   @@index([status])
   @@index([pinned])
+  @@index([priorityScore])
 }
 
 model ThemeFeedback {
@@ -715,6 +726,7 @@ model RoadmapItem {
 model PrioritizationSettings {
   workspaceId               String @id
 
+  /// Core signal weights (0–1)
   requestFrequencyWeight    Float @default(0.2)
   customerCountWeight       Float @default(0.2)
   arrValueWeight            Float @default(0.2)
@@ -722,6 +734,12 @@ model PrioritizationSettings {
   dealValueWeight           Float @default(0.2)
   strategicWeight           Float @default(0.1)
 
+  /// Extended CIQ weights — PRD formula fields
+  voteWeight                Float @default(0.15)
+  sentimentWeight           Float @default(0.1)
+  recencyWeight             Float @default(0.05)
+
+  /// Deal stage multipliers
   dealStageProspecting      Float @default(0.1)
   dealStageQualifying       Float @default(0.3)
   dealStageProposal         Float @default(0.6)

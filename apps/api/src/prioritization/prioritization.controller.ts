@@ -54,7 +54,8 @@ export class PrioritizationController {
 
   /**
    * POST /workspaces/:workspaceId/prioritization/themes/:themeId/recalculate
-   * Synchronously recalculates CIQ score for a theme.
+   * Enqueues an async CIQ scoring job for a single theme.
+   * Returns immediately with a job reference.
    * ADMIN / EDITOR only.
    */
   @Post("themes/:themeId/recalculate")
@@ -63,7 +64,21 @@ export class PrioritizationController {
     @Param("workspaceId") workspaceId: string,
     @Param("themeId") themeId: string
   ) {
-    return this.ciqService.scoreTheme(workspaceId, themeId);
+    return this.prioritizationService.enqueueThemeRescore(workspaceId, themeId);
+  }
+
+  /**
+   * POST /workspaces/:workspaceId/prioritization/recalculate-all
+   * Enqueues CIQ scoring jobs for ALL active themes in the workspace.
+   * ADMIN only.
+   */
+  @Post("recalculate-all")
+  @Roles(WorkspaceRole.ADMIN)
+  recalculateAllThemes(
+    @Param("workspaceId") workspaceId: string,
+    @Req() req: AuthenticatedRequest
+  ) {
+    return this.prioritizationService.enqueueWorkspaceRescore(workspaceId, req.user.sub);
   }
 
   @Get("settings")

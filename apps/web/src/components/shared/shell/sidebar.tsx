@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/shared/ui/tooltip";
-import { Home, Settings, Package, Package2, Users2, LineChart, Headphones, User, Building2 } from "lucide-react";
+import { Home, Settings, Package, Package2, Users2, LineChart, Headphones, User, Building2, Brain } from "lucide-react";
 import { appRoutes, orgAdminRoutes } from "@/lib/routes";
 
 export function Sidebar({ orgSlug: orgSlugProp }: { orgSlug?: string }) {
@@ -62,6 +62,18 @@ export function Sidebar({ orgSlug: orgSlugProp }: { orgSlug?: string }) {
               </Link>
             </TooltipTrigger>
             <TooltipContent side="right">Profile</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Link
+                href={adminR.aiSettings}
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8"
+              >
+                <Brain className="h-5 w-5" />
+                <span className="sr-only">AI Settings</span>
+              </Link>
+            </TooltipTrigger>
+            <TooltipContent side="right">AI Priority Settings</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>

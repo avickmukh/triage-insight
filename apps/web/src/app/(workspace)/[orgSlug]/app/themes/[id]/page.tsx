@@ -9,7 +9,9 @@ import {
   useRemoveFeedbackFromTheme,
 } from '@/hooks/use-themes';
 import { useCurrentMemberRole } from '@/hooks/use-workspace';
+import { useThemeCiqScore, useRecalculateThemeCiq } from '@/hooks/use-ciq';
 import {
+  CiqScoreOutput,
   FeedbackSourceType,
   FeedbackStatus,
   ThemeLinkedFeedback,
@@ -383,6 +385,23 @@ export default function ThemeDetailPage() {
   const canEdit = role === WorkspaceRole.ADMIN || role === WorkspaceRole.EDITOR;
 
   const { data: theme, isLoading, isError, error } = useThemeDetail(themeId);
+  const { data: ciqScore, isLoading: ciqLoading } = useThemeCiqScore(themeId || null);
+  const recalculate = useRecalculateThemeCiq();
+  const [rescoreToast, setRescoreToast] = useState<string | null>(null);
+
+  const handleRescore = () => {
+    if (!themeId) return;
+    recalculate.mutate(themeId, {
+      onSuccess: (res) => {
+        setRescoreToast(`Scoring job enqueued (job #${res.jobId}). Score will update in a few seconds.`);
+        setTimeout(() => setRescoreToast(null), 6000);
+      },
+      onError: (err) => {
+        setRescoreToast(`Failed to enqueue: ${err.message}`);
+        setTimeout(() => setRescoreToast(null), 5000);
+      },
+    });
+  };
 
   const [showEdit, setShowEdit] = useState(false);
   const [feedbackSearch, setFeedbackSearch] = useState('');
@@ -537,25 +556,125 @@ export default function ThemeDetailPage() {
         </div>
       </div>
 
-      {/* ── AI Insights placeholder (only shown when backend fields exist) ── */}
-      {(theme.aggregatedPriorityScore != null || theme.feedbackCount > 0) && (
-        <div
-          style={{
-            ...CARD,
-            background: 'linear-gradient(135deg, #f0f7ff 0%, #e8f5e9 100%)',
-            border: '1px solid #c8e6c9',
-          }}
-        >
-          <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#0a2540', margin: '0 0 0.5rem' }}>
-            AI Insights
-          </h3>
-          <p style={{ fontSize: '0.85rem', color: '#6C757D', margin: 0, lineHeight: 1.6 }}>
-            {theme.feedbackCount >= 5
-              ? `This theme has ${theme.feedbackCount} feedback signals. AI summarization and trend analysis will be available once the CIQ pipeline is active.`
-              : `Collect more feedback signals to unlock AI-generated insights for this theme.`}
-          </p>
+      {/* ── CIQ Priority Intelligence Panel ── */}
+      <div
+        style={{
+          ...CARD,
+          background: 'linear-gradient(135deg, #f0f7ff 0%, #e8f4fd 100%)',
+          border: '1px solid #b3d4f5',
+        }}
+      >
+        {/* Header row */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <div>
+            <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#0a2540', margin: '0 0 0.125rem' }}>
+              Priority Intelligence
+            </h3>
+            <p style={{ fontSize: '0.78rem', color: '#6C757D', margin: 0 }}>
+              CIQ score based on ARR, deal pipeline, votes, signals &amp; recency
+            </p>
+          </div>
+          {canEdit && (
+            <button
+              onClick={handleRescore}
+              disabled={recalculate.isPending}
+              style={{
+                padding: '0.4rem 0.9rem', borderRadius: '0.5rem',
+                border: '1px solid #b3d4f5', background: '#fff',
+                fontSize: '0.78rem', cursor: recalculate.isPending ? 'not-allowed' : 'pointer',
+                color: '#1a6fc4', fontWeight: 600, opacity: recalculate.isPending ? 0.6 : 1,
+              }}
+            >
+              {recalculate.isPending ? 'Enqueueing…' : '↻ Recalculate'}
+            </button>
+          )}
         </div>
-      )}
+
+        {/* Toast */}
+        {rescoreToast && (
+          <div style={{ padding: '0.5rem 0.75rem', background: '#e8f5e9', border: '1px solid #c8e6c9', borderRadius: '0.5rem', fontSize: '0.78rem', color: '#2e7d32', marginBottom: '1rem' }}>
+            {rescoreToast}
+          </div>
+        )}
+
+        {/* Score summary row */}
+        {ciqLoading ? (
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+            {[120, 100, 140].map((w, i) => <Skeleton key={i} style={{ height: '3rem', width: `${w}px` }} />)}
+          </div>
+        ) : ciqScore ? (
+          <>
+            {/* Top-level metrics */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(9rem, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
+              <div style={{ background: '#fff', borderRadius: '0.625rem', padding: '0.75rem', border: '1px solid #e3edf7', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.7rem', color: '#adb5bd', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Priority Score</div>
+                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: ciqScore.priorityScore >= 70 ? '#e63946' : ciqScore.priorityScore >= 40 ? '#f4a261' : '#20A4A4' }}>
+                  {Math.round(ciqScore.priorityScore)}
+                </div>
+                <div style={{ fontSize: '0.7rem', color: '#adb5bd' }}>/ 100</div>
+              </div>
+              <div style={{ background: '#fff', borderRadius: '0.625rem', padding: '0.75rem', border: '1px solid #e3edf7', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.7rem', color: '#adb5bd', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Confidence</div>
+                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0a2540' }}>
+                  {Math.round(ciqScore.confidenceScore * 100)}%
+                </div>
+              </div>
+              <div style={{ background: '#fff', borderRadius: '0.625rem', padding: '0.75rem', border: '1px solid #e3edf7', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.7rem', color: '#adb5bd', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Revenue Impact</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#2e7d32' }}>
+                  {ciqScore.revenueImpactValue > 0
+                    ? `$${(ciqScore.revenueImpactValue / 1000).toFixed(0)}K`
+                    : '—'}
+                </div>
+              </div>
+              <div style={{ background: '#fff', borderRadius: '0.625rem', padding: '0.75rem', border: '1px solid #e3edf7', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.7rem', color: '#adb5bd', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Customers</div>
+                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0a2540' }}>{ciqScore.uniqueCustomerCount}</div>
+              </div>
+              <div style={{ background: '#fff', borderRadius: '0.625rem', padding: '0.75rem', border: '1px solid #e3edf7', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.7rem', color: '#adb5bd', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Signals</div>
+                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0a2540' }}>{ciqScore.signalCount}</div>
+              </div>
+            </div>
+
+            {/* Signal breakdown bars */}
+            {Object.keys(ciqScore.scoreExplanation).length > 0 && (
+              <div>
+                <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#0a2540', marginBottom: '0.625rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Signal Breakdown
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {Object.entries(ciqScore.scoreExplanation)
+                    .sort((a, b) => b[1].contribution - a[1].contribution)
+                    .map(([key, factor]) => {
+                      const pct = Math.min(100, Math.round(factor.contribution));
+                      const barColor = pct >= 20 ? '#1a6fc4' : pct >= 10 ? '#20A4A4' : '#adb5bd';
+                      return (
+                        <div key={key}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.2rem' }}>
+                            <span style={{ fontSize: '0.75rem', color: '#495057' }}>{factor.label}</span>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: barColor }}>
+                              {factor.contribution.toFixed(1)} pts
+                            </span>
+                          </div>
+                          <div style={{ height: '6px', background: '#e9ecef', borderRadius: '3px' }}>
+                            <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: '3px', transition: 'width 0.4s' }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <p style={{ fontSize: '0.85rem', color: '#6C757D', margin: 0 }}>
+            {(theme.feedbackCount ?? 0) >= 3
+              ? 'CIQ score not yet computed. Click “Recalculate” to generate the priority score.'
+              : 'Add at least 3 feedback signals to unlock CIQ scoring for this theme.'}
+          </p>
+        )}
+      </div>
 
       {/* ── Linked Feedback ── */}
       <div style={CARD}>

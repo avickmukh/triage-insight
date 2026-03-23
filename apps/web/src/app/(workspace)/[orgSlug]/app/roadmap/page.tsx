@@ -187,6 +187,11 @@ function ItemCard({ item, canEdit, onEdit, onMove }: ItemCardProps) {
         )}
         <PriorityPill score={item.priorityScore} />
         <ConfidencePill score={item.confidenceScore} />
+        {(item.revenueImpactValue ?? 0) > 0 && (
+          <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#2e7d32', background: '#e8f5e9', padding: '0.1rem 0.45rem', borderRadius: '999px' }}>
+            ${((item.revenueImpactValue ?? 0) / 1000).toFixed(0)}K ARR
+          </span>
+        )}
         {(item.feedbackCount ?? 0) > 0 && (
           <span style={{ fontSize: '0.68rem', color: '#6C757D', background: '#f0f4f8', padding: '0.1rem 0.45rem', borderRadius: '999px' }}>
             {item.feedbackCount} fb

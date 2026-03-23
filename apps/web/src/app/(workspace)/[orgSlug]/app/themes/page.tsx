@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useThemeList, useCreateTheme, useTriggerRecluster } from '@/hooks/use-themes';
 import { useCurrentMemberRole } from '@/hooks/use-workspace';
+import { useRecalculateAllThemes } from '@/hooks/use-ciq';
 import { Theme, ThemeStatus, WorkspaceRole } from '@/lib/api-types';
 import { appRoutes } from '@/lib/routes';
 
@@ -243,9 +244,17 @@ function ThemeCard({ theme, href }: { theme: Theme; href: string }) {
             </span>
           </div>
           <div style={{ flex: 1, minWidth: '8rem' }}>
-            <span style={{ fontSize: '0.75rem', color: '#adb5bd', display: 'block', marginBottom: '0.25rem' }}>Priority</span>
-            <PriorityBar score={theme.aggregatedPriorityScore} />
+            <span style={{ fontSize: '0.75rem', color: '#adb5bd', display: 'block', marginBottom: '0.25rem' }}>CIQ Score</span>
+            <PriorityBar score={theme.priorityScore ?? theme.aggregatedPriorityScore} />
           </div>
+          {theme.revenueInfluence != null && theme.revenueInfluence > 0 && (
+            <div>
+              <span style={{ fontSize: '0.75rem', color: '#adb5bd', display: 'block' }}>Revenue</span>
+              <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#2e7d32' }}>
+                ${(theme.revenueInfluence / 1000).toFixed(0)}K
+              </span>
+            </div>
+          )}
           <div>
             <span style={{ fontSize: '0.75rem', color: '#adb5bd', display: 'block' }}>Updated</span>
             <span style={{ fontSize: '0.8rem', color: '#495057' }}>
@@ -266,12 +275,15 @@ export default function ThemesPage() {
 
   const [activeStatus, setActiveStatus] = useState<string | undefined>(undefined);
   const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState<'default' | 'priority' | 'feedback'>('default');
   const [showCreate, setShowCreate] = useState(false);
+  const [rescoreAllMsg, setRescoreAllMsg] = useState<string | null>(null);
 
   const { role } = useCurrentMemberRole();
   const canEdit = role === WorkspaceRole.ADMIN || role === WorkspaceRole.EDITOR;
 
   const { mutate: triggerRecluster, isPending: isReclustering } = useTriggerRecluster();
+  const { mutate: recalculateAll, isPending: isRecalculating } = useRecalculateAllThemes();
   const [reclusterMsg, setReclusterMsg] = useState<string | null>(null);
 
   const { data, isLoading, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage } =
@@ -282,6 +294,21 @@ export default function ThemesPage() {
 
   const allThemes: Theme[] = data?.pages?.flatMap((p) => p.data) ?? [];
   const totalCount = data?.pages?.[0]?.total ?? 0;
+
+  // Client-side sort on top of server-paginated data
+  const sortedThemes = [...allThemes].sort((a, b) => {
+    if (sortBy === 'priority') {
+      const aScore = a.priorityScore ?? -1;
+      const bScore = b.priorityScore ?? -1;
+      return bScore - aScore;
+    }
+    if (sortBy === 'feedback') {
+      const aCount = a._count?.feedbacks ?? a.feedbackCount ?? 0;
+      const bCount = b._count?.feedbacks ?? b.feedbackCount ?? 0;
+      return bCount - aCount;
+    }
+    return 0; // default: server order
+  });
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -296,7 +323,7 @@ export default function ThemesPage() {
           </p>
         </div>
         {canEdit && (
-          <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
             <button
               onClick={() => {
                 triggerRecluster(undefined, {
@@ -314,6 +341,25 @@ export default function ThemesPage() {
               {isReclustering ? 'Reclustering…' : '⟳ Recluster'}
             </button>
             <button
+              onClick={() => {
+                recalculateAll(undefined, {
+                  onSuccess: (res) => {
+                    setRescoreAllMsg(`✓ ${res.message} (${res.enqueued} jobs enqueued)`);
+                    setTimeout(() => setRescoreAllMsg(null), 8000);
+                  },
+                });
+              }}
+              disabled={isRecalculating}
+              style={{
+                padding: '0.5rem 1rem', borderRadius: '0.5rem',
+                border: '1px solid #b3d4f5', background: '#f0f7ff',
+                fontSize: '0.875rem', cursor: isRecalculating ? 'not-allowed' : 'pointer',
+                color: '#1a6fc4', fontWeight: 500,
+              }}
+            >
+              {isRecalculating ? 'Scoring…' : '↻ Rescore All'}
+            </button>
+            <button
               onClick={() => setShowCreate(true)}
               style={{
                 padding: '0.5rem 1.25rem', borderRadius: '0.5rem',
@@ -326,6 +372,25 @@ export default function ThemesPage() {
           </div>
         )}
       </div>
+
+      {/* ── Rescore All banner ── */}
+      {rescoreAllMsg && (
+        <div
+          style={{
+            background: '#e8f4fd', border: '1px solid #b3d4f5', borderRadius: '0.625rem',
+            padding: '0.75rem 1rem', fontSize: '0.875rem', color: '#1a6fc4',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}
+        >
+          <span>{rescoreAllMsg}</span>
+          <button
+            onClick={() => setRescoreAllMsg(null)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1a6fc4', fontSize: '1rem' }}
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* ── Recluster success banner ── */}
       {reclusterMsg && (
@@ -376,6 +441,20 @@ export default function ThemesPage() {
             </button>
           ))}
         </div>
+        {/* Sort selector */}
+        <select
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value as 'default' | 'priority' | 'feedback')}
+          style={{
+            padding: '0.375rem 0.625rem', borderRadius: '0.5rem',
+            border: '1px solid #ced4da', background: '#fff',
+            fontSize: '0.8rem', color: '#495057', cursor: 'pointer', outline: 'none',
+          }}
+        >
+          <option value="default">Sort: Default</option>
+          <option value="priority">Sort: Priority Score ↓</option>
+          <option value="feedback">Sort: Feedback Count ↓</option>
+        </select>
         {!isLoading && (
           <span style={{ fontSize: '0.8rem', color: '#adb5bd', whiteSpace: 'nowrap' }}>
             {totalCount} theme{totalCount !== 1 ? 's' : ''}
@@ -447,9 +526,9 @@ export default function ThemesPage() {
       )}
 
       {/* ── Theme Grid ── */}
-      {!isLoading && !isError && allThemes.length > 0 && (
+      {!isLoading && !isError && sortedThemes.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(20rem, 1fr))', gap: '1rem' }}>
-          {allThemes.map((theme) => (
+          {sortedThemes.map((theme) => (
             <ThemeCard key={theme.id} theme={theme} href={r.themeItem(theme.id)} />
           ))}
         </div>

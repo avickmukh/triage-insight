@@ -68,6 +68,9 @@ export class CiqScoringProcessor {
             return;
           }
           const score = await this.ciqService.scoreTheme(workspaceId, themeId);
+          // Persist to Theme row (priorityScore, lastScoredAt, revenueInfluence, signalBreakdown)
+          await this.ciqService.persistThemeScore(themeId, score);
+          // Also propagate to linked RoadmapItem rows
           await this.ciqService.persistThemeScoreToRoadmap(workspaceId, themeId, score);
           this.logger.debug(
             `CIQ theme scored: ${themeId} → priorityScore=${score.priorityScore}, ` +

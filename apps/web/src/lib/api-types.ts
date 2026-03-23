@@ -213,6 +213,15 @@ export interface Theme {
   feedbackCount?: number;
   /** Present on list endpoint (findMany) — Prisma _count include */
   _count?: { feedbacks: number };
+  // ─── CIQ Priority Intelligence fields ───────────────────────────────────────
+  /** CIQ priority score (0–100), null if never scored */
+  priorityScore?: number | null;
+  /** Timestamp of the last CIQ scoring run */
+  lastScoredAt?: string | null;
+  /** Raw ARR sum from linked customers (used for revenue impact display) */
+  revenueInfluence?: number | null;
+  /** Per-factor signal breakdown from the last CIQ scoring run (JSON) */
+  signalBreakdown?: Record<string, unknown> | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -1186,4 +1195,31 @@ export interface SurveyIntelligence {
   npsResponseCount: number;
   ratingResponseCount: number;
   textResponseCount: number;
+}
+
+// ─── Prioritization Settings ───────────────────────────────────────────────────
+/**
+ * Returned by GET/PATCH /workspaces/:id/prioritization/settings
+ * All weight fields are 0–1 floats.
+ */
+export interface PrioritizationSettings {
+  workspaceId: string;
+  // Core signal weights
+  requestFrequencyWeight: number;
+  customerCountWeight: number;
+  arrValueWeight: number;
+  accountPriorityWeight: number;
+  dealValueWeight: number;
+  strategicWeight: number;
+  // Extended CIQ weights (PRD formula fields)
+  voteWeight: number;
+  sentimentWeight: number;
+  recencyWeight: number;
+  // Deal stage multipliers
+  dealStageProspecting: number;
+  dealStageQualifying: number;
+  dealStageProposal: number;
+  dealStageNegotiation: number;
+  dealStageClosedWon: number;
+  updatedAt: string;
 }

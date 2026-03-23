@@ -1,6 +1,7 @@
 import { IsNumber, IsOptional, Min, Max } from 'class-validator';
 
 export class UpdateSettingsDto {
+  // ─── Core signal weights ───────────────────────────────────────────────────
   @IsOptional() @IsNumber() @Min(0) @Max(1)
   requestFrequencyWeight?: number;
 
@@ -19,6 +20,17 @@ export class UpdateSettingsDto {
   @IsOptional() @IsNumber() @Min(0) @Max(1)
   strategicWeight?: number;
 
+  // ─── Extended CIQ weights (PRD formula fields) ────────────────────────────
+  @IsOptional() @IsNumber() @Min(0) @Max(1)
+  voteWeight?: number;
+
+  @IsOptional() @IsNumber() @Min(0) @Max(1)
+  sentimentWeight?: number;
+
+  @IsOptional() @IsNumber() @Min(0) @Max(1)
+  recencyWeight?: number;
+
+  // ─── Deal stage multipliers ────────────────────────────────────────────────
   @IsOptional() @IsNumber() @Min(0) @Max(1)
   dealStageProspecting?: number;
 

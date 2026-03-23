@@ -77,6 +77,7 @@ import {
   CreateSurveyPayload,
   AddQuestionPayload,
   SubmitSurveyResponsePayload,
+  PrioritizationSettings,
 } from "@/lib/api-types";
 
 const getApiBaseUrl = () => {
@@ -277,19 +278,22 @@ const apiClient = {
 
   prioritization: {
     /** GET /workspaces/:id/prioritization/themes — weighted priority list */
-    getThemes: (workspaceId: string, params?: { page?: number; limit?: number }): Promise<{ data: unknown[]; total: number; page: number; limit: number }> =>
+    getThemes: (workspaceId: string, params?: { page?: number; limit?: number; sortBy?: string }): Promise<{ data: Theme[]; total: number; page: number; limit: number }> =>
       api.get(`/workspaces/${workspaceId}/prioritization/themes`, { params }).then(handleResponse),
     /** GET /workspaces/:id/prioritization/themes/:themeId/ciq — real CIQ score */
     getThemeCiq: (workspaceId: string, themeId: string): Promise<CiqScoreOutput> =>
       api.get(`/workspaces/${workspaceId}/prioritization/themes/${themeId}/ciq`).then(handleResponse),
-    /** POST /workspaces/:id/prioritization/themes/:themeId/recalculate — force rescore */
-    recalculateThemeCiq: (workspaceId: string, themeId: string): Promise<CiqScoreOutput> =>
+    /** POST /workspaces/:id/prioritization/themes/:themeId/recalculate — async enqueue */
+    recalculateThemeCiq: (workspaceId: string, themeId: string): Promise<{ jobId: string | number; message: string }> =>
       api.post(`/workspaces/${workspaceId}/prioritization/themes/${themeId}/recalculate`).then(handleResponse),
+    /** POST /workspaces/:id/prioritization/recalculate-all — bulk async enqueue */
+    recalculateAll: (workspaceId: string): Promise<{ enqueued: number; message: string }> =>
+      api.post(`/workspaces/${workspaceId}/prioritization/recalculate-all`).then(handleResponse),
     /** GET /workspaces/:id/prioritization/settings */
-    getSettings: (workspaceId: string): Promise<unknown> =>
+    getSettings: (workspaceId: string): Promise<PrioritizationSettings> =>
       api.get(`/workspaces/${workspaceId}/prioritization/settings`).then(handleResponse),
     /** PATCH /workspaces/:id/prioritization/settings */
-    updateSettings: (workspaceId: string, data: Record<string, number>): Promise<unknown> =>
+    updateSettings: (workspaceId: string, data: Partial<PrioritizationSettings>): Promise<PrioritizationSettings> =>
       api.patch(`/workspaces/${workspaceId}/prioritization/settings`, data).then(handleResponse),
   },
 

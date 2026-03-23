@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { Prisma, Theme, ThemeStatus } from '@prisma/client';
-import { QueryThemeDto } from '../dto/query-theme.dto';
+import { QueryThemeDto, ThemeSortBy } from '../dto/query-theme.dto';
 
 @Injectable()
 export class ThemeRepository {
@@ -15,7 +15,7 @@ export class ThemeRepository {
   }
 
   async findMany(workspaceId: string, query: QueryThemeDto) {
-    const { page = 1, limit = 20, search, status, pinned } = query;
+    const { page = 1, limit = 20, search, status, pinned, sortBy = ThemeSortBy.CREATED_AT } = query;
     const where: Prisma.ThemeWhereInput = {
       workspaceId,
       status,
@@ -28,12 +28,20 @@ export class ThemeRepository {
       }),
     };
 
+    // Build orderBy: priorityScore sorts nulls last so unscored themes appear at bottom
+    const orderBy: Prisma.ThemeOrderByWithRelationInput[] =
+      sortBy === ThemeSortBy.PRIORITY_SCORE
+        ? [{ priorityScore: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }]
+        : sortBy === ThemeSortBy.UPDATED_AT
+        ? [{ updatedAt: 'desc' }]
+        : [{ createdAt: 'desc' }];
+
     const [data, total] = await this.prisma.$transaction([
       this.prisma.theme.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         include: { _count: { select: { feedbacks: true } } },
       }),
       this.prisma.theme.count({ where }),

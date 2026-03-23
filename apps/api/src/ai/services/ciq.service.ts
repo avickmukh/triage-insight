@@ -137,6 +137,7 @@ export class CiqService {
               sentiment: true,
               impactScore: true,
               status: true,
+              createdAt: true,
               customer: {
                 select: {
                   arrValue: true,
@@ -260,6 +261,34 @@ export class CiqService {
         contribution: normSignalStrength * settings.strategicWeight,
         label: 'Customer signal strength',
       },
+    };
+
+    // ── Extended CIQ factors (vote weight, sentiment weight, recency weight) ──
+    // Vote count: total votes on linked feedback (portal upvotes)
+    const voteRows = await this.prisma.feedbackVote.findMany({
+      where: { feedback: { themes: { some: { themeId } }, status: { not: 'MERGED' } } },
+      select: { id: true },
+    });
+    const voteCount = voteRows.length;
+    const normVotes = countNorm(voteCount, 100);
+    explanation['voteSignal'] = {
+      value: normVotes,
+      weight: settings.voteWeight,
+      contribution: normVotes * settings.voteWeight,
+      label: 'Portal vote signal',
+    };
+
+    // Recency: boost themes with recent feedback (within last 30 days)
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const recentFeedbackCount = activeFeedback.filter(
+      (tf) => tf.feedback.createdAt != null && new Date(tf.feedback.createdAt) > thirtyDaysAgo,
+    ).length;
+    const normRecency = countNorm(recentFeedbackCount, 20);
+    explanation['recencySignal'] = {
+      value: normRecency,
+      weight: settings.recencyWeight,
+      contribution: normRecency * settings.recencyWeight,
+      label: 'Recent activity (30d)',
     };
 
     // Sentiment penalty reduces the total score slightly
@@ -449,6 +478,27 @@ export class CiqService {
   }
 
   // ─── Persist theme score ────────────────────────────────────────────────────
+
+  /**
+   * Persist CIQ scores directly onto the Theme row.
+   * Writes: priorityScore, lastScoredAt, revenueInfluence, signalBreakdown.
+   * Safe to call fire-and-forget; errors are caught and logged.
+   */
+  async persistThemeScore(themeId: string, score: CiqScoreOutput): Promise<void> {
+    try {
+      await this.prisma.theme.update({
+        where: { id: themeId },
+        data: {
+          priorityScore:    score.priorityScore,
+          lastScoredAt:     new Date(),
+          revenueInfluence: score.revenueImpactValue,
+          signalBreakdown:  score.scoreExplanation as object,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`Failed to persist CIQ score to Theme row: ${(err as Error).message}`);
+    }
+  }
 
   /**
    * Persist CIQ scores back to RoadmapItem rows linked to the given theme.
