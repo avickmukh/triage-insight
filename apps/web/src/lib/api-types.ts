@@ -960,3 +960,55 @@ export interface CreateDealPayload {
 }
 
 export interface UpdateDealPayload extends Partial<CreateDealPayload> {}
+
+// ─── Voice / Audio Upload ─────────────────────────────────────────────────────
+
+export type VoiceJobStatus = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+
+export interface VoiceUploadListItem {
+  id: string;
+  workspaceId: string;
+  fileName: string;
+  s3Key: string;
+  s3Bucket: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: string;
+  jobStatus: VoiceJobStatus | null;
+  jobId: string | null;
+  transcript: string | null;
+  feedbackId: string | null;
+  feedbackTitle: string | null;
+  error: string | null;
+}
+
+export interface VoiceUploadDetail extends VoiceUploadListItem {
+  downloadUrl: string;
+  feedback: {
+    id: string;
+    title: string;
+    description: string;
+    status: string;
+    createdAt: string;
+  } | null;
+}
+
+export interface VoiceUploadListResponse {
+  data: VoiceUploadListItem[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface VoicePresignedUrlResponse {
+  signedUrl: string;
+  key: string;
+  bucket: string;
+}
+
+export interface VoiceFinalizeResponse {
+  uploadAssetId: string;
+  aiJobLogId: string;
+  status: VoiceJobStatus;
+}

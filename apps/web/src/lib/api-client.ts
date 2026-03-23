@@ -66,6 +66,10 @@ import {
   CreateDealPayload,
   UpdateDealPayload,
   DealDetail,
+  VoicePresignedUrlResponse,
+  VoiceFinalizeResponse,
+  VoiceUploadListResponse,
+  VoiceUploadDetail,
 } from "@/lib/api-types";
 
 const getApiBaseUrl = () => {
@@ -591,6 +595,42 @@ const apiClient = {
     /** DELETE /workspaces/:id/deals/:dealId/themes/:themeId */
     unlinkTheme: (workspaceId: string, dealId: string, themeId: string): Promise<void> =>
       api.delete(`/workspaces/${workspaceId}/deals/${dealId}/themes/${themeId}`).then(handleResponse),
+  },
+
+  voice: {
+    /**
+     * POST /workspaces/:id/voice/presigned-url
+     * Returns a pre-signed S3 PUT URL for direct browser upload.
+     */
+    getPresignedUrl: (
+      workspaceId: string,
+      data: { fileName: string; mimeType: string; sizeBytes: number }
+    ): Promise<VoicePresignedUrlResponse> =>
+      api.post(`/workspaces/${workspaceId}/voice/presigned-url`, data).then(handleResponse),
+    /**
+     * POST /workspaces/:id/voice/finalize
+     * Creates UploadAsset + AiJobLog and enqueues transcription.
+     */
+    finalize: (
+      workspaceId: string,
+      data: { key: string; bucket: string; fileName: string; mimeType: string; sizeBytes: number; label?: string }
+    ): Promise<VoiceFinalizeResponse> =>
+      api.post(`/workspaces/${workspaceId}/voice/finalize`, data).then(handleResponse),
+    /**
+     * GET /workspaces/:id/voice
+     * Lists all voice uploads for the workspace.
+     */
+    list: (
+      workspaceId: string,
+      params?: { page?: number; limit?: number }
+    ): Promise<VoiceUploadListResponse> =>
+      api.get(`/workspaces/${workspaceId}/voice`, { params }).then(handleResponse),
+    /**
+     * GET /workspaces/:id/voice/:uploadId
+     * Returns full detail for a single upload including signed download URL.
+     */
+    getById: (workspaceId: string, uploadId: string): Promise<VoiceUploadDetail> =>
+      api.get(`/workspaces/${workspaceId}/voice/${uploadId}`).then(handleResponse),
   },
 
   themeRevenue: {
