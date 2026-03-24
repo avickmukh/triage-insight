@@ -31,6 +31,11 @@ export class FeedbackService {
     if (!workspace) {
       throw new NotFoundException('Workspace not found');
     }
+    if (workspace.status === WorkspaceStatus.FROZEN) {
+      throw new UnprocessableEntityException(
+        'This workspace is frozen pending a scheduled data purge. All mutations are blocked.',
+      );
+    }
     if (workspace.status !== WorkspaceStatus.ACTIVE) {
       throw new UnprocessableEntityException(
         'Feedback cannot be submitted to an inactive workspace.',

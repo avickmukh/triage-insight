@@ -7,7 +7,7 @@ import apiClient from '@/lib/api-client';
 import { PlatformRole } from '@/lib/api-types';
 import { LoadingSpinner } from '@/components/shared/common/loading-spinner';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, Building2, CreditCard, Tag, ToggleLeft, Activity, ScrollText, Shield, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, Building2, CreditCard, Tag, ToggleLeft, Activity, ScrollText, Shield, ChevronRight, Trash2 } from 'lucide-react';
 
 const NAV = [
   { label: 'Dashboard',      href: '/admin',           icon: LayoutDashboard },
@@ -17,6 +17,7 @@ const NAV = [
   { label: 'Feature Flags',  href: '/admin/flags',     icon: ToggleLeft },
   { label: 'System Health',  href: '/admin/health',    icon: Activity },
   { label: 'Audit Log',      href: '/admin/audit-log', icon: ScrollText },
+  { label: 'Purge Requests', href: '/admin/purge',     icon: Trash2 },
 ];
 
 export default function PlatformAdminLayout({ children }: { children: React.ReactNode }) {

@@ -997,6 +997,25 @@ const apiClient = {
     listAuditLogs: (params?: { page?: number; limit?: number; workspaceId?: string }) =>
       api.get('/platform/audit-log', { params }).then(handleResponse),
     getMe: (): Promise<User> => api.get('/auth/me').then(handleResponse),
+    // ── Purge (platform admin) ──
+    listPurgeRequests: () => api.get('/platform/purge/requests').then(handleResponse),
+    getPurgeRequest: (requestId: string) => api.get(`/platform/purge/requests/${requestId}`).then(handleResponse),
+    approvePurgeRequest: (requestId: string, data?: { scheduledFor?: string }) =>
+      api.patch(`/platform/purge/requests/${requestId}/approve`, data ?? {}).then(handleResponse),
+    executePurge: (requestId: string) =>
+      api.post(`/platform/purge/requests/${requestId}/execute`).then(handleResponse),
+    cancelPurgeRequest: (requestId: string) =>
+      api.delete(`/platform/purge/requests/${requestId}`).then(handleResponse),
+  },
+  purge: {
+    requestDeletion: (workspaceId: string, data: { reason?: string; includeExportBeforeDelete?: boolean }) =>
+      api.post(`/workspaces/${workspaceId}/purge/request`, data).then(handleResponse),
+    cancelRequest: (workspaceId: string, requestId: string) =>
+      api.delete(`/workspaces/${workspaceId}/purge/request/${requestId}`).then(handleResponse),
+    listRequests: (workspaceId: string) =>
+      api.get(`/workspaces/${workspaceId}/purge/request`).then(handleResponse),
+    getRequest: (workspaceId: string, requestId: string) =>
+      api.get(`/workspaces/${workspaceId}/purge/request/${requestId}`).then(handleResponse),
   },
 };
 

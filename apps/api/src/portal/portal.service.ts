@@ -40,6 +40,11 @@ export class PortalService {
     if (!workspace) {
       throw new NotFoundException(`Workspace '${orgSlug}' not found`);
     }
+    if (workspace.status === WorkspaceStatus.FROZEN) {
+      throw new UnprocessableEntityException(
+        'This workspace is frozen pending a scheduled data purge. All submissions are blocked.',
+      );
+    }
     if (workspace.status !== WorkspaceStatus.ACTIVE) {
       throw new UnprocessableEntityException(
         'This workspace is not currently accepting feedback.',

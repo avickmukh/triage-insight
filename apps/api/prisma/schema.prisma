@@ -34,6 +34,23 @@ enum WorkspaceStatus {
   ACTIVE
   SUSPENDED
   DISABLED
+  /// Workspace is frozen pending data purge — all mutations are blocked
+  FROZEN
+}
+
+enum WorkspaceDeletionStatus {
+  REQUESTED
+  APPROVED
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum PurgeStepStatus {
+  SUCCESS
+  FAILED
 }
 
 enum BillingPlan {
@@ -292,6 +309,8 @@ model User {
   passwordResetTokens PasswordResetToken[]
   platformAuditLogs   PlatformAuditLog[]  @relation("PlatformAuditActor")
   featureOverridesSet WorkspaceFeatureOverride[] @relation("FeatureOverrideSetBy")
+  deletionRequestsRequested WorkspaceDeletionRequest[] @relation("DeletionRequestedBy")
+  deletionRequestsApproved  WorkspaceDeletionRequest[] @relation("DeletionApprovedBy")
 }
 
 model RefreshToken {
@@ -382,7 +401,58 @@ model Workspace {
   invoices              Invoice[]
   platformAuditLogs     PlatformAuditLog[]  @relation("PlatformAuditWorkspace")
   featureOverrides      WorkspaceFeatureOverride[]
+  deletionRequests      WorkspaceDeletionRequest[]
 }
+
+/// Tracks the full lifecycle of a workspace data purge request.
+model WorkspaceDeletionRequest {
+  id                        String                    @id @default(uuid())
+  workspaceId               String
+  workspace                 Workspace                 @relation(fields: [workspaceId], references: [id])
+  requestedByUserId         String?
+  requestedBy               User?                     @relation("DeletionRequestedBy", fields: [requestedByUserId], references: [id])
+  approvedByUserId          String?
+  approvedBy                User?                     @relation("DeletionApprovedBy", fields: [approvedByUserId], references: [id])
+  reason                    String?
+  status                    WorkspaceDeletionStatus   @default(REQUESTED)
+  /// Whether to generate a data export archive before purging
+  includeExportBeforeDelete Boolean                   @default(false)
+  /// Signed URL to the export archive (set when export is ready)
+  exportUrl                 String?
+  legalHold                 Boolean                   @default(false)
+  retentionEndsAt           DateTime?
+  scheduledFor              DateTime?
+  requestedAt               DateTime                  @default(now())
+  approvedAt                DateTime?
+  startedAt                 DateTime?
+  completedAt               DateTime?
+  failedAt                  DateTime?
+  failureReason             String?
+  auditLogs                 WorkspaceDeletionAuditLog[]
+  createdAt                 DateTime                  @default(now())
+  updatedAt                 DateTime                  @updatedAt
+
+  @@index([workspaceId])
+  @@index([status])
+}
+
+/// Append-only step-level audit log for each purge operation.
+model WorkspaceDeletionAuditLog {
+  id                String          @id @default(uuid())
+  deletionRequestId String
+  deletionRequest   WorkspaceDeletionRequest @relation(fields: [deletionRequestId], references: [id])
+  workspaceId       String
+  stepName          String
+  status            PurgeStepStatus
+  detailsJson       Json?
+  errorMessage      String?
+  startedAt         DateTime        @default(now())
+  completedAt       DateTime?
+
+  @@index([deletionRequestId])
+  @@index([workspaceId])
+}
+
 model WorkspaceMember {
   id          String        @id @default(uuid())
   role        WorkspaceRole @default(VIEWER)

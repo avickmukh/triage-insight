@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useWorkspace } from '@/hooks/use-workspace';
 import apiClient from '@/lib/api-client';
 import { PublicPortalVisibility, UpdateWorkspaceDto, Workspace } from '@/lib/api-types';
+import { DangerZone } from '@/components/admin/danger-zone';
 
 // ── Design tokens (matches existing admin design system) ──────────────────────
 
@@ -395,6 +396,12 @@ export default function SettingsPage() {
           )}
         </div>
       </form>
+      {workspace && (
+        <DangerZone
+          workspaceId={workspace.id}
+          workspaceName={workspace.name}
+        />
+      )}
     </div>
   );
 }
