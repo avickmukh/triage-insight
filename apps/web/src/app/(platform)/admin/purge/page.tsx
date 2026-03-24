@@ -2,68 +2,25 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/lib/api-client';
+import { LoadingSpinner } from '@/components/shared/common/loading-spinner';
+import { AlertTriangle, CheckCircle, XCircle, Clock, Play } from 'lucide-react';
 
-// ── Design tokens ─────────────────────────────────────────────────────────────
-const CARD: React.CSSProperties = {
-  background: '#fff',
-  border: '1px solid #e9ecef',
-  borderRadius: '0.875rem',
-  padding: '1.5rem',
+const STATUS_COLORS: Record<string, string> = {
+  REQUESTED:   'text-yellow-400 bg-yellow-400/10',
+  APPROVED:    'text-blue-400 bg-blue-400/10',
+  SCHEDULED:   'text-violet-400 bg-violet-400/10',
+  IN_PROGRESS: 'text-orange-400 bg-orange-400/10',
+  COMPLETED:   'text-green-400 bg-green-400/10',
+  FAILED:      'text-red-400 bg-red-400/10',
+  CANCELLED:   'text-gray-400 bg-gray-400/10',
 };
 
-const BADGE_BASE: React.CSSProperties = {
-  display: 'inline-block',
-  padding: '0.2rem 0.6rem',
-  borderRadius: '999px',
-  fontSize: '0.72rem',
-  fontWeight: 700,
-  letterSpacing: '0.04em',
+const STEP_COLORS: Record<string, string> = {
+  SUCCESS: 'bg-green-400/10 border-green-400/20 text-green-400',
+  FAILED:  'bg-red-400/10 border-red-400/20 text-red-400',
+  PENDING: 'bg-gray-800 border-gray-700 text-gray-400',
 };
 
-const STATUS_STYLE: Record<string, React.CSSProperties> = {
-  REQUESTED:   { ...BADGE_BASE, background: '#fef3c7', color: '#92400e' },
-  APPROVED:    { ...BADGE_BASE, background: '#dbeafe', color: '#1e40af' },
-  SCHEDULED:   { ...BADGE_BASE, background: '#ede9fe', color: '#5b21b6' },
-  IN_PROGRESS: { ...BADGE_BASE, background: '#ffedd5', color: '#9a3412' },
-  COMPLETED:   { ...BADGE_BASE, background: '#d1fae5', color: '#065f46' },
-  FAILED:      { ...BADGE_BASE, background: '#fee2e2', color: '#991b1b' },
-  CANCELLED:   { ...BADGE_BASE, background: '#f3f4f6', color: '#374151' },
-};
-
-const BTN_DANGER: React.CSSProperties = {
-  padding: '0.5rem 1rem',
-  borderRadius: '0.4rem',
-  border: 'none',
-  background: '#ef4444',
-  color: '#fff',
-  fontWeight: 700,
-  fontSize: '0.8rem',
-  cursor: 'pointer',
-};
-
-const BTN_APPROVE: React.CSSProperties = {
-  padding: '0.5rem 1rem',
-  borderRadius: '0.4rem',
-  border: 'none',
-  background: '#3b82f6',
-  color: '#fff',
-  fontWeight: 700,
-  fontSize: '0.8rem',
-  cursor: 'pointer',
-};
-
-const BTN_GHOST: React.CSSProperties = {
-  padding: '0.5rem 1rem',
-  borderRadius: '0.4rem',
-  border: '1px solid #dee2e6',
-  background: '#fff',
-  color: '#6C757D',
-  fontWeight: 600,
-  fontSize: '0.8rem',
-  cursor: 'pointer',
-};
-
-// ── Component ─────────────────────────────────────────────────────────────────
 export default function PurgeManagementPage() {
   const qc = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -73,7 +30,7 @@ export default function PurgeManagementPage() {
   const { data: requests, isLoading } = useQuery({
     queryKey: ['platform', 'purge-requests'],
     queryFn: () => apiClient.platform.listPurgeRequests(),
-    refetchInterval: 15_000, // poll every 15s for in-progress purges
+    refetchInterval: 15_000,
   });
 
   const requestList: any[] = Array.isArray(requests) ? requests : [];
@@ -81,139 +38,84 @@ export default function PurgeManagementPage() {
 
   const approveMutation = useMutation({
     mutationFn: (id: string) => apiClient.platform.approvePurgeRequest(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['platform', 'purge-requests'] });
-      setActionSuccess('Request approved. It will execute after the cooling-off period.');
-      setActionError('');
-    },
-    onError: (err: any) => {
-      setActionError(err?.response?.data?.message ?? 'Failed to approve request.');
-    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['platform', 'purge-requests'] }); setActionSuccess('Request approved. It will execute after the cooling-off period.'); setActionError(''); },
+    onError: (err: any) => { setActionError(err?.response?.data?.message ?? 'Failed to approve request.'); },
   });
 
   const executeMutation = useMutation({
     mutationFn: (id: string) => apiClient.platform.executePurge(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['platform', 'purge-requests'] });
-      setActionSuccess('Purge job enqueued. Monitor the audit log for step-by-step progress.');
-      setActionError('');
-    },
-    onError: (err: any) => {
-      setActionError(err?.response?.data?.message ?? 'Failed to execute purge.');
-    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['platform', 'purge-requests'] }); setActionSuccess('Purge job enqueued. Monitor the audit log for step-by-step progress.'); setActionError(''); },
+    onError: (err: any) => { setActionError(err?.response?.data?.message ?? 'Failed to execute purge.'); },
   });
 
   const cancelMutation = useMutation({
     mutationFn: (id: string) => apiClient.platform.cancelPurgeRequest(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['platform', 'purge-requests'] });
-      setActionSuccess('Request cancelled.');
-      setActionError('');
-    },
-    onError: (err: any) => {
-      setActionError(err?.response?.data?.message ?? 'Failed to cancel request.');
-    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['platform', 'purge-requests'] }); setActionSuccess('Request cancelled.'); setActionError(''); },
+    onError: (err: any) => { setActionError(err?.response?.data?.message ?? 'Failed to cancel request.'); },
   });
 
-  const clearMessages = () => { setActionError(''); setActionSuccess(''); };
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-      {/* Header */}
+    <div className="p-8 space-y-6">
       <div>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0A2540', marginBottom: '0.25rem' }}>
-          Workspace Purge Management
-        </h1>
-        <p style={{ fontSize: '0.9rem', color: '#6C757D' }}>
-          Review, approve, and execute workspace deletion requests. All actions are logged in the
-          audit trail. A purge permanently removes all workspace data including S3 files, database
-          records, and embeddings.
+        <h1 className="text-2xl font-bold text-white">Workspace Purge Management</h1>
+        <p className="text-sm text-gray-400 mt-1">
+          Review, approve, and execute workspace deletion requests. All actions are logged in the audit trail.
+          A purge permanently removes all workspace data including S3 files, database records, and embeddings.
         </p>
       </div>
 
-      {/* Action feedback */}
       {actionSuccess && (
-        <div style={{ background: '#d1fae5', border: '1px solid #6ee7b7', borderRadius: '0.5rem', padding: '0.75rem 1rem', fontSize: '0.88rem', color: '#065f46', display: 'flex', justifyContent: 'space-between' }}>
-          <span>✓ {actionSuccess}</span>
-          <button onClick={() => setActionSuccess('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#065f46', fontWeight: 700 }}>×</button>
+        <div className="flex items-center justify-between px-4 py-3 bg-green-400/10 border border-green-400/20 rounded-lg text-sm text-green-400">
+          <span><CheckCircle className="inline h-4 w-4 mr-2" />{actionSuccess}</span>
+          <button onClick={() => setActionSuccess('')} className="text-green-400/70 hover:text-green-400 ml-4">✕</button>
         </div>
       )}
       {actionError && (
-        <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: '0.5rem', padding: '0.75rem 1rem', fontSize: '0.88rem', color: '#991b1b', display: 'flex', justifyContent: 'space-between' }}>
-          <span>⚠ {actionError}</span>
-          <button onClick={() => setActionError('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#991b1b', fontWeight: 700 }}>×</button>
+        <div className="flex items-center justify-between px-4 py-3 bg-red-400/10 border border-red-400/20 rounded-lg text-sm text-red-400">
+          <span><AlertTriangle className="inline h-4 w-4 mr-2" />{actionError}</span>
+          <button onClick={() => setActionError('')} className="text-red-400/70 hover:text-red-400 ml-4">✕</button>
         </div>
       )}
 
-      {/* Two-panel layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: '1.5rem', alignItems: 'flex-start' }}>
-
+      <div className="grid grid-cols-5 gap-6 items-start">
         {/* Left: request list */}
-        <div style={CARD}>
-          <h2 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0A2540', marginBottom: '1rem' }}>
-            Deletion Requests
-          </h2>
-          {isLoading && (
-            <p style={{ fontSize: '0.85rem', color: '#6C757D' }}>Loading…</p>
-          )}
+        <div className="col-span-2 bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
+          <h2 className="text-sm font-semibold text-gray-300">Deletion Requests</h2>
+          {isLoading && <div className="flex justify-center py-4"><LoadingSpinner className="h-5 w-5 text-violet-400" /></div>}
           {!isLoading && requestList.length === 0 && (
-            <p style={{ fontSize: '0.85rem', color: '#6C757D' }}>No deletion requests yet.</p>
+            <p className="text-sm text-gray-500 text-center py-4">No deletion requests yet.</p>
           )}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <div className="space-y-2">
             {requestList.map((req) => (
               <button
                 key={req.id}
-                onClick={() => { setSelectedId(req.id); clearMessages(); }}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '0.3rem',
-                  padding: '0.875rem 1rem',
-                  borderRadius: '0.6rem',
-                  border: `1.5px solid ${selectedId === req.id ? '#3b82f6' : '#e9ecef'}`,
-                  background: selectedId === req.id ? '#eff6ff' : '#fff',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  width: '100%',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontWeight: 700, fontSize: '0.88rem', color: '#0A2540' }}>
-                    {req.workspace?.name ?? req.workspaceId}
-                  </span>
-                  <span style={STATUS_STYLE[req.status] ?? BADGE_BASE}>{req.status}</span>
+                onClick={() => { setSelectedId(req.id); setActionError(''); setActionSuccess(''); }}
+                className={`w-full text-left p-3 rounded-lg border transition-colors ${selectedId === req.id ? 'border-violet-500 bg-violet-600/10' : 'border-gray-800 bg-gray-800/50 hover:bg-gray-800'}`}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-medium text-sm text-white truncate">{req.workspace?.name ?? req.workspaceId}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ml-2 shrink-0 ${STATUS_COLORS[req.status] ?? 'text-gray-400 bg-gray-400/10'}`}>{req.status}</span>
                 </div>
-                <span style={{ fontSize: '0.75rem', color: '#6C757D' }}>
-                  Requested {new Date(req.requestedAt).toLocaleDateString()} by {req.requestedBy?.email ?? 'unknown'}
-                </span>
+                <p className="text-xs text-gray-500">
+                  {new Date(req.requestedAt).toLocaleDateString()} · {req.requestedBy?.email ?? 'unknown'}
+                </p>
               </button>
             ))}
           </div>
         </div>
 
         {/* Right: detail panel */}
-        <div style={CARD}>
+        <div className="col-span-3 bg-gray-900 border border-gray-800 rounded-lg p-6">
           {!selected ? (
-            <p style={{ fontSize: '0.85rem', color: '#6C757D' }}>
-              Select a request from the list to review it.
-            </p>
+            <p className="text-sm text-gray-500 text-center py-8">Select a request from the list to review it.</p>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              {/* Title */}
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.25rem' }}>
-                  <h2 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0A2540', margin: 0 }}>
-                    {selected.workspace?.name ?? selected.workspaceId}
-                  </h2>
-                  <span style={STATUS_STYLE[selected.status] ?? BADGE_BASE}>{selected.status}</span>
-                </div>
-                <p style={{ fontSize: '0.78rem', color: '#6C757D', margin: 0 }}>
-                  Workspace ID: <code style={{ fontSize: '0.75rem' }}>{selected.workspaceId}</code>
-                </p>
+            <div className="space-y-5">
+              <div className="flex items-center gap-3">
+                <h2 className="text-lg font-bold text-white">{selected.workspace?.name ?? selected.workspaceId}</h2>
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[selected.status] ?? 'text-gray-400 bg-gray-400/10'}`}>{selected.status}</span>
               </div>
+              <p className="text-xs text-gray-500 font-mono">ID: {selected.workspaceId}</p>
 
-              {/* Meta */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <div className="grid grid-cols-2 gap-3 text-sm">
                 {[
                   { label: 'Requested by', value: selected.requestedBy?.email ?? '—' },
                   { label: 'Requested at', value: new Date(selected.requestedAt).toLocaleString() },
@@ -223,51 +125,32 @@ export default function PurgeManagementPage() {
                   { label: 'Completed at', value: selected.completedAt ? new Date(selected.completedAt).toLocaleString() : '—' },
                 ].map(({ label, value }) => (
                   <div key={label}>
-                    <p style={{ fontSize: '0.72rem', fontWeight: 600, color: '#6C757D', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</p>
-                    <p style={{ fontSize: '0.85rem', color: '#0A2540', margin: '0.1rem 0 0', wordBreak: 'break-all' }}>{value}</p>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">{label}</p>
+                    <p className="text-gray-200 mt-0.5 break-all">{value}</p>
                   </div>
                 ))}
               </div>
 
-              {/* Reason */}
               {selected.reason && (
-                <div style={{ background: '#f8f9fa', borderRadius: '0.5rem', padding: '0.75rem 1rem' }}>
-                  <p style={{ fontSize: '0.72rem', fontWeight: 600, color: '#6C757D', margin: '0 0 0.3rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Reason</p>
-                  <p style={{ fontSize: '0.85rem', color: '#0A2540', margin: 0 }}>{selected.reason}</p>
+                <div className="bg-gray-800 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Reason</p>
+                  <p className="text-sm text-gray-300">{selected.reason}</p>
                 </div>
               )}
 
-              {/* Audit steps */}
               {selected.auditLogs && selected.auditLogs.length > 0 && (
                 <div>
-                  <p style={{ fontSize: '0.72rem', fontWeight: 600, color: '#6C757D', margin: '0 0 0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Purge Steps</p>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Purge Steps</p>
+                  <div className="space-y-1.5">
                     {selected.auditLogs.map((log: any) => (
-                      <div
-                        key={log.id}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'flex-start',
-                          gap: '0.6rem',
-                          padding: '0.5rem 0.75rem',
-                          borderRadius: '0.4rem',
-                          background: log.status === 'SUCCESS' ? '#f0fdf4' : log.status === 'FAILED' ? '#fef2f2' : '#f8f9fa',
-                          border: `1px solid ${log.status === 'SUCCESS' ? '#bbf7d0' : log.status === 'FAILED' ? '#fecaca' : '#e9ecef'}`,
-                        }}
-                      >
-                        <span style={{ fontSize: '0.85rem' }}>
-                          {log.status === 'SUCCESS' ? '✓' : log.status === 'FAILED' ? '✗' : '○'}
+                      <div key={log.id} className={`flex items-start gap-2 px-3 py-2 rounded border text-xs ${STEP_COLORS[log.status] ?? STEP_COLORS.PENDING}`}>
+                        <span className="mt-0.5 shrink-0">
+                          {log.status === 'SUCCESS' ? <CheckCircle className="h-3.5 w-3.5" /> : log.status === 'FAILED' ? <XCircle className="h-3.5 w-3.5" /> : <Clock className="h-3.5 w-3.5" />}
                         </span>
                         <div>
-                          <p style={{ fontWeight: 700, fontSize: '0.82rem', color: '#0A2540', margin: 0 }}>{log.stepName}</p>
-                          {log.errorMessage && (
-                            <p style={{ fontSize: '0.75rem', color: '#991b1b', margin: '0.15rem 0 0' }}>{log.errorMessage}</p>
-                          )}
-                          {log.metadata && (
-                            <p style={{ fontSize: '0.72rem', color: '#6C757D', margin: '0.1rem 0 0', fontFamily: 'monospace' }}>
-                              {JSON.stringify(log.metadata)}
-                            </p>
-                          )}
+                          <p className="font-medium">{log.stepName}</p>
+                          {log.message && <p className="opacity-70 mt-0.5">{log.message}</p>}
+                          {log.metadata && <p className="font-mono opacity-60 mt-0.5">{JSON.stringify(log.metadata)}</p>}
                         </div>
                       </div>
                     ))}
@@ -275,32 +158,22 @@ export default function PurgeManagementPage() {
                 </div>
               )}
 
-              {/* Actions */}
-              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', borderTop: '1px solid #e9ecef', paddingTop: '1rem' }}>
+              <div className="flex gap-3 pt-2 border-t border-gray-800">
                 {selected.status === 'REQUESTED' && (
-                  <button
-                    onClick={() => approveMutation.mutate(selected.id)}
-                    disabled={approveMutation.isPending}
-                    style={{ ...BTN_APPROVE, opacity: approveMutation.isPending ? 0.6 : 1, cursor: approveMutation.isPending ? 'not-allowed' : 'pointer' }}
-                  >
-                    {approveMutation.isPending ? 'Approving…' : '✓ Approve Request'}
+                  <button onClick={() => approveMutation.mutate(selected.id)} disabled={approveMutation.isPending}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-sm rounded transition-colors">
+                    <CheckCircle className="h-4 w-4" />{approveMutation.isPending ? 'Approving…' : 'Approve Request'}
                   </button>
                 )}
                 {selected.status === 'APPROVED' && (
-                  <button
-                    onClick={() => executeMutation.mutate(selected.id)}
-                    disabled={executeMutation.isPending}
-                    style={{ ...BTN_DANGER, opacity: executeMutation.isPending ? 0.6 : 1, cursor: executeMutation.isPending ? 'not-allowed' : 'pointer' }}
-                  >
-                    {executeMutation.isPending ? 'Executing…' : '⚠ Execute Purge Now'}
+                  <button onClick={() => executeMutation.mutate(selected.id)} disabled={executeMutation.isPending}
+                    className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white text-sm rounded transition-colors">
+                    <Play className="h-4 w-4" />{executeMutation.isPending ? 'Executing…' : 'Execute Purge Now'}
                   </button>
                 )}
                 {['REQUESTED', 'APPROVED', 'SCHEDULED'].includes(selected.status) && (
-                  <button
-                    onClick={() => cancelMutation.mutate(selected.id)}
-                    disabled={cancelMutation.isPending}
-                    style={{ ...BTN_GHOST, opacity: cancelMutation.isPending ? 0.6 : 1, cursor: cancelMutation.isPending ? 'not-allowed' : 'pointer' }}
-                  >
+                  <button onClick={() => cancelMutation.mutate(selected.id)} disabled={cancelMutation.isPending}
+                    className="px-4 py-2 bg-gray-800 hover:bg-gray-700 disabled:opacity-40 text-gray-300 text-sm rounded transition-colors">
                     {cancelMutation.isPending ? 'Cancelling…' : 'Cancel Request'}
                   </button>
                 )}

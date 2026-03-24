@@ -12,7 +12,10 @@ import {
   PlanStatus,
   WorkspaceStatus,
   TrialStatus,
+  AiJobStatus,
+  PlatformRole,
 } from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
 import { CreatePlanDto, UpdatePlanDto } from './dto/plan.dto';
 import {
   UpdateWorkspaceStatusDto,
@@ -30,7 +33,10 @@ const PLAN_ORDER: BillingPlan[] = [
 
 @Injectable()
 export class PlatformService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
 
   // ── Audit helper ─────────────────────────────────────────────────────────────
 
@@ -168,7 +174,7 @@ export class PlatformService {
     ]);
 
     return {
-      data: data.map((w) => ({
+      workspaces: data.map((w) => ({
         ...w,
         memberCount: w._count.members,
         feedbackCount: w._count.feedbacks,
@@ -316,8 +322,23 @@ export class PlatformService {
 
     return {
       totalWorkspaces,
+      // Alias fields to match frontend expectations
+      paidWorkspaces: activeCount,
+      trialWorkspaces: trialingCount,
+      failedPayments: pastDueCount,
+      cancelledWorkspaces: canceledCount,
+      freeWorkspaces: planBreakdown.find((p) => p.billingPlan === BillingPlan.FREE)?._count.id ?? 0,
+      suspendedWorkspaces: suspendedCount,
+      // MRR/ARR/churnRate are Stripe-derived; return null when Stripe is not configured
+      mrr: null,
+      arr: null,
+      churnRate: null,
+      planDistribution: planBreakdown.map((p) => ({
+        plan: p.billingPlan,
+        count: p._count.id,
+      })),
+      // Legacy field names kept for backwards compatibility
       activeCount,
-      suspendedCount,
       trialingCount,
       pastDueCount,
       canceledCount,
@@ -354,7 +375,7 @@ export class PlatformService {
       }),
       this.prisma.workspace.count(),
     ]);
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return { workspaces: data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async overrideBillingPlan(
@@ -589,6 +610,8 @@ export class PlatformService {
       failedAiJobs,
       integrationErrors,
       totalUsers,
+      activeUsersThisMonth,
+      feedbackLast30d,
     ] = await Promise.all([
       this.prisma.workspace.count(),
       this.prisma.workspace.count({ where: { status: WorkspaceStatus.ACTIVE } }),
@@ -599,15 +622,67 @@ export class PlatformService {
       this.prisma.feedback.count({ where: { createdAt: { gte: last24h } } }),
       this.prisma.feedback.count({ where: { createdAt: { gte: last7d } } }),
       this.prisma.aiJobLog.count(),
-      this.prisma.aiJobLog.count({ where: { status: 'RUNNING' as any } }),
-      this.prisma.aiJobLog.count({ where: { status: 'FAILED' as any } }),
+      this.prisma.aiJobLog.count({ where: { status: AiJobStatus.RUNNING } }),
+      this.prisma.aiJobLog.count({ where: { status: AiJobStatus.FAILED } }),
       this.prisma.integrationConnection.count({
         where: { healthState: 'ERROR' as any },
       }),
       this.prisma.user.count(),
+      this.prisma.user.count({ where: { updatedAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } } }),
+      this.prisma.feedback.count({ where: { createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } } }),
     ]);
 
+    // Probe infrastructure health
+    const dbStatus = await this.prisma.$queryRaw`SELECT 1`
+      .then(() => 'healthy')
+      .catch(() => 'down');
+
+    const redisHost = this.config.get<string>('REDIS_HOST', 'localhost');
+    const redisPort = this.config.get<number>('REDIS_PORT', 6379);
+    let redisStatus = 'down';
+    let redisLatency: number | null = null;
+    try {
+      const net = await import('net');
+      await new Promise<void>((resolve, reject) => {
+        const t0 = Date.now();
+        const sock = net.createConnection({ host: redisHost, port: redisPort }, () => {
+          redisLatency = Date.now() - t0;
+          redisStatus = 'healthy';
+          sock.destroy();
+          resolve();
+        });
+        sock.setTimeout(2000);
+        sock.on('error', reject);
+        sock.on('timeout', reject);
+      });
+    } catch { /* redisStatus stays 'down' */ }
+
+    const openAiKey = this.config.get<string>('OPENAI_API_KEY', '');
+    const aiStatus = openAiKey ? 'healthy' : 'degraded';
+
+    const s3Bucket = this.config.get<string>('AWS_S3_BUCKET', '');
+    const storageStatus = s3Bucket ? 'healthy' : 'degraded';
+
+    const stripeKey = this.config.get<string>('STRIPE_SECRET_KEY', '');
+    const stripeStatus = stripeKey ? 'healthy' : 'degraded';
+
+    // Email: no dedicated env var yet — mark degraded until configured
+    const emailStatus = 'degraded';
+
     return {
+      services: {
+        database: dbStatus,
+        redis: redisStatus,
+        queue: redisStatus, // queue runs on Redis
+        ai: aiStatus,
+        storage: storageStatus,
+        email: emailStatus,
+        stripe: stripeStatus,
+      },
+      latencies: {
+        database: null,
+        redis: redisLatency,
+      },
       workspaces: {
         total: totalWorkspaces,
         active: activeWorkspaces,
@@ -617,6 +692,7 @@ export class PlatformService {
         total: totalFeedback,
         last24h: feedbackLast24h,
         last7d: feedbackLast7d,
+        last30Days: feedbackLast30d,
         ingestionRatePerHour: Math.round(feedbackLast24h / 24),
       },
       aiJobs: {
@@ -628,8 +704,16 @@ export class PlatformService {
             ? Math.round((failedAiJobs / totalAiJobs) * 100)
             : 0,
       },
+      // queue metrics are not directly queryable without Bull injection; return nulls
+      queue: {
+        waiting: null,
+        active: null,
+        completed: null,
+        failed: null,
+        delayed: null,
+      },
       integrations: { errorCount: integrationErrors },
-      users: { total: totalUsers },
+      users: { total: totalUsers, activeThisMonth: activeUsersThisMonth },
     };
   }
 
@@ -665,6 +749,73 @@ export class PlatformService {
       this.prisma.platformAuditLog.count({ where }),
     ]);
 
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return { logs: data, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  // ── Platform users management ─────────────────────────────────────────────────
+
+  async listPlatformUsers(page = 1, limit = 50, search?: string) {
+    const skip = (page - 1) * limit;
+    const where: any = { platformRole: { not: null } };
+    if (search) {
+      where.OR = [
+        { email: { contains: search, mode: 'insensitive' } },
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+    const [users, total] = await Promise.all([
+      this.prisma.user.findMany({
+        skip,
+        take: limit,
+        where,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          platformRole: true,
+          status: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+    return { users, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  async updatePlatformUser(
+    userId: string,
+    data: { platformRole?: PlatformRole | null; status?: string },
+    actorId: string,
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException(`User '${userId}' not found.`);
+
+    const before = { platformRole: user.platformRole, status: user.status };
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: data as any,
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        platformRole: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    await this.audit(actorId, 'PLATFORM_USER_UPDATED', undefined, {
+      targetUserId: userId,
+      before,
+      after: data,
+    });
+
+    return updated;
   }
 }

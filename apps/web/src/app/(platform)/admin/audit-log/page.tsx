@@ -48,8 +48,8 @@ export default function AuditLogPage() {
                 <tr key={log.id} className="hover:bg-gray-800/50">
                   <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{new Date(log.createdAt).toLocaleString()}</td>
                   <td className="px-4 py-3"><span className="font-mono text-xs bg-gray-800 text-violet-300 px-2 py-0.5 rounded">{log.action}</span></td>
-                  <td className="px-4 py-3 text-gray-300 text-xs">{log.actor?.name ?? log.actorId ?? 'System'}</td>
-                  <td className="px-4 py-3 text-gray-400 text-xs">{log.workspaceId ?? '\u2014'}</td>
+                  <td className="px-4 py-3 text-gray-300 text-xs">{log.actor ? `${log.actor.firstName ?? ''} ${log.actor.lastName ?? ''}`.trim() || log.actor.email : log.actorId ?? 'System'}</td>
+                  <td className="px-4 py-3 text-gray-400 text-xs">{log.workspace?.name ?? log.workspaceId ?? '—'}</td>
                   <td className="px-4 py-3 text-gray-400 text-xs font-mono max-w-xs truncate">{log.details ? JSON.stringify(log.details) : '\u2014'}</td>
                 </tr>
               ))}

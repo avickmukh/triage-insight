@@ -23,7 +23,7 @@ export default function WorkspacesPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['platform-workspaces', search, statusFilter, planFilter, page],
-    queryFn: () => apiClient.platform.listWorkspaces({ page, limit: 20, search: search || undefined, status: statusFilter || undefined, plan: planFilter || undefined }),
+    queryFn: () => apiClient.platform.listWorkspaces({ page, limit: 20, search: search || undefined, status: statusFilter || undefined, billingPlan: planFilter || undefined }),
     staleTime: 15_000,
   });
 
@@ -46,7 +46,7 @@ export default function WorkspacesPage() {
       <div className="flex gap-3">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
-          <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Search by name or slug\u2026"
+          <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Search by name or slug…"
             className="w-full pl-9 pr-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-violet-500" />
         </div>
         <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
@@ -57,7 +57,7 @@ export default function WorkspacesPage() {
         <select value={planFilter} onChange={e => { setPlanFilter(e.target.value); setPage(1); }}
           className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-sm text-gray-300 focus:outline-none focus:border-violet-500">
           <option value="">All plans</option>
-          {['FREE','STARTER','PRO','BUSINESS','ENTERPRISE'].map(p => <option key={p} value={p}>{p}</option>)}
+          {['FREE','PRO','BUSINESS'].map(p => <option key={p} value={p}>{p}</option>)}
         </select>
       </div>
       {isLoading ? (
@@ -88,7 +88,7 @@ export default function WorkspacesPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-gray-300">{w.billingPlan}</td>
-                    <td className="px-4 py-3 text-gray-300">{w._count?.members ?? '\u2014'}</td>
+                    <td className="px-4 py-3 text-gray-300">{w.memberCount ?? '—'}</td>
                     <td className="px-4 py-3 text-gray-400 text-xs">{new Date(w.createdAt).toLocaleDateString()}</td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
@@ -123,7 +123,7 @@ export default function WorkspacesPage() {
       )}
       {total > 20 && (
         <div className="flex items-center justify-between text-sm text-gray-400">
-          <span>Page {page} of {(total / 20) | 0 + 1}</span>
+          <span>Page {page} of {Math.ceil(total / 20)}</span>
           <div className="flex gap-2">
             <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="px-3 py-1 bg-gray-800 rounded disabled:opacity-40 hover:bg-gray-700 transition-colors">Prev</button>
             <button onClick={() => setPage(p => p + 1)} disabled={page * 20 >= total} className="px-3 py-1 bg-gray-800 rounded disabled:opacity-40 hover:bg-gray-700 transition-colors">Next</button>

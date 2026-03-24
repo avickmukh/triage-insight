@@ -7,6 +7,12 @@ import { LoadingSpinner } from '@/components/shared/common/loading-spinner';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 
+const VALID_FEATURES = [
+  'aiInsights','aiThemeClustering','ciqPrioritization','explainableAi',
+  'weeklyDigest','voiceFeedback','survey','integrations','publicPortal',
+  'csvImport','apiAccess','executiveReporting','customDomain',
+];
+
 export default function WorkspaceDetailPage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const qc = useQueryClient();
@@ -18,7 +24,7 @@ export default function WorkspaceDetailPage() {
   const { data: ws, isLoading } = useQuery({ queryKey: ['platform-workspace', workspaceId], queryFn: () => apiClient.platform.getWorkspace(workspaceId), staleTime: 15_000 });
   const { data: overrides } = useQuery({ queryKey: ['platform-feature-overrides', workspaceId], queryFn: () => apiClient.platform.listFeatureOverrides(workspaceId), staleTime: 15_000 });
 
-  const overridePlanMutation = useMutation({ mutationFn: (targetPlan: string) => apiClient.platform.overrideBillingPlan(workspaceId, { targetPlan }), onSuccess: () => qc.invalidateQueries({ queryKey: ['platform-workspace', workspaceId] }) });
+  const overridePlanMutation = useMutation({ mutationFn: (plan: string) => apiClient.platform.overrideBillingPlan(workspaceId, { plan }), onSuccess: () => qc.invalidateQueries({ queryKey: ['platform-workspace', workspaceId] }) });
   const extendTrialMutation = useMutation({ mutationFn: (days: number) => apiClient.platform.extendTrial(workspaceId, { days }), onSuccess: () => qc.invalidateQueries({ queryKey: ['platform-workspace', workspaceId] }) });
   const cancelMutation = useMutation({ mutationFn: () => apiClient.platform.cancelSubscription(workspaceId), onSuccess: () => qc.invalidateQueries({ queryKey: ['platform-workspace', workspaceId] }) });
   const reactivateMutation = useMutation({ mutationFn: () => apiClient.platform.reactivateSubscription(workspaceId), onSuccess: () => qc.invalidateQueries({ queryKey: ['platform-workspace', workspaceId] }) });
@@ -38,12 +44,38 @@ export default function WorkspaceDetailPage() {
         </div>
       </div>
       <div className="grid grid-cols-3 gap-4">
-        {[{ label: 'Members', value: w?._count?.members ?? 0 }, { label: 'Feedback entries', value: w?._count?.feedbackEntries ?? 0 }, { label: 'Support tickets', value: w?._count?.supportTickets ?? 0 }].map(({ label, value }) => (
+        {[
+          { label: 'Members', value: w?.memberCount ?? 0 },
+          { label: 'Feedback entries', value: w?.feedbackCount ?? 0 },
+          { label: 'Support tickets', value: w?.supportTicketCount ?? 0 },
+        ].map(({ label, value }) => (
           <div key={label} className="bg-gray-900 border border-gray-800 rounded-lg p-4">
             <p className="text-xs text-gray-500">{label}</p>
             <p className="text-xl font-bold text-white mt-1">{value}</p>
           </div>
         ))}
+      </div>
+      {/* Workspace info */}
+      <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+        <h2 className="text-sm font-semibold text-gray-300 mb-4">Workspace Details</h2>
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          {[
+            { label: 'ID', value: w?.id },
+            { label: 'Slug', value: w?.slug },
+            { label: 'Status', value: w?.status },
+            { label: 'Billing Plan', value: w?.billingPlan },
+            { label: 'Billing Status', value: w?.billingStatus },
+            { label: 'Plan Status', value: w?.planStatus },
+            { label: 'Trial Status', value: w?.trialStatus },
+            { label: 'Trial Ends', value: w?.trialEndsAt ? new Date(w.trialEndsAt).toLocaleDateString() : '—' },
+            { label: 'Seat Limit', value: w?.seatLimit ?? 'Unlimited' },
+            { label: 'Billing Email', value: w?.billingEmail ?? '—' },
+            { label: 'Stripe Customer', value: w?.stripeCustomerId ?? '—' },
+            { label: 'Created', value: w?.createdAt ? new Date(w.createdAt).toLocaleDateString() : '—' },
+          ].map(({ label, value }) => (
+            <div key={label}><p className="text-xs text-gray-500">{label}</p><p className="text-gray-200 font-medium truncate">{String(value ?? '—')}</p></div>
+          ))}
+        </div>
       </div>
       <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 space-y-5">
         <h2 className="text-sm font-semibold text-gray-300">Billing Control</h2>
@@ -51,13 +83,13 @@ export default function WorkspaceDetailPage() {
           <div className="flex-1">
             <label className="text-xs text-gray-500 mb-1 block">Override Plan</label>
             <select value={overridePlan} onChange={e => setOverridePlan(e.target.value)} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-300 focus:outline-none focus:border-violet-500">
-              <option value="">Select plan\u2026</option>
-              {['FREE','STARTER','PRO','BUSINESS','ENTERPRISE'].map(p => <option key={p} value={p}>{p}</option>)}
+              <option value="">Select plan…</option>
+              {['FREE','PRO','BUSINESS'].map(p => <option key={p} value={p}>{p}</option>)}
             </select>
           </div>
           <button onClick={() => overridePlan && overridePlanMutation.mutate(overridePlan)} disabled={!overridePlan || overridePlanMutation.isPending}
             className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white text-sm rounded transition-colors">
-            {overridePlanMutation.isPending ? 'Applying\u2026' : 'Apply'}
+            {overridePlanMutation.isPending ? 'Applying…' : 'Apply'}
           </button>
         </div>
         <div className="flex gap-3 items-end">
@@ -68,7 +100,7 @@ export default function WorkspaceDetailPage() {
           </div>
           <button onClick={() => extendTrialMutation.mutate(extendDays)} disabled={extendTrialMutation.isPending}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-sm rounded transition-colors">
-            {extendTrialMutation.isPending ? 'Extending\u2026' : 'Extend Trial'}
+            {extendTrialMutation.isPending ? 'Extending…' : 'Extend Trial'}
           </button>
         </div>
         <div className="flex gap-3">
@@ -81,8 +113,11 @@ export default function WorkspaceDetailPage() {
         <div className="flex gap-3 items-end">
           <div className="flex-1">
             <label className="text-xs text-gray-500 mb-1 block">Feature key</label>
-            <input value={featureKey} onChange={e => setFeatureKey(e.target.value)} placeholder="e.g. aiPrioritization"
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-300 focus:outline-none focus:border-violet-500" />
+            <select value={featureKey} onChange={e => setFeatureKey(e.target.value)}
+              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-300 focus:outline-none focus:border-violet-500">
+              <option value="">Select feature…</option>
+              {VALID_FEATURES.map(f => <option key={f} value={f}>{f}</option>)}
+            </select>
           </div>
           <div>
             <label className="text-xs text-gray-500 mb-1 block">State</label>
@@ -113,6 +148,23 @@ export default function WorkspaceDetailPage() {
           </div>
         ) : <p className="text-sm text-gray-500">No overrides set for this workspace.</p>}
       </div>
+      {/* Recent members */}
+      {w?.members && w.members.length > 0 && (
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+          <h2 className="text-sm font-semibold text-gray-300 mb-4">Recent Members</h2>
+          <div className="space-y-2">
+            {w.members.map((m: any) => (
+              <div key={m.id} className="flex items-center justify-between text-sm">
+                <div>
+                  <p className="text-gray-200">{m.user?.firstName} {m.user?.lastName}</p>
+                  <p className="text-xs text-gray-500">{m.user?.email}</p>
+                </div>
+                <span className="text-xs text-gray-500">{m.role}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

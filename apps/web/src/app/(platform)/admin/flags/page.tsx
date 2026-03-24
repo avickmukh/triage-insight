@@ -5,6 +5,12 @@ import apiClient from '@/lib/api-client';
 import { LoadingSpinner } from '@/components/shared/common/loading-spinner';
 import { Search } from 'lucide-react';
 
+const VALID_FEATURES = [
+  'aiInsights','aiThemeClustering','ciqPrioritization','explainableAi',
+  'weeklyDigest','voiceFeedback','survey','integrations','publicPortal',
+  'csvImport','apiAccess','executiveReporting','customDomain',
+];
+
 export default function FeatureFlagsPage() {
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
@@ -23,7 +29,8 @@ export default function FeatureFlagsPage() {
   const setMutation = useMutation({ mutationFn: () => apiClient.platform.setFeatureOverride(wsId, { feature: featureKey, enabled }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['platform-feature-overrides', wsId] }); setFeatureKey(''); } });
   const deleteMutation = useMutation({ mutationFn: (feature: string) => apiClient.platform.deleteFeatureOverride(wsId, feature), onSuccess: () => qc.invalidateQueries({ queryKey: ['platform-feature-overrides', wsId] }) });
 
-  const wsList = (workspaces as any)?.workspaces ?? [];
+  // API returns { workspaces: [...] } after our fix
+  const wsList = (workspaces as any)?.workspaces ?? (workspaces as any)?.data ?? [];
   const filtered = wsList.filter((w: any) => !search || w.name.toLowerCase().includes(search.toLowerCase()) || w.slug.includes(search));
 
   return (
@@ -37,7 +44,7 @@ export default function FeatureFlagsPage() {
           <h2 className="text-sm font-semibold text-gray-300">Select Workspace</h2>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search\u2026"
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search…"
               className="w-full pl-9 pr-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-300 placeholder-gray-500 focus:outline-none focus:border-violet-500" />
           </div>
           <div className="space-y-1 max-h-80 overflow-y-auto">
@@ -47,6 +54,7 @@ export default function FeatureFlagsPage() {
                 <p className="font-medium">{w.name}</p><p className="text-xs opacity-60">{w.slug}</p>
               </button>
             ))}
+            {filtered.length === 0 && <p className="text-xs text-gray-600 text-center py-4">No workspaces found</p>}
           </div>
         </div>
         <div className="col-span-2 bg-gray-900 border border-gray-800 rounded-lg p-5 space-y-5">
@@ -58,8 +66,11 @@ export default function FeatureFlagsPage() {
               <div className="flex gap-3 items-end">
                 <div className="flex-1">
                   <label className="text-xs text-gray-500 mb-1 block">Feature key</label>
-                  <input value={featureKey} onChange={e => setFeatureKey(e.target.value)} placeholder="e.g. aiPrioritization"
-                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-300 focus:outline-none focus:border-violet-500" />
+                  <select value={featureKey} onChange={e => setFeatureKey(e.target.value)}
+                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-300 focus:outline-none focus:border-violet-500">
+                    <option value="">Select feature…</option>
+                    {VALID_FEATURES.map(f => <option key={f} value={f}>{f}</option>)}
+                  </select>
                 </div>
                 <div>
                   <label className="text-xs text-gray-500 mb-1 block">State</label>

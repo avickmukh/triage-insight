@@ -11,12 +11,13 @@ export default function BillingHealthPage() {
   const { data: subs, isLoading: subsLoading } = useQuery({ queryKey: ['platform-subscriptions', page], queryFn: () => apiClient.platform.listAllSubscriptions({ page, limit: 25 }), staleTime: 15_000 });
 
   const overrideMutation = useMutation({
-    mutationFn: ({ id, plan }: { id: string; plan: string }) => apiClient.platform.overrideBillingPlan(id, { targetPlan: plan }),
+    mutationFn: ({ id, plan }: { id: string; plan: string }) => apiClient.platform.overrideBillingPlan(id, { plan }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['platform-subscriptions'] }),
   });
 
   const h = health as any;
-  const list = (subs as any)?.workspaces ?? [];
+  // API returns { workspaces: [...], total, ... } after our fix
+  const list = (subs as any)?.workspaces ?? (subs as any)?.data ?? [];
   const total = (subs as any)?.total ?? 0;
 
   return (
@@ -28,20 +29,34 @@ export default function BillingHealthPage() {
       {isLoading ? <LoadingSpinner className="h-6 w-6 text-violet-400" /> : (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: 'MRR', value: h?.mrr ? `$${h.mrr.toLocaleString()}` : '\u2014' },
-            { label: 'ARR', value: h?.arr ? `$${h.arr.toLocaleString()}` : '\u2014' },
-            { label: 'Paid', value: h?.paidWorkspaces ?? '\u2014' },
-            { label: 'Trial', value: h?.trialWorkspaces ?? '\u2014' },
-            { label: 'Failed Payments', value: h?.failedPayments ?? '\u2014' },
-            { label: 'Cancelled', value: h?.cancelledWorkspaces ?? '\u2014' },
-            { label: 'Churn Rate', value: h?.churnRate ? `${h.churnRate.toFixed(1)}%` : '\u2014' },
-            { label: 'Free', value: h?.freeWorkspaces ?? '\u2014' },
+            { label: 'MRR', value: h?.mrr != null ? `$${Number(h.mrr).toLocaleString()}` : '—' },
+            { label: 'ARR', value: h?.arr != null ? `$${Number(h.arr).toLocaleString()}` : '—' },
+            { label: 'Paid', value: h?.paidWorkspaces ?? h?.activeCount ?? '—' },
+            { label: 'Trial', value: h?.trialWorkspaces ?? h?.trialingCount ?? '—' },
+            { label: 'Failed Payments', value: h?.failedPayments ?? h?.pastDueCount ?? '—' },
+            { label: 'Cancelled', value: h?.cancelledWorkspaces ?? h?.canceledCount ?? '—' },
+            { label: 'Churn Rate', value: h?.churnRate != null ? `${Number(h.churnRate).toFixed(1)}%` : '—' },
+            { label: 'Free', value: h?.freeWorkspaces ?? '—' },
           ].map(({ label, value }) => (
             <div key={label} className="bg-gray-900 border border-gray-800 rounded-lg p-4">
               <p className="text-xs text-gray-500">{label}</p>
-              <p className="text-xl font-bold text-white mt-1">{value}</p>
+              <p className="text-xl font-bold text-white mt-1">{String(value)}</p>
             </div>
           ))}
+        </div>
+      )}
+      {/* Plan distribution */}
+      {h?.planDistribution && h.planDistribution.length > 0 && (
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-5">
+          <h2 className="text-sm font-semibold text-gray-300 mb-3">Plan Distribution</h2>
+          <div className="flex gap-6">
+            {h.planDistribution.map((p: any) => (
+              <div key={p.plan} className="text-center">
+                <p className="text-2xl font-bold text-white">{p.count}</p>
+                <p className="text-xs text-gray-500 mt-1">{p.plan}</p>
+              </div>
+            ))}
+          </div>
         </div>
       )}
       <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
@@ -65,12 +80,12 @@ export default function BillingHealthPage() {
                   <td className="px-4 py-3"><p className="font-medium text-white">{w.name}</p><p className="text-xs text-gray-500">{w.slug}</p></td>
                   <td className="px-4 py-3 text-gray-300">{w.billingPlan}</td>
                   <td className="px-4 py-3 text-gray-300">{w.billingStatus}</td>
-                  <td className="px-4 py-3 text-gray-400 text-xs">{w.trialEndsAt ? new Date(w.trialEndsAt).toLocaleDateString() : '\u2014'}</td>
+                  <td className="px-4 py-3 text-gray-400 text-xs">{w.trialEndsAt ? new Date(w.trialEndsAt).toLocaleDateString() : '—'}</td>
                   <td className="px-4 py-3">
                     <select defaultValue="" onChange={e => e.target.value && overrideMutation.mutate({ id: w.id, plan: e.target.value })}
                       className="px-2 py-1 bg-gray-800 border border-gray-700 rounded text-xs text-gray-300 focus:outline-none focus:border-violet-500">
-                      <option value="">Override\u2026</option>
-                      {['FREE','STARTER','PRO','BUSINESS','ENTERPRISE'].map(p => <option key={p} value={p}>{p}</option>)}
+                      <option value="">Override…</option>
+                      {['FREE','PRO','BUSINESS'].map(p => <option key={p} value={p}>{p}</option>)}
                     </select>
                   </td>
                 </tr>

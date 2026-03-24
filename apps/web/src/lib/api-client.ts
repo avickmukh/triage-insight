@@ -970,7 +970,7 @@ const apiClient = {
     updatePlan: (planType: string, data: any) => api.patch(`/platform/plans/${planType}`, data).then(handleResponse),
     deletePlan: (planType: string) => api.delete(`/platform/plans/${planType}`).then(handleResponse),
     updateTrialDuration: (planType: string, trialDays: number) => api.patch(`/platform/plans/${planType}/trial`, { trialDays }).then(handleResponse),
-    listWorkspaces: (params?: { page?: number; limit?: number; status?: string; plan?: string; search?: string }) =>
+    listWorkspaces: (params?: { page?: number; limit?: number; status?: string; billingPlan?: string; search?: string }) =>
       api.get('/platform/workspaces', { params }).then(handleResponse),
     getWorkspace: (workspaceId: string) => api.get(`/platform/workspaces/${workspaceId}`).then(handleResponse),
     updateWorkspaceStatus: (workspaceId: string, data: { status: string; reason?: string }) =>
@@ -979,7 +979,7 @@ const apiClient = {
     getBillingHealth: () => api.get('/platform/billing/health').then(handleResponse),
     listAllSubscriptions: (params?: { page?: number; limit?: number }) =>
       api.get('/platform/billing/subscriptions', { params }).then(handleResponse),
-    overrideBillingPlan: (workspaceId: string, data: { targetPlan: string; reason?: string }) =>
+    overrideBillingPlan: (workspaceId: string, data: { plan: string; billingStatus?: string; reason?: string }) =>
       api.post(`/platform/billing/workspaces/${workspaceId}/override-plan`, data).then(handleResponse),
     extendTrial: (workspaceId: string, data: { days: number; reason?: string }) =>
       api.post(`/platform/billing/workspaces/${workspaceId}/extend-trial`, data).then(handleResponse),
@@ -996,6 +996,10 @@ const apiClient = {
     getSystemHealth: () => api.get('/platform/health').then(handleResponse),
     listAuditLogs: (params?: { page?: number; limit?: number; workspaceId?: string }) =>
       api.get('/platform/audit-log', { params }).then(handleResponse),
+    listPlatformUsers: (params?: { page?: number; limit?: number; search?: string }) =>
+      api.get('/platform/users', { params }).then(handleResponse),
+    updatePlatformUser: (userId: string, data: { platformRole?: string | null; status?: string }) =>
+      api.patch(`/platform/users/${userId}`, data).then(handleResponse),
     getMe: (): Promise<User> => api.get('/auth/me').then(handleResponse),
     // ── Purge (platform admin) ──
     listPurgeRequests: () => api.get('/platform/purge/requests').then(handleResponse),

@@ -61,4 +61,8 @@ export class PlatformController {
 
   @Get('health') getSystemHealth() { return this.platformService.getSystemHealth(); }
   @Get('audit-log') listPlatformAuditLogs(@Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number, @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number, @Query('workspaceId') workspaceId?: string) { return this.platformService.listPlatformAuditLogs(page, limit, workspaceId); }
+
+  // Platform users management
+  @Get('users') listPlatformUsers(@Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number, @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number, @Query('search') search?: string) { return this.platformService.listPlatformUsers(page, limit, search); }
+  @Patch('users/:id') @PlatformRoles(PlatformRole.SUPER_ADMIN) updatePlatformUser(@Param('id') id: string, @Body() body: { platformRole?: PlatformRole | null; status?: string }, @Req() req: any) { return this.platformService.updatePlatformUser(id, body, req.user.sub); }
 }
