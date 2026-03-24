@@ -2,7 +2,6 @@
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCurrentMemberRole, useWorkspace } from '@/hooks/use-workspace';
 import {
   useSurveyDetail,
@@ -15,10 +14,8 @@ import {
   useSurveyResponses,
   useSurveyIntelligence,
 } from '@/hooks/use-surveys';
-import { useThemeList } from '@/hooks/use-themes';
-import { SurveyStatus, SurveyQuestionType, SurveyType, Feedback, Theme } from '@/lib/api-types';
+import { SurveyStatus, SurveyQuestionType, SurveyType } from '@/lib/api-types';
 import { appRoutes, publicRoutes } from '@/lib/routes';
-import apiClient from '@/lib/api-client';
 
 // ─── Design tokens ─────────────────────────────────────────────────────────────
 const CARD: React.CSSProperties = {
@@ -148,231 +145,6 @@ function AddQuestionModal({ surveyId, workspaceId, onClose }: { surveyId: string
   );
 }
 
-// ─── Link Feedback to Theme Modal ─────────────────────────────────────────────
-/**
- * Allows the user to:
- *   1. Search feedback items in the workspace
- *   2. Pick a theme from the workspace theme list
- *   3. Click "Link" to call POST /themes/:themeId/feedback/:feedbackId
- *
- * The modal is self-contained: it fetches its own data so the parent page
- * does not need to pass anything except a close callback.
- */
-function LinkFeedbackToThemeModal({ onClose }: { onClose: () => void }) {
-  const { workspace } = useWorkspace();
-  const workspaceId = workspace?.id ?? '';
-  const queryClient = useQueryClient();
-
-  const [feedbackSearch, setFeedbackSearch] = useState('');
-  const [selectedFeedback, setSelectedFeedback] = useState<Feedback | null>(null);
-  const [selectedTheme, setSelectedTheme] = useState<Theme | null>(null);
-  const [successMsg, setSuccessMsg] = useState('');
-  const [errorMsg, setErrorMsg] = useState('');
-
-  // Fetch feedback list with search
-  const { data: feedbackData, isLoading: loadingFeedback } = useQuery({
-    queryKey: ['feedback-link-modal', workspaceId, feedbackSearch],
-    queryFn: () => apiClient.feedback.list(workspaceId, { search: feedbackSearch || undefined, limit: 20 }),
-    enabled: !!workspaceId,
-    staleTime: 10_000,
-  });
-
-  // Fetch theme list (first page, up to 50)
-  const { data: themePages, isLoading: loadingThemes } = useQuery({
-    queryKey: ['themes-link-modal', workspaceId],
-    queryFn: () => apiClient.themes.list(workspaceId, { limit: 50 }),
-    enabled: !!workspaceId,
-    staleTime: 30_000,
-  });
-  const themes: Theme[] = themePages?.data ?? [];
-
-  // Link mutation
-  const { mutate: linkFeedback, isPending: linking } = useMutation<void, Error, { themeId: string; feedbackId: string }>({
-    mutationFn: ({ themeId, feedbackId }) =>
-      apiClient.themes.addFeedback(workspaceId, themeId, feedbackId),
-    onSuccess: (_, vars) => {
-      queryClient.invalidateQueries({ queryKey: ['themes', workspaceId, vars.themeId] });
-      queryClient.invalidateQueries({ queryKey: ['themes', workspaceId, 'list'] });
-      setSuccessMsg(`Feedback linked to theme successfully.`);
-      setSelectedFeedback(null);
-      setSelectedTheme(null);
-      setErrorMsg('');
-    },
-    onError: (err) => {
-      setErrorMsg(err.message ?? 'Failed to link feedback. Please try again.');
-    },
-  });
-
-  const handleLink = () => {
-    if (!selectedFeedback || !selectedTheme) return;
-    setSuccessMsg('');
-    setErrorMsg('');
-    linkFeedback({ themeId: selectedTheme.id, feedbackId: selectedFeedback.id });
-  };
-
-  const feedbackList: Feedback[] = feedbackData?.data ?? [];
-
-  return (
-    <div
-      style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(10,37,64,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div style={{ ...CARD, width: '100%', maxWidth: '38rem', padding: '2rem', maxHeight: '90vh', overflowY: 'auto' }}>
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-          <h2 style={{ fontSize: '1.125rem', fontWeight: 700, color: '#0a2540', margin: 0 }}>
-            🔗 Link Feedback to a Theme
-          </h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '1.25rem', cursor: 'pointer', color: '#6C757D', lineHeight: 1 }}>×</button>
-        </div>
-
-        <p style={{ fontSize: '0.8125rem', color: '#6C757D', marginBottom: '1.5rem', lineHeight: 1.6 }}>
-          Manually connect any feedback item to a theme. This helps TriageInsight score themes more accurately and surfaces the feedback in the right Intelligence Hub views.
-        </p>
-
-        {/* Step 1 — Pick feedback */}
-        <div style={{ marginBottom: '1.25rem' }}>
-          <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 700, color: '#0a2540', marginBottom: '0.5rem' }}>
-            Step 1 — Choose a feedback item
-          </label>
-          <input
-            value={feedbackSearch}
-            onChange={(e) => { setFeedbackSearch(e.target.value); setSelectedFeedback(null); }}
-            placeholder="Search by title or description…"
-            style={{ width: '100%', padding: '0.625rem 0.875rem', border: '1px solid #dee2e6', borderRadius: '0.5rem', fontSize: '0.875rem', color: '#0a2540', boxSizing: 'border-box', marginBottom: '0.5rem' }}
-          />
-          {loadingFeedback ? (
-            <p style={{ fontSize: '0.8rem', color: '#6C757D' }}>Loading…</p>
-          ) : feedbackList.length === 0 ? (
-            <p style={{ fontSize: '0.8rem', color: '#6C757D' }}>No feedback found{feedbackSearch ? ` for "${feedbackSearch}"` : ''}.</p>
-          ) : (
-            <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid #dee2e6', borderRadius: '0.5rem' }}>
-              {feedbackList.map((fb) => (
-                <div
-                  key={fb.id}
-                  onClick={() => setSelectedFeedback(fb)}
-                  style={{
-                    padding: '0.625rem 0.875rem',
-                    cursor: 'pointer',
-                    borderBottom: '1px solid #f0f4f8',
-                    background: selectedFeedback?.id === fb.id ? '#e8f7f7' : '#fff',
-                    borderLeft: selectedFeedback?.id === fb.id ? '3px solid #20A4A4' : '3px solid transparent',
-                    transition: 'background 0.1s',
-                  }}
-                >
-                  <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0a2540', margin: '0 0 0.15rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {fb.title}
-                  </p>
-                  <p style={{ fontSize: '0.72rem', color: '#6C757D', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {fb.description?.slice(0, 100)}{(fb.description?.length ?? 0) > 100 ? '…' : ''}
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
-          {selectedFeedback && (
-            <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.75rem', background: '#e8f7f7', borderRadius: '0.5rem', fontSize: '0.8rem', color: '#0a2540', fontWeight: 500 }}>
-              ✓ Selected: {selectedFeedback.title}
-            </div>
-          )}
-        </div>
-
-        {/* Step 2 — Pick theme */}
-        <div style={{ marginBottom: '1.5rem' }}>
-          <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 700, color: '#0a2540', marginBottom: '0.5rem' }}>
-            Step 2 — Choose a theme
-          </label>
-          {loadingThemes ? (
-            <p style={{ fontSize: '0.8rem', color: '#6C757D' }}>Loading themes…</p>
-          ) : themes.length === 0 ? (
-            <p style={{ fontSize: '0.8rem', color: '#6C757D' }}>No themes found. Create a theme first.</p>
-          ) : (
-            <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid #dee2e6', borderRadius: '0.5rem' }}>
-              {themes.map((th) => (
-                <div
-                  key={th.id}
-                  onClick={() => setSelectedTheme(th)}
-                  style={{
-                    padding: '0.625rem 0.875rem',
-                    cursor: 'pointer',
-                    borderBottom: '1px solid #f0f4f8',
-                    background: selectedTheme?.id === th.id ? '#ede9fe' : '#fff',
-                    borderLeft: selectedTheme?.id === th.id ? '3px solid #7c3aed' : '3px solid transparent',
-                    transition: 'background 0.1s',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0a2540', margin: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {th.title}
-                    </p>
-                    {th._count?.feedbacks != null && (
-                      <span style={{ fontSize: '0.7rem', color: '#6C757D', flexShrink: 0 }}>
-                        {th._count.feedbacks} linked
-                      </span>
-                    )}
-                    {th.priorityScore != null && (
-                      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#20A4A4', flexShrink: 0 }}>
-                        CIQ {Math.round(th.priorityScore)}
-                      </span>
-                    )}
-                  </div>
-                  {th.description && (
-                    <p style={{ fontSize: '0.72rem', color: '#6C757D', margin: '0.1rem 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {th.description}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-          {selectedTheme && (
-            <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.75rem', background: '#ede9fe', borderRadius: '0.5rem', fontSize: '0.8rem', color: '#0a2540', fontWeight: 500 }}>
-              ✓ Selected: {selectedTheme.title}
-            </div>
-          )}
-        </div>
-
-        {/* Success / error messages */}
-        {successMsg && (
-          <div style={{ padding: '0.625rem 0.875rem', background: '#e8f5e9', border: '1px solid #a5d6a7', borderRadius: '0.5rem', fontSize: '0.875rem', color: '#2e7d32', marginBottom: '1rem' }}>
-            ✓ {successMsg}
-          </div>
-        )}
-        {errorMsg && (
-          <div style={{ padding: '0.625rem 0.875rem', background: '#fdecea', border: '1px solid #ef9a9a', borderRadius: '0.5rem', fontSize: '0.875rem', color: '#c62828', marginBottom: '1rem' }}>
-            ✗ {errorMsg}
-          </div>
-        )}
-
-        {/* Actions */}
-        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{ padding: '0.5rem 1.25rem', borderRadius: '0.5rem', border: '1px solid #dee2e6', background: '#fff', color: '#495057', fontSize: '0.875rem', cursor: 'pointer', fontWeight: 500 }}
-          >
-            Close
-          </button>
-          <button
-            type="button"
-            onClick={handleLink}
-            disabled={!selectedFeedback || !selectedTheme || linking}
-            style={{
-              padding: '0.5rem 1.5rem', borderRadius: '0.5rem', border: 'none',
-              background: '#0a2540', color: '#fff', fontSize: '0.875rem',
-              cursor: (!selectedFeedback || !selectedTheme || linking) ? 'not-allowed' : 'pointer',
-              fontWeight: 600,
-              opacity: (!selectedFeedback || !selectedTheme || linking) ? 0.55 : 1,
-            }}
-          >
-            {linking ? 'Linking…' : '🔗 Link Feedback to Theme'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Main page ─────────────────────────────────────────────────────────────────
 export default function SurveyDetailPage() {
   const { orgSlug, id: surveyId } = useParams<{ orgSlug: string; id: string }>();
@@ -392,8 +164,6 @@ export default function SurveyDetailPage() {
   // Intelligence
   const { data: intelligence, isLoading: loadingIntel } = useSurveyIntelligence('', surveyId);
   const [showAddQuestion, setShowAddQuestion] = useState(false);
-  const [showLinkModal, setShowLinkModal] = useState(false);
-
   const r = appRoutes(orgSlug);
 
   if (isLoading || !survey) {
@@ -447,13 +217,7 @@ export default function SurveyDetailPage() {
 
         {/* Action buttons */}
         <div style={{ display: 'flex', gap: '0.625rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          {/* Link feedback to theme — always visible */}
-          <button
-            onClick={() => setShowLinkModal(true)}
-            style={{ padding: '0.5rem 1rem', borderRadius: '0.5rem', border: '1px solid #7c3aed', background: '#fff', color: '#7c3aed', fontSize: '0.8125rem', cursor: 'pointer', fontWeight: 600 }}
-          >
-            🔗 Link Feedback to Theme
-          </button>
+
 
           {canEdit && survey.status === SurveyStatus.DRAFT && (
             <button
@@ -801,16 +565,11 @@ export default function SurveyDetailPage() {
               <div style={{ ...CARD }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.875rem' }}>
                   <h3 style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0a2540', margin: 0 }}>Linked Themes</h3>
-                  <button
-                    onClick={() => setShowLinkModal(true)}
-                    style={{ padding: '0.375rem 0.875rem', borderRadius: '0.5rem', border: '1px solid #7c3aed', background: '#fff', color: '#7c3aed', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600 }}
-                  >
-                    🔗 Link Feedback to Theme
-                  </button>
+
                 </div>
                 {(intelligence.linkedThemeIds?.length ?? 0) === 0 ? (
                   <p style={{ fontSize: '0.875rem', color: '#6C757D', margin: 0 }}>
-                    No themes linked yet. Click "Link Feedback to Theme" to manually connect feedback from this survey to a theme.
+                    No themes are linked to this survey yet. Themes are linked automatically when survey responses are processed by the AI engine.
                   </p>
                 ) : (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -936,9 +695,7 @@ export default function SurveyDetailPage() {
         <AddQuestionModal surveyId={surveyId} workspaceId="" onClose={() => setShowAddQuestion(false)} />
       )}
 
-      {showLinkModal && (
-        <LinkFeedbackToThemeModal onClose={() => setShowLinkModal(false)} />
-      )}
+
     </>
   );
 }

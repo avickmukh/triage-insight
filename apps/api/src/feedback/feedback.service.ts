@@ -112,6 +112,14 @@ export class FeedbackService {
               lifecycleStage: true,
             },
           },
+          // Include linked themes so the Inbox list can show theme identifier pills
+          themes: {
+            include: {
+              theme: {
+                select: { id: true, title: true },
+              },
+            },
+          },
         },
       }),
       this.prisma.feedback.count({ where }),

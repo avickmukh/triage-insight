@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useFeedback } from '@/hooks/use-feedback';
-import { Feedback, FeedbackSourceType, FeedbackStatus } from '@/lib/api-types';
+import { Feedback, FeedbackSourceType, FeedbackStatus, ThemeFeedback } from '@/lib/api-types';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { appRoutes } from '@/lib/routes';
@@ -219,7 +219,7 @@ export default function InboxPage() {
                       i < allItems.length - 1 ? '1px solid #f0f4f8' : 'none',
                   }}
                 >
-                  {/* Title + description */}
+                  {/* Title + description + theme pills */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p
                       style={{
@@ -242,10 +242,45 @@ export default function InboxPage() {
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap',
+                          marginBottom: fb.themes && fb.themes.length > 0 ? '0.35rem' : 0,
                         }}
                       >
                         {fb.description}
                       </p>
+                    )}
+                    {/* Theme identifier pills */}
+                    {fb.themes && fb.themes.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+                        {(fb.themes as ThemeFeedback[]).slice(0, 3).map((tf) => (
+                          <span
+                            key={tf.themeId}
+                            title={tf.theme?.title ?? tf.themeId}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.2rem',
+                              background: '#ede9fe',
+                              color: '#7c3aed',
+                              padding: '0.1rem 0.5rem',
+                              borderRadius: '999px',
+                              fontSize: '0.68rem',
+                              fontWeight: 600,
+                              maxWidth: '8rem',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            <span style={{ fontSize: '0.6rem' }}>⬡</span>
+                            {tf.theme?.title ?? 'Theme'}
+                          </span>
+                        ))}
+                        {fb.themes.length > 3 && (
+                          <span style={{ background: '#f3f0ff', color: '#7c3aed', padding: '0.1rem 0.45rem', borderRadius: '999px', fontSize: '0.68rem', fontWeight: 600 }}>
+                            +{fb.themes.length - 3}
+                          </span>
+                        )}
+                      </div>
                     )}
                   </div>
 
