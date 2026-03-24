@@ -5,7 +5,7 @@
  * Navigation structure (redesigned):
  *   Workspace   → Home, Inbox, Themes, Roadmap
  *   Intelligence Hub  → CIQ Overview, Theme Ranking, Feature Ranking, Customer Ranking
- *   Prioritization    → Engine, Roadmap Alignment, Opportunities
+ *   Prioritization    → Engine, Feature Priority Ranking, Revenue Opportunities, Roadmap Recommendations
  *   Customers   → Customers, Reports
  *   Signals     → Voice, Surveys, Support
  *   Admin       → Members, Billing, Integrations, Settings  (admin only)
@@ -146,8 +146,9 @@ function AuthenticatedShell({ slug, pathname, children }: { slug: string; pathna
             {/* Prioritization Engine — promoted to top-level */}
             <NavGroup label="Prioritization" open={sidebarOpen}>
               <SideNavItem href={r.prioritization}              pathname={pathname} open={sidebarOpen} icon={<IconPriority/>}>Engine</SideNavItem>
-              <SideNavItem href={r.prioritizationOpportunities} pathname={pathname} open={sidebarOpen} icon={<IconOpportunity/>}>Opportunities</SideNavItem>
-              <SideNavItem href={r.prioritizationRoadmap}       pathname={pathname} open={sidebarOpen} icon={<IconRoadmapAlign/>}>Roadmap Fit</SideNavItem>
+              <SideNavItem href={r.prioritizationFeatures}      pathname={pathname} open={sidebarOpen} icon={<IconFeaturePriority/>}>Feature Priority Ranking</SideNavItem>
+              <SideNavItem href={r.prioritizationOpportunities} pathname={pathname} open={sidebarOpen} icon={<IconOpportunity/>}>Revenue Opportunities</SideNavItem>
+              <SideNavItem href={r.prioritizationRoadmap}       pathname={pathname} open={sidebarOpen} icon={<IconRoadmapAlign/>}>Roadmap Recommendations</SideNavItem>
             </NavGroup>
 
             {/* Customers & Revenue */}
@@ -216,8 +217,9 @@ function AuthenticatedShell({ slug, pathname, children }: { slug: string; pathna
               </NavGroupDrawer>
               <NavGroupDrawer label="Prioritization">
                 <DrawerNavItem href={r.prioritization}              pathname={pathname} icon={<IconPriority/>}>Engine</DrawerNavItem>
-                <DrawerNavItem href={r.prioritizationOpportunities} pathname={pathname} icon={<IconOpportunity/>}>Opportunities</DrawerNavItem>
-                <DrawerNavItem href={r.prioritizationRoadmap}       pathname={pathname} icon={<IconRoadmapAlign/>}>Roadmap Fit</DrawerNavItem>
+                <DrawerNavItem href={r.prioritizationFeatures}      pathname={pathname} icon={<IconFeaturePriority/>}>Feature Priority Ranking</DrawerNavItem>
+                <DrawerNavItem href={r.prioritizationOpportunities} pathname={pathname} icon={<IconOpportunity/>}>Revenue Opportunities</DrawerNavItem>
+                <DrawerNavItem href={r.prioritizationRoadmap}       pathname={pathname} icon={<IconRoadmapAlign/>}>Roadmap Recommendations</DrawerNavItem>
               </NavGroupDrawer>
               <NavGroupDrawer label="Customers">
                 <DrawerNavItem href={r.customers} pathname={pathname} icon={<IconCustomers/>}>Customers</DrawerNavItem>
@@ -445,12 +447,25 @@ function PageTitle({ pathname, slug }: { pathname: string; slug: string }) {
     }
   }
 
+  // Context-aware title: when inside /prioritization/*, use prioritization-specific labels
+  if (parent === 'prioritization') {
+    const prioTitles: Record<string, string> = {
+      features:      'Feature Priority Ranking',
+      opportunities: 'Revenue Opportunities',
+      roadmap:       'Roadmap Recommendations',
+      settings:      'Prioritization Settings',
+    };
+    if (prioTitles[last]) {
+      return <h1 style={{ fontSize: '0.95rem', fontWeight: 700, color: NAVY, margin: 0, letterSpacing: '-0.01em' }}>{prioTitles[last]}</h1>;
+    }
+  }
+
   const titles: Record<string, string> = {
     app: 'Home', inbox: 'Feedback Inbox', themes: 'Themes', roadmap: 'Roadmap',
     customers: 'Customers', reports: 'Reports', voice: 'Voice', surveys: 'Surveys',
     support: 'Support',
     intelligence: 'Intelligence Hub', features: 'Feature Ranking', 'customers-iq': 'Customer Ranking',
-    prioritization: 'Prioritization Engine', opportunities: 'Opportunities', 'roadmap-fit': 'Roadmap Fit',
+    prioritization: 'Prioritization Engine', opportunities: 'Revenue Opportunities', 'roadmap-fit': 'Roadmap Recommendations',
     digest: 'Weekly Digest', risk: 'Revenue Risk', members: 'Members', billing: 'Billing',
     integrations: 'Integrations', settings: 'Settings', profile: 'Profile', 'ai-settings': 'AI Settings',
   };
@@ -486,9 +501,10 @@ function IconFeatureRank()  { return <svg {...ip}><polyline points="22 12 18 12 
 function IconCustomerIQ()   { return <svg {...ip}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>; }
 
 // Prioritization
-function IconPriority()     { return <svg {...ip}><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>; }
-function IconOpportunity()  { return <svg {...ip}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>; }
-function IconRoadmapAlign() { return <svg {...ip}><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>; }
+function IconPriority()       { return <svg {...ip}><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>; }
+function IconFeaturePriority(){ return <svg {...ip}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>; }
+function IconOpportunity()    { return <svg {...ip}><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>; }
+function IconRoadmapAlign()   { return <svg {...ip}><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>; }
 
 // Customers
 function IconCustomers()    { return <svg {...ip}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>; }

@@ -6,13 +6,14 @@
  * No jargon. No metric clutter. Just the things you need to act on today.
  *
  * Sections:
- *   1. Today's Summary   — one plain-English sentence about what matters most
- *   2. Quick Actions     — 4 large buttons to the two power features
- *   3. What customers are asking about  (Emerging Themes)
- *   4. Customers at risk                (Revenue Risk)
- *   5. Support pressure                 (Support Pressure)
- *   6. Roadmap health                   (Roadmap Health)
- *   7. Voice & survey sentiment         (Voice Sentiment)
+ *   1. Today's Summary         — one plain-English sentence about what matters most
+ *   2. Quick Actions           — 4 large buttons to the two power features
+ *   3. Charts Row              — Roadmap Status donut + Top Features bar + Sentiment gauge
+ *   4. What customers are asking about  (Emerging Themes)
+ *   5. Customers at risk                (Revenue Risk)
+ *   6. Support pressure                 (Support Pressure)
+ *   7. Roadmap health                   (Roadmap Health)
+ *   8. Voice & survey sentiment         (Voice Sentiment)
  */
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -41,6 +42,8 @@ const GREEN  = '#2e7d32';
 const GREEN_L= '#e8f5e9';
 const GRAY   = '#6C757D';
 const BORDER = '#e9ecef';
+const PURPLE = '#7c3aed';
+const BLUE   = '#0369a1';
 
 const CARD: React.CSSProperties = {
   background: '#fff',
@@ -159,7 +162,7 @@ function QuickActions({ r }: { r: ReturnType<typeof appRoutes> }) {
       emoji: '🎯',
       label: 'Prioritization Engine',
       desc: 'Score every feature request and decide what to build next',
-      accent: '#7c3aed',
+      accent: PURPLE,
       bg: '#faf5ff',
     },
     {
@@ -167,13 +170,13 @@ function QuickActions({ r }: { r: ReturnType<typeof appRoutes> }) {
       emoji: '📊',
       label: 'Feature Ranking',
       desc: 'All feature requests ranked by customer demand and revenue',
-      accent: '#0369a1',
+      accent: BLUE,
       bg: '#f0f9ff',
     },
     {
       href: r.prioritizationOpportunities,
       emoji: '💡',
-      label: 'Opportunities',
+      label: 'Revenue Opportunities',
       desc: 'High-value features not yet on your roadmap',
       accent: AMBER,
       bg: AMBER_L,
@@ -197,11 +200,244 @@ function QuickActions({ r }: { r: ReturnType<typeof appRoutes> }) {
   );
 }
 
-// ─── 3. What customers are asking about ──────────────────────────────────────
+// ─── 3a. Roadmap Status Donut Chart ──────────────────────────────────────────
+function RoadmapDonutChart({ roadmap, href }: { roadmap: RoadmapHealthPanel; href: string }) {
+  const segments = [
+    { label: 'Shipped',     count: roadmap.shippedCount,   color: GREEN },
+    { label: 'In Progress', count: roadmap.committedCount, color: TEAL },
+    { label: 'Planned',     count: roadmap.plannedCount,   color: BLUE },
+    { label: 'Backlog',     count: roadmap.backlogCount,   color: '#adb5bd' },
+  ];
+  const total = segments.reduce((s, x) => s + x.count, 0);
+
+  // Build SVG donut arcs
+  const cx = 60; const cy = 60; const r = 44; const innerR = 28;
+  const circumference = 2 * Math.PI * r;
+
+  let cumulativeAngle = -Math.PI / 2; // start at top
+  const arcs = total === 0 ? [] : segments.map((seg) => {
+    const fraction = seg.count / total;
+    const startAngle = cumulativeAngle;
+    const sweepAngle = fraction * 2 * Math.PI;
+    cumulativeAngle += sweepAngle;
+    const endAngle = cumulativeAngle;
+
+    const x1 = cx + r * Math.cos(startAngle);
+    const y1 = cy + r * Math.sin(startAngle);
+    const x2 = cx + r * Math.cos(endAngle);
+    const y2 = cy + r * Math.sin(endAngle);
+    const ix1 = cx + innerR * Math.cos(endAngle);
+    const iy1 = cy + innerR * Math.sin(endAngle);
+    const ix2 = cx + innerR * Math.cos(startAngle);
+    const iy2 = cy + innerR * Math.sin(startAngle);
+    const largeArc = sweepAngle > Math.PI ? 1 : 0;
+
+    if (fraction === 0) return null;
+    const d = [
+      `M ${x1} ${y1}`,
+      `A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2}`,
+      `L ${ix1} ${iy1}`,
+      `A ${innerR} ${innerR} 0 ${largeArc} 0 ${ix2} ${iy2}`,
+      'Z',
+    ].join(' ');
+    return { d, color: seg.color, label: seg.label, count: seg.count };
+  }).filter(Boolean);
+
+  const healthColor = roadmap.healthScore >= 70 ? GREEN : roadmap.healthScore >= 40 ? AMBER : RED;
+
+  return (
+    <div style={{ ...CARD, display: 'flex', flexDirection: 'column' }}>
+      <SectionHeader label="Roadmap Status" href={href} accent={healthColor} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          <svg width="120" height="120" viewBox="0 0 120 120">
+            {total === 0 ? (
+              <circle cx={cx} cy={cy} r={r} fill="none" stroke={BORDER} strokeWidth={r - innerR} />
+            ) : (
+              arcs.map((arc, i) => arc && (
+                <path key={i} d={arc.d} fill={arc.color} />
+              ))
+            )}
+            {/* Inner label */}
+            <text x={cx} y={cy - 4} textAnchor="middle" fontSize="14" fontWeight="700" fill={healthColor}>{roadmap.healthScore}</text>
+            <text x={cx} y={cy + 10} textAnchor="middle" fontSize="8" fill={GRAY}>/ 100</text>
+          </svg>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1, minWidth: 120 }}>
+          {segments.map((s) => (
+            <div key={s.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <div style={{ width: 10, height: 10, borderRadius: '50%', background: s.color, flexShrink: 0 }} />
+                <span style={{ fontSize: '0.78rem', color: GRAY }}>{s.label}</span>
+              </div>
+              <span style={{ fontSize: '0.82rem', fontWeight: 700, color: NAVY }}>{s.count}</span>
+            </div>
+          ))}
+          <div style={{ marginTop: '0.25rem', paddingTop: '0.5rem', borderTop: `1px solid ${BORDER}` }}>
+            <span style={{ fontSize: '0.75rem', color: GRAY }}>Total items: </span>
+            <span style={{ fontSize: '0.82rem', fontWeight: 700, color: NAVY }}>{total}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── 3b. Top Feature Requests Bar Chart ──────────────────────────────────────
+function TopFeaturesChart({ direction, href }: { direction: ProductDirectionSummary; href: string }) {
+  const features = direction.topFeatures.slice(0, 5);
+  const maxScore = features.length > 0 ? Math.max(...features.map((f) => f.ciqScore)) : 100;
+
+  return (
+    <div style={{ ...CARD, display: 'flex', flexDirection: 'column' }}>
+      <SectionHeader label="Top Feature Requests" href={href} accent={BLUE} />
+      {features.length === 0 ? (
+        <p style={{ fontSize: '0.875rem', color: GRAY, margin: 0 }}>No scored features yet. Add customer feedback to see rankings.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {features.map((f, i) => {
+            const pct = maxScore > 0 ? (f.ciqScore / maxScore) * 100 : 0;
+            const barColor = pct >= 70 ? TEAL : pct >= 40 ? BLUE : GRAY;
+            return (
+              <div key={f.feedbackId}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', minWidth: 0, flex: 1 }}>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: GRAY, minWidth: 16 }}>#{i + 1}</span>
+                    <span style={{ fontSize: '0.82rem', fontWeight: 600, color: NAVY, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {f.title}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: barColor, flexShrink: 0, marginLeft: '0.5rem' }}>
+                    {Math.round(f.ciqScore)}
+                  </span>
+                </div>
+                <div style={{ height: 6, background: BORDER, borderRadius: 3, overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%', width: `${pct}%`, background: barColor,
+                    borderRadius: 3, transition: 'width 0.6s ease',
+                  }} />
+                </div>
+                {f.themeTitle && (
+                  <span style={{ fontSize: '0.68rem', color: GRAY }}>{f.themeTitle}</span>
+                )}
+              </div>
+            );
+          })}
+          <p style={{ fontSize: '0.72rem', color: GRAY, margin: '0.25rem 0 0' }}>
+            {direction.scoredFeedbackCount} of {direction.totalFeedbackCount} items scored
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── 3c. Sentiment Gauge ─────────────────────────────────────────────────────
+function SentimentGauge({ sentiment, href }: { sentiment: VoiceSentimentSignal; href: string }) {
+  const score = sentiment.overallSentimentScore;
+  const sentColor = score >= 70 ? GREEN : score >= 40 ? AMBER : RED;
+  const trendLabel = sentiment.sentimentTrend === 'improving' ? '↑ Improving'
+    : sentiment.sentimentTrend === 'declining' ? '↓ Declining' : '→ Stable';
+  const trendColor = sentiment.sentimentTrend === 'improving' ? GREEN
+    : sentiment.sentimentTrend === 'declining' ? RED : GRAY;
+
+  // Arc gauge: semicircle from 180° to 0° (left to right)
+  const cx = 80; const cy = 80; const radius = 60;
+  const startAngle = Math.PI; // 180°
+  const endAngle = 0;         // 0°
+  const scoreAngle = Math.PI - (score / 100) * Math.PI; // maps 0→180°, 100→0°
+
+  const arcX = (angle: number) => cx + radius * Math.cos(angle);
+  const arcY = (angle: number) => cy + radius * Math.sin(angle);
+
+  // Background arc (full semicircle)
+  const bgD = `M ${arcX(startAngle)} ${arcY(startAngle)} A ${radius} ${radius} 0 0 1 ${arcX(endAngle)} ${arcY(endAngle)}`;
+  // Filled arc (up to score)
+  const fillD = score > 0
+    ? `M ${arcX(startAngle)} ${arcY(startAngle)} A ${radius} ${radius} 0 ${score > 50 ? 1 : 0} 1 ${arcX(scoreAngle)} ${arcY(scoreAngle)}`
+    : '';
+
+  // Needle
+  const needleX = cx + (radius - 10) * Math.cos(scoreAngle);
+  const needleY = cy + (radius - 10) * Math.sin(scoreAngle);
+
+  // Theme breakdown bars
+  const themeData = sentiment.sentimentByTheme?.slice(0, 4) ?? [];
+
+  return (
+    <div style={{ ...CARD, display: 'flex', flexDirection: 'column' }}>
+      <SectionHeader label="Customer Sentiment" href={href} accent={sentColor} />
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1.25rem', flexWrap: 'wrap' }}>
+        {/* Gauge */}
+        <div style={{ flexShrink: 0 }}>
+          <svg width="160" height="95" viewBox="0 0 160 95">
+            {/* Background track */}
+            <path d={bgD} fill="none" stroke={BORDER} strokeWidth="12" strokeLinecap="round" />
+            {/* Colored fill */}
+            {fillD && <path d={fillD} fill="none" stroke={sentColor} strokeWidth="12" strokeLinecap="round" />}
+            {/* Needle dot */}
+            <circle cx={needleX} cy={needleY} r="5" fill={sentColor} />
+            <circle cx={cx} cy={cy} r="4" fill={NAVY} />
+            {/* Score label */}
+            <text x={cx} y={cy - 8} textAnchor="middle" fontSize="20" fontWeight="800" fill={sentColor}>{score}</text>
+            <text x={cx} y={cy + 6} textAnchor="middle" fontSize="9" fill={GRAY}>/ 100</text>
+            {/* Min/Max labels */}
+            <text x="8" y="88" fontSize="9" fill={GRAY}>0</text>
+            <text x="144" y="88" fontSize="9" fill={GRAY}>100</text>
+          </svg>
+          <div style={{ textAlign: 'center', marginTop: '-0.25rem' }}>
+            <Badge label={trendLabel} bg={trendColor + '18'} color={trendColor} />
+          </div>
+        </div>
+
+        {/* Theme breakdown */}
+        <div style={{ flex: 1, minWidth: 120 }}>
+          {themeData.length > 0 ? (
+            <>
+              <p style={{ fontSize: '0.72rem', fontWeight: 700, color: GRAY, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 0.5rem' }}>
+                By theme
+              </p>
+              {themeData.map((t) => {
+                const tc = t.avgSentiment >= 70 ? GREEN : t.avgSentiment >= 40 ? AMBER : RED;
+                return (
+                  <div key={t.themeId} style={{ marginBottom: '0.5rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.2rem' }}>
+                      <span style={{ fontSize: '0.75rem', color: NAVY, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '80%' }}>{t.title}</span>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 700, color: tc }}>{Math.round(t.avgSentiment)}</span>
+                    </div>
+                    <div style={{ height: 4, background: BORDER, borderRadius: 2, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${t.avgSentiment}%`, background: tc, borderRadius: 2 }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+              <p style={{ fontSize: '0.875rem', color: score >= 70 ? GREEN : score >= 40 ? AMBER : RED, margin: 0, fontWeight: 600 }}>
+                {score >= 70 ? '✓ Customers are happy' : score >= 40 ? '⚠ Mixed signals' : '✗ Needs attention'}
+              </p>
+              <p style={{ fontSize: '0.8rem', color: GRAY, margin: 0 }}>
+                {sentiment.voiceCallCount} voice recordings analysed
+              </p>
+              {sentiment.unresolvedPainSummary && (
+                <p style={{ fontSize: '0.78rem', color: NAVY, margin: 0, lineHeight: 1.5 }}>
+                  {sentiment.unresolvedPainSummary}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── 4. What customers are asking about ──────────────────────────────────────
 function ThemesCard({ data, href }: { data: EmergingThemeRadar; href: string }) {
   return (
-    <div style={cardAccent('#7c3aed')}>
-      <SectionHeader label="What customers are asking about" href={href} accent="#7c3aed" />
+    <div style={cardAccent(PURPLE)}>
+      <SectionHeader label="What customers are asking about" href={href} accent={PURPLE} />
       {data.spikeEvents.length > 0 && (
         <div style={{ background: AMBER_L, border: `1px solid ${AMBER}33`, borderRadius: '0.6rem', padding: '0.6rem 0.875rem', marginBottom: '0.875rem' }}>
           <p style={{ fontSize: '0.78rem', fontWeight: 700, color: AMBER, margin: '0 0 0.2rem' }}>
@@ -223,12 +459,12 @@ function ThemesCard({ data, href }: { data: EmergingThemeRadar; href: string }) 
                   <p style={{ fontSize: '0.875rem', fontWeight: 600, color: NAVY, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {t.title}
                   </p>
-                  {t.isNew && <Badge label="New" bg="#fce8ff" color="#7c3aed" />}
+                  {t.isNew && <Badge label="New" bg="#fce8ff" color={PURPLE} />}
                 </div>
                 <p style={{ fontSize: '0.78rem', color: GRAY, margin: 0 }}>{t.signal}</p>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <p style={{ fontSize: '0.85rem', fontWeight: 700, color: '#7c3aed', margin: 0 }}>+{t.feedbackDelta7d}</p>
+                <p style={{ fontSize: '0.85rem', fontWeight: 700, color: PURPLE, margin: 0 }}>+{t.feedbackDelta7d}</p>
                 <p style={{ fontSize: '0.7rem', color: GRAY, margin: 0 }}>this week</p>
               </div>
             </div>
@@ -242,7 +478,7 @@ function ThemesCard({ data, href }: { data: EmergingThemeRadar; href: string }) 
   );
 }
 
-// ─── 4. Customers at risk ─────────────────────────────────────────────────────
+// ─── 5. Customers at risk ─────────────────────────────────────────────────────
 function CustomersAtRiskCard({ data, href }: { data: RevenueRiskIndicator; href: string }) {
   const arrFormatted = data.totalArrAtRisk >= 1_000_000
     ? `$${(data.totalArrAtRisk / 1_000_000).toFixed(1)}M`
@@ -297,7 +533,7 @@ function CustomersAtRiskCard({ data, href }: { data: RevenueRiskIndicator; href:
   );
 }
 
-// ─── 5. Support pressure ──────────────────────────────────────────────────────
+// ─── 6. Support pressure ──────────────────────────────────────────────────────
 function SupportPressureCard({ data, href }: { data: SupportPressureIndicator; href: string }) {
   const delta = data.ticketDelta7d;
   const deltaColor = delta > 0 ? RED : delta < 0 ? GREEN : GRAY;
@@ -337,7 +573,7 @@ function SupportPressureCard({ data, href }: { data: SupportPressureIndicator; h
   );
 }
 
-// ─── 6. Roadmap health ────────────────────────────────────────────────────────
+// ─── 7. Roadmap health ────────────────────────────────────────────────────────
 function RoadmapHealthCard({ data, href }: { data: RoadmapHealthPanel; href: string }) {
   const healthColor = data.healthScore >= 70 ? GREEN : data.healthScore >= 40 ? AMBER : RED;
   const statusLabel = data.healthScore >= 70 ? 'On Track' : data.healthScore >= 40 ? 'At Risk' : 'Needs Attention';
@@ -360,7 +596,7 @@ function RoadmapHealthCard({ data, href }: { data: RoadmapHealthPanel; href: str
         {[
           { label: 'Shipped', count: data.shippedCount, color: GREEN },
           { label: 'In Progress', count: data.committedCount, color: TEAL },
-          { label: 'Planned', count: data.plannedCount, color: '#0369a1' },
+          { label: 'Planned', count: data.plannedCount, color: BLUE },
           { label: 'Backlog', count: data.backlogCount, color: GRAY },
         ].map((s) => (
           <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
@@ -386,7 +622,7 @@ function RoadmapHealthCard({ data, href }: { data: RoadmapHealthPanel; href: str
   );
 }
 
-// ─── 7. Voice & survey sentiment ─────────────────────────────────────────────
+// ─── 8. Voice & survey sentiment (full-width card) ───────────────────────────
 function SentimentCard({ data, href }: { data: VoiceSentimentSignal; href: string }) {
   const sentColor = data.overallSentimentScore >= 70 ? GREEN : data.overallSentimentScore >= 40 ? AMBER : RED;
   return (
@@ -517,6 +753,9 @@ export default function HomeDashboardPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.875rem' }}>
             {[...Array(4)].map((_, i) => <CardSkeleton key={i} />)}
           </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.25rem' }}>
+            {[...Array(3)].map((_, i) => <CardSkeleton key={i} />)}
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.25rem' }}>
             {[...Array(4)].map((_, i) => <CardSkeleton key={i} />)}
           </div>
@@ -548,12 +787,19 @@ export default function HomeDashboardPage() {
           {/* Quick actions — always prominent */}
           <QuickActions r={r} />
 
+          {/* ── Charts row ── 3 visual charts side by side */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem' }}>
+            <RoadmapDonutChart  roadmap={data.roadmapHealth}    href={r.roadmap} />
+            <TopFeaturesChart   direction={data.productDirection} href={r.intelligenceFeatures} />
+            <SentimentGauge     sentiment={data.voiceSentiment}  href={r.voice} />
+          </div>
+
           {/* 2×2 grid of status cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.25rem' }}>
-            <ThemesCard         data={data.emergingThemes}   href={r.intelligenceThemes} />
-            <CustomersAtRiskCard data={data.revenueRisk}     href={r.intelligenceCustomers} />
-            <SupportPressureCard data={data.supportPressure} href={r.support.tickets} />
-            <RoadmapHealthCard   data={data.roadmapHealth}   href={r.roadmap} />
+            <ThemesCard          data={data.emergingThemes}   href={r.intelligenceThemes} />
+            <CustomersAtRiskCard data={data.revenueRisk}      href={r.intelligenceCustomers} />
+            <SupportPressureCard data={data.supportPressure}  href={r.support.tickets} />
+            <RoadmapHealthCard   data={data.roadmapHealth}    href={r.roadmap} />
           </div>
 
           {/* Sentiment — full width */}
