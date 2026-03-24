@@ -42,6 +42,16 @@ const nextConfig = {
         source: "/:orgSlug/roadmap",
         destination: "/:orgSlug/portal/roadmap",
       },
+      // Public portal – survey list
+      {
+        source: "/:orgSlug/surveys",
+        destination: "/:orgSlug/portal/surveys",
+      },
+      // Public portal – survey detail (the public-facing survey form)
+      {
+        source: "/:orgSlug/surveys/:id",
+        destination: "/:orgSlug/portal/surveys/:id",
+      },
     ];
   },
 };

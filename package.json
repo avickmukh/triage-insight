@@ -6,6 +6,8 @@
     "dev": "turbo run dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
+    "lint:check": "turbo run lint:check",
+    "type-check": "turbo run type-check",
     "test": "turbo run test"
   },
   "devDependencies": {

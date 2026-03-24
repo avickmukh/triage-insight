@@ -101,7 +101,12 @@ export default function WorkspaceDetailPage() {
                 <span className="text-sm text-gray-300 font-mono">{o.feature}</span>
                 <div className="flex items-center gap-3">
                   <span className={`text-xs px-2 py-0.5 rounded-full ${o.enabled ? 'bg-green-400/10 text-green-400' : 'bg-red-400/10 text-red-400'}`}>{o.enabled ? 'ON' : 'OFF'}</span>
-                  <button onClick={() => deleteOverrideMutation.mutate(o.feature)} className="text-xs text-gray-500 hover:text-red-400 transition-colors">Remove</button>
+                  <button
+                    onClick={() => deleteOverrideMutation.mutate(o.feature)}
+                    disabled={deleteOverrideMutation.isPending && deleteOverrideMutation.variables === o.feature}
+                    className="text-xs text-gray-500 hover:text-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                    {deleteOverrideMutation.isPending && deleteOverrideMutation.variables === o.feature ? 'Removing…' : 'Remove'}
+                  </button>
                 </div>
               </div>
             ))}

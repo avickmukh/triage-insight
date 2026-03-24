@@ -80,6 +80,9 @@ export const publicRoutes = (slug: string) => ({
   feedbackItem:   (id: string) => `/${slug}/feedback/${id}`,
   feedbackNew:    `/${slug}/feedback/new`,
   roadmap:        `/${slug}/roadmap`,
+  // Portal surveys — public-facing survey pages
+  portalSurveys:     `/${slug}/portal/surveys`,
+  portalSurveyItem:  (id: string) => `/${slug}/portal/surveys/${id}`,
 });
 
 /** Workspace-scoped auth routes */

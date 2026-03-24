@@ -15,7 +15,7 @@ import {
   useSurveyIntelligence,
 } from '@/hooks/use-surveys';
 import { SurveyStatus, SurveyQuestionType, SurveyType } from '@/lib/api-types';
-import { appRoutes } from '@/lib/routes';
+import { appRoutes, publicRoutes } from '@/lib/routes';
 
 // ─── Design tokens ─────────────────────────────────────────────────────────────
 const CARD: React.CSSProperties = {
@@ -178,7 +178,9 @@ export default function SurveyDetailPage() {
     [SurveyType.OPEN_INSIGHT]:       'Open Insight',
     [SurveyType.CUSTOM]:             'Custom',
   };
-  const portalUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/${orgSlug}/surveys/${surveyId}`;
+  // Correct public URL: /:orgSlug/portal/surveys/:id
+  const pub = publicRoutes(orgSlug);
+  const portalUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}${pub.portalSurveyItem(surveyId)}`;
 
   return (
     <>

@@ -93,12 +93,20 @@ export default function WorkspacesPage() {
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
                         {w.status === 'ACTIVE' && (
-                          <button onClick={() => statusMutation.mutate({ id: w.id, status: 'SUSPENDED', reason: 'Platform admin action' })}
-                            className="text-xs px-2 py-1 bg-red-600/20 text-red-400 rounded hover:bg-red-600/30 transition-colors">Suspend</button>
+                          <button
+                            onClick={() => statusMutation.mutate({ id: w.id, status: 'SUSPENDED', reason: 'Platform admin action' })}
+                            disabled={statusMutation.isPending && statusMutation.variables?.id === w.id}
+                            className="text-xs px-2 py-1 bg-red-600/20 text-red-400 rounded hover:bg-red-600/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                            {statusMutation.isPending && statusMutation.variables?.id === w.id ? 'Suspending…' : 'Suspend'}
+                          </button>
                         )}
                         {w.status === 'SUSPENDED' && (
-                          <button onClick={() => statusMutation.mutate({ id: w.id, status: 'ACTIVE' })}
-                            className="text-xs px-2 py-1 bg-green-600/20 text-green-400 rounded hover:bg-green-600/30 transition-colors">Activate</button>
+                          <button
+                            onClick={() => statusMutation.mutate({ id: w.id, status: 'ACTIVE' })}
+                            disabled={statusMutation.isPending && statusMutation.variables?.id === w.id}
+                            className="text-xs px-2 py-1 bg-green-600/20 text-green-400 rounded hover:bg-green-600/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                            {statusMutation.isPending && statusMutation.variables?.id === w.id ? 'Activating…' : 'Activate'}
+                          </button>
                         )}
                       </div>
                     </td>

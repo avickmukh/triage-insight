@@ -69,7 +69,9 @@ export default function FeatureFlagsPage() {
                   </select>
                 </div>
                 <button onClick={() => featureKey && setMutation.mutate()} disabled={!featureKey || setMutation.isPending}
-                  className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white text-sm rounded transition-colors">Set</button>
+                  className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white text-sm rounded transition-colors">
+                  {setMutation.isPending ? 'Setting…' : 'Set'}
+                </button>
               </div>
               {isLoading ? <LoadingSpinner className="h-5 w-5 text-violet-400" /> : (
                 <div className="space-y-2">
@@ -79,7 +81,12 @@ export default function FeatureFlagsPage() {
                         <span className="text-sm text-gray-300 font-mono">{o.feature}</span>
                         <div className="flex items-center gap-3">
                           <span className={`text-xs px-2 py-0.5 rounded-full ${o.enabled ? 'bg-green-400/10 text-green-400' : 'bg-red-400/10 text-red-400'}`}>{o.enabled ? 'ON' : 'OFF'}</span>
-                          <button onClick={() => deleteMutation.mutate(o.feature)} className="text-xs text-gray-500 hover:text-red-400 transition-colors">Remove</button>
+                          <button
+                            onClick={() => deleteMutation.mutate(o.feature)}
+                            disabled={deleteMutation.isPending && deleteMutation.variables === o.feature}
+                            className="text-xs text-gray-500 hover:text-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                            {deleteMutation.isPending && deleteMutation.variables === o.feature ? 'Removing…' : 'Remove'}
+                          </button>
                         </div>
                       </div>
                     ))
