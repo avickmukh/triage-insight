@@ -8,6 +8,7 @@ import { useSearchParams } from "next/navigation";
 import * as z from "zod";
 import { useAuth } from "@/lib/auth";
 import { BillingPlan } from "@/lib/api-types";
+import PasswordInput from "@/components/shared/PasswordInput";
 
 // ── Zod schema ────────────────────────────────────────────────────────────────
 const signupSchema = z.object({
@@ -18,7 +19,12 @@ const signupSchema = z.object({
     .min(2, "Organization name must be at least 2 characters")
     .max(100, "Organization name must be 100 characters or fewer"),
   email: z.string().email("Please enter a valid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+    .regex(/[0-9]/, "Password must contain at least one number")
+    .regex(/[^A-Za-z0-9]/, "Password must contain at least one special character"),
 });
 
 type SignupFormValues = z.infer<typeof signupSchema>;
@@ -83,8 +89,11 @@ export default function SignupPage() {
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<SignupFormValues>({ resolver: zodResolver(signupSchema) });
+
+  const passwordValue = watch('password');
 
   const onSubmit = async (data: SignupFormValues) => {
     setServerError(null);
@@ -268,15 +277,20 @@ export default function SignupPage() {
             {/* Password */}
             <div>
               <label htmlFor="password" style={labelStyle}>Password</label>
-              <input
+              <PasswordInput
                 id="password"
-                type="password"
                 placeholder="Min. 8 characters"
-                autoComplete="new-password"
+                hasError={!!errors.password}
+                showStrength
+                value={passwordValue}
                 {...register("password")}
-                style={inputStyle(!!errors.password)}
               />
               {errors.password && <p style={errorStyle}>{errors.password.message}</p>}
+              {!errors.password && (
+                <p style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.3)", marginTop: "0.35rem" }}>
+                  Min. 8 characters with uppercase, number, and special character.
+                </p>
+              )}
             </div>
 
             <button

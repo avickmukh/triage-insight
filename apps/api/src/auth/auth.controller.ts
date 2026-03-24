@@ -1,4 +1,5 @@
 import { Controller, Post, Patch, Body, Get, UseGuards, Req, Query, Param } from '@nestjs/common';
+import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { SignUpDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
@@ -20,11 +21,15 @@ export class AuthController {
 
   // ─── Workspace User Auth ──────────────────────────────────────────────────
 
+  // Tighter rate limit on signup: 5 attempts per minute per IP
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('signup')
   signUp(@Body() signUpDto: SignUpDto) {
     return this.authService.signUp(signUpDto);
   }
 
+  // Tighter rate limit on login: 10 attempts per minute per IP (brute-force protection)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('login')
   login(@Body() loginDto: LoginDto & { orgSlug?: string }) {
     return this.authService.login(loginDto);
@@ -67,6 +72,8 @@ export class AuthController {
    * Always returns HTTP 200 with a generic message to prevent user enumeration.
    * In production the token is delivered via email; in dev it is returned in the body.
    */
+  // Tighter rate limit on forgot-password: 5 requests per minute per IP
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('forgot-password')
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto);
@@ -107,6 +114,8 @@ export class AuthController {
   }
 
   /** Public — log in a portal user for a specific workspace */
+  // Tighter rate limit on portal login: 10 attempts per minute per IP
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('portal/:workspaceSlug/login')
   portalLogin(
     @Param('workspaceSlug') workspaceSlug: string,

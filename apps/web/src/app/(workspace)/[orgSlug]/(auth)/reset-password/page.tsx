@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { workspaceAuthRoutes } from "@/lib/routes";
 import apiClient from "@/lib/api-client";
+import PasswordInput from "@/components/shared/PasswordInput";
 
 interface RequestFormValues { email: string; }
 interface ConfirmFormValues { password: string; confirmPassword: string; }
@@ -118,16 +119,36 @@ export default function ResetPasswordPage() {
               <form onSubmit={handleConf(onConfirmSubmit)} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
                 <div>
                   <label htmlFor="password" style={labelStyle}>New Password</label>
-                  <input id="password" type="password" placeholder="Min. 8 characters"
-                    {...regConf("password", { required: "Password is required", minLength: { value: 8, message: "At least 8 characters" } })}
-                    style={inputStyle(!!confErrors.password)} />
+                  <PasswordInput
+                    id="password"
+                    placeholder="Min. 8 characters"
+                    hasError={!!confErrors.password}
+                    showStrength
+                    value={passwordValue}
+                    {...regConf('password', {
+                      required: 'Password is required',
+                      minLength: { value: 8, message: 'At least 8 characters' },
+                      pattern: {
+                        value: /^(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,}$/,
+                        message: 'Must include uppercase, number, and special character',
+                      },
+                    })}
+                  />
                   {confErrors.password && <p style={{ fontSize: "0.75rem", color: "#e74c3c", marginTop: "0.3rem" }}>{confErrors.password.message}</p>}
+                  {!confErrors.password && (
+                    <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.3)', marginTop: '0.35rem' }}>
+                      Min. 8 characters with uppercase, number, and special character.
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label htmlFor="confirmPassword" style={labelStyle}>Confirm Password</label>
-                  <input id="confirmPassword" type="password" placeholder="••••••••"
-                    {...regConf("confirmPassword", { required: "Please confirm", validate: (v) => v === passwordValue || "Passwords do not match" })}
-                    style={inputStyle(!!confErrors.confirmPassword)} />
+                  <PasswordInput
+                    id="confirmPassword"
+                    placeholder="••••••••"
+                    hasError={!!confErrors.confirmPassword}
+                    {...regConf('confirmPassword', { required: 'Please confirm', validate: (v) => v === passwordValue || 'Passwords do not match' })}
+                  />
                   {confErrors.confirmPassword && <p style={{ fontSize: "0.75rem", color: "#e74c3c", marginTop: "0.3rem" }}>{confErrors.confirmPassword.message}</p>}
                 </div>
                 <button type="submit" disabled={confSubmitting} style={btn(confSubmitting)}>{confSubmitting ? "Saving…" : "Set password"}</button>

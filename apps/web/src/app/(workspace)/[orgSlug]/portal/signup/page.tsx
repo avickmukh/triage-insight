@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useForm } from "react-hook-form";
 import apiClient, { isApiError } from "@/lib/api-client";
 import { publicRoutes } from "@/lib/routes";
+import PasswordInput from "@/components/shared/PasswordInput";
 
 interface FormValues {
   name: string;
@@ -248,31 +249,29 @@ export default function PortalSignUpPage() {
               >
                 Password
               </label>
-              <input
+              <PasswordInput
                 id="password"
-                type="password"
                 placeholder="Min. 8 characters"
+                hasError={!!errors.password}
+                showStrength
+                value={passwordValue}
                 {...register("password", {
                   required: "Password is required",
                   minLength: { value: 8, message: "Password must be at least 8 characters" },
+                  pattern: {
+                    value: /^(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,}$/,
+                    message: 'Must include uppercase, number, and special character',
+                  },
                 })}
-                style={{
-                  width: "100%",
-                  padding: "0.7rem 1rem",
-                  borderRadius: "0.6rem",
-                  border: errors.password
-                    ? "1px solid #e74c3c"
-                    : "1px solid rgba(255,255,255,0.15)",
-                  background: "rgba(255,255,255,0.06)",
-                  color: "#fff",
-                  fontSize: "0.95rem",
-                  outline: "none",
-                  boxSizing: "border-box",
-                }}
               />
               {errors.password && (
                 <p style={{ fontSize: "0.75rem", color: "#e74c3c", marginTop: "0.3rem" }}>
                   {errors.password.message}
+                </p>
+              )}
+              {!errors.password && (
+                <p style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.3)", marginTop: "0.35rem" }}>
+                  Min. 8 characters with uppercase, number, and special character.
                 </p>
               )}
             </div>
@@ -293,27 +292,14 @@ export default function PortalSignUpPage() {
               >
                 Confirm Password
               </label>
-              <input
+              <PasswordInput
                 id="confirmPassword"
-                type="password"
                 placeholder="••••••••"
+                hasError={!!errors.confirmPassword}
                 {...register("confirmPassword", {
                   required: "Please confirm your password",
                   validate: (v) => v === passwordValue || "Passwords do not match",
                 })}
-                style={{
-                  width: "100%",
-                  padding: "0.7rem 1rem",
-                  borderRadius: "0.6rem",
-                  border: errors.confirmPassword
-                    ? "1px solid #e74c3c"
-                    : "1px solid rgba(255,255,255,0.15)",
-                  background: "rgba(255,255,255,0.06)",
-                  color: "#fff",
-                  fontSize: "0.95rem",
-                  outline: "none",
-                  boxSizing: "border-box",
-                }}
               />
               {errors.confirmPassword && (
                 <p style={{ fontSize: "0.75rem", color: "#e74c3c", marginTop: "0.3rem" }}>

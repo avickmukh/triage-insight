@@ -7,12 +7,18 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import Link from 'next/link';
 import apiClient from '@/lib/api-client';
+import PasswordInput from '@/components/shared/PasswordInput';
 import { setTokens } from '@/lib/token-storage';
 import { appRoutes } from '@/lib/routes';
 
 const schema = z
   .object({
-    password: z.string().min(8, 'Password must be at least 8 characters'),
+    password: z
+      .string()
+      .min(8, 'Password must be at least 8 characters')
+      .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+      .regex(/[0-9]/, 'Password must contain at least one number')
+      .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character'),
     confirm: z.string(),
   })
   .refine((d) => d.password === d.confirm, {
@@ -42,8 +48,11 @@ export default function AcceptInvitePage() {
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({ resolver: zodResolver(schema) });
+
+  const passwordValue = watch('password');
 
   useEffect(() => {
     if (!token) {
@@ -190,26 +199,31 @@ export default function AcceptInvitePage() {
               >
                 <div>
                   <label style={labelStyle}>New password</label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     placeholder="At least 8 characters"
+                    hasError={!!errors.password}
+                    showStrength
+                    value={passwordValue}
                     {...register('password')}
-                    style={inputStyle(!!errors.password)}
                   />
                   {errors.password && (
                     <p style={{ fontSize: '0.75rem', color: '#e74c3c', marginTop: '0.3rem' }}>
                       {errors.password.message}
                     </p>
                   )}
+                  {!errors.password && (
+                    <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.3)', marginTop: '0.35rem' }}>
+                      Min. 8 characters with uppercase, number, and special character.
+                    </p>
+                  )}
                 </div>
 
                 <div>
                   <label style={labelStyle}>Confirm password</label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     placeholder="Repeat password"
+                    hasError={!!errors.confirm}
                     {...register('confirm')}
-                    style={inputStyle(!!errors.confirm)}
                   />
                   {errors.confirm && (
                     <p style={{ fontSize: '0.75rem', color: '#e74c3c', marginTop: '0.3rem' }}>

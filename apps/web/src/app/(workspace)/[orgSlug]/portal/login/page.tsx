@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useForm } from "react-hook-form";
 import apiClient, { isApiError } from "@/lib/api-client";
 import { publicRoutes } from "@/lib/routes";
+import PasswordInput from "@/components/shared/PasswordInput";
 
 interface FormValues {
   email: string;
@@ -195,24 +196,11 @@ export default function PortalLoginPage() {
               >
                 Password
               </label>
-              <input
+              <PasswordInput
                 id="password"
-                type="password"
                 placeholder="••••••••"
+                hasError={!!errors.password}
                 {...register("password", { required: "Password is required" })}
-                style={{
-                  width: "100%",
-                  padding: "0.7rem 1rem",
-                  borderRadius: "0.6rem",
-                  border: errors.password
-                    ? "1px solid #e74c3c"
-                    : "1px solid rgba(255,255,255,0.15)",
-                  background: "rgba(255,255,255,0.06)",
-                  color: "#fff",
-                  fontSize: "0.95rem",
-                  outline: "none",
-                  boxSizing: "border-box",
-                }}
               />
               {errors.password && (
                 <p style={{ fontSize: "0.75rem", color: "#e74c3c", marginTop: "0.3rem" }}>

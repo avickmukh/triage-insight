@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from "react";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -7,6 +8,7 @@ import * as z from "zod";
 import { useAuth } from "@/lib/auth";
 import { useParams } from "next/navigation";
 import { workspaceAuthRoutes } from "@/lib/routes";
+import PasswordInput from "@/components/shared/PasswordInput";
 
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email"),
@@ -15,19 +17,51 @@ const loginSchema = z.object({
 
 type LoginFormValues = z.infer<typeof loginSchema>;
 
+const labelStyle: React.CSSProperties = {
+  display: "block",
+  fontSize: "0.78rem",
+  fontWeight: 600,
+  color: "rgba(255,255,255,0.65)",
+  marginBottom: "0.4rem",
+  letterSpacing: "0.06em",
+  textTransform: "uppercase",
+};
+
+const inputStyle = (hasError: boolean): React.CSSProperties => ({
+  width: "100%",
+  padding: "0.7rem 1rem",
+  borderRadius: "0.6rem",
+  border: hasError ? "1px solid #e74c3c" : "1px solid rgba(255,255,255,0.15)",
+  background: "rgba(255,255,255,0.06)",
+  color: "#fff",
+  fontSize: "0.95rem",
+  outline: "none",
+  boxSizing: "border-box",
+  fontFamily: "Inter, sans-serif",
+});
+
 export default function LoginPage() {
   const { login } = useAuth();
+  const [serverError, setServerError] = useState<string | null>(null);
   const params = useParams();
   const slug = (Array.isArray(params.orgSlug) ? params.orgSlug[0] : params.orgSlug) ?? '';
   const wa = workspaceAuthRoutes(slug);
+
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<LoginFormValues>({ resolver: zodResolver(loginSchema) });
 
-  const onSubmit = (data: LoginFormValues) => {
-    login(data);
+  const onSubmit = async (data: LoginFormValues) => {
+    setServerError(null);
+    try {
+      await login(data);
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setServerError(message ?? "Invalid email or password. Please try again.");
+    }
   };
 
   return (
@@ -79,41 +113,33 @@ export default function LoginPage() {
             Sign in to your TriageInsight workspace
           </p>
 
+          {serverError && (
+            <div style={{
+              background: "rgba(231,76,60,0.12)",
+              border: "1px solid rgba(231,76,60,0.4)",
+              borderRadius: "0.6rem",
+              padding: "0.75rem 1rem",
+              color: "#e74c3c",
+              fontSize: "0.85rem",
+              marginBottom: "1.25rem",
+            }}>
+              {serverError}
+            </div>
+          )}
+
           <form
             onSubmit={handleSubmit(onSubmit)}
             style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}
           >
             <div>
-              <label
-                htmlFor="email"
-                style={{
-                  display: "block",
-                  fontSize: "0.78rem",
-                  fontWeight: 600,
-                  color: "rgba(255,255,255,0.65)",
-                  marginBottom: "0.4rem",
-                  letterSpacing: "0.06em",
-                  textTransform: "uppercase",
-                }}
-              >
-                Email
-              </label>
+              <label htmlFor="email" style={labelStyle}>Email</label>
               <input
                 id="email"
                 type="email"
                 placeholder="you@company.com"
+                autoComplete="email"
                 {...register("email")}
-                style={{
-                  width: "100%",
-                  padding: "0.7rem 1rem",
-                  borderRadius: "0.6rem",
-                  border: errors.email ? "1px solid #e74c3c" : "1px solid rgba(255,255,255,0.15)",
-                  background: "rgba(255,255,255,0.06)",
-                  color: "#fff",
-                  fontSize: "0.95rem",
-                  outline: "none",
-                  boxSizing: "border-box",
-                }}
+                style={inputStyle(!!errors.email)}
               />
               {errors.email && (
                 <p style={{ fontSize: "0.75rem", color: "#e74c3c", marginTop: "0.3rem" }}>
@@ -123,49 +149,17 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: "0.4rem",
-                }}
-              >
-                <label
-                  htmlFor="password"
-                  style={{
-                    fontSize: "0.78rem",
-                    fontWeight: 600,
-                    color: "rgba(255,255,255,0.65)",
-                    letterSpacing: "0.06em",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  Password
-                </label>
-                <Link
-                  href={wa.resetPassword}
-                  style={{ fontSize: "0.78rem", color: "#20A4A4", textDecoration: "none" }}
-                >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.4rem" }}>
+                <label htmlFor="password" style={{ ...labelStyle, display: "inline" }}>Password</label>
+                <Link href={wa.resetPassword} style={{ fontSize: "0.78rem", color: "#20A4A4", textDecoration: "none" }}>
                   Forgot password?
                 </Link>
               </div>
-              <input
+              <PasswordInput
                 id="password"
-                type="password"
                 placeholder="••••••••"
+                hasError={!!errors.password}
                 {...register("password")}
-                style={{
-                  width: "100%",
-                  padding: "0.7rem 1rem",
-                  borderRadius: "0.6rem",
-                  border: errors.password ? "1px solid #e74c3c" : "1px solid rgba(255,255,255,0.15)",
-                  background: "rgba(255,255,255,0.06)",
-                  color: "#fff",
-                  fontSize: "0.95rem",
-                  outline: "none",
-                  boxSizing: "border-box",
-                }}
               />
               {errors.password && (
                 <p style={{ fontSize: "0.75rem", color: "#e74c3c", marginTop: "0.3rem" }}>
@@ -194,14 +188,7 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <p
-            style={{
-              marginTop: "1.5rem",
-              textAlign: "center",
-              fontSize: "0.85rem",
-              color: "rgba(255,255,255,0.5)",
-            }}
-          >
+          <p style={{ marginTop: "1.5rem", textAlign: "center", fontSize: "0.85rem", color: "rgba(255,255,255,0.5)" }}>
             No account?{" "}
             <Link href={wa.signup} style={{ color: "#20A4A4", textDecoration: "none", fontWeight: 600 }}>
               Create one free

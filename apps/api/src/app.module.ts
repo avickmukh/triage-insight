@@ -1,6 +1,8 @@
 
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './health/health.module';
 import { QueueModule } from './queue/queue.module';
@@ -35,6 +37,24 @@ import { validationSchema } from './config/validation';
       isGlobal: true,
       validationSchema,
     }),
+    // ── Global Rate Limiting ──────────────────────────────────────────────
+    // Protects all endpoints from brute-force and DoS attacks.
+    // Auth endpoints (login, signup, forgot-password) are most sensitive.
+    // Default: 20 requests per 60 seconds per IP (configurable via env vars).
+    // Override per-route with @Throttle({ default: { limit: N, ttl: S } }).
+    // @SkipThrottle() can be used on health-check endpoints.
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        throttlers: [
+          {
+            ttl: config.get<number>('THROTTLE_TTL_MS', 60000),
+            limit: config.get<number>('THROTTLE_LIMIT', 20),
+          },
+        ],
+      }),
+    }),
     PrismaModule,
     HealthModule,
     QueueModule,
@@ -61,6 +81,14 @@ import { validationSchema } from './config/validation';
     CommonModule,
     ReportingModule,
     PurgeModule,
+  ],
+  providers: [
+    // Apply ThrottlerGuard globally to every route in the application.
+    // This is the recommended approach for NestJS throttling.
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
 export class AppModule {}

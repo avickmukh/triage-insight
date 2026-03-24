@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/lib/api-client';
+import PasswordInput from '@/components/shared/PasswordInput';
 
 /* ─── Design tokens (matches existing app) ─── */
 const CARD: React.CSSProperties = {
@@ -58,7 +59,12 @@ const profileSchema = z.object({
 const passwordSchema = z
   .object({
     currentPassword: z.string().min(1, 'Current password is required'),
-    newPassword: z.string().min(8, 'New password must be at least 8 characters'),
+    newPassword: z
+    .string()
+    .min(8, 'New password must be at least 8 characters')
+    .regex(/[A-Z]/, 'Must contain at least one uppercase letter')
+    .regex(/[0-9]/, 'Must contain at least one number')
+    .regex(/[^A-Za-z0-9]/, 'Must contain at least one special character'),
     confirmPassword: z.string(),
   })
   .refine((d) => d.newPassword === d.confirmPassword, {
@@ -230,11 +236,11 @@ export default function ProfilePage() {
         >
           <div>
             <label style={LABEL}>Current password</label>
-            <input
-              type="password"
+            <PasswordInput
+              theme="light"
               placeholder="••••••••"
+              hasError={!!passwordForm.formState.errors.currentPassword}
               {...passwordForm.register('currentPassword')}
-              style={INPUT(!!passwordForm.formState.errors.currentPassword)}
             />
             {passwordForm.formState.errors.currentPassword && (
               <p style={{ fontSize: '0.75rem', color: '#e74c3c', marginTop: '0.3rem' }}>
@@ -245,26 +251,33 @@ export default function ProfilePage() {
 
           <div>
             <label style={LABEL}>New password</label>
-            <input
-              type="password"
+            <PasswordInput
+              theme="light"
               placeholder="At least 8 characters"
+              hasError={!!passwordForm.formState.errors.newPassword}
+              showStrength
+              value={passwordForm.watch('newPassword')}
               {...passwordForm.register('newPassword')}
-              style={INPUT(!!passwordForm.formState.errors.newPassword)}
             />
             {passwordForm.formState.errors.newPassword && (
               <p style={{ fontSize: '0.75rem', color: '#e74c3c', marginTop: '0.3rem' }}>
                 {passwordForm.formState.errors.newPassword.message}
               </p>
             )}
+            {!passwordForm.formState.errors.newPassword && (
+              <p style={{ fontSize: '0.72rem', color: '#adb5bd', marginTop: '0.35rem' }}>
+                Min. 8 characters with uppercase, number, and special character.
+              </p>
+            )}
           </div>
 
           <div>
             <label style={LABEL}>Confirm new password</label>
-            <input
-              type="password"
+            <PasswordInput
+              theme="light"
               placeholder="Repeat new password"
+              hasError={!!passwordForm.formState.errors.confirmPassword}
               {...passwordForm.register('confirmPassword')}
-              style={INPUT(!!passwordForm.formState.errors.confirmPassword)}
             />
             {passwordForm.formState.errors.confirmPassword && (
               <p style={{ fontSize: '0.75rem', color: '#e74c3c', marginTop: '0.3rem' }}>
