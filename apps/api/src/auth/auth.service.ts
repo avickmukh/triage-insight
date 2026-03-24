@@ -219,8 +219,36 @@ export class AuthService {
   }
 
   /**
-   * Refresh token rotation.
-   * Looks up the stored hash of the raw token. Revokes the old token and issues a new pair.
+   * Refresh token rotation (by raw opaque token — no userId required).
+   *
+   * The refresh token is an opaque hex string stored as a SHA-256 hash.
+   * We look it up directly by hash, find the associated user, revoke the old
+   * token, and issue a new access + refresh token pair (rotation).
+   *
+   * This is the correct method to call from the /auth/refresh endpoint because
+   * the raw refresh token is NOT a JWT and cannot be decoded with jwtService.
+   */
+  async refreshTokenByRaw(rawRefreshToken: string) {
+    if (!rawRefreshToken) throw new UnauthorizedException('Refresh token is required.');
+
+    const tokenHash = hashToken(rawRefreshToken);
+    const rt = await this.prisma.refreshToken.findFirst({
+      where: { tokenHash, revoked: false },
+      include: { user: true },
+    });
+
+    if (!rt || rt.expiresAt < new Date()) {
+      throw new UnauthorizedException('Invalid or expired refresh token.');
+    }
+
+    // Rotation: revoke the old token before issuing a new pair
+    await this.prisma.refreshToken.update({ where: { id: rt.id }, data: { revoked: true } });
+    return this.generateTokens(rt.user.id, rt.user.email);
+  }
+
+  /**
+   * Refresh token rotation (legacy — requires userId).
+   * Kept for backward compatibility; prefer refreshTokenByRaw for new code.
    */
   async refreshToken(userId: string, rawRefreshToken: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
@@ -425,18 +453,21 @@ export class AuthService {
   private async generateTokens(userId: string, email: string) {
     const payload = { sub: userId, email };
     const jwtSecret = this.configService.get<string>('JWT_SECRET');
-    const accessToken = this.jwtService.sign(payload, { secret: jwtSecret, expiresIn: '15m' });
+    // Access token: 1 hour (was 15m — increased to reduce refresh frequency and improve UX).
+    // The silent refresh interceptor on the frontend will renew it automatically on 401.
+    const accessToken = this.jwtService.sign(payload, { secret: jwtSecret, expiresIn: '1h' });
 
     // Opaque refresh token — 48 random bytes = 384 bits of entropy
     const rawRefreshToken = crypto.randomBytes(48).toString('hex');
     const tokenHash = hashToken(rawRefreshToken);
 
+    // Refresh token valid for 30 days (was 7d — extended for better session persistence)
     await this.prisma.refreshToken.create({
       data: {
         token: rawRefreshToken,   // kept for backward compat; hash is the canonical lookup key
         tokenHash,
         userId,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       },
     });
     return { accessToken, refreshToken: rawRefreshToken };

@@ -35,10 +35,17 @@ export class AuthController {
     return this.authService.login(loginDto);
   }
 
+  /**
+   * Refresh token rotation.
+   *
+   * IMPORTANT: The refresh token is an opaque hex string (NOT a JWT).
+   * We must NOT call decodeToken() on it — that only works for JWTs.
+   * Instead, we look it up directly by its SHA-256 hash in the database.
+   * The refreshToken service method handles the hash lookup internally.
+   */
   @Post('refresh')
   refresh(@Body() refreshTokenDto: RefreshTokenDto) {
-    const decoded = this.authService.decodeToken(refreshTokenDto.refreshToken);
-    return this.authService.refreshToken(decoded.sub, refreshTokenDto.refreshToken);
+    return this.authService.refreshTokenByRaw(refreshTokenDto.refreshToken);
   }
 
   @UseGuards(JwtAuthGuard)

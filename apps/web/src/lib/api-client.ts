@@ -1,6 +1,6 @@
 import { AxiosError, AxiosInstance, AxiosResponse } from "axios";
 import axios from "axios";
-import { getAccessToken, getRefreshToken, setAccessToken, clearTokens } from "@/lib/token-storage";
+import { getAccessToken, getRefreshToken, setAccessToken, setTokens, clearTokens } from "@/lib/token-storage";
 import {
   ApiError,
   BillingStatusResponse,
@@ -1023,42 +1023,124 @@ const apiClient = {
   },
 };
 
+/**
+ * Silent token refresh with queue-based concurrency control.
+ *
+ * Problem solved: When multiple API calls fail with 401 simultaneously (e.g. on
+ * page load), the naive approach triggers multiple concurrent refresh requests.
+ * Because the backend uses refresh token rotation, the second concurrent request
+ * uses an already-revoked token and fails, causing an unnecessary logout.
+ *
+ * Solution: A single "isRefreshing" flag and a "failedQueue" ensure that only
+ * ONE refresh request is in-flight at a time. All other 401 failures are queued
+ * and resolved/rejected once the single refresh completes.
+ */
+let isRefreshing = false;
+type QueueItem = { resolve: (token: string) => void; reject: (err: unknown) => void };
+let failedQueue: QueueItem[] = [];
+
+function processQueue(error: unknown, token: string | null) {
+  failedQueue.forEach((item) => {
+    if (error) {
+      item.reject(error);
+    } else {
+      item.resolve(token as string);
+    }
+  });
+  failedQueue = [];
+}
+
+function redirectToLogin() {
+  if (typeof window === "undefined") return;
+  const path = window.location.pathname;
+  // Match /:orgSlug/app/* and /:orgSlug/admin/* (workspace-scoped protected routes)
+  const isProtected =
+    /^\/[^/]+\/app(\/|$)/.test(path) ||
+    /^\/[^/]+\/admin(\/|$)/.test(path);
+  if (isProtected) {
+    const slugMatch = path.match(/^\/([^/]+)\//); 
+    const slug = slugMatch ? slugMatch[1] : null;
+    window.location.href = slug ? `/${slug}/login` : "/login";
+  } else if (
+    /^\/[^/]+\/portal(\/|$)/.test(path)
+  ) {
+    const slugMatch = path.match(/^\/([^/]+)\//); 
+    const slug = slugMatch ? slugMatch[1] : null;
+    window.location.href = slug ? `/${slug}/portal/login` : "/login";
+  } else if (path.startsWith("/admin")) {
+    window.location.href = "/login";
+  }
+}
+
 api.interceptors.response.use(
   (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-      const refreshToken = getRefreshToken();
-      if (refreshToken) {
-        try {
-          const { accessToken } = await apiClient.auth.refresh({ refreshToken });
-          // Update both localStorage and the middleware cookie
-          setAccessToken(accessToken);
-          axios.defaults.headers.common["Authorization"] = `Bearer ${accessToken}`;
-          originalRequest.headers["Authorization"] = `Bearer ${accessToken}`;
-          return api(originalRequest);
-        } catch (refreshError) {
-          console.error("Token refresh failed:", refreshError);
-          // Clear both localStorage and the middleware cookie
-          clearTokens();
-          if (typeof window !== "undefined") {
-            const path = window.location.pathname;
-            // Match /:orgSlug/app/* and /:orgSlug/admin/* (workspace-scoped protected routes)
-            const isProtected =
-              /^\/[^/]+\/app(\/|$)/.test(path) ||
-              /^\/[^/]+\/admin(\/|$)/.test(path);
-            if (isProtected) {
-              // Redirect to workspace login if we can extract the slug, else global login
-              const slugMatch = path.match(/^\/([^/]+)\//); 
-              const slug = slugMatch ? slugMatch[1] : null;
-              window.location.href = slug ? `/${slug}/login` : "/login";
-            }
-          }
-        }
-      }
+  async (error: AxiosError) => {
+    const originalRequest = error.config as (typeof error.config & { _retry?: boolean });
+
+    // Only attempt refresh on 401 errors that haven't already been retried
+    if (error.response?.status !== 401 || originalRequest._retry) {
+      return Promise.reject(error);
     }
-    return Promise.reject(error);
+
+    // Don't try to refresh if the failing request IS the refresh endpoint
+    // (avoids infinite loops when the refresh token itself is expired)
+    if (originalRequest.url?.includes('/auth/refresh')) {
+      clearTokens();
+      redirectToLogin();
+      return Promise.reject(error);
+    }
+
+    const refreshToken = getRefreshToken();
+    if (!refreshToken) {
+      // No refresh token stored — user needs to log in
+      return Promise.reject(error);
+    }
+
+    if (isRefreshing) {
+      // Another refresh is already in-flight — queue this request and wait
+      return new Promise<string>((resolve, reject) => {
+        failedQueue.push({ resolve, reject });
+      })
+        .then((newToken) => {
+          originalRequest.headers!["Authorization"] = `Bearer ${newToken}`;
+          return api(originalRequest);
+        })
+        .catch((err) => Promise.reject(err));
+    }
+
+    // This is the first 401 — take the refresh lock
+    originalRequest._retry = true;
+    isRefreshing = true;
+
+    try {
+      const { accessToken, refreshToken: newRefreshToken } = await axios.post<{
+        accessToken: string;
+        refreshToken: string;
+      }>(
+        `${getApiBaseUrl()}/auth/refresh`,
+        { refreshToken },
+        { headers: { "Content-Type": "application/json" } },
+      ).then((r) => r.data);
+
+      // Persist the new token pair (rotation: old refresh token is now revoked)
+      setTokens(accessToken, newRefreshToken);
+
+      // Update the Authorization header for the retried request
+      originalRequest.headers!["Authorization"] = `Bearer ${accessToken}`;
+
+      // Resolve all queued requests with the new token
+      processQueue(null, accessToken);
+
+      return api(originalRequest);
+    } catch (refreshError) {
+      // Refresh failed (token expired or revoked) — clear session and redirect
+      processQueue(refreshError, null);
+      clearTokens();
+      redirectToLogin();
+      return Promise.reject(refreshError);
+    } finally {
+      isRefreshing = false;
+    }
   }
 );
 

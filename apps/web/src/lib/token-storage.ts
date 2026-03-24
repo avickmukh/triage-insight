@@ -17,8 +17,12 @@
 const ACCESS_TOKEN_KEY = "accessToken";
 const REFRESH_TOKEN_KEY = "refreshToken";
 
-/** Max-age in seconds for the access token cookie (15 minutes). */
-const ACCESS_TOKEN_COOKIE_MAX_AGE = 60 * 15;
+/**
+ * Max-age in seconds for the access token cookie.
+ * Must match the JWT access token TTL (currently 1 hour).
+ * The silent refresh interceptor in api-client.ts renews it automatically on 401.
+ */
+const ACCESS_TOKEN_COOKIE_MAX_AGE = 60 * 60; // 1 hour
 
 function buildCookieString(value: string): string {
   const isProduction = process.env.NODE_ENV === "production";
