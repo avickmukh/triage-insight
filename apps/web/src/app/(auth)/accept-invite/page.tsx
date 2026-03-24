@@ -9,6 +9,7 @@ import Link from 'next/link';
 import apiClient from '@/lib/api-client';
 import PasswordInput from '@/components/shared/PasswordInput';
 import { setTokens } from '@/lib/token-storage';
+import { hashPasswordForTransmission } from '@/lib/password-hash';
 import { appRoutes } from '@/lib/routes';
 
 const schema = z
@@ -70,7 +71,8 @@ export default function AcceptInvitePage() {
   const onSubmit = async (data: FormValues) => {
     setSubmitError('');
     try {
-      const res = await apiClient.auth.setupPassword({ token, password: data.password });
+      const hashedPassword = await hashPasswordForTransmission(data.password);
+      const res = await apiClient.auth.setupPassword({ token, password: hashedPassword });
       setTokens(res.accessToken, res.refreshToken);
       setDone(true);
       setTimeout(() => {

@@ -3,6 +3,7 @@ import apiClient from "@/lib/api-client";
 import { LoginRequest, SignUpDto, User } from "@/lib/api-types";
 import { useRouter } from "next/navigation";
 import { setTokens, clearTokens } from "@/lib/token-storage";
+import { hashPasswordForTransmission } from "@/lib/password-hash";
 
 const USER_QUERY_KEY = "user";
 
@@ -33,7 +34,12 @@ export const useAuth = () => {
   });
 
   const signUpMutation = useMutation({
-    mutationFn: (data: SignUpDto) => apiClient.auth.signUp(data),
+    mutationFn: async (data: SignUpDto) => {
+      // Hash the password with SHA-256 before transmission.
+      // The server receives a hex hash — the raw password never leaves the browser.
+      const hashedPassword = await hashPasswordForTransmission(data.password);
+      return apiClient.auth.signUp({ ...data, password: hashedPassword });
+    },
     onSuccess: async (data) => {
       // Write to both localStorage (Axios interceptor) and cookie (middleware)
       setTokens(data.accessToken, data.refreshToken);
@@ -46,7 +52,11 @@ export const useAuth = () => {
   const signUp = (data: SignUpDto) => signUpMutation.mutateAsync(data);
 
   const { mutate: login } = useMutation({
-    mutationFn: (data: LoginRequest) => apiClient.auth.login(data),
+    mutationFn: async (data: LoginRequest) => {
+      // Hash the password with SHA-256 before transmission.
+      const hashedPassword = await hashPasswordForTransmission(data.password);
+      return apiClient.auth.login({ ...data, password: hashedPassword });
+    },
     onSuccess: async (data) => {
       // Write to both localStorage (Axios interceptor) and cookie (middleware)
       setTokens(data.accessToken, data.refreshToken);

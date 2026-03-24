@@ -7,6 +7,7 @@ import * as z from 'zod';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/lib/api-client';
 import PasswordInput from '@/components/shared/PasswordInput';
+import { hashPasswordForTransmission } from '@/lib/password-hash';
 
 /* ─── Design tokens (matches existing app) ─── */
 const CARD: React.CSSProperties = {
@@ -119,8 +120,14 @@ export default function ProfilePage() {
   });
 
   const changePasswordMutation = useMutation({
-    mutationFn: (data: { currentPassword: string; newPassword: string }) =>
-      apiClient.auth.changePassword(data),
+    mutationFn: async (data: { currentPassword: string; newPassword: string }) => {
+      // Hash both passwords with SHA-256 before transmission
+      const [hashedCurrent, hashedNew] = await Promise.all([
+        hashPasswordForTransmission(data.currentPassword),
+        hashPasswordForTransmission(data.newPassword),
+      ]);
+      return apiClient.auth.changePassword({ currentPassword: hashedCurrent, newPassword: hashedNew });
+    },
     onSuccess: () => {
       passwordForm.reset();
       setPasswordError('');

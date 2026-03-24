@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form";
 import { workspaceAuthRoutes } from "@/lib/routes";
 import apiClient from "@/lib/api-client";
 import PasswordInput from "@/components/shared/PasswordInput";
+import { hashPasswordForTransmission } from "@/lib/password-hash";
 
 interface RequestFormValues { email: string; }
 interface ConfirmFormValues { password: string; confirmPassword: string; }
@@ -66,7 +67,8 @@ export default function ResetPasswordPage() {
       return;
     }
     try {
-      await apiClient.auth.resetPassword({ token, password: values.password });
+      const hashedPassword = await hashPasswordForTransmission(values.password);
+      await apiClient.auth.resetPassword({ token, password: hashedPassword });
       setResetSuccess(true);
       setTimeout(() => router.push(wa.login), 2000);
     } catch (err: unknown) {

@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form";
 import apiClient, { isApiError } from "@/lib/api-client";
 import { publicRoutes } from "@/lib/routes";
 import PasswordInput from "@/components/shared/PasswordInput";
+import { hashPasswordForTransmission } from "@/lib/password-hash";
 
 interface FormValues {
   name: string;
@@ -35,10 +36,11 @@ export default function PortalSignUpPage() {
   const onSubmit = async (values: FormValues) => {
     setServerError(null);
     try {
+      const hashedPassword = await hashPasswordForTransmission(values.password);
       const res = await apiClient.auth.portalSignUp(orgSlug, {
         email: values.email,
         name: values.name,
-        password: values.password,
+        password: hashedPassword,
       });
       if (typeof window !== "undefined") {
         localStorage.setItem(PORTAL_USER_KEY, JSON.stringify(res.portalUser));

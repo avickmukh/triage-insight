@@ -291,6 +291,8 @@ model User {
   id                  String               @id @default(uuid())
   email               String               @unique
   passwordHash        String
+  /// 0 = legacy (bcrypt of raw password), 1 = new (bcrypt of sha256 of password)
+  passwordVersion     Int                  @default(0)
   firstName           String
   lastName            String
   platformRole        PlatformRole?
@@ -595,6 +597,8 @@ model PortalUser {
   email           String?
   name            String?
   passwordHash    String?
+  /// 0 = legacy (bcrypt of raw password), 1 = new (bcrypt of sha256 of password)
+  passwordVersion Int?      @default(0)
   verified        Boolean   @default(false)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt

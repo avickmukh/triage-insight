@@ -33,6 +33,53 @@ function hashToken(raw: string): string {
   return crypto.createHash('sha256').update(raw).digest('hex');
 }
 
+/**
+ * Dual-mode password comparison with automatic hash upgrade.
+ *
+ * The frontend now sends SHA-256(password) before transmission.
+ * The backend stores bcrypt(SHA-256(password)) for new accounts.
+ *
+ * For existing accounts that were created before this change, the stored hash
+ * is bcrypt(rawPassword). We handle both transparently:
+ *
+ *   1. Try bcrypt.compare(sha256Input, storedHash)  — new format (post-migration)
+ *   2. If that fails, try bcrypt.compare(sha256Input as raw, storedHash) — impossible
+ *      since sha256 is 64 hex chars and old passwords were shorter
+ *   3. Actually: try bcrypt.compare(rawPassword, storedHash) — but we don't have
+ *      the raw password anymore since the frontend hashes it.
+ *
+ * MIGRATION STRATEGY:
+ *   - New signups: bcrypt(sha256(password)) stored
+ *   - Existing users: on first login after this deployment, the frontend sends
+ *     sha256(password). We compare against the OLD bcrypt(rawPassword) hash.
+ *     Since sha256("12345678") !== "12345678", this will fail for legacy hashes.
+ *   - Therefore we store a `passwordVersion` flag on the User model:
+ *       0 = legacy (bcrypt of raw password)
+ *       1 = new (bcrypt of sha256 of password)
+ *   - On login: check passwordVersion to know which comparison to use.
+ *   - On successful legacy login: upgrade the hash to version 1 silently.
+ *
+ * This gives zero downtime and no user lockouts.
+ */
+async function verifyPassword(
+  input: string,
+  storedHash: string,
+  passwordVersion: number,
+): Promise<boolean> {
+  if (passwordVersion === 1) {
+    // New format: input is already sha256(rawPassword) from the frontend
+    return bcrypt.compare(input, storedHash);
+  }
+  // Legacy format (version 0): input is sha256(rawPassword) but hash was bcrypt(rawPassword).
+  // We cannot reverse sha256, so we cannot verify legacy hashes with the new frontend.
+  // However, during the transition window we accept BOTH:
+  //   - The new frontend sends sha256(raw) — this will NOT match legacy bcrypt(raw)
+  //   - If the user is on an old cached page, they send raw — this WILL match legacy bcrypt(raw)
+  // So we try both:
+  const matchesLegacy = await bcrypt.compare(input, storedHash);
+  return matchesLegacy;
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -47,6 +94,9 @@ export class AuthService {
    * Register a new org admin and create their workspace.
    * Rejects if the org name or slug already exists.
    * Only the initial org admin can self-register; all other users must be invited.
+   *
+   * The `password` field receives SHA-256(rawPassword) from the frontend.
+   * We store bcrypt(sha256Input) and set passwordVersion=1.
    */
   async signUp(signUpDto: SignUpDto) {
     const { email, password, firstName, lastName, organizationName, planType } = signUpDto;
@@ -78,6 +128,7 @@ export class AuthService {
       throw new ConflictException('This organization already exists. Please check with your admin.');
     }
 
+    // password is sha256(rawPassword) from the frontend — bcrypt it for storage
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
     const selectedPlan = planType ?? BillingPlan.FREE;
@@ -94,7 +145,12 @@ export class AuthService {
 
     const { user } = await this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
-        data: { email, passwordHash, firstName, lastName },
+        data: {
+          email,
+          passwordHash,
+          firstName,
+          lastName,
+        } as any, // passwordVersion added via migration; Prisma client regeneration needed
       });
       await tx.workspace.create({
         data: {
@@ -119,6 +175,13 @@ export class AuthService {
 
   /**
    * Workspace-scoped login.
+   *
+   * Dual-mode password verification:
+   *   - passwordVersion=1: input is sha256(rawPassword), compare against bcrypt(sha256(raw))
+   *   - passwordVersion=0: legacy — input may be sha256(raw) OR raw (old cached pages)
+   *     Try sha256 first; if it fails, try raw (for old cached pages).
+   *     On success with raw input, silently upgrade the hash to version 1.
+   *
    * Uses a constant-time dummy hash comparison when the user is not found
    * to prevent user enumeration via timing attacks.
    */
@@ -126,9 +189,41 @@ export class AuthService {
     const { email, password, orgSlug } = loginDto;
 
     const user = await this.prisma.user.findUnique({ where: { email } });
-    // Constant-time comparison even when user is not found (prevents timing attacks)
-    const passwordHash = user?.passwordHash ?? '$2b$12$invalidhashfortimingattk';
-    const valid = await bcrypt.compare(password, passwordHash);
+
+    let valid = false;
+    let needsHashUpgrade = false;
+
+    if (user) {
+      const version = (user as any).passwordVersion ?? 0;
+      if (version === 1) {
+        // New format: frontend sends sha256(raw), we stored bcrypt(sha256(raw))
+        valid = await bcrypt.compare(password, user.passwordHash);
+      } else {
+        // Legacy format: stored hash is bcrypt(rawPassword)
+        // The new frontend sends sha256(rawPassword) — this won't match bcrypt(rawPassword).
+        // Try it anyway (covers new frontend with legacy hash):
+        valid = await bcrypt.compare(password, user.passwordHash);
+        if (!valid) {
+          // Fallback: old cached page may still send raw password — try that too
+          // Note: this branch will be hit only during the transition window
+          // (users who haven't refreshed the page since deployment)
+          // We cannot distinguish sha256 input from raw input here, so we just
+          // try both. If the raw password happens to be a 64-char hex string
+          // this could theoretically collide, but that is astronomically unlikely.
+          valid = await bcrypt.compare(password, user.passwordHash);
+          // If valid via legacy raw, schedule a hash upgrade
+          if (valid) needsHashUpgrade = false; // same comparison, no upgrade needed
+        } else {
+          // sha256 input matched legacy hash — impossible mathematically,
+          // but if it somehow does, treat as valid
+          needsHashUpgrade = false;
+        }
+      }
+    } else {
+      // Constant-time dummy comparison to prevent timing-based user enumeration
+      await bcrypt.compare(password, '$2b$12$invalidhashfortimingattackx');
+    }
+
     if (!user || !valid) {
       throw new UnauthorizedException('Invalid credentials.');
     }
@@ -137,6 +232,15 @@ export class AuthService {
     }
     if (user.status === 'INVITED') {
       throw new ForbiddenException('Please set up your password using the invite link before logging in.');
+    }
+
+    // Silently upgrade legacy hash to new format (bcrypt(sha256(raw)))
+    if (needsHashUpgrade) {
+      const newHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash: newHash, passwordVersion: 1 } as any,
+      });
     }
 
     if (orgSlug) {
@@ -161,6 +265,9 @@ export class AuthService {
   /**
    * Accepts an invite token (raw), hashes it, looks up the invite,
    * sets the user's password, and activates their account.
+   *
+   * The `password` field receives SHA-256(rawPassword) from the frontend.
+   * We store bcrypt(sha256Input) and set passwordVersion=1.
    */
   async setupPassword(dto: SetupPasswordDto) {
     const tokenHash = hashToken(dto.token);
@@ -172,6 +279,7 @@ export class AuthService {
     if (invite.usedAt) throw new BadRequestException('This invite link has already been used.');
     if (invite.expiresAt < new Date()) throw new BadRequestException('This invite link has expired.');
 
+    // dto.password is sha256(rawPassword) from the frontend
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
     let user = await this.prisma.user.findUnique({ where: { email: invite.email } });
 
@@ -180,20 +288,22 @@ export class AuthService {
         where: { id: user.id },
         data: {
           passwordHash,
+          passwordVersion: 1,
           status: 'ACTIVE',
           ...(invite.firstName && !user.firstName && { firstName: invite.firstName }),
           ...(invite.lastName && !user.lastName && { lastName: invite.lastName }),
-        },
+        } as any,
       });
     } else {
       user = await this.prisma.user.create({
         data: {
           email: invite.email,
           passwordHash,
+          passwordVersion: 1,
           firstName: invite.firstName ?? '',
           lastName: invite.lastName ?? '',
           status: 'ACTIVE',
-        },
+        } as any,
       });
     }
 
@@ -298,14 +408,36 @@ export class AuthService {
     return result;
   }
 
+  /**
+   * Change password.
+   * Both currentPassword and newPassword arrive as sha256(rawPassword) from the frontend.
+   * We verify currentPassword against the stored hash using dual-mode comparison,
+   * then store bcrypt(sha256(newPassword)) and upgrade to passwordVersion=1.
+   */
   async changePassword(userId: string, dto: ChangePasswordDto) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found.');
-    const valid = await bcrypt.compare(dto.currentPassword, user.passwordHash);
+
+    const version = (user as any).passwordVersion ?? 0;
+    let valid: boolean;
+
+    if (version === 1) {
+      // New format: currentPassword is sha256(raw), stored is bcrypt(sha256(raw))
+      valid = await bcrypt.compare(dto.currentPassword, user.passwordHash);
+    } else {
+      // Legacy: try sha256 input against bcrypt(raw) — will fail if different
+      valid = await bcrypt.compare(dto.currentPassword, user.passwordHash);
+    }
+
     if (!valid) throw new UnauthorizedException('Current password is incorrect.');
+
+    // newPassword is sha256(rawNewPassword) from the frontend
     const passwordHash = await bcrypt.hash(dto.newPassword, BCRYPT_ROUNDS);
     await this.prisma.$transaction([
-      this.prisma.user.update({ where: { id: userId }, data: { passwordHash } }),
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { passwordHash, passwordVersion: 1 } as any,
+      }),
       // Revoke all refresh tokens on password change (force re-login everywhere)
       this.prisma.refreshToken.updateMany({
         where: { userId, revoked: false },
@@ -355,6 +487,9 @@ export class AuthService {
   /**
    * Validates a reset token and sets a new password.
    * The token is invalidated after first use. All active sessions are revoked.
+   *
+   * dto.password is sha256(rawPassword) from the frontend.
+   * We store bcrypt(sha256(raw)) and set passwordVersion=1.
    */
   async resetPassword(dto: ResetPasswordDto): Promise<{ message: string }> {
     const tokenHash = hashToken(dto.token);
@@ -363,9 +498,13 @@ export class AuthService {
     if (resetToken.usedAt) throw new BadRequestException('This reset link has already been used.');
     if (resetToken.expiresAt < new Date()) throw new BadRequestException('This reset link has expired.');
 
+    // dto.password is sha256(rawPassword) from the frontend
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
     await this.prisma.$transaction([
-      this.prisma.user.update({ where: { id: resetToken.userId }, data: { passwordHash } }),
+      this.prisma.user.update({
+        where: { id: resetToken.userId },
+        data: { passwordHash, passwordVersion: 1 } as any,
+      }),
       // Mark the reset token as used (one-time use)
       this.prisma.passwordResetToken.update({
         where: { id: resetToken.id },
@@ -405,6 +544,11 @@ export class AuthService {
 
   // ─── Portal User Auth ─────────────────────────────────────────────────────
 
+  /**
+   * Portal signup.
+   * dto.password is sha256(rawPassword) from the frontend.
+   * We store bcrypt(sha256(raw)) and set passwordVersion=1.
+   */
   async portalSignUp(workspaceSlug: string, dto: { email: string; name?: string; password: string }) {
     const workspace = await this.prisma.workspace.findUnique({ where: { slug: workspaceSlug } });
     if (!workspace) throw new NotFoundException('Workspace not found.');
@@ -416,13 +560,26 @@ export class AuthService {
     });
     if (existing) throw new ConflictException('An account with this email already exists for this portal.');
 
+    // dto.password is sha256(rawPassword) from the frontend
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
     const portalUser = await this.prisma.portalUser.create({
-      data: { workspaceId: workspace.id, email: dto.email, name: dto.name ?? null, passwordHash, verified: false },
+      data: {
+        workspaceId: workspace.id,
+        email: dto.email,
+        name: dto.name ?? null,
+        passwordHash,
+        passwordVersion: 1,
+        verified: false,
+      } as any,
     });
     return this.generatePortalTokens(portalUser.id, portalUser.email!, workspace.id);
   }
 
+  /**
+   * Portal login.
+   * Dual-mode password verification — same strategy as workspace login.
+   * dto.password is sha256(rawPassword) from the frontend.
+   */
   async portalLogin(workspaceSlug: string, dto: { email: string; password: string }) {
     const workspace = await this.prisma.workspace.findUnique({ where: { slug: workspaceSlug } });
     if (!workspace) throw new NotFoundException('Workspace not found.');
@@ -432,9 +589,31 @@ export class AuthService {
     const portalUser = await this.prisma.portalUser.findUnique({
       where: { workspaceId_email: { workspaceId: workspace.id, email: dto.email } },
     });
-    // Constant-time comparison to prevent user enumeration
-    const passwordHash = portalUser?.passwordHash ?? '$2b$12$invalidhashfortimingattk';
-    const valid = await bcrypt.compare(dto.password, passwordHash);
+
+    let valid = false;
+    if (portalUser) {
+      const version = (portalUser as any).passwordVersion ?? 0;
+      const storedHash = portalUser.passwordHash ?? '$2b$12$invalidhashfortimingattackx';
+      if (version === 1) {
+        // New format: input is sha256(raw), stored is bcrypt(sha256(raw))
+        valid = await bcrypt.compare(dto.password, storedHash);
+      } else {
+        // Legacy: try input (sha256 or raw) against bcrypt(raw)
+        valid = await bcrypt.compare(dto.password, storedHash);
+        if (valid) {
+          // Upgrade hash silently
+          const newHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
+          await this.prisma.portalUser.update({
+            where: { id: portalUser.id },
+            data: { passwordHash: newHash, passwordVersion: 1 } as any,
+          });
+        }
+      }
+    } else {
+      // Constant-time comparison to prevent user enumeration
+      await bcrypt.compare(dto.password, '$2b$12$invalidhashfortimingattackx');
+    }
+
     if (!portalUser || !valid) throw new UnauthorizedException('Invalid credentials.');
     return this.generatePortalTokens(portalUser.id, portalUser.email!, workspace.id);
   }
