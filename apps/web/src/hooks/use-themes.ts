@@ -168,6 +168,27 @@ export const useUpdateTheme = (themeId: string) => {
   });
 };
 
+export const useAddFeedbackToTheme = (themeId: string) => {
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id;
+  const queryClient = useQueryClient();
+
+  return useMutation<void, Error, string>({
+    mutationFn: (feedbackId) => {
+      if (!workspaceId) throw new Error('Workspace ID is not available');
+      return apiClient.themes.addFeedback(workspaceId, themeId, feedbackId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: [THEME_QUERY_KEY, workspaceId, themeId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [THEME_QUERY_KEY, workspaceId, 'list'],
+      });
+    },
+  });
+};
+
 export const useRemoveFeedbackFromTheme = (themeId: string) => {
   const { workspace } = useWorkspace();
   const workspaceId = workspace?.id;

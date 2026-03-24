@@ -2,7 +2,8 @@
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { useCurrentMemberRole } from '@/hooks/use-workspace';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useCurrentMemberRole, useWorkspace } from '@/hooks/use-workspace';
 import {
   useSurveyDetail,
   usePublishSurvey,
@@ -14,8 +15,10 @@ import {
   useSurveyResponses,
   useSurveyIntelligence,
 } from '@/hooks/use-surveys';
-import { SurveyStatus, SurveyQuestionType, SurveyType } from '@/lib/api-types';
+import { useThemeList } from '@/hooks/use-themes';
+import { SurveyStatus, SurveyQuestionType, SurveyType, Feedback, Theme } from '@/lib/api-types';
 import { appRoutes, publicRoutes } from '@/lib/routes';
+import apiClient from '@/lib/api-client';
 
 // ─── Design tokens ─────────────────────────────────────────────────────────────
 const CARD: React.CSSProperties = {
@@ -40,6 +43,14 @@ const QUESTION_TYPE_LABELS: Record<SurveyQuestionType, string> = {
   [SurveyQuestionType.RATING]:          'Rating Scale',
   [SurveyQuestionType.NPS]:             'NPS (0–10)',
 };
+
+// ─── Safe number helpers ───────────────────────────────────────────────────────
+const safeRound = (v: number | null | undefined) =>
+  v != null ? Math.round(v) : '—';
+const safeFixed = (v: number | null | undefined, d = 2) =>
+  v != null ? (v as number).toFixed(d) : '—';
+const safeArrK = (v: number | null | undefined) =>
+  v != null ? `$${(v / 1000).toFixed(0)}k` : '—';
 
 // ─── Add Question Modal ────────────────────────────────────────────────────────
 function AddQuestionModal({ surveyId, workspaceId, onClose }: { surveyId: string; workspaceId: string; onClose: () => void }) {
@@ -137,6 +148,231 @@ function AddQuestionModal({ surveyId, workspaceId, onClose }: { surveyId: string
   );
 }
 
+// ─── Link Feedback to Theme Modal ─────────────────────────────────────────────
+/**
+ * Allows the user to:
+ *   1. Search feedback items in the workspace
+ *   2. Pick a theme from the workspace theme list
+ *   3. Click "Link" to call POST /themes/:themeId/feedback/:feedbackId
+ *
+ * The modal is self-contained: it fetches its own data so the parent page
+ * does not need to pass anything except a close callback.
+ */
+function LinkFeedbackToThemeModal({ onClose }: { onClose: () => void }) {
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id ?? '';
+  const queryClient = useQueryClient();
+
+  const [feedbackSearch, setFeedbackSearch] = useState('');
+  const [selectedFeedback, setSelectedFeedback] = useState<Feedback | null>(null);
+  const [selectedTheme, setSelectedTheme] = useState<Theme | null>(null);
+  const [successMsg, setSuccessMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  // Fetch feedback list with search
+  const { data: feedbackData, isLoading: loadingFeedback } = useQuery({
+    queryKey: ['feedback-link-modal', workspaceId, feedbackSearch],
+    queryFn: () => apiClient.feedback.list(workspaceId, { search: feedbackSearch || undefined, limit: 20 }),
+    enabled: !!workspaceId,
+    staleTime: 10_000,
+  });
+
+  // Fetch theme list (first page, up to 50)
+  const { data: themePages, isLoading: loadingThemes } = useQuery({
+    queryKey: ['themes-link-modal', workspaceId],
+    queryFn: () => apiClient.themes.list(workspaceId, { limit: 50 }),
+    enabled: !!workspaceId,
+    staleTime: 30_000,
+  });
+  const themes: Theme[] = themePages?.data ?? [];
+
+  // Link mutation
+  const { mutate: linkFeedback, isPending: linking } = useMutation<void, Error, { themeId: string; feedbackId: string }>({
+    mutationFn: ({ themeId, feedbackId }) =>
+      apiClient.themes.addFeedback(workspaceId, themeId, feedbackId),
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['themes', workspaceId, vars.themeId] });
+      queryClient.invalidateQueries({ queryKey: ['themes', workspaceId, 'list'] });
+      setSuccessMsg(`Feedback linked to theme successfully.`);
+      setSelectedFeedback(null);
+      setSelectedTheme(null);
+      setErrorMsg('');
+    },
+    onError: (err) => {
+      setErrorMsg(err.message ?? 'Failed to link feedback. Please try again.');
+    },
+  });
+
+  const handleLink = () => {
+    if (!selectedFeedback || !selectedTheme) return;
+    setSuccessMsg('');
+    setErrorMsg('');
+    linkFeedback({ themeId: selectedTheme.id, feedbackId: selectedFeedback.id });
+  };
+
+  const feedbackList: Feedback[] = feedbackData?.data ?? [];
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(10,37,64,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div style={{ ...CARD, width: '100%', maxWidth: '38rem', padding: '2rem', maxHeight: '90vh', overflowY: 'auto' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+          <h2 style={{ fontSize: '1.125rem', fontWeight: 700, color: '#0a2540', margin: 0 }}>
+            🔗 Link Feedback to a Theme
+          </h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '1.25rem', cursor: 'pointer', color: '#6C757D', lineHeight: 1 }}>×</button>
+        </div>
+
+        <p style={{ fontSize: '0.8125rem', color: '#6C757D', marginBottom: '1.5rem', lineHeight: 1.6 }}>
+          Manually connect any feedback item to a theme. This helps TriageInsight score themes more accurately and surfaces the feedback in the right Intelligence Hub views.
+        </p>
+
+        {/* Step 1 — Pick feedback */}
+        <div style={{ marginBottom: '1.25rem' }}>
+          <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 700, color: '#0a2540', marginBottom: '0.5rem' }}>
+            Step 1 — Choose a feedback item
+          </label>
+          <input
+            value={feedbackSearch}
+            onChange={(e) => { setFeedbackSearch(e.target.value); setSelectedFeedback(null); }}
+            placeholder="Search by title or description…"
+            style={{ width: '100%', padding: '0.625rem 0.875rem', border: '1px solid #dee2e6', borderRadius: '0.5rem', fontSize: '0.875rem', color: '#0a2540', boxSizing: 'border-box', marginBottom: '0.5rem' }}
+          />
+          {loadingFeedback ? (
+            <p style={{ fontSize: '0.8rem', color: '#6C757D' }}>Loading…</p>
+          ) : feedbackList.length === 0 ? (
+            <p style={{ fontSize: '0.8rem', color: '#6C757D' }}>No feedback found{feedbackSearch ? ` for "${feedbackSearch}"` : ''}.</p>
+          ) : (
+            <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid #dee2e6', borderRadius: '0.5rem' }}>
+              {feedbackList.map((fb) => (
+                <div
+                  key={fb.id}
+                  onClick={() => setSelectedFeedback(fb)}
+                  style={{
+                    padding: '0.625rem 0.875rem',
+                    cursor: 'pointer',
+                    borderBottom: '1px solid #f0f4f8',
+                    background: selectedFeedback?.id === fb.id ? '#e8f7f7' : '#fff',
+                    borderLeft: selectedFeedback?.id === fb.id ? '3px solid #20A4A4' : '3px solid transparent',
+                    transition: 'background 0.1s',
+                  }}
+                >
+                  <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0a2540', margin: '0 0 0.15rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {fb.title}
+                  </p>
+                  <p style={{ fontSize: '0.72rem', color: '#6C757D', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {fb.description?.slice(0, 100)}{(fb.description?.length ?? 0) > 100 ? '…' : ''}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+          {selectedFeedback && (
+            <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.75rem', background: '#e8f7f7', borderRadius: '0.5rem', fontSize: '0.8rem', color: '#0a2540', fontWeight: 500 }}>
+              ✓ Selected: {selectedFeedback.title}
+            </div>
+          )}
+        </div>
+
+        {/* Step 2 — Pick theme */}
+        <div style={{ marginBottom: '1.5rem' }}>
+          <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 700, color: '#0a2540', marginBottom: '0.5rem' }}>
+            Step 2 — Choose a theme
+          </label>
+          {loadingThemes ? (
+            <p style={{ fontSize: '0.8rem', color: '#6C757D' }}>Loading themes…</p>
+          ) : themes.length === 0 ? (
+            <p style={{ fontSize: '0.8rem', color: '#6C757D' }}>No themes found. Create a theme first.</p>
+          ) : (
+            <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid #dee2e6', borderRadius: '0.5rem' }}>
+              {themes.map((th) => (
+                <div
+                  key={th.id}
+                  onClick={() => setSelectedTheme(th)}
+                  style={{
+                    padding: '0.625rem 0.875rem',
+                    cursor: 'pointer',
+                    borderBottom: '1px solid #f0f4f8',
+                    background: selectedTheme?.id === th.id ? '#ede9fe' : '#fff',
+                    borderLeft: selectedTheme?.id === th.id ? '3px solid #7c3aed' : '3px solid transparent',
+                    transition: 'background 0.1s',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0a2540', margin: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {th.title}
+                    </p>
+                    {th._count?.feedbacks != null && (
+                      <span style={{ fontSize: '0.7rem', color: '#6C757D', flexShrink: 0 }}>
+                        {th._count.feedbacks} linked
+                      </span>
+                    )}
+                    {th.priorityScore != null && (
+                      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#20A4A4', flexShrink: 0 }}>
+                        CIQ {Math.round(th.priorityScore)}
+                      </span>
+                    )}
+                  </div>
+                  {th.description && (
+                    <p style={{ fontSize: '0.72rem', color: '#6C757D', margin: '0.1rem 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {th.description}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          {selectedTheme && (
+            <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.75rem', background: '#ede9fe', borderRadius: '0.5rem', fontSize: '0.8rem', color: '#0a2540', fontWeight: 500 }}>
+              ✓ Selected: {selectedTheme.title}
+            </div>
+          )}
+        </div>
+
+        {/* Success / error messages */}
+        {successMsg && (
+          <div style={{ padding: '0.625rem 0.875rem', background: '#e8f5e9', border: '1px solid #a5d6a7', borderRadius: '0.5rem', fontSize: '0.875rem', color: '#2e7d32', marginBottom: '1rem' }}>
+            ✓ {successMsg}
+          </div>
+        )}
+        {errorMsg && (
+          <div style={{ padding: '0.625rem 0.875rem', background: '#fdecea', border: '1px solid #ef9a9a', borderRadius: '0.5rem', fontSize: '0.875rem', color: '#c62828', marginBottom: '1rem' }}>
+            ✗ {errorMsg}
+          </div>
+        )}
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{ padding: '0.5rem 1.25rem', borderRadius: '0.5rem', border: '1px solid #dee2e6', background: '#fff', color: '#495057', fontSize: '0.875rem', cursor: 'pointer', fontWeight: 500 }}
+          >
+            Close
+          </button>
+          <button
+            type="button"
+            onClick={handleLink}
+            disabled={!selectedFeedback || !selectedTheme || linking}
+            style={{
+              padding: '0.5rem 1.5rem', borderRadius: '0.5rem', border: 'none',
+              background: '#0a2540', color: '#fff', fontSize: '0.875rem',
+              cursor: (!selectedFeedback || !selectedTheme || linking) ? 'not-allowed' : 'pointer',
+              fontWeight: 600,
+              opacity: (!selectedFeedback || !selectedTheme || linking) ? 0.55 : 1,
+            }}
+          >
+            {linking ? 'Linking…' : '🔗 Link Feedback to Theme'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ─────────────────────────────────────────────────────────────────
 export default function SurveyDetailPage() {
   const { orgSlug, id: surveyId } = useParams<{ orgSlug: string; id: string }>();
@@ -156,6 +392,7 @@ export default function SurveyDetailPage() {
   // Intelligence
   const { data: intelligence, isLoading: loadingIntel } = useSurveyIntelligence('', surveyId);
   const [showAddQuestion, setShowAddQuestion] = useState(false);
+  const [showLinkModal, setShowLinkModal] = useState(false);
 
   const r = appRoutes(orgSlug);
 
@@ -204,200 +441,227 @@ export default function SurveyDetailPage() {
             )}
           </div>
           {survey.description && (
-            <p style={{ color: '#6C757D', fontSize: '0.9rem', margin: 0 }}>{survey.description}</p>
+            <p style={{ color: '#6C757D', fontSize: '0.875rem', margin: 0 }}>{survey.description}</p>
           )}
         </div>
-        {canEdit && (
-          <div style={{ display: 'flex', gap: '0.625rem', flexWrap: 'wrap' }}>
-            {survey.status === SurveyStatus.DRAFT && (
+
+        {/* Action buttons */}
+        <div style={{ display: 'flex', gap: '0.625rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          {/* Link feedback to theme — always visible */}
+          <button
+            onClick={() => setShowLinkModal(true)}
+            style={{ padding: '0.5rem 1rem', borderRadius: '0.5rem', border: '1px solid #7c3aed', background: '#fff', color: '#7c3aed', fontSize: '0.8125rem', cursor: 'pointer', fontWeight: 600 }}
+          >
+            🔗 Link Feedback to Theme
+          </button>
+
+          {canEdit && survey.status === SurveyStatus.DRAFT && (
+            <button
+              onClick={() => publish(undefined)}
+              disabled={publishing}
+              style={{ padding: '0.5rem 1rem', borderRadius: '0.5rem', border: 'none', background: '#2e7d32', color: '#fff', fontSize: '0.8125rem', cursor: publishing ? 'not-allowed' : 'pointer', fontWeight: 600, opacity: publishing ? 0.7 : 1 }}
+            >
+              {publishing ? 'Publishing…' : 'Publish'}
+            </button>
+          )}
+          {canEdit && survey.status === SurveyStatus.PUBLISHED && (
+            <>
               <button
-                onClick={() => publish()}
-                disabled={publishing}
-                style={{ padding: '0.5rem 1.125rem', borderRadius: '0.5rem', border: 'none', background: '#2e7d32', color: '#fff', fontSize: '0.8125rem', cursor: 'pointer', fontWeight: 600, opacity: publishing ? 0.6 : 1 }}
+                onClick={() => unpublish(undefined)}
+                disabled={unpublishing}
+                style={{ padding: '0.5rem 1rem', borderRadius: '0.5rem', border: '1px solid #dee2e6', background: '#fff', color: '#495057', fontSize: '0.8125rem', cursor: unpublishing ? 'not-allowed' : 'pointer', fontWeight: 500, opacity: unpublishing ? 0.7 : 1 }}
               >
-                {publishing ? 'Publishing…' : '▶ Publish'}
+                {unpublishing ? 'Unpublishing…' : 'Unpublish'}
               </button>
-            )}
-            {survey.status === SurveyStatus.PUBLISHED && (
-              <>
-                <button
-                  onClick={() => unpublish()}
-                  disabled={unpublishing}
-                  style={{ padding: '0.5rem 1.125rem', borderRadius: '0.5rem', border: '1px solid #dee2e6', background: '#fff', color: '#495057', fontSize: '0.8125rem', cursor: 'pointer', fontWeight: 600 }}
-                >
-                  Unpublish
-                </button>
-                <button
-                  onClick={() => close()}
-                  disabled={closing}
-                  style={{ padding: '0.5rem 1.125rem', borderRadius: '0.5rem', border: '1px solid #dee2e6', background: '#fff', color: '#e63946', fontSize: '0.8125rem', cursor: 'pointer', fontWeight: 600 }}
-                >
-                  Close Survey
-                </button>
-              </>
-            )}
-          </div>
-        )}
+              <button
+                onClick={() => close(undefined)}
+                disabled={closing}
+                style={{ padding: '0.5rem 1rem', borderRadius: '0.5rem', border: '1px solid #dee2e6', background: '#fff', color: '#b8860b', fontSize: '0.8125rem', cursor: closing ? 'not-allowed' : 'pointer', fontWeight: 500, opacity: closing ? 0.7 : 1 }}
+              >
+                {closing ? 'Closing…' : 'Close Survey'}
+              </button>
+            </>
+          )}
+          {canEdit && (
+            <button
+              onClick={() => {
+                if (confirm('Delete this survey? This cannot be undone.')) {
+                  deleteSurvey(undefined, { onSuccess: () => { window.location.href = `/${orgSlug}/app/surveys`; } });
+                }
+              }}
+              style={{ padding: '0.5rem 1rem', borderRadius: '0.5rem', border: '1px solid #ffcdd2', background: '#fff5f5', color: '#c62828', fontSize: '0.8125rem', cursor: 'pointer', fontWeight: 500 }}
+            >
+              Delete
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Portal link banner */}
-      {survey.status === SurveyStatus.PUBLISHED && (
-        <div style={{ background: '#e3f2fd', border: '1px solid #90caf9', borderRadius: '0.75rem', padding: '0.875rem 1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-            <span>🌐</span>
-            <div>
-              <strong style={{ fontSize: '0.875rem', color: '#0d47a1' }}>Survey is live on your public portal</strong>
-              <p style={{ margin: '0.125rem 0 0', fontSize: '0.8rem', color: '#1565c0', fontFamily: 'monospace' }}>{portalUrl}</p>
-            </div>
-          </div>
-          <a href={portalUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.8125rem', color: '#1565c0', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
-            View live ↗
-          </a>
-        </div>
-      )}
-
       {/* Stats row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.875rem', marginBottom: '1.5rem' }}>
         {[
           { label: 'Questions', value: survey.questions?.length ?? 0, color: '#0a2540' },
           { label: 'Responses', value: survey._count?.responses ?? responsesData?.total ?? 0, color: '#20A4A4' },
           { label: 'AI-Ready', value: survey.convertToFeedback ? 'Yes' : 'No', color: survey.convertToFeedback ? '#2e7d32' : '#6C757D' },
-          { label: 'Status', value: cfg.label, color: cfg.color },
-        ].map((stat) => (
-          <div key={stat.label} style={{ ...CARD, padding: '1rem', textAlign: 'center' }}>
-            <div style={{ fontSize: '1.25rem', fontWeight: 800, color: stat.color }}>{stat.value}</div>
-            <div style={{ fontSize: '0.7rem', color: '#6C757D', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '0.25rem' }}>{stat.label}</div>
+        ].map((s) => (
+          <div key={s.label} style={{ ...CARD, padding: '1rem', textAlign: 'center' }}>
+            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: s.color }}>{s.value}</div>
+            <div style={{ fontSize: '0.7rem', color: '#6C757D', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '0.25rem' }}>{s.label}</div>
           </div>
         ))}
       </div>
 
+      {/* Public URL */}
+      {survey.status === SurveyStatus.PUBLISHED && (
+        <div style={{ ...CARD, marginBottom: '1.5rem', background: '#e8f7f7', border: '1px solid #20A4A433' }}>
+          <p style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#20A4A4', marginBottom: '0.375rem' }}>Public Survey URL</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <code style={{ fontSize: '0.8125rem', color: '#0a2540', background: '#fff', padding: '0.375rem 0.75rem', borderRadius: '0.375rem', border: '1px solid #dee2e6', flex: 1, wordBreak: 'break-all' }}>
+              {portalUrl}
+            </code>
+            <button
+              onClick={() => navigator.clipboard.writeText(portalUrl)}
+              style={{ padding: '0.375rem 0.875rem', borderRadius: '0.375rem', border: '1px solid #20A4A4', background: '#fff', color: '#20A4A4', fontSize: '0.8125rem', cursor: 'pointer', fontWeight: 500, flexShrink: 0 }}
+            >
+              Copy
+            </button>
+            <a
+              href={portalUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ padding: '0.375rem 0.875rem', borderRadius: '0.375rem', border: 'none', background: '#20A4A4', color: '#fff', fontSize: '0.8125rem', textDecoration: 'none', fontWeight: 500, flexShrink: 0 }}
+            >
+              Open ↗
+            </a>
+          </div>
+        </div>
+      )}
+
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '0', borderBottom: '2px solid #e9ecef', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.5rem', borderBottom: '2px solid #e9ecef' }}>
         {(['questions', 'responses', 'intelligence'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
             style={{
-              padding: '0.625rem 1.25rem', border: 'none', background: 'none', cursor: 'pointer',
-              fontSize: '0.875rem', fontWeight: 600,
-              color: activeTab === tab ? '#0a2540' : '#6C757D',
-              borderBottom: activeTab === tab ? '2px solid #0a2540' : '2px solid transparent',
-              marginBottom: '-2px', transition: 'all 0.15s',
+              padding: '0.625rem 1.25rem',
+              border: 'none',
+              background: 'none',
+              fontSize: '0.875rem',
+              fontWeight: activeTab === tab ? 700 : 500,
+              color: activeTab === tab ? '#20A4A4' : '#6C757D',
+              borderBottom: activeTab === tab ? '2px solid #20A4A4' : '2px solid transparent',
+              cursor: 'pointer',
+              marginBottom: '-2px',
               textTransform: 'capitalize',
             }}
           >
-            {tab === 'intelligence' ? 'Intelligence' : tab}
-            {tab === 'responses' && responsesData ? ` (${responsesData.total})` : ''}
+            {tab === 'responses' && responsesData ? `Responses (${responsesData.total})` : tab.charAt(0).toUpperCase() + tab.slice(1)}
           </button>
         ))}
       </div>
 
       {/* Questions tab */}
       {activeTab === 'questions' && (
-        <div>
-          {canEdit && survey.status !== SurveyStatus.CLOSED && (
-            <div style={{ marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+          {canEdit && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <button
                 onClick={() => setShowAddQuestion(true)}
-                style={{ padding: '0.5rem 1.125rem', borderRadius: '0.5rem', border: '1px dashed #20A4A4', background: 'transparent', color: '#20A4A4', fontSize: '0.875rem', cursor: 'pointer', fontWeight: 600 }}
+                style={{ padding: '0.5rem 1.125rem', borderRadius: '0.5rem', border: 'none', background: '#0a2540', color: '#fff', fontSize: '0.8125rem', cursor: 'pointer', fontWeight: 600 }}
               >
                 + Add Question
               </button>
             </div>
           )}
-
           {!survey.questions?.length ? (
             <div style={{ ...CARD, textAlign: 'center', padding: '2.5rem' }}>
-              <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>❓</div>
+              <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>📝</div>
               <p style={{ color: '#6C757D', fontSize: '0.875rem' }}>No questions yet. Add your first question to get started.</p>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {survey.questions.map((q: any, idx: number) => (
-                <div key={q.id} style={{ ...CARD, display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
-                  <div style={{ width: '2rem', height: '2rem', borderRadius: '50%', background: '#f0f4f8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8125rem', fontWeight: 700, color: '#0a2540', flexShrink: 0 }}>
-                    {idx + 1}
+            survey.questions.map((q, i) => (
+              <div key={q.id} style={{ ...CARD, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', marginBottom: '0.375rem', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6C757D', minWidth: '1.5rem' }}>Q{i + 1}</span>
+                    <span style={{ background: '#e0f7fa', color: '#00838f', padding: '0.15rem 0.5rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 600 }}>
+                      {QUESTION_TYPE_LABELS[q.type as SurveyQuestionType] ?? q.type}
+                    </span>
+                    {q.required && (
+                      <span style={{ background: '#fce4ec', color: '#c62828', padding: '0.15rem 0.5rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 600 }}>Required</span>
+                    )}
                   </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                      <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0a2540' }}>{q.label}</span>
-                      {q.required && <span style={{ fontSize: '0.7rem', color: '#e63946', fontWeight: 600 }}>Required</span>}
+                  <p style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#0a2540', margin: '0 0 0.25rem' }}>{q.label}</p>
+                  {q.placeholder && (
+                    <p style={{ fontSize: '0.8125rem', color: '#6C757D', margin: 0, fontStyle: 'italic' }}>Placeholder: {q.placeholder}</p>
+                  )}
+                  {q.options && q.options.length > 0 && (
+                    <div style={{ marginTop: '0.5rem', display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
+                      {q.options.map((opt: string) => (
+                        <span key={opt} style={{ background: '#f0f4f8', color: '#495057', padding: '0.2rem 0.625rem', borderRadius: '999px', fontSize: '0.75rem' }}>{opt}</span>
+                      ))}
                     </div>
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: '0.75rem', background: '#f0f4f8', color: '#495057', padding: '0.15rem 0.5rem', borderRadius: '0.3rem', fontWeight: 500 }}>
-                        {QUESTION_TYPE_LABELS[q.type as SurveyQuestionType]}
-                      </span>
-                      {q.placeholder && (
-                        <span style={{ fontSize: '0.75rem', color: '#adb5bd' }}>Placeholder: "{q.placeholder}"</span>
-                      )}
-                      {q.options && Array.isArray(q.options) && (
-                        <span style={{ fontSize: '0.75rem', color: '#6C757D' }}>{q.options.length} options</span>
-                      )}
-                    </div>
-                  </div>
-                  {canEdit && survey.status !== SurveyStatus.CLOSED && (
-                    <button
-                      onClick={() => { if (confirm('Delete this question?')) deleteQuestion(q.id); }}
-                      style={{ background: 'none', border: 'none', color: '#adb5bd', cursor: 'pointer', fontSize: '1rem', padding: '0.25rem', flexShrink: 0 }}
-                      title="Delete question"
-                    >
-                      ✕
-                    </button>
                   )}
                 </div>
-              ))}
-            </div>
+                {canEdit && (
+                  <button
+                    onClick={() => {
+                      if (confirm('Delete this question?')) deleteQuestion(q.id);
+                    }}
+                    style={{ padding: '0.375rem 0.75rem', borderRadius: '0.375rem', border: '1px solid #ffcdd2', background: '#fff5f5', color: '#c62828', fontSize: '0.75rem', cursor: 'pointer', flexShrink: 0 }}
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>
+            ))
           )}
         </div>
       )}
 
       {/* Responses tab */}
       {activeTab === 'responses' && (
-        <div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
           {!responsesData?.data?.length ? (
             <div style={{ ...CARD, textAlign: 'center', padding: '2.5rem' }}>
-              <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>📬</div>
+              <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>📊</div>
               <p style={{ color: '#6C757D', fontSize: '0.875rem' }}>No responses yet. Share the survey link to start collecting responses.</p>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {responsesData.data.map((resp: any) => (
-                <div key={resp.id} style={{ ...CARD }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                    <div>
-                      <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0a2540' }}>
-                        {resp.respondentName ?? resp.respondentEmail ?? resp.portalUser?.email ?? 'Anonymous'}
-                      </span>
-                      {resp.respondentEmail && (
-                        <span style={{ fontSize: '0.75rem', color: '#6C757D', marginLeft: '0.5rem' }}>{resp.respondentEmail}</span>
-                      )}
-                    </div>
-                    <span style={{ fontSize: '0.75rem', color: '#adb5bd' }}>
-                      {new Date(resp.submittedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                    </span>
+            responsesData.data.map((resp: any) => (
+              <div key={resp.id} style={{ ...CARD }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <div>
+                    <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0a2540', margin: 0 }}>
+                      {resp.respondentEmail ?? resp.respondentName ?? 'Anonymous'}
+                    </p>
+                    <p style={{ fontSize: '0.75rem', color: '#6C757D', margin: 0 }}>
+                      {new Date(resp.submittedAt ?? resp.createdAt).toLocaleDateString()}
+                    </p>
                   </div>
+                  {resp.feedbackId && (
+                    <Link href={`/${orgSlug}/app/inbox/${resp.feedbackId}`} style={{ fontSize: '0.8125rem', color: '#20A4A4', fontWeight: 500, textDecoration: 'none' }}>
+                      View generated Feedback →
+                    </Link>
+                  )}
+                </div>
+                {resp.answers?.length > 0 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    {resp.answers?.map((ans: any) => (
-                      <div key={ans.id} style={{ background: '#f8f9fa', borderRadius: '0.5rem', padding: '0.625rem 0.875rem' }}>
-                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6C757D', marginBottom: '0.25rem' }}>
-                          Q{ans.question?.order}: {ans.question?.label}
-                        </div>
-                        <div style={{ fontSize: '0.875rem', color: '#0a2540' }}>
-                          {ans.textValue ?? (ans.numericValue != null ? String(ans.numericValue) : null) ?? (ans.choiceValues ? (ans.choiceValues as string[]).join(', ') : '—')}
-                        </div>
+                    {resp.answers.map((ans: any, ai: number) => (
+                      <div key={ai} style={{ background: '#f8f9fa', borderRadius: '0.5rem', padding: '0.625rem 0.875rem' }}>
+                        <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6C757D', margin: '0 0 0.2rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                          {ans.questionLabel ?? `Q${ai + 1}`}
+                        </p>
+                        <p style={{ fontSize: '0.875rem', color: '#0a2540', margin: 0 }}>
+                          {Array.isArray(ans.value) ? ans.value.join(', ') : String(ans.value ?? '—')}
+                        </p>
                       </div>
                     ))}
                   </div>
-                  {resp.feedbackId && (
-                    <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #f0f4f8' }}>
-                      <Link href={`/${orgSlug}/app/inbox/${resp.feedbackId}`} style={{ fontSize: '0.8125rem', color: '#20A4A4', fontWeight: 500, textDecoration: 'none' }}>
-                        View generated Feedback →
-                      </Link>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+                )}
+              </div>
+            ))
           )}
         </div>
       )}
@@ -470,11 +734,10 @@ export default function SurveyDetailPage() {
                     </div>
                   </div>
                 )}
-
                 {/* Sentiment Distribution */}
                 {intelligence.sentimentDistribution && (
                   <div style={{ ...CARD }}>
-                    <h3 style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0a2540', marginBottom: '0.75rem' }}>Sentiment Distribution</h3>
+                    <h3 style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0a2540', marginBottom: '0.75rem' }}>😊 Sentiment Distribution</h3>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                       {[
                         { label: 'Positive', value: intelligence.sentimentDistribution.positive, color: '#2e7d32', bg: '#e8f5e9' },
@@ -534,10 +797,22 @@ export default function SurveyDetailPage() {
                 </div>
               )}
 
-              {/* Linked Themes */}
-              {intelligence.linkedThemeIds?.length > 0 && (
-                <div style={{ ...CARD }}>
-                  <h3 style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0a2540', marginBottom: '0.875rem' }}>Linked Themes</h3>
+              {/* Linked Themes — with Link button */}
+              <div style={{ ...CARD }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.875rem' }}>
+                  <h3 style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0a2540', margin: 0 }}>Linked Themes</h3>
+                  <button
+                    onClick={() => setShowLinkModal(true)}
+                    style={{ padding: '0.375rem 0.875rem', borderRadius: '0.5rem', border: '1px solid #7c3aed', background: '#fff', color: '#7c3aed', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600 }}
+                  >
+                    🔗 Link Feedback to Theme
+                  </button>
+                </div>
+                {(intelligence.linkedThemeIds?.length ?? 0) === 0 ? (
+                  <p style={{ fontSize: '0.875rem', color: '#6C757D', margin: 0 }}>
+                    No themes linked yet. Click "Link Feedback to Theme" to manually connect feedback from this survey to a theme.
+                  </p>
+                ) : (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                     {intelligence.linkedThemeIds.map((themeId: string) => (
                       <a
@@ -549,10 +824,10 @@ export default function SurveyDetailPage() {
                       </a>
                     ))}
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
-              {/* Revenue-Weighted Intelligence Card */}
+              {/* Revenue-Weighted Intelligence Card — all fields safely guarded */}
               {intelligence.revenueWeighted && (
                 <div style={{ ...CARD, border: '1px solid #ffe0b2', background: 'linear-gradient(135deg, #fff8f0 0%, #fff3e0 100%)' }}>
                   <h3 style={{ fontSize: '0.875rem', fontWeight: 700, color: '#e65100', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -560,12 +835,12 @@ export default function SurveyDetailPage() {
                   </h3>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
                     {[
-                      { label: 'Revenue Score', value: Math.round(intelligence.revenueWeighted.revenueWeightedScore), color: '#e65100' },
-                      { label: 'Validation Score', value: `${Math.round(intelligence.revenueWeighted.validationScore)}%`, color: '#6a1b9a' },
-                      { label: 'Respondent ARR', value: `$${(intelligence.revenueWeighted.totalRespondentArr / 1000).toFixed(0)}k`, color: '#1565c0' },
-                      { label: 'Avg CIQ Weight', value: intelligence.revenueWeighted.avgCiqWeight.toFixed(2), color: '#20A4A4' },
-                      { label: 'Enterprise Val.', value: `${Math.round(intelligence.revenueWeighted.enterpriseValidation)}%`, color: '#2e7d32' },
-                      { label: 'SMB Val.', value: `${Math.round(intelligence.revenueWeighted.smbValidation)}%`, color: '#0a2540' },
+                      { label: 'Revenue Score',   value: safeRound(intelligence.revenueWeighted.revenueWeightedScore), color: '#e65100' },
+                      { label: 'Validation Score', value: intelligence.revenueWeighted.validationScore != null ? `${safeRound(intelligence.revenueWeighted.validationScore)}%` : '—', color: '#6a1b9a' },
+                      { label: 'Respondent ARR',  value: safeArrK(intelligence.revenueWeighted.totalRespondentArr), color: '#1565c0' },
+                      { label: 'Avg CIQ Weight',  value: safeFixed(intelligence.revenueWeighted.avgCiqWeight, 2), color: '#20A4A4' },
+                      { label: 'Enterprise Val.', value: intelligence.revenueWeighted.enterpriseValidation != null ? `${safeRound(intelligence.revenueWeighted.enterpriseValidation)}%` : '—', color: '#2e7d32' },
+                      { label: 'SMB Val.',         value: intelligence.revenueWeighted.smbValidation != null ? `${safeRound(intelligence.revenueWeighted.smbValidation)}%` : '—', color: '#0a2540' },
                     ].map((kpi) => (
                       <div key={kpi.label} style={{ background: '#fff', border: '1px solid #ffe0b2', borderRadius: '0.625rem', padding: '0.75rem', textAlign: 'center' }}>
                         <div style={{ fontSize: '1.25rem', fontWeight: 800, color: kpi.color }}>{kpi.value}</div>
@@ -574,7 +849,7 @@ export default function SurveyDetailPage() {
                     ))}
                   </div>
                   {/* Response Clusters */}
-                  {intelligence.revenueWeighted.clusters.length > 0 && (
+                  {(intelligence.revenueWeighted.clusters?.length ?? 0) > 0 && (
                     <div style={{ marginBottom: '1rem' }}>
                       <h4 style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0a2540', marginBottom: '0.5rem' }}>Response Clusters</h4>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -586,7 +861,7 @@ export default function SurveyDetailPage() {
                               color: cluster.label === 'Promoter' ? '#2e7d32' : cluster.label === 'Detractor' ? '#c62828' : '#b8860b',
                             }}>{cluster.label}</span>
                             <span style={{ fontSize: '0.8125rem', color: '#0a2540', fontWeight: 600 }}>{cluster.count} respondents</span>
-                            <span style={{ fontSize: '0.8125rem', color: '#6C757D' }}>${(cluster.totalArr / 1000).toFixed(0)}k ARR</span>
+                            <span style={{ fontSize: '0.8125rem', color: '#6C757D' }}>{safeArrK(cluster.totalArr)}</span>
                             <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
                               {cluster.topTopics.slice(0, 3).map((t) => (
                                 <span key={t} style={{ background: '#f0f4f8', color: '#495057', padding: '0.1rem 0.375rem', borderRadius: '999px', fontSize: '0.7rem' }}>{t}</span>
@@ -598,7 +873,7 @@ export default function SurveyDetailPage() {
                     </div>
                   )}
                   {/* Top Features by ARR */}
-                  {intelligence.revenueWeighted.topFeaturesByArr.length > 0 && (
+                  {(intelligence.revenueWeighted.topFeaturesByArr?.length ?? 0) > 0 && (
                     <div style={{ marginBottom: '1rem' }}>
                       <h4 style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0a2540', marginBottom: '0.5rem' }}>🔬 Top Features by ARR Demand</h4>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
@@ -606,7 +881,7 @@ export default function SurveyDetailPage() {
                           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
                             <span style={{ fontSize: '0.75rem', color: '#adb5bd', width: '1rem', flexShrink: 0 }}>#{i + 1}</span>
                             <span style={{ flex: 1, fontSize: '0.8125rem', color: '#0a2540' }}>{f.feature}</span>
-                            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1565c0' }}>${(f.arr / 1000).toFixed(0)}k</span>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1565c0' }}>{safeArrK(f.arr)}</span>
                             <span style={{ fontSize: '0.7rem', color: '#6C757D' }}>{f.count} votes</span>
                           </div>
                         ))}
@@ -617,7 +892,7 @@ export default function SurveyDetailPage() {
               )}
 
               {/* Churn Signal Panel */}
-              {intelligence.revenueWeighted && intelligence.revenueWeighted.churnSignals.length > 0 && (
+              {intelligence.revenueWeighted && (intelligence.revenueWeighted.churnSignals?.length ?? 0) > 0 && (
                 <div style={{ ...CARD, border: '1px solid #ffcdd2', background: 'linear-gradient(135deg, #fff5f5 0%, #fce4ec 100%)' }}>
                   <h3 style={{ fontSize: '0.875rem', fontWeight: 700, color: '#c62828', marginBottom: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <span>🚨</span> Churn Risk Signals ({intelligence.revenueWeighted.churnSignals.length} customers)
@@ -631,13 +906,15 @@ export default function SurveyDetailPage() {
                           color: signal.riskLevel === 'HIGH' ? '#c62828' : signal.riskLevel === 'MEDIUM' ? '#b8860b' : '#6C757D',
                         }}>{signal.riskLevel}</span>
                         <span style={{ flex: 1, fontSize: '0.8125rem', fontWeight: 600, color: '#0a2540' }}>{signal.customerName}</span>
-                        <span style={{ fontSize: '0.75rem', color: '#6C757D' }}>${(signal.arr / 1000).toFixed(0)}k ARR</span>
+                        <span style={{ fontSize: '0.75rem', color: '#6C757D' }}>{safeArrK(signal.arr)}</span>
                         {signal.npsScore != null && (
                           <span style={{ fontSize: '0.75rem', fontWeight: 700, color: signal.npsScore <= 3 ? '#c62828' : '#b8860b' }}>NPS: {signal.npsScore}</span>
                         )}
-                        <span style={{ fontSize: '0.75rem', color: signal.sentiment < -0.5 ? '#c62828' : '#b8860b' }}>
-                          Sentiment: {signal.sentiment.toFixed(2)}
-                        </span>
+                        {signal.sentiment != null && (
+                          <span style={{ fontSize: '0.75rem', color: signal.sentiment < -0.5 ? '#c62828' : '#b8860b' }}>
+                            Sentiment: {(signal.sentiment as number).toFixed(2)}
+                          </span>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -647,7 +924,7 @@ export default function SurveyDetailPage() {
               {/* How it works */}
               <div style={{ background: '#f0f4f8', border: '1px solid #dee2e6', borderRadius: '0.75rem', padding: '1rem 1.25rem' }}>
                 <p style={{ fontSize: '0.8125rem', color: '#495057', margin: 0 }}>
-                  <strong>How intelligence works:</strong> After each response is submitted, TriageInsight automatically extracts sentiment, key topics, pain points, and feature requests from text answers using GPT-4.1-mini. Rating and NPS answers are converted to normalised signals and stored as Customer Signals for CIQ scoring. Revenue-weighted scores are computed by weighting each respondent’s signal by their ARR contribution. Text responses are linked to the most relevant theme via semantic clustering.
+                  <strong>How intelligence works:</strong> After each response is submitted, TriageInsight automatically extracts sentiment, key topics, pain points, and feature requests from text answers using GPT-4.1-mini. Rating and NPS answers are converted to normalised signals and stored as Customer Signals for CIQ scoring. Revenue-weighted scores are computed by weighting each respondent&apos;s signal by their ARR contribution. Text responses are linked to the most relevant theme via semantic clustering.
                 </p>
               </div>
             </div>
@@ -657,6 +934,10 @@ export default function SurveyDetailPage() {
 
       {showAddQuestion && (
         <AddQuestionModal surveyId={surveyId} workspaceId="" onClose={() => setShowAddQuestion(false)} />
+      )}
+
+      {showLinkModal && (
+        <LinkFeedbackToThemeModal onClose={() => setShowLinkModal(false)} />
       )}
     </>
   );
