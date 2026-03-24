@@ -5,7 +5,7 @@
  * Navigation structure (redesigned):
  *   Workspace   → Home, Inbox, Themes, Roadmap
  *   Intelligence Hub  → CIQ Overview, Theme Ranking, Feature Ranking, Customer Ranking
- *   Prioritization    → Engine, Feature Priority Ranking, Revenue Opportunities, Roadmap Recommendations
+ *   Prioritization    → Engine, Feature Priority Ranking, Revenue Opportunities, Roadmap Fit
  *   Customers   → Customers, Reports
  *   Signals     → Voice, Surveys, Support
  *   Admin       → Members, Billing, Integrations, Settings  (admin only)
@@ -148,7 +148,7 @@ function AuthenticatedShell({ slug, pathname, children }: { slug: string; pathna
               <SideNavItem href={r.prioritization}              pathname={pathname} open={sidebarOpen} icon={<IconPriority/>}>Engine</SideNavItem>
               <SideNavItem href={r.prioritizationFeatures}      pathname={pathname} open={sidebarOpen} icon={<IconFeaturePriority/>}>Feature Priority Ranking</SideNavItem>
               <SideNavItem href={r.prioritizationOpportunities} pathname={pathname} open={sidebarOpen} icon={<IconOpportunity/>}>Revenue Opportunities</SideNavItem>
-              <SideNavItem href={r.prioritizationRoadmap}       pathname={pathname} open={sidebarOpen} icon={<IconRoadmapAlign/>}>Roadmap Recommendations</SideNavItem>
+              <SideNavItem href={r.prioritizationRoadmap}       pathname={pathname} open={sidebarOpen} icon={<IconRoadmapAlign/>}>Roadmap Fit</SideNavItem>
             </NavGroup>
 
             {/* Customers & Revenue */}
@@ -219,7 +219,7 @@ function AuthenticatedShell({ slug, pathname, children }: { slug: string; pathna
                 <DrawerNavItem href={r.prioritization}              pathname={pathname} icon={<IconPriority/>}>Engine</DrawerNavItem>
                 <DrawerNavItem href={r.prioritizationFeatures}      pathname={pathname} icon={<IconFeaturePriority/>}>Feature Priority Ranking</DrawerNavItem>
                 <DrawerNavItem href={r.prioritizationOpportunities} pathname={pathname} icon={<IconOpportunity/>}>Revenue Opportunities</DrawerNavItem>
-                <DrawerNavItem href={r.prioritizationRoadmap}       pathname={pathname} icon={<IconRoadmapAlign/>}>Roadmap Recommendations</DrawerNavItem>
+                <DrawerNavItem href={r.prioritizationRoadmap}       pathname={pathname} icon={<IconRoadmapAlign/>}>Roadmap Fit</DrawerNavItem>
               </NavGroupDrawer>
               <NavGroupDrawer label="Customers">
                 <DrawerNavItem href={r.customers} pathname={pathname} icon={<IconCustomers/>}>Customers</DrawerNavItem>
@@ -452,7 +452,7 @@ function PageTitle({ pathname, slug }: { pathname: string; slug: string }) {
     const prioTitles: Record<string, string> = {
       features:      'Feature Priority Ranking',
       opportunities: 'Revenue Opportunities',
-      roadmap:       'Roadmap Recommendations',
+      roadmap:       'Roadmap Fit',
       settings:      'Prioritization Settings',
     };
     if (prioTitles[last]) {
@@ -465,7 +465,7 @@ function PageTitle({ pathname, slug }: { pathname: string; slug: string }) {
     customers: 'Customers', reports: 'Reports', voice: 'Voice', surveys: 'Surveys',
     support: 'Support',
     intelligence: 'Intelligence Hub', features: 'Feature Ranking', 'customers-iq': 'Customer Ranking',
-    prioritization: 'Prioritization Engine', opportunities: 'Revenue Opportunities', 'roadmap-fit': 'Roadmap Recommendations',
+    prioritization: 'Prioritization Engine', opportunities: 'Revenue Opportunities', 'roadmap-fit': 'Roadmap Fit',
     digest: 'Weekly Digest', risk: 'Revenue Risk', members: 'Members', billing: 'Billing',
     integrations: 'Integrations', settings: 'Settings', profile: 'Profile', 'ai-settings': 'AI Settings',
   };
