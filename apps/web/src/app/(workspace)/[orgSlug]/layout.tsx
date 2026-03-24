@@ -4,7 +4,7 @@
  *
  * Navigation structure (redesigned):
  *   Workspace   → Home, Inbox, Themes, Roadmap
- *   Intelligence Hub  → Overview, Features, Customers, Themes
+ *   Intelligence Hub  → CIQ Overview, Theme Ranking, Feature Ranking, Customer Ranking
  *   Prioritization    → Engine, Roadmap Alignment, Opportunities
  *   Customers   → Customers, Reports
  *   Signals     → Voice, Surveys, Support
@@ -138,8 +138,9 @@ function AuthenticatedShell({ slug, pathname, children }: { slug: string; pathna
             {/* Intelligence Hub — promoted to top-level */}
             <NavGroup label="Intelligence Hub" open={sidebarOpen}>
               <SideNavItem href={r.intelligence}          pathname={pathname} open={sidebarOpen} icon={<IconIntelligence/>}>CIQ Overview</SideNavItem>
+              <SideNavItem href={r.intelligenceThemes}    pathname={pathname} open={sidebarOpen} icon={<IconThemeRank/>}>Theme Ranking</SideNavItem>
               <SideNavItem href={r.intelligenceFeatures}  pathname={pathname} open={sidebarOpen} icon={<IconFeatureRank/>}>Feature Ranking</SideNavItem>
-              <SideNavItem href={r.intelligenceCustomers} pathname={pathname} open={sidebarOpen} icon={<IconCustomerIQ/>}>Customer IQ</SideNavItem>
+              <SideNavItem href={r.intelligenceCustomers} pathname={pathname} open={sidebarOpen} icon={<IconCustomerIQ/>}>Customer Ranking</SideNavItem>
             </NavGroup>
 
             {/* Prioritization Engine — promoted to top-level */}
@@ -209,8 +210,9 @@ function AuthenticatedShell({ slug, pathname, children }: { slug: string; pathna
               </NavGroupDrawer>
               <NavGroupDrawer label="Intelligence Hub">
                 <DrawerNavItem href={r.intelligence}          pathname={pathname} icon={<IconIntelligence/>}>CIQ Overview</DrawerNavItem>
+                <DrawerNavItem href={r.intelligenceThemes}    pathname={pathname} icon={<IconThemeRank/>}>Theme Ranking</DrawerNavItem>
                 <DrawerNavItem href={r.intelligenceFeatures}  pathname={pathname} icon={<IconFeatureRank/>}>Feature Ranking</DrawerNavItem>
-                <DrawerNavItem href={r.intelligenceCustomers} pathname={pathname} icon={<IconCustomerIQ/>}>Customer IQ</DrawerNavItem>
+                <DrawerNavItem href={r.intelligenceCustomers} pathname={pathname} icon={<IconCustomerIQ/>}>Customer Ranking</DrawerNavItem>
               </NavGroupDrawer>
               <NavGroupDrawer label="Prioritization">
                 <DrawerNavItem href={r.prioritization}              pathname={pathname} icon={<IconPriority/>}>Engine</DrawerNavItem>
@@ -429,11 +431,25 @@ function DrawerNavItem({ href, pathname, icon, children }: { href: string; pathn
 function PageTitle({ pathname, slug }: { pathname: string; slug: string }) {
   const segments = pathname.replace(`/${slug}`, '').split('/').filter(Boolean);
   const last     = segments[segments.length - 1] ?? 'app';
+  const parent   = segments[segments.length - 2] ?? '';
+
+  // Context-aware title: when inside /intelligence/*, use intelligence-specific labels
+  if (parent === 'intelligence') {
+    const intelTitles: Record<string, string> = {
+      themes:    'Theme Ranking',
+      features:  'Feature Ranking',
+      customers: 'Customer Ranking',
+    };
+    if (intelTitles[last]) {
+      return <h1 style={{ fontSize: '0.95rem', fontWeight: 700, color: NAVY, margin: 0, letterSpacing: '-0.01em' }}>{intelTitles[last]}</h1>;
+    }
+  }
+
   const titles: Record<string, string> = {
     app: 'Home', inbox: 'Feedback Inbox', themes: 'Themes', roadmap: 'Roadmap',
     customers: 'Customers', reports: 'Reports', voice: 'Voice', surveys: 'Surveys',
     support: 'Support',
-    intelligence: 'Intelligence Hub', features: 'Feature Ranking', 'customers-iq': 'Customer IQ',
+    intelligence: 'Intelligence Hub', features: 'Feature Ranking', 'customers-iq': 'Customer Ranking',
     prioritization: 'Prioritization Engine', opportunities: 'Opportunities', 'roadmap-fit': 'Roadmap Fit',
     digest: 'Weekly Digest', risk: 'Revenue Risk', members: 'Members', billing: 'Billing',
     integrations: 'Integrations', settings: 'Settings', profile: 'Profile', 'ai-settings': 'AI Settings',
@@ -465,6 +481,7 @@ function IconRoadmap()      { return <svg {...ip}><line x1="3" y1="12" x2="21" y
 
 // Intelligence Hub
 function IconIntelligence() { return <svg {...ip}><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 1 1 7.072 0l-.548.547A3.374 3.374 0 0 0 14 18.469V19a2 2 0 1 1-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>; }
+function IconThemeRank()    { return <svg {...ip}><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>; }
 function IconFeatureRank()  { return <svg {...ip}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>; }
 function IconCustomerIQ()   { return <svg {...ip}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>; }
 
