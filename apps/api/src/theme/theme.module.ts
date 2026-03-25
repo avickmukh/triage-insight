@@ -18,6 +18,6 @@ import { DealModule } from '../deal/deal.module';
     DealModule,
   ],
   controllers: [ThemeController],
-  providers: [ThemeService, ThemeRepository, ThemeClusteringProcessor],
+  providers: [ThemeService, ThemeRepository],
 })
 export class ThemeModule {}

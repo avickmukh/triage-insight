@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PlanLimitService } from '../billing/plan-limit.service';
+import { EmailService } from '../email/email.service';
 import { DomainVerificationStatus, WorkspaceRole } from '@prisma/client';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 import { InviteMemberDto } from './dto/invite-member.dto';
@@ -24,6 +25,7 @@ export class WorkspaceService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly planLimit: PlanLimitService,
+    private readonly emailService: EmailService,
   ) {}
 
   async getCurrentWorkspace(userId: string) {
@@ -124,13 +126,18 @@ export class WorkspaceService {
       },
     });
 
+    const inviteLink = `https://app.triageinsight.com/accept-invite?token=${rawToken}`;
+
+    await this.emailService.send({
+      to: dto.email,
+      subject: `You're invited to join ${workspace.name} on TriageInsight`,
+      html: `<p>Click <a href="${inviteLink}">here</a> to accept your invitation.</p>`,
+      text: `Accept your invitation here: ${inviteLink}`,
+    });
+
     return {
-      // Raw token returned so the frontend can construct the accept-invite URL.
-      // The hash is stored in the DB; the raw token is never persisted.
-      inviteToken: rawToken,
+      message: 'Invite sent successfully.',
       email: dto.email,
-      role: dto.role,
-      expiresAt,
     };
   }
 

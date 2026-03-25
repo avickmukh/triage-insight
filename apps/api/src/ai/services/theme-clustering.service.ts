@@ -1,43 +1,46 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { EmbeddingService } from './embedding.service';
 
 /**
  * ThemeClusteringService
  *
- * MVP implementation: assigns a single feedback item to the best-matching
- * existing theme in the same workspace using normalized-text Jaccard similarity.
- * If no theme scores above the confidence threshold, a new DRAFT candidate theme
- * is created automatically.
+ * Semantic clustering using pgvector cosine similarity.
+ * Assigns a single feedback item to the best-matching existing theme in the
+ * same workspace. If no theme scores above the similarity threshold, a new
+ * DRAFT candidate theme is created and its embedding is stored for future
+ * incremental clustering.
  *
- * Architecture note:
- * The public interface `assignFeedbackToTheme(workspaceId, feedbackId, embedding?)` is
- * designed so that the heuristic path can be replaced with a pgvector cosine-similarity
- * query once embeddings are available — no callers need to change.
+ * Tenant isolation is enforced by scoping all queries to `workspaceId`.
+ * Clustering is async via BullMQ (see ThemeClusteringProcessor).
  */
 @Injectable()
 export class ThemeClusteringService {
   private readonly logger = new Logger(ThemeClusteringService.name);
 
-  /** Minimum Jaccard score (0–1) required to link to an existing theme. */
-  private readonly CONFIDENCE_THRESHOLD = 0.35;
+  /** Cosine similarity threshold (0–1) required to link to an existing theme. */
+  private readonly SIMILARITY_THRESHOLD = 0.8;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly embeddingService: EmbeddingService,
+  ) {}
 
   // ─── Public API ───────────────────────────────────────────────────────────
 
   /**
    * Assign a single feedback item to the best-matching theme in the workspace.
    *
-   * Priority:
-   *   1. Embedding cosine similarity (future — when `embedding` arg is provided)
-   *   2. Normalized-text Jaccard similarity (current MVP)
+   * Uses pgvector cosine similarity on stored theme embeddings.
+   * If the feedback already has an embedding, it is used directly.
+   * Otherwise, a new embedding is generated from the feedback's title and description.
    *
    * Returns the themeId the feedback was assigned to, or null if skipped.
    */
   async assignFeedbackToTheme(
     workspaceId: string,
     feedbackId: string,
-    _embedding?: number[],
+    embedding?: number[],
   ): Promise<string | null> {
     // Skip if already linked to any theme
     const existingLink = await this.prisma.themeFeedback.findFirst({
@@ -66,60 +69,58 @@ export class ThemeClusteringService {
       return null;
     }
 
-    const feedbackText = this.buildSearchText(
-      feedback.title,
-      feedback.normalizedText ?? feedback.description,
-    );
-
-    // Fetch all non-archived themes in the workspace with their recent feedback
-    const themes = await this.prisma.theme.findMany({
-      where: { workspaceId, status: { not: 'ARCHIVED' } },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        feedbacks: {
-          take: 20,
-          orderBy: { assignedAt: 'desc' },
-          include: {
-            feedback: {
-              select: { title: true, normalizedText: true, description: true },
-            },
-          },
-        },
-      },
-    });
-
-    if (themes.length === 0) {
+    // Generate or reuse the feedback embedding
+    let feedbackEmbedding: number[];
+    try {
+      feedbackEmbedding = embedding ?? await this.embeddingService.generateEmbedding(
+        `${feedback.title} ${feedback.description}`,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Embedding generation failed for feedback ${feedbackId}: ${(err as Error).message}. Falling back to candidate theme creation.`,
+      );
       return this.createCandidateTheme(workspaceId, feedbackId, feedback.title);
     }
 
-    // Score each theme and pick the best
-    let bestThemeId: string | null = null;
-    let bestScore = 0;
+    const vectorStr = `[${feedbackEmbedding.join(',')}]`;
 
-    for (const theme of themes) {
-      const score = this.scoreTheme(feedbackText, theme);
-      if (score > bestScore) {
-        bestScore = score;
-        bestThemeId = theme.id;
-      }
-    }
+    // Find the most similar theme using pgvector cosine similarity
+    // Scoped to the workspace for tenant isolation
+    const similarThemes = await this.prisma.$queryRaw<Array<{ id: string; similarity: number }>>`
+      SELECT
+        id,
+        1 - (embedding <=> ${vectorStr}::vector) AS similarity
+      FROM "Theme"
+      WHERE "workspaceId" = ${workspaceId}
+        AND "embedding" IS NOT NULL
+        AND "status" != 'ARCHIVED'
+      ORDER BY similarity DESC
+      LIMIT 1;
+    `;
 
-    if (bestScore >= this.CONFIDENCE_THRESHOLD && bestThemeId) {
+    if (similarThemes.length > 0 && similarThemes[0].similarity > this.SIMILARITY_THRESHOLD) {
+      const themeId = similarThemes[0].id;
       await this.prisma.themeFeedback.upsert({
-        where: { themeId_feedbackId: { themeId: bestThemeId, feedbackId } },
-        create: { themeId: bestThemeId, feedbackId, assignedBy: 'ai', confidence: bestScore },
-        update: { assignedBy: 'ai', confidence: bestScore },
+        where: { themeId_feedbackId: { themeId, feedbackId } },
+        create: {
+          themeId,
+          feedbackId,
+          assignedBy: 'ai',
+          confidence: similarThemes[0].similarity,
+        },
+        update: {
+          assignedBy: 'ai',
+          confidence: similarThemes[0].similarity,
+        },
       });
       this.logger.log(
-        `Assigned feedback ${feedbackId} to theme ${bestThemeId} (score=${bestScore.toFixed(3)})`,
+        `Assigned feedback ${feedbackId} to theme ${themeId} (similarity=${similarThemes[0].similarity.toFixed(3)})`,
       );
-      return bestThemeId;
+      return themeId;
     }
 
-    // No good match — create a new candidate theme
-    return this.createCandidateTheme(workspaceId, feedbackId, feedback.title);
+    // No good match — create a new candidate theme and store its embedding
+    return this.createCandidateTheme(workspaceId, feedbackId, feedback.title, feedbackEmbedding);
   }
 
   /**
@@ -169,77 +170,16 @@ export class ThemeClusteringService {
   // ─── Private helpers ──────────────────────────────────────────────────────
 
   /**
-   * Score a theme against a feedback's search text using Jaccard similarity.
-   *
-   * The theme's representative text is built from its title, description, and
-   * the titles/normalized text of its most recently linked feedback items.
-   *
-   * Replacement point: swap this method body with a pgvector cosine query
-   * once theme-level embeddings are available.
-   */
-  private scoreTheme(
-    feedbackText: string,
-    theme: {
-      title: string;
-      description: string | null;
-      feedbacks: Array<{
-        feedback: { title: string; normalizedText: string | null; description: string };
-      }>;
-    },
-  ): number {
-    const themeText = [
-      theme.title,
-      theme.description ?? '',
-      ...theme.feedbacks.map(
-        (tf) => tf.feedback.normalizedText ?? tf.feedback.title,
-      ),
-    ].join(' ');
-
-    return this.jaccardSimilarity(feedbackText, themeText);
-  }
-
-  /** Jaccard similarity on word-level token sets. Returns a score in [0, 1]. */
-  private jaccardSimilarity(a: string, b: string): number {
-    const setA = new Set(this.tokenize(a));
-    const setB = new Set(this.tokenize(b));
-
-    if (setA.size === 0 && setB.size === 0) return 0;
-
-    const intersection = new Set([...setA].filter((t) => setB.has(t)));
-    const union = new Set([...setA, ...setB]);
-
-    return intersection.size / union.size;
-  }
-
-  /** Lowercase, strip punctuation, split on whitespace, remove stop words. */
-  private tokenize(text: string): string[] {
-    const STOP_WORDS = new Set([
-      'a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
-      'of', 'with', 'by', 'from', 'is', 'are', 'was', 'were', 'be', 'been',
-      'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
-      'should', 'may', 'might', 'can', 'not', 'no', 'this', 'that', 'it',
-      'its', 'i', 'we', 'you', 'they', 'he', 'she', 'my', 'our', 'your',
-    ]);
-
-    return text
-      .toLowerCase()
-      .replace(/[^a-z0-9\s]/g, ' ')
-      .split(/\s+/)
-      .filter((t) => t.length > 2 && !STOP_WORDS.has(t));
-  }
-
-  private buildSearchText(title: string, body: string): string {
-    return `${title} ${body}`;
-  }
-
-  /**
    * Create a new DRAFT candidate theme seeded from a single feedback item.
    * The theme title is derived from the feedback title (truncated to 80 chars).
+   * If a feedbackEmbedding is provided, it is stored as the theme's embedding
+   * for future incremental clustering.
    */
   private async createCandidateTheme(
     workspaceId: string,
     feedbackId: string,
     feedbackTitle: string,
+    feedbackEmbedding?: number[],
   ): Promise<string> {
     const candidateTitle =
       feedbackTitle.length > 80 ? `${feedbackTitle.slice(0, 77)}…` : feedbackTitle;
@@ -254,6 +194,16 @@ export class ThemeClusteringService {
         },
       },
     });
+
+    // Store the feedback's embedding as the theme's initial embedding
+    if (feedbackEmbedding && feedbackEmbedding.length > 0) {
+      const vectorStr = `[${feedbackEmbedding.join(',')}]`;
+      await this.prisma.$executeRaw`
+        UPDATE "Theme"
+        SET embedding = ${vectorStr}::vector
+        WHERE id = ${theme.id};
+      `;
+    }
 
     this.logger.log(
       `Created candidate theme "${theme.title}" (${theme.id}) for feedback ${feedbackId}`,

@@ -48,6 +48,9 @@ export const validationSchema = Joi.object({
   // AI features return 503 if not configured.
   OPENAI_API_KEY:         Joi.string().default(''),
 
+  // ── Email ─────────────────────────────────────────────────────────────────
+  EMAIL_PROVIDER:         Joi.string().valid('console', 'smtp', 'ses').default('console'),
+
   // ── Stripe Billing ────────────────────────────────────────────────────────
   // Billing features return 503 if not configured.
   // In production these MUST be set to real values.

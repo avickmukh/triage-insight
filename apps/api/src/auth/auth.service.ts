@@ -9,6 +9,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { EmailService } from '../email/email.service';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { SignUpDto } from './dto/signup.dto';
@@ -86,6 +87,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly emailService: EmailService,
   ) {}
 
   // ─── Workspace User Auth ──────────────────────────────────────────────────
@@ -476,11 +478,18 @@ export class AuthService {
       data: { tokenHash, userId: user.id, expiresAt },
     });
 
-    // TODO (production): Replace with email delivery via SendGrid/Resend.
-    // Reset link: https://app.triageinsight.com/{orgSlug}/reset-password?token={rawToken}
+    // In a real app, you'd get the org slug to build the full URL
+    const resetLink = `https://app.triageinsight.com/reset-password?token=${rawToken}`;
+
+    await this.emailService.send({
+      to: user.email,
+      subject: 'Your TriageInsight Password Reset Link',
+      html: `<p>Click <a href="${resetLink}">here</a> to reset your password.</p><p>If you did not request this, please ignore this email.</p>`,
+      text: `Reset your password here: ${resetLink}`,
+    });
+
     return {
       message: 'If an account with that email exists, a reset link has been sent.',
-      resetToken: rawToken, // Remove this line in production
     };
   }
 

@@ -25,8 +25,7 @@ import { CiqEngineService } from '../ciq/ciq-engine.service';
   ],
   controllers: [AiController, DuplicateSuggestionsController],
   providers: [
-    AiAnalysisProcessor,
-    CiqScoringProcessor,
+
     CiqEngineService,
     EmbeddingService,
     SummarizationService,
