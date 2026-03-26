@@ -19,7 +19,6 @@ import { PortalSseGateway } from './gateway/portal-sse.gateway';
   controllers: [PublicPortalController],
   providers: [
     PublicPortalService,
-    PortalSignalProcessor,
     PortalSseGateway,
   ],
   exports: [PortalSseGateway],

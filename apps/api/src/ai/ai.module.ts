@@ -1,8 +1,8 @@
-import { Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bull';
 import { PrismaModule } from '../prisma/prisma.module';
-import { AiAnalysisProcessor, AI_ANALYSIS_QUEUE } from './processors/analysis.processor';
-import { CiqScoringProcessor, CIQ_SCORING_QUEUE } from './processors/ciq-scoring.processor';
+import { AI_ANALYSIS_QUEUE } from './processors/analysis.processor';
+import { CIQ_SCORING_QUEUE } from './processors/ciq-scoring.processor';
 import { EmbeddingService } from './services/embedding.service';
 import { SummarizationService } from './services/summarization.service';
 import { DuplicateDetectionService } from './services/duplicate-detection.service';
@@ -17,6 +17,12 @@ import { AuditService } from './services/audit.service';
 // without creating a circular dependency (CiqModule → AiModule → CiqModule)
 import { CiqEngineService } from '../ciq/ciq-engine.service';
 
+/**
+ * Marked @Global() so AI services are available in every module without
+ * explicit import. Processors are NOT registered here — they live only in
+ * WorkerProcessorsModule to prevent double-registration.
+ */
+@Global()
 @Module({
   imports: [
     PrismaModule,
@@ -34,12 +40,10 @@ import { CiqEngineService } from '../ciq/ciq-engine.service';
     CiqService,
     MergeService,
     AuditService,
-    // BullMQ processors — consumed by the worker process only.
-    // Registering them here (in the API module) ensures they are available
-    // when the worker imports AiModule, while the API process ignores them
-    // because it does not connect to a BullMQ worker context.
-    AiAnalysisProcessor,
-    CiqScoringProcessor,
+    // NOTE: AiAnalysisProcessor and CiqScoringProcessor are NOT here.
+    // They are registered only in WorkerProcessorsModule
+    // (apps/worker/src/processors.module.ts) to prevent double-registration
+    // when multiple modules import AiModule (e.g. ThemeModule also imports it).
   ],
   exports: [
     CiqEngineService,

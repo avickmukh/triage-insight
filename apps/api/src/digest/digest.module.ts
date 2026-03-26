@@ -15,7 +15,6 @@ import { DigestController } from './digest.controller';
   controllers: [DigestController],
   providers: [
     DigestService,
-    DigestProcessor,
   ],
   exports: [DigestService],
 })

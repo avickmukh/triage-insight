@@ -27,10 +27,8 @@ import { SpikeDetectionProcessor } from './processors/spike-detection.processor'
     TicketService,
     ClusteringService,
     SpikeDetectionService,
-    SyncProcessor,
-    ClusteringProcessor,
-    SpikeDetectionProcessor,
   ],
-  exports: [TicketService, ClusteringService, SpikeDetectionService],
+  // IngestionService exported so SyncProcessor (in WorkerProcessorsModule) can resolve it
+  exports: [IngestionService, TicketService, ClusteringService, SpikeDetectionService],
 })
 export class SupportModule {}

@@ -35,13 +35,20 @@ import { QUEUE_NAMES } from '../queue/queue.module';
   controllers: [PurgeWorkspaceController, PurgePlatformController],
   providers: [
     PurgeService,
-    PurgeWorker,
     WorkspaceFreezeGuard,
     StoragePurgeStep,
     DatabasePurgeStep,
     QueuePurgeStep,
     TokenRevocationStep,
   ],
-  exports: [PurgeService, WorkspaceFreezeGuard],
+  exports: [
+    PurgeService,
+    WorkspaceFreezeGuard,
+    // Step services exported so PurgeWorker (in WorkerProcessorsModule) can resolve them
+    StoragePurgeStep,
+    DatabasePurgeStep,
+    QueuePurgeStep,
+    TokenRevocationStep,
+  ],
 })
 export class PurgeModule {}

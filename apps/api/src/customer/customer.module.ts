@@ -4,11 +4,9 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { CustomerController } from './customer.controller';
 import { CustomerService } from './customer.service';
 import {
-  CustomerRevenueSignalProcessor,
   CUSTOMER_REVENUE_SIGNAL_QUEUE,
 } from './processors/customer-revenue-signal.processor';
 import {
-  CustomerSignalAggregationProcessor,
   CUSTOMER_SIGNAL_AGGREGATION_QUEUE,
 } from './processors/customer-signal-aggregation.processor';
 import { CIQ_SCORING_QUEUE } from '../ai/processors/ciq-scoring.processor';
@@ -24,8 +22,6 @@ import { CIQ_SCORING_QUEUE } from '../ai/processors/ciq-scoring.processor';
   controllers: [CustomerController],
   providers: [
     CustomerService,
-    CustomerRevenueSignalProcessor,
-    CustomerSignalAggregationProcessor,
   ],
   exports: [CustomerService],
 })

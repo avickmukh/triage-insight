@@ -4,7 +4,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { AiModule } from '../ai/ai.module';
 import { SurveyService } from './services/survey.service';
 import { SurveyIntelligenceService } from './services/survey-intelligence.service';
-import { SurveyIntelligenceProcessor, SURVEY_INTELLIGENCE_QUEUE } from './processors/survey-intelligence.processor';
+import { SURVEY_INTELLIGENCE_QUEUE } from './processors/survey-intelligence.processor';
 import { SurveyController, PublicSurveyController } from './survey.controller';
 import { CIQ_SCORING_QUEUE } from '../ai/processors/ciq-scoring.processor';
 
@@ -16,7 +16,9 @@ import { CIQ_SCORING_QUEUE } from '../ai/processors/ciq-scoring.processor';
     BullModule.registerQueue({ name: CIQ_SCORING_QUEUE }),
   ],
   controllers: [SurveyController, PublicSurveyController],
-  providers: [SurveyService, SurveyIntelligenceService, SurveyIntelligenceProcessor],
-  exports: [SurveyService],
+  providers: [SurveyService, SurveyIntelligenceService],
+  // SurveyIntelligenceService exported so WorkerProcessorsModule can resolve
+  // SurveyIntelligenceProcessor's dependency.
+  exports: [SurveyService, SurveyIntelligenceService],
 })
 export class SurveyModule {}

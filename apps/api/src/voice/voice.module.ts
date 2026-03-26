@@ -26,9 +26,8 @@ import { CIQ_SCORING_QUEUE } from '../ai/processors/ciq-scoring.processor';
     VoiceService,
     TranscriptionService,
     VoiceIntelligenceService,
-    VoiceTranscriptionProcessor,
-    VoiceExtractionProcessor,
   ],
-  exports: [VoiceService, VoiceIntelligenceService],
+  // TranscriptionService exported so VoiceTranscriptionProcessor (in WorkerProcessorsModule) can resolve it
+  exports: [VoiceService, TranscriptionService, VoiceIntelligenceService],
 })
 export class VoiceModule {}

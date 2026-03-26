@@ -17,7 +17,6 @@ import { PrismaModule } from '../prisma/prisma.module';
     DashboardAggregationService,
     ExecutiveInsightService,
     DashboardCacheService,
-    DashboardRefreshWorker,
   ],
   exports: [DashboardAggregationService, ExecutiveInsightService, DashboardCacheService],
 })
