@@ -859,11 +859,13 @@ export interface WorkspaceLimitSummary {
  * Returned by /ciq-explanation and /prioritization/themes/:id/ciq endpoints.
  */
 export interface CiqScoreComponent {
-  /** Raw normalised input value (0–100) before weight is applied */
+  /** Raw input value (e.g., request count, ARR in dollars) */
   value: number;
+  /** Normalised input value in the 0–100 range used for scoring */
+  normalisedValue?: number;
   /** Configured weight (0–1) from PrioritizationSettings */
   weight: number;
-  /** Weighted contribution to the final score: value × weight */
+  /** Weighted contribution to the final score: normalisedValue × weight */
   contribution: number;
   /** Human-readable label for explainability UI */
   label: string;
@@ -900,6 +902,11 @@ export interface CiqScoreOutput {
    *       dealInfluence | signalStrength | storedRevenue
    */
   scoreExplanation: Record<string, CiqScoreComponent>;
+  /**
+   * The scoring dimension that contributed most to the final score.
+   * Useful for surfacing a one-line explanation in the UI.
+   */
+  dominantDriver?: string;
   /** True when the score was derived from a linked theme (vs. stored values only) */
   themeScored?: boolean;
 }

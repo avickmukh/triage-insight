@@ -638,6 +638,15 @@ export default function ThemeDetailPage() {
               </div>
             </div>
 
+            {/* Dominant driver badge */}
+            {ciqScore.dominantDriver && ciqScore.scoreExplanation[ciqScore.dominantDriver] && (
+              <div style={{ marginBottom: '1rem', padding: '0.5rem 0.75rem', background: '#eef6ff', border: '1px solid #bfdbfe', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#1a6fc4', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>Top Driver</span>
+                <span style={{ fontSize: '0.8rem', color: '#1e3a5f' }}>
+                  {ciqScore.scoreExplanation[ciqScore.dominantDriver].label} &mdash; contributing {ciqScore.scoreExplanation[ciqScore.dominantDriver].contribution.toFixed(1)} pts to the priority score
+                </span>
+              </div>
+            )}
             {/* Signal breakdown bars */}
             {Object.keys(ciqScore.scoreExplanation).length > 0 && (
               <div>
@@ -648,12 +657,18 @@ export default function ThemeDetailPage() {
                   {Object.entries(ciqScore.scoreExplanation)
                     .sort((a, b) => b[1].contribution - a[1].contribution)
                     .map(([key, factor]) => {
+                      const isDominant = key === ciqScore.dominantDriver;
                       const pct = Math.min(100, Math.round(factor.contribution));
-                      const barColor = pct >= 20 ? '#1a6fc4' : pct >= 10 ? '#20A4A4' : '#adb5bd';
+                      const barColor = isDominant ? '#1a6fc4' : pct >= 10 ? '#20A4A4' : '#adb5bd';
                       return (
                         <div key={key}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.2rem' }}>
-                            <span style={{ fontSize: '0.75rem', color: '#495057' }}>{factor.label}</span>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.2rem', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.75rem', color: '#495057', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                              {factor.label}
+                              {isDominant && (
+                                <span style={{ fontSize: '0.6rem', background: '#dbeafe', color: '#1a6fc4', borderRadius: '0.25rem', padding: '0.1rem 0.3rem', fontWeight: 700 }}>TOP</span>
+                              )}
+                            </span>
                             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: barColor }}>
                               {factor.contribution.toFixed(1)} pts
                             </span>

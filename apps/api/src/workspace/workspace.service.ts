@@ -13,6 +13,7 @@ import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 import { InviteMemberDto } from './dto/invite-member.dto';
 import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
 import { SetDomainDto } from './dto/set-domain.dto';
+import { UpdatePortalSettingsDto } from './dto/update-portal-settings.dto';
 import * as crypto from 'crypto';
 
 /** SHA-256 hash of a raw token string (hex). */
@@ -336,9 +337,60 @@ export class WorkspaceService {
     };
   }
 
+  // ── Portal settings ───────────────────────────────────────────────────────
+
   /**
-   * Removes the custom domain from the workspace and resets all domain fields.
+   * Returns the portal-specific subset of workspace settings.
+   * Includes the computed portal URL (slug-based default or custom domain).
    */
+  async getPortalSettings(userId: string) {
+    const workspace = await this.getCurrentWorkspace(userId);
+    const portalUrl = workspace.customDomain
+      ? `https://${workspace.customDomain}`
+      : `${process.env.FRONTEND_URL ?? 'https://app.triageinsight.com'}/${workspace.slug}/portal`;
+    return {
+      portalVisibility: workspace.portalVisibility,
+      name: workspace.name,
+      description: workspace.description,
+      slug: workspace.slug,
+      portalUrl,
+      customDomain: workspace.customDomain,
+      domainVerificationStatus: workspace.domainVerificationStatus,
+    };
+  }
+
+  /**
+   * Updates portal-specific settings (visibility, name, description).
+   * ADMIN only — enforced at the controller level and re-checked here.
+   */
+  async updatePortalSettings(userId: string, dto: UpdatePortalSettingsDto) {
+    const workspace = await this.getCurrentWorkspace(userId);
+    const membership = await this.prisma.workspaceMember.findUnique({
+      where: { userId_workspaceId: { userId, workspaceId: workspace.id } },
+    });
+    if (!membership || membership.role !== WorkspaceRole.ADMIN) {
+      throw new ForbiddenException('Only workspace admins can update portal settings.');
+    }
+    const updated = await this.prisma.workspace.update({
+      where: { id: workspace.id },
+      data: {
+        ...(dto.portalVisibility !== undefined && { portalVisibility: dto.portalVisibility }),
+        ...(dto.name !== undefined && { name: dto.name }),
+        ...(dto.description !== undefined && { description: dto.description }),
+      },
+    });
+    const portalUrl = updated.customDomain
+      ? `https://${updated.customDomain}`
+      : `${process.env.FRONTEND_URL ?? 'https://app.triageinsight.com'}/${updated.slug}/portal`;
+    return {
+      portalVisibility: updated.portalVisibility,
+      name: updated.name,
+      description: updated.description,
+      slug: updated.slug,
+      portalUrl,
+    };
+  }
+
   async removeDomain(adminUserId: string) {
     const workspace = await this.getCurrentWorkspace(adminUserId);
 

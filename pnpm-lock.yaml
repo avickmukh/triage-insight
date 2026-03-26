@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      '@nestjs/cli':
+        specifier: ^11.0.0
+        version: 11.0.16(@types/node@22.19.15)
       turbo:
         specifier: ^2.0.0
         version: 2.8.14

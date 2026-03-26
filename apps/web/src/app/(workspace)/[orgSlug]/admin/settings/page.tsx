@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWorkspace } from '@/hooks/use-workspace';
 import apiClient from '@/lib/api-client';
 import { PublicPortalVisibility, UpdateWorkspaceDto, Workspace } from '@/lib/api-types';
@@ -111,6 +111,23 @@ const CURRENCIES: { value: string; label: string }[] = [
   { value: 'BRL', label: 'BRL — Brazilian Real' },
 ];
 
+// ── Portal settings types ─────────────────────────────────────────────────────
+
+interface PortalSettings {
+  portalVisibility: PublicPortalVisibility;
+  name: string;
+  description?: string;
+  slug: string;
+  portalUrl: string;
+  customDomain?: string | null;
+}
+
+interface UpdatePortalSettingsDto {
+  portalVisibility?: PublicPortalVisibility;
+  name?: string;
+  description?: string;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function useSettingsForm(workspace: Workspace | undefined) {
@@ -156,6 +173,132 @@ function useSettingsForm(workspace: Workspace | undefined) {
     billingEmail, setBillingEmail,
     toDto,
   };
+}
+
+// ── Portal Branding Card (standalone, uses dedicated portal-settings endpoint) ─
+
+function PortalBrandingCard() {
+  const qc = useQueryClient();
+  const { data: portalSettings, isLoading } = useQuery<PortalSettings>({
+    queryKey: ['workspace', 'portal-settings'],
+    queryFn: () => (apiClient.workspace as unknown as { getPortalSettings: () => Promise<PortalSettings> }).getPortalSettings(),
+  });
+
+  const [portalName, setPortalName] = useState('');
+  const [portalDescription, setPortalDescription] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!portalSettings) return;
+    setPortalName(portalSettings.name ?? '');
+    setPortalDescription(portalSettings.description ?? '');
+  }, [portalSettings]);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setError('');
+    try {
+      const dto: UpdatePortalSettingsDto = {
+        name: portalName.trim() || undefined,
+        description: portalDescription.trim() || undefined,
+      };
+      await (apiClient.workspace as unknown as { updatePortalSettings: (dto: UpdatePortalSettingsDto) => Promise<PortalSettings> }).updatePortalSettings(dto);
+      qc.invalidateQueries({ queryKey: ['workspace', 'portal-settings'] });
+      qc.invalidateQueries({ queryKey: ['workspace', 'current'] });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch {
+      setError('Failed to save portal settings.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (isLoading) return null;
+
+  return (
+    <div style={CARD}>
+      <h2 style={SECTION_TITLE}>Portal Branding</h2>
+      {portalSettings && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem',
+            padding: '0.75rem 1rem',
+            background: '#f0fafa',
+            borderRadius: '0.5rem',
+            border: '1px solid #b2e0e0',
+            marginBottom: '1.25rem',
+          }}
+        >
+          <span style={{ fontSize: '0.8rem', color: '#6C757D' }}>Portal URL:</span>
+          <a
+            href={portalSettings.portalUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ fontSize: '0.85rem', color: '#20A4A4', fontWeight: 600, wordBreak: 'break-all' }}
+          >
+            {portalSettings.portalUrl}
+          </a>
+          <button
+            type="button"
+            onClick={() => navigator.clipboard.writeText(portalSettings.portalUrl)}
+            style={{
+              marginLeft: 'auto',
+              padding: '0.3rem 0.7rem',
+              borderRadius: '0.4rem',
+              border: '1px solid #b2e0e0',
+              background: '#fff',
+              fontSize: '0.75rem',
+              cursor: 'pointer',
+              color: '#20A4A4',
+              fontWeight: 600,
+              flexShrink: 0,
+            }}
+          >
+            Copy
+          </button>
+        </div>
+      )}
+      <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div>
+          <label style={LABEL}>Portal title</label>
+          <input
+            type="text"
+            value={portalName}
+            onChange={(e) => setPortalName(e.target.value)}
+            placeholder="Acme Corp Feedback"
+            maxLength={100}
+            style={INPUT}
+          />
+          <p style={HINT}>Displayed in the portal header and browser tab.</p>
+        </div>
+        <div>
+          <label style={LABEL}>Portal tagline</label>
+          <textarea
+            value={portalDescription}
+            onChange={(e) => setPortalDescription(e.target.value)}
+            placeholder="Share your feedback and ideas with us…"
+            maxLength={500}
+            rows={2}
+            style={{ ...INPUT, resize: 'vertical', lineHeight: '1.5' }}
+          />
+          <p style={HINT}>Shown below the portal title. Max 500 characters.</p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <button type="submit" disabled={saving} style={saving ? BTN_DISABLED : BTN_PRIMARY}>
+            {saving ? 'Saving…' : 'Save portal branding'}
+          </button>
+          {saved && <span style={{ fontSize: '0.85rem', color: '#20A4A4', fontWeight: 600 }}>✓ Saved</span>}
+          {error && <span style={{ fontSize: '0.85rem', color: '#e74c3c' }}>{error}</span>}
+        </div>
+      </form>
+    </div>
+  );
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -292,7 +435,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* ── Public Portal ── */}
+        {/* ── Public Portal Visibility ── */}
         <div style={CARD}>
           <h2 style={SECTION_TITLE}>Public Portal</h2>
           <div>
@@ -396,6 +539,10 @@ export default function SettingsPage() {
           )}
         </div>
       </form>
+
+      {/* ── Portal Branding (separate form, separate endpoint) ── */}
+      <PortalBrandingCard />
+
       {workspace && (
         <DangerZone
           workspaceId={workspace.id}

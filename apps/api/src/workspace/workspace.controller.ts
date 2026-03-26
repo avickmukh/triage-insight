@@ -15,6 +15,7 @@ import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 import { InviteMemberDto } from './dto/invite-member.dto';
 import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
 import { SetDomainDto } from './dto/set-domain.dto';
+import { UpdatePortalSettingsDto } from './dto/update-portal-settings.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { Roles } from './decorators/roles.decorator';
@@ -140,6 +141,32 @@ export class WorkspaceController {
     @Body() dto: UpdateMemberRoleDto,
   ) {
     return this.workspaceService.updateMemberRole(req.user.sub, userId, dto);
+  }
+
+  // ── Portal settings ──────────────────────────────────────────────────────────
+
+  /**
+   * GET /workspace/current/portal-settings
+   * Returns portal-specific settings (visibility, name, description, slug).
+   * Accessible to all authenticated members.
+   */
+  @Get('current/portal-settings')
+  getPortalSettings(@Req() req: AuthenticatedRequest) {
+    return this.workspaceService.getPortalSettings(req.user.sub);
+  }
+
+  /**
+   * PATCH /workspace/current/portal-settings
+   * Updates portal-specific settings. ADMIN only.
+   */
+  @Patch('current/portal-settings')
+  @UseGuards(RolesGuard)
+  @Roles(WorkspaceRole.ADMIN)
+  updatePortalSettings(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: UpdatePortalSettingsDto,
+  ) {
+    return this.workspaceService.updatePortalSettings(req.user.sub, dto);
   }
 
   // ── Domain management ────────────────────────────────────────────────────────

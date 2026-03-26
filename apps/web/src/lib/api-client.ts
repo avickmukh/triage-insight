@@ -183,6 +183,27 @@ const apiClient = {
       api.patch(`/workspace/current/members/${userId}/role`, { role }).then(handleResponse),
     getLimits: (): Promise<WorkspaceLimitSummary> =>
       api.get('/workspace/current/limits').then(handleResponse),
+    getPortalSettings: (): Promise<{
+      portalVisibility: string;
+      name: string;
+      description?: string;
+      slug: string;
+      portalUrl: string;
+      customDomain?: string | null;
+    }> =>
+      api.get('/workspace/current/portal-settings').then(handleResponse),
+    updatePortalSettings: (data: {
+      portalVisibility?: string;
+      name?: string;
+      description?: string;
+    }): Promise<{
+      portalVisibility: string;
+      name: string;
+      description?: string;
+      slug: string;
+      portalUrl: string;
+    }> =>
+      api.patch('/workspace/current/portal-settings', data).then(handleResponse),
   },
 
   feedback: {
