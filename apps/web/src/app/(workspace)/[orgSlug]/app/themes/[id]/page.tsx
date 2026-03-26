@@ -689,10 +689,19 @@ export default function ThemeDetailPage() {
             <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#0a2540', margin: '0 0 0.125rem' }}>
               Priority Intelligence
             </h3>
-            <p style={{ fontSize: '0.78rem', color: '#6C757D', margin: 0 }}>
+            <p style={{ fontSize: '0.78rem', color: '#6C757D', margin: '0 0 0.25rem' }}>
               Composite score across ARR influence, deal pipeline, feedback volume, voice signals, survey demand, and support pressure.
               A higher score means more customers are affected and more revenue is at stake.
             </p>
+            {ciqScore && (
+              <p style={{ fontSize: '0.78rem', color: ciqScore.priorityScore >= 70 ? '#c62828' : ciqScore.priorityScore >= 40 ? '#b8860b' : '#2e7d32', fontWeight: 600, margin: 0 }}>
+                {ciqScore.priorityScore >= 70
+                  ? `Score ${Math.round(ciqScore.priorityScore)}/100 — High urgency. This theme is affecting significant revenue and customer volume.`
+                  : ciqScore.priorityScore >= 40
+                  ? `Score ${Math.round(ciqScore.priorityScore)}/100 — Moderate priority. Worth tracking; consider adding to the roadmap.`
+                  : `Score ${Math.round(ciqScore.priorityScore)}/100 — Low urgency. Monitor for signal growth before escalating.`}
+              </p>
+            )}
           </div>
           {canEdit && (
             <button

@@ -468,37 +468,71 @@ function ThemesCard({ data, href }: { data: EmergingThemeRadar; href: string }) 
   return (
     <div style={cardAccent(PURPLE)}>
       <SectionHeader label="What customers are asking about" href={href} accent={PURPLE} />
+      {/* ── Urgency: support spike alert ── */}
       {data.spikeEvents.length > 0 && (
-        <div style={{ background: AMBER_L, border: `1px solid ${AMBER}33`, borderRadius: '0.6rem', padding: '0.6rem 0.875rem', marginBottom: '0.875rem' }}>
+        <div style={{ background: AMBER_L, border: `1px solid ${AMBER}55`, borderRadius: '0.6rem', padding: '0.6rem 0.875rem', marginBottom: '0.875rem' }}>
           <p style={{ fontSize: '0.78rem', fontWeight: 700, color: AMBER, margin: '0 0 0.2rem' }}>
-            ⚡ {data.spikeEvents.length} sudden spike{data.spikeEvents.length > 1 ? 's' : ''} in support tickets
+            ⚡ {data.spikeEvents.length} sudden spike{data.spikeEvents.length > 1 ? 's' : ''} in support tickets — action needed
           </p>
           <p style={{ fontSize: '0.8rem', color: NAVY, margin: 0 }}>
-            {data.spikeEvents[0].clusterTitle} — {data.spikeEvents[0].ticketCount} tickets this week
+            <strong>{data.spikeEvents[0].clusterTitle}</strong> — {data.spikeEvents[0].ticketCount} tickets this week
           </p>
         </div>
       )}
+      {/* ── Growth callout: fastest-growing theme ── */}
+      {(() => {
+        const fastest = data.emergingThemes.length > 0
+          ? [...data.emergingThemes].sort((a, b) => b.feedbackDelta7d - a.feedbackDelta7d)[0]
+          : null;
+        return fastest && fastest.feedbackDelta7d >= 3 ? (
+          <div style={{ background: '#faf5ff', border: `1px solid ${PURPLE}33`, borderRadius: '0.6rem', padding: '0.5rem 0.875rem', marginBottom: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: PURPLE }}>🚀 Fastest growing:</span>
+            <span style={{ fontSize: '0.8rem', color: NAVY, fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {fastest.title}
+            </span>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: PURPLE, flexShrink: 0 }}>+{fastest.feedbackDelta7d} this week</span>
+          </div>
+        ) : null;
+      })()}
       {data.emergingThemes.length === 0 ? (
         <p style={{ fontSize: '0.875rem', color: GRAY }}>No new themes this week. Add more feedback to detect patterns.</p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
-          {data.emergingThemes.slice(0, 4).map((t) => (
-            <div key={t.themeId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem' }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginBottom: '0.15rem' }}>
-                  <p style={{ fontSize: '0.875rem', fontWeight: 600, color: NAVY, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {t.title}
-                  </p>
-                  {t.isNew && <Badge label="New" bg="#fce8ff" color={PURPLE} />}
+          {data.emergingThemes.slice(0, 4).map((t, idx) => {
+            const isUrgent = data.spikeEvents.some((s) => s.clusterTitle === t.title);
+            const fastestId = data.emergingThemes.length > 0
+              ? [...data.emergingThemes].sort((a, b) => b.feedbackDelta7d - a.feedbackDelta7d)[0].themeId
+              : null;
+            const isTopGrowing = t.themeId === fastestId && t.feedbackDelta7d >= 3;
+            return (
+              <div
+                key={t.themeId}
+                style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem',
+                  padding: isUrgent ? '0.4rem 0.6rem' : '0',
+                  background: isUrgent ? AMBER_L : 'transparent',
+                  borderRadius: isUrgent ? '0.4rem' : 0,
+                }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginBottom: '0.15rem', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#adb5bd', minWidth: '1.1rem' }}>#{idx + 1}</span>
+                    <p style={{ fontSize: '0.875rem', fontWeight: 600, color: NAVY, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {t.title}
+                    </p>
+                    {t.isNew && <Badge label="New" bg="#fce8ff" color={PURPLE} />}
+                    {isUrgent && <Badge label="⚡ Urgent" bg={AMBER_L} color={AMBER} />}
+                    {isTopGrowing && !isUrgent && <Badge label="🚀 Growing" bg="#faf5ff" color={PURPLE} />}
+                  </div>
+                  <p style={{ fontSize: '0.78rem', color: GRAY, margin: 0 }}>{t.signal}</p>
                 </div>
-                <p style={{ fontSize: '0.78rem', color: GRAY, margin: 0 }}>{t.signal}</p>
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <p style={{ fontSize: '0.85rem', fontWeight: 700, color: t.feedbackDelta7d >= 5 ? RED : PURPLE, margin: 0 }}>+{t.feedbackDelta7d}</p>
+                  <p style={{ fontSize: '0.7rem', color: GRAY, margin: 0 }}>this week</p>
+                </div>
               </div>
-              <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <p style={{ fontSize: '0.85rem', fontWeight: 700, color: PURPLE, margin: 0 }}>+{t.feedbackDelta7d}</p>
-                <p style={{ fontSize: '0.7rem', color: GRAY, margin: 0 }}>this week</p>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
       <p style={{ fontSize: '0.75rem', color: GRAY, marginTop: '1rem' }}>
@@ -690,33 +724,91 @@ function SentimentCard({ data, href }: { data: VoiceSentimentSignal; href: strin
 
 // ─── Empty state ──────────────────────────────────────────────────────────────
 function EmptyState({ r, onRefresh, isRefreshing }: { r: ReturnType<typeof appRoutes>; onRefresh: () => void; isRefreshing: boolean }) {
+  const steps = [
+    {
+      num: '1',
+      title: 'Add customer feedback',
+      desc: 'Paste feedback manually, import a CSV, or connect Slack. Even 5 items will activate the AI.',
+      href: r.inboxNew,
+      cta: 'Add feedback →',
+      color: TEAL,
+      bg: TEAL_L,
+    },
+    {
+      num: '2',
+      title: 'AI clusters it into themes',
+      desc: 'TriageInsight groups similar feedback automatically using semantic similarity. No tagging needed.',
+      href: r.themes,
+      cta: 'View themes →',
+      color: PURPLE,
+      bg: '#faf5ff',
+    },
+    {
+      num: '3',
+      title: 'CIQ scores rank every theme',
+      desc: 'Each theme gets a composite score across frequency, ARR influence, voice signals, and support pressure.',
+      href: r.intelligenceThemes,
+      cta: 'See rankings →',
+      color: BLUE,
+      bg: '#f0f9ff',
+    },
+    {
+      num: '4',
+      title: 'Decide what to build next',
+      desc: 'Use the Prioritization Engine to score feature requests and surface revenue opportunities.',
+      href: r.prioritization,
+      cta: 'Open engine →',
+      color: AMBER,
+      bg: AMBER_L,
+    },
+  ];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
       {/* Welcome banner */}
-      <div style={{ ...CARD, borderLeft: `3px solid ${TEAL}`, background: TEAL_L, textAlign: 'center', padding: '2rem' }}>
-        <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>👋</div>
-        <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: NAVY, marginBottom: '0.5rem' }}>
-          Welcome to TriageInsight
-        </h2>
-        <p style={{ fontSize: '0.9rem', color: GRAY, maxWidth: '460px', margin: '0 auto 1.25rem', lineHeight: 1.6 }}>
-          Start by adding customer feedback, then TriageInsight will automatically group it into themes,
-          score feature requests, and tell you what to build next.
-        </p>
-        <button
-          onClick={onRefresh}
-          disabled={isRefreshing}
-          style={{
-            background: TEAL, color: '#fff', border: 'none', borderRadius: '0.5rem',
-            padding: '0.6rem 1.25rem', fontSize: '0.875rem', fontWeight: 600,
-            cursor: isRefreshing ? 'not-allowed' : 'pointer', opacity: isRefreshing ? 0.7 : 1,
-          }}
-        >
-          {isRefreshing ? 'Generating…' : 'Generate my first report'}
-        </button>
+      <div style={{ ...CARD, borderLeft: `3px solid ${TEAL}`, background: TEAL_L, padding: '1.75rem 2rem' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
+          <div style={{ fontSize: '2rem', flexShrink: 0 }}>👋</div>
+          <div style={{ flex: 1 }}>
+            <h2 style={{ fontSize: '1.15rem', fontWeight: 700, color: NAVY, margin: '0 0 0.4rem' }}>
+              Welcome to TriageInsight
+            </h2>
+            <p style={{ fontSize: '0.875rem', color: GRAY, margin: '0 0 1.25rem', lineHeight: 1.6, maxWidth: '560px' }}>
+              Your dashboard will populate as soon as you add feedback. Follow the 4 steps below — the AI does the rest.
+            </p>
+            <button
+              onClick={onRefresh}
+              disabled={isRefreshing}
+              style={{
+                background: TEAL, color: '#fff', border: 'none', borderRadius: '0.5rem',
+                padding: '0.5rem 1.125rem', fontSize: '0.85rem', fontWeight: 600,
+                cursor: isRefreshing ? 'not-allowed' : 'pointer', opacity: isRefreshing ? 0.7 : 1,
+              }}
+            >
+              {isRefreshing ? 'Generating…' : '↻ Refresh dashboard'}
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Quick action cards always visible even when empty */}
-      <QuickActions r={r} />
+      {/* 4-step onboarding checklist */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.875rem' }}>
+        {steps.map((s) => (
+          <div key={s.num} style={{ ...CARD, borderLeft: `3px solid ${s.color}`, background: s.bg, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{
+                width: '1.5rem', height: '1.5rem', borderRadius: '50%', background: s.color,
+                color: '#fff', fontSize: '0.75rem', fontWeight: 700,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              }}>{s.num}</span>
+              <p style={{ fontSize: '0.875rem', fontWeight: 700, color: NAVY, margin: 0 }}>{s.title}</p>
+            </div>
+            <p style={{ fontSize: '0.78rem', color: GRAY, margin: 0, lineHeight: 1.5 }}>{s.desc}</p>
+            <Link href={s.href} style={{ fontSize: '0.78rem', fontWeight: 600, color: s.color, textDecoration: 'none', marginTop: 'auto' }}>
+              {s.cta}
+            </Link>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

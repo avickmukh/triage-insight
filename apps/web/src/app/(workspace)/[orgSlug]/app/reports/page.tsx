@@ -574,7 +574,10 @@ export default function ReportsPage() {
           {loadingPriority ? (
             <SkeletonCard lines={5} />
           ) : !priorityDist ? (
-            <p style={{ color: '#adb5bd', fontSize: '0.85rem', textAlign: 'center', padding: '2rem 0' }}>No data</p>
+            <div style={{ textAlign: 'center', padding: '2rem 0' }}>
+              <p style={{ color: '#adb5bd', fontSize: '0.85rem', margin: '0 0 0.25rem' }}>No priority data yet</p>
+              <p style={{ color: '#ced4da', fontSize: '0.78rem', margin: 0 }}>Add feedback and run AI scoring to populate this chart.</p>
+            </div>
           ) : (
             <>
               <BarChart
@@ -699,7 +702,10 @@ export default function ReportsPage() {
           {loadingRoadmap ? (
             <SkeletonCard lines={5} />
           ) : !roadmapProgress ? (
-            <p style={{ color: '#adb5bd', fontSize: '0.85rem', textAlign: 'center', padding: '2rem 0' }}>No data</p>
+            <div style={{ textAlign: 'center', padding: '2rem 0' }}>
+              <p style={{ color: '#adb5bd', fontSize: '0.85rem', margin: '0 0 0.25rem' }}>No roadmap data yet</p>
+              <p style={{ color: '#ced4da', fontSize: '0.78rem', margin: 0 }}>Create roadmap items from themes to track progress here.</p>
+            </div>
           ) : (
             <>
               <BarChart data={roadmapChartData} color="#7c3aed" height={80} />

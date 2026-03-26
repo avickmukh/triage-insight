@@ -138,7 +138,14 @@ function SuggestionRow({
               fontWeight: 600,
             }}
           >
-            {conf.label} match ({Math.round(similarityScore * 100)}%)
+            {conf.label} match
+          </span>
+          {/* Visual similarity bar */}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+            <span style={{ display: 'inline-block', width: '48px', height: '5px', borderRadius: '999px', background: '#e9ecef', overflow: 'hidden' }}>
+              <span style={{ display: 'block', height: '100%', width: `${Math.round(similarityScore * 100)}%`, background: conf.color, borderRadius: '999px', transition: 'width 0.3s' }} />
+            </span>
+            <span style={{ fontSize: '0.68rem', color: '#adb5bd', fontWeight: 600 }}>{Math.round(similarityScore * 100)}%</span>
           </span>
           {/* Date */}
           <span style={{ fontSize: '0.72rem', color: '#adb5bd' }}>
@@ -333,6 +340,15 @@ export function DuplicateSuggestionsPanel({
             Read-only
           </span>
         )}
+      </div>
+
+      {/* AI trust explanation */}
+      <div style={{ background: '#f8fafc', border: '1px solid #e9ecef', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', marginBottom: '0.875rem', display: 'flex', alignItems: 'flex-start', gap: '0.4rem' }}>
+        <span style={{ fontSize: '0.8rem', flexShrink: 0 }}>🤖</span>
+        <p style={{ fontSize: '0.75rem', color: '#6C757D', margin: 0, lineHeight: 1.5 }}>
+          These items were flagged by the AI using <strong>semantic similarity</strong> — comparing meaning, not just keywords.
+          A match above 70% is considered high confidence. Review and accept to merge, or dismiss if they are unrelated.
+        </p>
       </div>
 
       {/* Action-level error banners */}

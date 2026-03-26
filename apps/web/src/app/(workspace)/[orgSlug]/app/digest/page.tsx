@@ -76,15 +76,36 @@ function DigestContent() {
         </div>
       )}
 
+      {/* Schedule info bar */}
+      <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '0.75rem', padding: '0.75rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '1rem' }}>🗓️</span>
+        <div style={{ flex: 1 }}>
+          <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0369a1' }}>Scheduled delivery: </span>
+          <span style={{ fontSize: '0.82rem', color: '#0c4a6e' }}>Every Monday at 8:00 AM UTC — sent to all workspace members.</span>
+        </div>
+        <button
+          onClick={handleGenerate}
+          disabled={generating || generated}
+          style={{
+            padding: '0.4rem 1rem', borderRadius: '0.4rem',
+            border: 'none', background: generating || generated ? '#94a3b8' : '#0369a1',
+            color: '#fff', fontSize: '0.78rem', fontWeight: 600,
+            cursor: generating || generated ? 'not-allowed' : 'pointer', flexShrink: 0,
+          }}
+        >
+          {generating ? 'Generating…' : generated ? 'Queued ✓' : 'Send now'}
+        </button>
+      </div>
+
       {/* How it works */}
       <div style={CARD}>
         <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#0A2540', margin: '0 0 1rem' }}>What&apos;s in your digest</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
           {[
-            { icon: '🏆', title: 'Top 5 themes', desc: 'The themes with the most new feedback signals this week' },
-            { icon: '📈', title: 'Sentiment trend', desc: 'Average sentiment across all feedback in the past 7 days' },
-            { icon: '⚡', title: 'Priority changes', desc: 'Themes that moved up or down in CIQ score this week' },
-            { icon: '🔔', title: 'Emerging signals', desc: 'New feedback clusters that may need your attention' },
+            { icon: '🏆', title: 'Top 5 themes', desc: 'Themes with the most new feedback signals this week, ranked by CIQ score movement.' },
+            { icon: '📈', title: 'Sentiment trend', desc: 'Average sentiment across all feedback in the past 7 days, with a week-on-week delta.' },
+            { icon: '⚡', title: 'Priority changes', desc: 'Themes that moved up or down in CIQ score this week — so you can act on shifts quickly.' },
+            { icon: '🔔', title: 'Emerging signals', desc: 'New feedback clusters that appeared this week and may need your attention before next sprint.' },
           ].map((item) => (
             <div key={item.title} style={{ padding: '0.875rem', background: '#f8fafc', borderRadius: '0.625rem', border: '1px solid #e9ecef' }}>
               <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>{item.icon}</div>
@@ -93,6 +114,29 @@ function DigestContent() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Sample digest preview */}
+      <div style={{ ...CARD, borderLeft: '3px solid #7c3aed' }}>
+        <h2 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#7c3aed', margin: '0 0 0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Sample digest preview</h2>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <div style={{ background: '#faf5ff', borderRadius: '0.5rem', padding: '0.75rem 1rem' }}>
+            <p style={{ fontSize: '0.78rem', fontWeight: 700, color: '#7c3aed', margin: '0 0 0.25rem' }}>🏆 Top theme this week</p>
+            <p style={{ fontSize: '0.875rem', color: '#0A2540', fontWeight: 600, margin: '0 0 0.15rem' }}>Slow API response times</p>
+            <p style={{ fontSize: '0.78rem', color: '#6C757D', margin: 0 }}>+12 new signals • CIQ score: 84/100 • ↑ 8 points from last week</p>
+          </div>
+          <div style={{ background: '#f0fdf4', borderRadius: '0.5rem', padding: '0.75rem 1rem' }}>
+            <p style={{ fontSize: '0.78rem', fontWeight: 700, color: '#2e7d32', margin: '0 0 0.25rem' }}>📈 Sentiment this week</p>
+            <p style={{ fontSize: '0.875rem', color: '#0A2540', fontWeight: 600, margin: '0 0 0.15rem' }}>72/100 — Improving</p>
+            <p style={{ fontSize: '0.78rem', color: '#6C757D', margin: 0 }}>+4 points vs last week • 3 critical negative signals resolved</p>
+          </div>
+          <div style={{ background: '#fff8e1', borderRadius: '0.5rem', padding: '0.75rem 1rem' }}>
+            <p style={{ fontSize: '0.78rem', fontWeight: 700, color: '#b8860b', margin: '0 0 0.25rem' }}>⚡ Priority shift</p>
+            <p style={{ fontSize: '0.875rem', color: '#0A2540', fontWeight: 600, margin: '0 0 0.15rem' }}>Mobile offline mode ↑ moved from #7 to #3</p>
+            <p style={{ fontSize: '0.78rem', color: '#6C757D', margin: 0 }}>Driven by 6 new enterprise customer requests this week</p>
+          </div>
+        </div>
+        <p style={{ fontSize: '0.72rem', color: '#adb5bd', margin: '0.875rem 0 0', fontStyle: 'italic' }}>This is an illustrative example. Your actual digest will reflect your workspace data.</p>
       </div>
 
       {/* Empty state / CTA */}

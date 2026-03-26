@@ -500,27 +500,65 @@ export default function ThemesPage() {
 
       {/* ── Empty ── */}
       {!isLoading && !isError && allThemes.length === 0 && (
-        <div style={{ ...CARD, padding: '3rem 1.5rem', textAlign: 'center' }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>🧩</div>
-          <p style={{ fontWeight: 700, color: '#0a2540', fontSize: '1.1rem', margin: '0 0 0.5rem' }}>
-            {search || activeStatus ? 'No themes match your filters' : 'No themes yet'}
-          </p>
-          <p style={{ color: '#6C757D', fontSize: '0.875rem', margin: '0 0 1.5rem' }}>
-            {search || activeStatus
-              ? 'Try adjusting your search or filter.'
-              : 'Create your first theme or trigger AI reclustering to auto-generate themes from feedback.'}
-          </p>
-          {canEdit && !search && !activeStatus && (
-            <button
-              onClick={() => setShowCreate(true)}
-              style={{
-                padding: '0.625rem 1.5rem', borderRadius: '0.5rem',
-                border: 'none', background: '#0a2540',
-                color: '#fff', fontSize: '0.875rem', cursor: 'pointer', fontWeight: 600,
-              }}
-            >
-              + New Theme
-            </button>
+        <div style={{ ...CARD, padding: '2.5rem 2rem' }}>
+          {search || activeStatus ? (
+            /* Filter empty state */
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>🔍</div>
+              <p style={{ fontWeight: 700, color: '#0a2540', fontSize: '1.05rem', margin: '0 0 0.4rem' }}>No themes match your filters</p>
+              <p style={{ color: '#6C757D', fontSize: '0.875rem', margin: 0 }}>Try adjusting your search or clearing the status filter.</p>
+            </div>
+          ) : (
+            /* First-time empty state */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>🧩</div>
+                <p style={{ fontWeight: 700, color: '#0a2540', fontSize: '1.1rem', margin: '0 0 0.4rem' }}>No themes yet</p>
+                <p style={{ color: '#6C757D', fontSize: '0.875rem', maxWidth: '480px', margin: '0 auto', lineHeight: 1.6 }}>
+                  Themes are created automatically when the AI clusters your feedback. You can also create them manually.
+                </p>
+              </div>
+              {/* How themes activate */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+                {[
+                  { icon: '💬', title: 'Add feedback', desc: 'Paste, import CSV, or connect Slack to start collecting signals.' },
+                  { icon: '🤖', title: 'AI clusters it', desc: 'Semantic similarity groups related feedback into themes automatically.' },
+                  { icon: '📊', title: 'CIQ scores it', desc: 'Each theme is ranked by frequency, ARR, voice, survey, and support signals.' },
+                ].map((step) => (
+                  <div key={step.title} style={{ background: '#f8fafc', borderRadius: '0.6rem', padding: '0.875rem', border: '1px solid #e9ecef' }}>
+                    <div style={{ fontSize: '1.25rem', marginBottom: '0.35rem' }}>{step.icon}</div>
+                    <p style={{ fontWeight: 700, color: '#0a2540', fontSize: '0.85rem', margin: '0 0 0.25rem' }}>{step.title}</p>
+                    <p style={{ color: '#6C757D', fontSize: '0.78rem', margin: 0, lineHeight: 1.5 }}>{step.desc}</p>
+                  </div>
+                ))}
+              </div>
+              {canEdit && (
+                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => setShowCreate(true)}
+                    style={{
+                      padding: '0.5rem 1.25rem', borderRadius: '0.5rem',
+                      border: 'none', background: '#0a2540',
+                      color: '#fff', fontSize: '0.875rem', cursor: 'pointer', fontWeight: 600,
+                    }}
+                  >
+                    + Create theme manually
+                  </button>
+                  <button
+                    onClick={() => triggerRecluster()}
+                    disabled={isReclustering}
+                    style={{
+                      padding: '0.5rem 1.25rem', borderRadius: '0.5rem',
+                      border: '1px solid #20A4A4', background: '#fff',
+                      color: '#20A4A4', fontSize: '0.875rem', cursor: isReclustering ? 'not-allowed' : 'pointer',
+                      fontWeight: 600, opacity: isReclustering ? 0.7 : 1,
+                    }}
+                  >
+                    {isReclustering ? 'Clustering…' : '🤖 Run AI clustering'}
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}
