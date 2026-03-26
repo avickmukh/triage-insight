@@ -14,12 +14,16 @@ import {
   PORTAL_SIGNAL_QUEUE,
   PORTAL_SIGNAL_JOB,
 } from './portal-signal.constants';
+import { AI_ANALYSIS_QUEUE } from '../ai/processors/analysis.processor';
+import { CIQ_SCORING_QUEUE } from '../ai/processors/ciq-scoring.processor';
 
 @Injectable()
 export class PublicPortalService {
   constructor(
     private readonly prisma: PrismaService,
     @InjectQueue(PORTAL_SIGNAL_QUEUE) private readonly signalQueue: Queue,
+    @InjectQueue(AI_ANALYSIS_QUEUE) private readonly analysisQueue: Queue,
+    @InjectQueue(CIQ_SCORING_QUEUE) private readonly ciqQueue: Queue,
   ) {}
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -235,6 +239,16 @@ export class PublicPortalService {
       },
     });
 
+    // Enqueue AI analysis (embedding, summarization, clustering, dedup)
+    this.analysisQueue
+      .add({ feedbackId: feedback.id, workspaceId: workspace.id })
+      .catch(() => {/* non-critical — worker will retry */});
+
+    // Enqueue CIQ scoring
+    this.ciqQueue
+      .add({ type: 'FEEDBACK_SCORED', workspaceId: workspace.id, feedbackId: feedback.id })
+      .catch(() => {/* non-critical — worker will retry */});
+
     // Publish portal signal (non-critical)
     this.signalQueue
       .add(
@@ -249,7 +263,6 @@ export class PublicPortalService {
         { attempts: 2, removeOnComplete: true },
       )
       .catch(() => {/* non-critical */});
-
     return { ...feedback, portalUserId };
   }
 

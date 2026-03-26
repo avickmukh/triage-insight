@@ -151,6 +151,25 @@ export class FeedbackService {
             churnRisk: true,
           },
         },
+        // Include AI-assigned themes so the detail page can render theme pills
+        themes: {
+          include: {
+            theme: {
+              select: { id: true, title: true, status: true },
+            },
+          },
+        },
+        // Include AI-generated duplicate suggestions (PENDING) for the detail page
+        duplicateSuggestionsAsSource: {
+          where: { status: 'PENDING' },
+          include: {
+            targetFeedback: {
+              select: { id: true, title: true, status: true, createdAt: true },
+            },
+          },
+          orderBy: { similarity: 'desc' },
+          take: 10,
+        },
       },
     });
     if (!feedback) {
@@ -220,34 +239,57 @@ export class FeedbackService {
   /**
    * Find potential duplicate feedback items for a given feedbackId.
    *
-   * Current implementation uses a simple keyword-overlap heuristic on
-   * normalizedText / title within the same workspace.  This is intentionally
-   * structured so that the heuristic can be replaced by an embedding-cosine
-   * similarity query (pgvector) without changing the method signature or
-   * callers.
+   * Primary path: return AI-generated suggestions from FeedbackDuplicateSuggestion
+   * (populated asynchronously by DuplicateDetectionService after embedding generation).
    *
-   * The AI pipeline (DuplicateDetectionService) runs the embedding-based
-   * version asynchronously after creation; this method provides a synchronous
-   * fallback for UI-level "possible duplicates" hints.
+   * Fallback path: if no AI suggestions exist yet (e.g. embedding not yet generated),
+   * use a keyword-overlap heuristic on normalizedText so the UI always has something
+   * to show immediately after feedback creation.
+   *
+   * Both paths are scoped to the workspace for tenant isolation.
    */
   async findPotentialDuplicates(
     workspaceId: string,
     feedbackId: string,
     limit = 5,
   ): Promise<Array<{ id: string; title: string; score: number }>> {
-    const source = await this.findOne(workspaceId, feedbackId);
+    // Verify ownership before any data access
+    await this.findOne(workspaceId, feedbackId);
 
-    // Use normalizedText when available, fall back to description
-    const sourceText = (source.normalizedText ?? source.description).toLowerCase();
+    // ── Primary: AI-persisted embedding-based suggestions ─────────────────
+    const aiSuggestions = await this.prisma.feedbackDuplicateSuggestion.findMany({
+      where: {
+        sourceId: feedbackId,
+        status: 'PENDING',
+        // Tenant isolation: both source and target must belong to this workspace
+        targetFeedback: { workspaceId },
+      },
+      include: {
+        targetFeedback: { select: { id: true, title: true } },
+      },
+      orderBy: { similarity: 'desc' },
+      take: limit,
+    });
 
-    // Extract meaningful tokens (words ≥ 4 chars) as a simple keyword set
-    const keywords = [...new Set(sourceText.match(/\b\w{4,}\b/g) ?? [])];
-
-    if (keywords.length === 0) {
-      return [];
+    if (aiSuggestions.length > 0) {
+      return aiSuggestions.map((s) => ({
+        id: s.targetFeedback.id,
+        title: s.targetFeedback.title,
+        score: s.similarity,
+      }));
     }
 
-    // Fetch recent feedback in the same workspace (excluding self and merged)
+    // ── Fallback: keyword-overlap heuristic (pre-embedding) ───────────────
+    const source = await this.prisma.feedback.findFirst({
+      where: { id: feedbackId, workspaceId },
+      select: { normalizedText: true, description: true },
+    });
+    if (!source) return [];
+
+    const sourceText = (source.normalizedText ?? source.description).toLowerCase();
+    const keywords = [...new Set(sourceText.match(/\b\w{4,}\b/g) ?? [])];
+    if (keywords.length === 0) return [];
+
     const candidates = await this.prisma.feedback.findMany({
       where: {
         workspaceId,
@@ -256,21 +298,17 @@ export class FeedbackService {
       },
       select: { id: true, title: true, normalizedText: true, description: true },
       orderBy: { createdAt: 'desc' },
-      take: 200, // cap scan window
+      take: 200,
     });
 
-    // Score each candidate by keyword overlap ratio
-    const scored = candidates
+    return candidates
       .map((c) => {
         const candidateText = (c.normalizedText ?? c.description).toLowerCase();
         const matches = keywords.filter((kw) => candidateText.includes(kw)).length;
-        const score = matches / keywords.length;
-        return { id: c.id, title: c.title, score };
+        return { id: c.id, title: c.title, score: matches / keywords.length };
       })
       .filter((c) => c.score > 0)
       .sort((a, b) => b.score - a.score)
       .slice(0, limit);
-
-    return scored;
   }
 }

@@ -186,11 +186,12 @@ export class SlackIngestionService {
       });
 
       // Queue for AI analysis (summarization, embedding, clustering)
-      await this.analysisQueue.add({ feedbackId: feedback.id }).catch(() => {});
+      // workspaceId is required by AiAnalysisProcessor for tenant isolation
+      await this.analysisQueue.add({ feedbackId: feedback.id, workspaceId }).catch(() => {});
 
-      // Queue for CIQ scoring
+      // Queue for CIQ scoring — use 'type' not 'action' to match CiqJobPayload
       await this.ciqQueue
-        .add({ workspaceId, feedbackId: feedback.id, action: 'FEEDBACK_SCORED' })
+        .add({ type: 'FEEDBACK_SCORED', workspaceId, feedbackId: feedback.id })
         .catch(() => {});
 
       return 'ingested';

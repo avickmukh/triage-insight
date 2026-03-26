@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bull';
 import { PrismaModule } from '../prisma/prisma.module';
 import { PORTAL_SIGNAL_QUEUE } from './portal-signal.constants';
+import { AI_ANALYSIS_QUEUE } from '../ai/processors/analysis.processor';
 import { CIQ_SCORING_QUEUE } from '../ai/processors/ciq-scoring.processor';
 import { PublicPortalController } from './public-portal.controller';
 import { PublicPortalService } from './public-portal.service';
@@ -12,6 +13,7 @@ import { PortalSseGateway } from './gateway/portal-sse.gateway';
   imports: [
     PrismaModule,
     BullModule.registerQueue({ name: PORTAL_SIGNAL_QUEUE }),
+    BullModule.registerQueue({ name: AI_ANALYSIS_QUEUE }),
     BullModule.registerQueue({ name: CIQ_SCORING_QUEUE }),
   ],
   controllers: [PublicPortalController],
