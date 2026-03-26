@@ -18,7 +18,15 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useExecutiveDashboard, useDashboardRefresh } from '@/hooks/use-dashboard';
-import { appRoutes } from '@/lib/routes';
+import { appRoutes, orgAdminRoutes } from '@/lib/routes';
+import { useWorkspace } from '@/hooks/use-workspace';
+import { useFeedbackCount } from '@/hooks/use-feedback';
+import { useThemeCount } from '@/hooks/use-themes';
+import { useOnboarding } from '@/components/onboarding/use-onboarding';
+import { OnboardingChecklist } from '@/components/onboarding/OnboardingChecklist';
+import { AiProcessingBanner } from '@/components/onboarding/AiProcessingBanner';
+import { FirstInsightHighlight } from '@/components/onboarding/FirstInsightHighlight';
+import { TeamInvitePrompt, DigestExpectationBanner, PortalActivationPrompt } from '@/components/onboarding/OnboardingPrompts';
 import {
   ProductDirectionSummary,
   EmergingThemeRadar,
@@ -818,6 +826,7 @@ export default function HomeDashboardPage() {
   const params = useParams();
   const slug = Array.isArray(params.orgSlug) ? params.orgSlug[0] : params.orgSlug ?? '';
   const r = appRoutes(slug);
+  const admin = orgAdminRoutes(slug);
 
   const { data, isLoading, isError, refetch } = useExecutiveDashboard();
   const refresh = useDashboardRefresh();
@@ -825,6 +834,32 @@ export default function HomeDashboardPage() {
   const handleRefresh = () => {
     refresh.mutate(undefined, { onSuccess: () => refetch() });
   };
+
+  // ── Onboarding data signals ────────────────────────────────────────────────
+  const { workspace } = useWorkspace();
+  const { data: feedbackCount = 0 } = useFeedbackCount();
+  const { data: themeCount = 0 } = useThemeCount();
+  const memberCount = 1; // conservative default; checklist auto-marks when > 1
+
+  // ── Onboarding persistence ────────────────────────────────────────────────
+  const { state: ob, hydrated: obHydrated, markStep, update: obUpdate, dismiss: obDismiss } = useOnboarding(workspace?.id);
+
+  // Auto-detect step completion from live data
+  const feedbackDone = ob.steps.feedbackImported || feedbackCount > 0;
+  const insightsDone = ob.steps.insightsReviewed || themeCount > 0;
+
+  // Top emerging theme for FirstInsightHighlight
+  const topTheme = data?.emergingThemes?.emergingThemes?.[0]
+    ? {
+        id: data.emergingThemes.emergingThemes[0].themeId,
+        name: data.emergingThemes.emergingThemes[0].title,
+        feedbackCount: data.emergingThemes.emergingThemes[0].totalFeedback,
+        priorityScore: data.emergingThemes.emergingThemes[0].urgencyScore,
+      }
+    : null;
+
+  // Show checklist only when not dismissed and not all steps done
+  const showChecklist = obHydrated && !ob.dismissed && !(feedbackDone && insightsDone && ob.steps.teamInvited);
 
   const hasData = data && (
     (data.productDirection?.topFeatures?.length ?? 0) > 0 ||
@@ -892,6 +927,64 @@ export default function HomeDashboardPage() {
             Try again
           </button>
         </div>
+      )}
+
+      {/* ── Onboarding banners (shown regardless of data state) ────────────── */}
+      {obHydrated && (
+        <>
+          {/* Step 1 + 2: Checklist + data ingestion guidance */}
+          {showChecklist && (
+            <OnboardingChecklist
+              state={ob}
+              feedbackCount={feedbackCount}
+              themeCount={themeCount}
+              memberCount={memberCount}
+              routes={{
+                inboxNew: r.inboxNew,
+                inbox: r.inbox,
+                intelligenceThemes: r.intelligenceThemes,
+                adminMembers: admin.members,
+                adminIntegrations: admin.integrations,
+              }}
+              onMarkStep={markStep}
+              onDismiss={obDismiss}
+            />
+          )}
+          {/* Step 3: AI processing state */}
+          <AiProcessingBanner feedbackCount={feedbackCount} themeCount={themeCount} />
+          {/* Step 4: First insight highlight */}
+          <FirstInsightHighlight
+            topTheme={topTheme}
+            themeCount={themeCount}
+            insightsReviewed={insightsDone}
+            href={r.intelligenceThemes}
+            onReview={() => markStep('insightsReviewed')}
+            onDismiss={() => markStep('insightsReviewed')}
+          />
+          {/* Step 5: Team invite prompt */}
+          <TeamInvitePrompt
+            seen={ob.invitePromptSeen}
+            insightsReviewed={insightsDone}
+            memberCount={memberCount}
+            inviteHref={admin.members}
+            onSeen={() => obUpdate({ invitePromptSeen: true })}
+          />
+          {/* Step 6: Digest expectation */}
+          <DigestExpectationBanner
+            seen={ob.digestPromptSeen}
+            themeCount={themeCount}
+            digestHref={r.digest ?? r.intelligenceThemes}
+            onSeen={() => obUpdate({ digestPromptSeen: true })}
+          />
+          {/* Step 7: Portal activation */}
+          <PortalActivationPrompt
+            seen={ob.portalPromptSeen}
+            themeCount={themeCount}
+            orgSlug={slug}
+            portalSettingsHref={admin.settings}
+            onSeen={() => obUpdate({ portalPromptSeen: true })}
+          />
+        </>
       )}
 
       {/* ── Empty state ───────────────────────────────────────────────────────── */}
