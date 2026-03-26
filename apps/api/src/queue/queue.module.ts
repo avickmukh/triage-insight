@@ -41,12 +41,13 @@ export const QUEUE_NAMES = {
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
         redis: {
-          host:                 configService.get<string>('REDIS_HOST', 'localhost'),
-          port:                 configService.get<number>('REDIS_PORT', 6379),
-          // ── Graceful degradation: don't block the app if Redis is down ──
-          enableOfflineQueue:   false,
-          lazyConnect:          true,
-          connectTimeout:       1000,
+          host:           configService.get<string>('REDIS_HOST', 'localhost'),
+          port:           configService.get<number>('REDIS_PORT', 6379),
+          // lazyConnect allows the app to start even if Redis is briefly unavailable.
+          // enableOfflineQueue is intentionally NOT set to false here — Bull processors
+          // call client() at startup and will crash if offline queue is disabled.
+          lazyConnect:    true,
+          connectTimeout: 5000,
         },
         /** Global default job options applied to every queue */
         defaultJobOptions: {
