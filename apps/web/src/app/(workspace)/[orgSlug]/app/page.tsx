@@ -121,26 +121,56 @@ function TodaySummaryCard({ summary }: { summary: ExecutiveSummary | undefined }
   if (!summary) return null;
   return (
     <div style={{ ...CARD, borderLeft: `3px solid ${TEAL}`, background: TEAL_L }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
-        <div style={{ fontSize: '1.25rem', flexShrink: 0 }}>📋</div>
-        <div style={{ flex: 1 }}>
-          <p style={{ fontSize: '0.95rem', fontWeight: 600, color: NAVY, margin: '0 0 0.4rem', lineHeight: 1.5 }}>
-            {summary.weekSummary}
-          </p>
-          {summary.keyInsights?.slice(0, 2).map((b: string, i: number) => (
-            <p key={i} style={{ fontSize: '0.85rem', color: '#374151', margin: '0 0 0.2rem', lineHeight: 1.5 }}>
-              → {b}
+      {/* Header row */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.625rem', flex: 1 }}>
+          <div style={{ fontSize: '1.25rem', flexShrink: 0 }}>📋</div>
+          <div>
+            <p style={{ fontSize: '0.7rem', fontWeight: 700, color: TEAL, margin: '0 0 0.2rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>This week&apos;s summary</p>
+            <p style={{ fontSize: '0.95rem', fontWeight: 600, color: NAVY, margin: 0, lineHeight: 1.5 }}>
+              {summary.weekSummary}
             </p>
-          ))}
-          {summary.topAction && (
-            <div style={{ marginTop: '0.75rem', background: '#fff', border: `1px solid ${TEAL}33`, borderRadius: '0.5rem', padding: '0.5rem 0.875rem' }}>
-              <p style={{ fontSize: '0.75rem', fontWeight: 700, color: TEAL, margin: '0 0 0.15rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Suggested next step
-              </p>
-              <p style={{ fontSize: '0.875rem', color: NAVY, margin: 0 }}>{summary.topAction}</p>
-            </div>
-          )}
+          </div>
         </div>
+        {summary.generatedAt && (
+          <p style={{ fontSize: '0.7rem', color: GRAY, margin: 0, flexShrink: 0, alignSelf: 'flex-start', paddingTop: '0.1rem' }}>
+            {new Date(summary.generatedAt).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+          </p>
+        )}
+      </div>
+
+      {/* Key insights row */}
+      {summary.keyInsights?.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '0.5rem', marginBottom: '0.875rem' }}>
+          {summary.keyInsights.slice(0, 3).map((insight: string, i: number) => (
+            <div key={i} style={{ background: '#fff', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', border: `1px solid ${TEAL}22`, display: 'flex', alignItems: 'flex-start', gap: '0.4rem' }}>
+              <span style={{ color: TEAL, fontWeight: 700, fontSize: '0.8rem', flexShrink: 0, marginTop: '0.05rem' }}>→</span>
+              <p style={{ fontSize: '0.82rem', color: '#374151', margin: 0, lineHeight: 1.5 }}>{insight}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Bottom row: risk alert + momentum + top action */}
+      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'stretch' }}>
+        {summary.riskAlert && (
+          <div style={{ flex: 1, minWidth: '200px', background: '#fff5f5', border: '1px solid #fecaca', borderRadius: '0.5rem', padding: '0.5rem 0.75rem' }}>
+            <p style={{ fontSize: '0.68rem', fontWeight: 700, color: '#e63946', margin: '0 0 0.15rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Risk alert</p>
+            <p style={{ fontSize: '0.82rem', color: '#7f1d1d', margin: 0, lineHeight: 1.4 }}>{summary.riskAlert}</p>
+          </div>
+        )}
+        {summary.momentumSignal && (
+          <div style={{ flex: 1, minWidth: '200px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '0.5rem', padding: '0.5rem 0.75rem' }}>
+            <p style={{ fontSize: '0.68rem', fontWeight: 700, color: '#2e7d32', margin: '0 0 0.15rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Momentum</p>
+            <p style={{ fontSize: '0.82rem', color: '#14532d', margin: 0, lineHeight: 1.4 }}>{summary.momentumSignal}</p>
+          </div>
+        )}
+        {summary.topAction && (
+          <div style={{ flex: 2, minWidth: '240px', background: '#fff', border: `1px solid ${TEAL}33`, borderRadius: '0.5rem', padding: '0.5rem 0.875rem' }}>
+            <p style={{ fontSize: '0.68rem', fontWeight: 700, color: TEAL, margin: '0 0 0.15rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Suggested next step</p>
+            <p style={{ fontSize: '0.875rem', color: NAVY, margin: 0, lineHeight: 1.4 }}>{summary.topAction}</p>
+          </div>
+        )}
       </div>
     </div>
   );

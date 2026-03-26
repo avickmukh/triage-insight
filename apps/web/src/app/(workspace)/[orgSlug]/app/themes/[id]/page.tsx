@@ -10,6 +10,7 @@ import {
 } from '@/hooks/use-themes';
 import { useCurrentMemberRole } from '@/hooks/use-workspace';
 import { useThemeCiqScore, useRecalculateThemeCiq, useThemeRevenueIntelligence } from '@/hooks/use-ciq';
+import { useCreateRoadmapFromTheme } from '@/hooks/use-roadmap';
 import {
   CiqScoreOutput,
   FeedbackSourceType,
@@ -272,22 +273,24 @@ function FeedbackRow({
           </span>
           {item.assignedBy === 'ai' && confidence && (
             <span
+              title={`AI matched this feedback to the theme with ${confidence} semantic similarity`}
               style={{
                 fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: '999px',
-                background: '#e3f2fd', color: '#1565c0', fontWeight: 600,
+                background: '#e3f2fd', color: '#1565c0', fontWeight: 600, cursor: 'help',
               }}
             >
-              AI · {confidence}
+              AI match · {confidence}
             </span>
           )}
           {item.assignedBy === 'manual' && (
             <span
+              title="Manually linked to this theme by a team member"
               style={{
                 fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: '999px',
-                background: '#f3e5f5', color: '#6a1b9a', fontWeight: 600,
+                background: '#f3e5f5', color: '#6a1b9a', fontWeight: 600, cursor: 'help',
               }}
             >
-              Manual
+              Manually linked
             </span>
           )}
         </div>
@@ -316,8 +319,9 @@ function FeedbackRow({
           )}
           {item.sentiment != null && (
             <span style={{ fontSize: '0.75rem', color: '#adb5bd' }}>
-              Sentiment: <strong style={{ color: item.sentiment >= 0 ? '#2e7d32' : '#e63946' }}>
-                {item.sentiment >= 0 ? '+' : ''}{item.sentiment.toFixed(2)}
+              Sentiment:{' '}
+              <strong style={{ color: item.sentiment >= 0.3 ? '#2e7d32' : item.sentiment <= -0.3 ? '#e63946' : '#b8860b' }}>
+                {item.sentiment >= 0.3 ? 'Positive' : item.sentiment <= -0.3 ? 'Negative' : 'Neutral'}
               </strong>
             </span>
           )}
@@ -388,7 +392,33 @@ export default function ThemeDetailPage() {
   const { data: ciqScore, isLoading: ciqLoading } = useThemeCiqScore(themeId || null);
   const { data: revenueIntel, isLoading: revenueLoading } = useThemeRevenueIntelligence(themeId || null);
   const recalculate = useRecalculateThemeCiq();
+  const addToRoadmap = useCreateRoadmapFromTheme();
   const [rescoreToast, setRescoreToast] = useState<string | null>(null);
+  const [actionToast, setActionToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const handleAddToRoadmap = () => {
+    if (!themeId) return;
+    addToRoadmap.mutate(
+      { themeId },
+      {
+        onSuccess: () => {
+          setActionToast({ message: 'Added to roadmap. You can now prioritize it there.', type: 'success' });
+          setTimeout(() => setActionToast(null), 5000);
+        },
+        onError: (err) => {
+          setActionToast({ message: err.message || 'Failed to add to roadmap.', type: 'error' });
+          setTimeout(() => setActionToast(null), 5000);
+        },
+      },
+    );
+  };
+
+  const handleMarkInvestigating = () => {
+    if (!themeId) return;
+    // Reuse the existing updateTheme mutation via the edit flow — set status to ACTIVE
+    // This is surfaced as a quick action without opening the modal
+    router.push(`${r.themeItem(themeId)}?action=investigate`);
+  };
 
   const handleRescore = () => {
     if (!themeId) return;
@@ -472,6 +502,26 @@ export default function ThemeDetailPage() {
         ← Themes
       </Link>
 
+      {/* ── Action toast ── */}
+      {actionToast && (
+        <div style={{
+          padding: '0.625rem 1rem',
+          background: actionToast.type === 'success' ? '#e8f5e9' : '#fff5f5',
+          border: `1px solid ${actionToast.type === 'success' ? '#c8e6c9' : '#f5c6cb'}`,
+          borderRadius: '0.5rem',
+          fontSize: '0.85rem',
+          color: actionToast.type === 'success' ? '#2e7d32' : '#e63946',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <span>{actionToast.message}</span>
+          {actionToast.type === 'success' && (
+            <Link href={r.roadmap} style={{ fontSize: '0.8rem', color: '#1a6fc4', fontWeight: 600, textDecoration: 'none', marginLeft: '1rem', whiteSpace: 'nowrap' }}>
+              View roadmap →
+            </Link>
+          )}
+        </div>
+      )}
+
       {/* ── Summary Card ── */}
       <div style={CARD}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
@@ -494,10 +544,28 @@ export default function ThemeDetailPage() {
               {theme.title}
             </h1>
             {theme.description && (
-              <p style={{ fontSize: '0.9rem', color: '#6C757D', margin: '0 0 1.25rem', lineHeight: 1.6 }}>
+              <p style={{ fontSize: '0.9rem', color: '#6C757D', margin: '0 0 1rem', lineHeight: 1.6 }}>
                 {theme.description}
               </p>
             )}
+            {/* ── Insight context strip — why this theme exists ── */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.25rem' }}>
+              {(theme.feedbackCount ?? 0) > 0 && (
+                <span style={{ fontSize: '0.75rem', background: '#f0f4f8', color: '#495057', borderRadius: '0.375rem', padding: '0.2rem 0.6rem', fontWeight: 500 }}>
+                  {theme.feedbackCount} feedback signal{theme.feedbackCount !== 1 ? 's' : ''} grouped here
+                </span>
+              )}
+              {(theme.feedbackCount ?? 0) >= 3 && (
+                <span style={{ fontSize: '0.75rem', background: '#e8f5e9', color: '#2e7d32', borderRadius: '0.375rem', padding: '0.2rem 0.6rem', fontWeight: 500 }}>
+                  AI-clustered by semantic similarity
+                </span>
+              )}
+              {theme.status === 'ACTIVE' && (
+                <span style={{ fontSize: '0.75rem', background: '#fff8e1', color: '#b8860b', borderRadius: '0.375rem', padding: '0.2rem 0.6rem', fontWeight: 500 }}>
+                  Active — receiving new signals
+                </span>
+              )}
+            </div>
           </div>
           {canEdit && (
             <button
@@ -557,6 +625,56 @@ export default function ThemeDetailPage() {
         </div>
       </div>
 
+      {/* ── Next Steps action bar ── */}
+      {canEdit && (
+        <div style={{
+          background: '#f8fafc',
+          border: '1px solid #e2e8f0',
+          borderRadius: '0.75rem',
+          padding: '0.875rem 1.25rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.75rem',
+          flexWrap: 'wrap',
+        }}>
+          <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#6C757D', marginRight: '0.25rem' }}>Next steps:</span>
+          <button
+            onClick={handleAddToRoadmap}
+            disabled={addToRoadmap.isPending}
+            style={{
+              padding: '0.4rem 0.875rem', borderRadius: '0.5rem',
+              border: 'none', background: '#0a2540',
+              color: '#fff', fontSize: '0.8rem', cursor: addToRoadmap.isPending ? 'not-allowed' : 'pointer',
+              fontWeight: 600, opacity: addToRoadmap.isPending ? 0.6 : 1,
+            }}
+          >
+            {addToRoadmap.isPending ? 'Adding…' : '+ Add to Roadmap'}
+          </button>
+          <Link
+            href={r.inbox}
+            style={{
+              padding: '0.4rem 0.875rem', borderRadius: '0.5rem',
+              border: '1px solid #ced4da', background: '#fff',
+              color: '#495057', fontSize: '0.8rem', fontWeight: 600,
+              textDecoration: 'none', display: 'inline-block',
+            }}
+          >
+            Review feedback inbox
+          </Link>
+          <Link
+            href={r.intelligenceThemes}
+            style={{
+              padding: '0.4rem 0.875rem', borderRadius: '0.5rem',
+              border: '1px solid #ced4da', background: '#fff',
+              color: '#495057', fontSize: '0.8rem', fontWeight: 600,
+              textDecoration: 'none', display: 'inline-block',
+            }}
+          >
+            Compare with other themes
+          </Link>
+        </div>
+      )}
+
       {/* ── CIQ Priority Intelligence Panel ── */}
       <div
         style={{
@@ -572,7 +690,8 @@ export default function ThemeDetailPage() {
               Priority Intelligence
             </h3>
             <p style={{ fontSize: '0.78rem', color: '#6C757D', margin: 0 }}>
-              CIQ score based on ARR, deal pipeline, votes, signals &amp; recency
+              Composite score across ARR influence, deal pipeline, feedback volume, voice signals, survey demand, and support pressure.
+              A higher score means more customers are affected and more revenue is at stake.
             </p>
           </div>
           {canEdit && (

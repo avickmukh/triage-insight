@@ -1042,6 +1042,10 @@ const apiClient = {
     getRequest: (workspaceId: string, requestId: string) =>
       api.get(`/workspaces/${workspaceId}/purge/request/${requestId}`).then(handleResponse),
   },
+  digest: {
+    generate: (workspaceId: string): Promise<void> =>
+      api.post(`/workspaces/${workspaceId}/digest/generate`).then(handleResponse),
+  },
 };
 
 /**

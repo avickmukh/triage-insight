@@ -59,8 +59,27 @@ export default function IntelligenceThemesPage() {
       ) : error ? (
         <div style={{ textAlign: 'center', padding: '4rem', color: '#c62828' }}>Failed to load theme rankings.</div>
       ) : !themes || themes.length === 0 ? (
-        <div style={{ ...CARD, textAlign: 'center', padding: '4rem', color: '#6C757D' }}>
-          No theme ranking data yet. CIQ scores are computed asynchronously as signals accumulate.
+        <div style={{ ...CARD, textAlign: 'center', padding: '3.5rem 2rem' }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>📊</div>
+          <p style={{ fontWeight: 700, color: '#0a2540', fontSize: '1.05rem', margin: '0 0 0.5rem' }}>No theme rankings yet</p>
+          <p style={{ color: '#6C757D', fontSize: '0.875rem', maxWidth: '400px', margin: '0 auto 1.5rem', lineHeight: 1.6 }}>
+            CIQ scores are calculated automatically once themes have linked feedback.
+            Start by adding feedback to the inbox and triggering AI reclustering from the Themes page.
+          </p>
+          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <Link
+              href={routes.inboxNew}
+              style={{ padding: '0.5rem 1.25rem', borderRadius: '0.5rem', background: '#0a2540', color: '#fff', fontSize: '0.875rem', fontWeight: 600, textDecoration: 'none' }}
+            >
+              Add feedback
+            </Link>
+            <Link
+              href={routes.themes}
+              style={{ padding: '0.5rem 1.25rem', borderRadius: '0.5rem', border: '1px solid #ced4da', background: '#fff', color: '#495057', fontSize: '0.875rem', fontWeight: 600, textDecoration: 'none' }}
+            >
+              View themes
+            </Link>
+          </div>
         </div>
       ) : (
         <div style={CARD}>
