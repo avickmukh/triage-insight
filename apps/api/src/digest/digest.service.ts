@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SummarizationService } from '../ai/services/summarization.service';
+import { EmailService } from '../email/email.service';
 import { DigestFrequency } from '@prisma/client';
 
 @Injectable()
@@ -10,6 +11,7 @@ export class DigestService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly summarizationService: SummarizationService,
+    private readonly emailService: EmailService,
   ) {}
 
   async generateDigest(workspaceId: string, frequency: DigestFrequency = DigestFrequency.WEEKLY) {
@@ -64,6 +66,60 @@ export class DigestService {
 
     this.logger.log(`Digest ${digestRun.id} created for workspace ${workspaceId}`);
 
+    await this.sendDigestEmail(digestRun.id);
+
     return digestRun;
+  }
+
+  private async sendDigestEmail(digestRunId: string) {
+    const digestRun = await this.prisma.digestRun.findUnique({
+      where: { id: digestRunId },
+      include: {
+        workspace: {
+          include: {
+            members: {
+              include: {
+                user: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!digestRun) {
+      this.logger.error(`Digest run ${digestRunId} not found for sending email.`);
+      return;
+    }
+
+    const recipients = digestRun.workspace.members
+      .filter((m) => m.user.email)
+      .map((m) => m.user.email);
+
+    if (recipients.length === 0) {
+      this.logger.warn(`No recipients found for digest email for workspace ${digestRun.workspaceId}`);
+      return;
+    }
+
+    const summary = digestRun.summary as any;
+
+    for (const recipient of recipients) {
+      await this.emailService.send({
+        to: recipient,
+        subject: `Your Weekly TriageInsight Digest for ${digestRun.workspace.name}`,
+        text: `Weekly Digest\n\n${summary.summaryText}\n\nTop Themes:\n${summary.topThemes.map((t: any) => `- ${t.title}`).join('\n')}\n\nAverage sentiment: ${summary.sentimentSummary._avg.sentiment?.toFixed(2)}`,
+        html: `
+          <h1>Weekly Digest</h1>
+          <p>${summary.summaryText}</p>
+          <h2>Top Themes</h2>
+          <ul>
+            ${summary.topThemes.map((t: any) => `<li>${t.title}</li>`).join('')}
+          </ul>
+          <p>Average sentiment: ${summary.sentimentSummary._avg.sentiment?.toFixed(2)}</p>
+        `,
+      });
+    }
+
+    this.logger.log(`Digest email sent for digest run ${digestRunId} to ${recipients.length} recipients.`);
   }
 }

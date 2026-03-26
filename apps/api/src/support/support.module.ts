@@ -27,9 +27,9 @@ import { SpikeDetectionProcessor } from './processors/spike-detection.processor'
     TicketService,
     ClusteringService,
     SpikeDetectionService,
-    SyncProcessor,
-    ClusteringProcessor,
-    SpikeDetectionProcessor,
+    
+    
+    
   ],
   exports: [TicketService, ClusteringService, SpikeDetectionService],
 })

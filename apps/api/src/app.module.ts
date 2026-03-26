@@ -31,6 +31,7 @@ import { ReportingModule } from './reporting/reporting.module';
 import { PurgeModule } from './purge/purge.module';
 import { EmailModule } from './email/email.module';
 import { DigestModule } from './digest/digest.module';
+import { SchedulerModule } from './scheduler/scheduler.module';
 import { validationSchema } from './config/validation';
 
 @Module({
@@ -85,6 +86,7 @@ import { validationSchema } from './config/validation';
     PurgeModule,
     EmailModule,
     DigestModule,
+    SchedulerModule,
   ],
   providers: [
     // Apply ThrottlerGuard globally to every route in the application.

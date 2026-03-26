@@ -23,7 +23,6 @@ import { CIQ_SCORING_QUEUE } from "../ai/processors/ciq-scoring.processor";
     AggregationService,
     ScoringService,
     PrioritizationCacheService,
-    PrioritizationWorker,
   ],
   exports: [PrioritizationService, AggregationService, ScoringService, PrioritizationCacheService],
 })

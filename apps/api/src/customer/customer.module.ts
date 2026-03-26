@@ -5,11 +5,11 @@ import { CustomerController } from './customer.controller';
 import { CustomerService } from './customer.service';
 import {
   CUSTOMER_REVENUE_SIGNAL_QUEUE,
-  CustomerRevenueSignalProcessor,
+  
 } from './processors/customer-revenue-signal.processor';
 import {
   CUSTOMER_SIGNAL_AGGREGATION_QUEUE,
-  CustomerSignalAggregationProcessor,
+  
 } from './processors/customer-signal-aggregation.processor';
 import { CIQ_SCORING_QUEUE } from '../ai/processors/ciq-scoring.processor';
 
@@ -24,8 +24,8 @@ import { CIQ_SCORING_QUEUE } from '../ai/processors/ciq-scoring.processor';
   controllers: [CustomerController],
   providers: [
     CustomerService,
-    CustomerRevenueSignalProcessor,
-    CustomerSignalAggregationProcessor,
+    
+    
   ],
   exports: [CustomerService],
 })

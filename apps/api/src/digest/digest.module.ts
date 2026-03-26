@@ -13,6 +13,7 @@ import { DigestController } from './digest.controller';
     BullModule.registerQueue({ name: DIGEST_QUEUE }),
   ],
   controllers: [DigestController],
-  providers: [DigestService, DigestProcessor],
+  providers: [DigestService],
+  exports: [DigestService],
 })
 export class DigestModule {}
