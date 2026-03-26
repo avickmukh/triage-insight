@@ -1,11 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useFeedback } from '@/hooks/use-feedback';
-import { Feedback, FeedbackSourceType, FeedbackStatus, ThemeFeedback } from '@/lib/api-types';
+import { useWorkspace, useCurrentMemberRole } from '@/hooks/use-workspace';
+import { Feedback, FeedbackSourceType, FeedbackStatus, ThemeFeedback, WorkspaceRole } from '@/lib/api-types';
+import apiClient from '@/lib/api-client';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { appRoutes } from '@/lib/routes';
+import { useQueryClient } from '@tanstack/react-query';
 
 const CARD: React.CSSProperties = {
   background: '#fff',
@@ -41,12 +44,354 @@ const TABS: { label: string; value: FeedbackStatus | undefined }[] = [
   { label: 'Archived', value: FeedbackStatus.ARCHIVED },
 ];
 
+// ─── CSV Import Modal ─────────────────────────────────────────────────────────
+
+type ImportState = 'idle' | 'loading' | 'success' | 'error';
+
+interface CsvImportResult {
+  imported: number;
+  skipped: number;
+  errors: string[];
+}
+
+function CsvImportModal({
+  workspaceId,
+  onClose,
+  onImported,
+}: {
+  workspaceId: string;
+  onClose: () => void;
+  onImported: () => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [importState, setImportState] = useState<ImportState>('idle');
+  const [result, setResult] = useState<CsvImportResult | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string>('');
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null;
+    setSelectedFile(file);
+    setImportState('idle');
+    setResult(null);
+    setErrorMessage('');
+  };
+
+  const handleSubmit = async () => {
+    if (!selectedFile) return;
+    setImportState('loading');
+    setErrorMessage('');
+    try {
+      const res = await apiClient.feedback.importCsv(workspaceId, selectedFile);
+      setResult(res);
+      setImportState('success');
+      onImported();
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        (err instanceof Error ? err.message : 'Upload failed. Please try again.');
+      setErrorMessage(msg);
+      setImportState('error');
+    }
+  };
+
+  const handleReset = () => {
+    setSelectedFile(null);
+    setImportState('idle');
+    setResult(null);
+    setErrorMessage('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  return (
+    /* Backdrop */
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(10,37,64,0.35)',
+        zIndex: 1000,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '1rem',
+      }}
+    >
+      {/* Modal panel — stop propagation so clicks inside don't close */}
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: '#fff',
+          borderRadius: '0.875rem',
+          boxShadow: '0 8px 32px rgba(10,37,64,0.16)',
+          width: '100%',
+          maxWidth: '28rem',
+          padding: '1.75rem',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '1.25rem',
+        }}
+      >
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <h2 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0A2540', marginBottom: '0.2rem' }}>
+              Import CSV
+            </h2>
+            <p style={{ fontSize: '0.82rem', color: '#6C757D' }}>
+              Bulk-import feedback rows from a CSV file.
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: '#6C757D',
+              fontSize: '1.25rem',
+              lineHeight: 1,
+              padding: '0.1rem 0.3rem',
+            }}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Format hint */}
+        <div
+          style={{
+            background: '#f0f4f8',
+            borderRadius: '0.5rem',
+            padding: '0.75rem 1rem',
+            fontSize: '0.8rem',
+            color: '#495057',
+            lineHeight: 1.6,
+          }}
+        >
+          <strong>Expected columns:</strong>{' '}
+          <code style={{ fontSize: '0.78rem', background: '#e9ecef', padding: '0.1rem 0.3rem', borderRadius: '0.25rem' }}>
+            title
+          </code>
+          {', '}
+          <code style={{ fontSize: '0.78rem', background: '#e9ecef', padding: '0.1rem 0.3rem', borderRadius: '0.25rem' }}>
+            description
+          </code>
+          {', '}
+          <code style={{ fontSize: '0.78rem', background: '#e9ecef', padding: '0.1rem 0.3rem', borderRadius: '0.25rem' }}>
+            customerEmail
+          </code>{' '}
+          (optional){'. '}
+          Max file size: <strong>10 MB</strong>.
+        </div>
+
+        {/* File picker */}
+        {importState !== 'success' && (
+          <div>
+            <label
+              htmlFor="csv-file-input"
+              style={{
+                display: 'block',
+                fontSize: '0.82rem',
+                fontWeight: 600,
+                color: '#0A2540',
+                marginBottom: '0.4rem',
+              }}
+            >
+              Select file
+            </label>
+            <input
+              id="csv-file-input"
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              onChange={handleFileChange}
+              disabled={importState === 'loading'}
+              style={{
+                display: 'block',
+                width: '100%',
+                fontSize: '0.85rem',
+                color: '#0A2540',
+                padding: '0.45rem 0.6rem',
+                border: '1px solid #dee2e6',
+                borderRadius: '0.5rem',
+                background: '#fff',
+                cursor: 'pointer',
+              }}
+            />
+            {selectedFile && (
+              <p style={{ fontSize: '0.78rem', color: '#6C757D', marginTop: '0.3rem' }}>
+                {selectedFile.name} &mdash; {(selectedFile.size / 1024).toFixed(1)} KB
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Loading state */}
+        {importState === 'loading' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#20A4A4', fontSize: '0.88rem', fontWeight: 600 }}>
+            <span
+              style={{
+                display: 'inline-block',
+                width: '1rem',
+                height: '1rem',
+                border: '2px solid #20A4A4',
+                borderTopColor: 'transparent',
+                borderRadius: '50%',
+                animation: 'spin 0.7s linear infinite',
+              }}
+            />
+            Uploading and processing…
+          </div>
+        )}
+
+        {/* Success state */}
+        {importState === 'success' && result && (
+          <div
+            style={{
+              background: '#e8f5e9',
+              border: '1px solid #c8e6c9',
+              borderRadius: '0.5rem',
+              padding: '1rem',
+              fontSize: '0.88rem',
+              color: '#2e7d32',
+            }}
+          >
+            <p style={{ fontWeight: 700, marginBottom: '0.35rem' }}>✓ Import complete</p>
+            <p>
+              <strong>{result.imported}</strong> rows imported
+              {result.skipped > 0 && <>, <strong>{result.skipped}</strong> skipped</>}.
+            </p>
+            {result.errors && result.errors.length > 0 && (
+              <div style={{ marginTop: '0.5rem' }}>
+                <p style={{ fontWeight: 600, color: '#c0392b', marginBottom: '0.25rem' }}>
+                  {result.errors.length} row{result.errors.length > 1 ? 's' : ''} had errors:
+                </p>
+                <ul style={{ paddingLeft: '1.1rem', margin: 0, fontSize: '0.78rem', color: '#c0392b' }}>
+                  {result.errors.slice(0, 5).map((e, i) => (
+                    <li key={i}>{e}</li>
+                  ))}
+                  {result.errors.length > 5 && <li>…and {result.errors.length - 5} more</li>}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Error state */}
+        {importState === 'error' && (
+          <div
+            style={{
+              background: '#fef2f2',
+              border: '1px solid #fecaca',
+              borderRadius: '0.5rem',
+              padding: '0.75rem 1rem',
+              fontSize: '0.85rem',
+              color: '#c0392b',
+              fontWeight: 600,
+            }}
+          >
+            {errorMessage || 'Upload failed. Please check the file and try again.'}
+          </div>
+        )}
+
+        {/* Actions */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.6rem' }}>
+          {importState === 'success' ? (
+            <>
+              <button
+                onClick={handleReset}
+                style={{
+                  padding: '0.5rem 1rem',
+                  borderRadius: '0.5rem',
+                  border: '1px solid #dee2e6',
+                  background: '#fff',
+                  color: '#0A2540',
+                  fontWeight: 600,
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                }}
+              >
+                Import another
+              </button>
+              <button
+                onClick={onClose}
+                style={{
+                  padding: '0.5rem 1.1rem',
+                  borderRadius: '0.5rem',
+                  border: 'none',
+                  background: '#20A4A4',
+                  color: '#fff',
+                  fontWeight: 700,
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                }}
+              >
+                Done
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={onClose}
+                disabled={importState === 'loading'}
+                style={{
+                  padding: '0.5rem 1rem',
+                  borderRadius: '0.5rem',
+                  border: '1px solid #dee2e6',
+                  background: '#fff',
+                  color: '#0A2540',
+                  fontWeight: 600,
+                  fontSize: '0.85rem',
+                  cursor: importState === 'loading' ? 'not-allowed' : 'pointer',
+                  opacity: importState === 'loading' ? 0.6 : 1,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={!selectedFile || importState === 'loading'}
+                style={{
+                  padding: '0.5rem 1.1rem',
+                  borderRadius: '0.5rem',
+                  border: 'none',
+                  background: !selectedFile || importState === 'loading' ? '#a0d4d4' : '#20A4A4',
+                  color: '#fff',
+                  fontWeight: 700,
+                  fontSize: '0.85rem',
+                  cursor: !selectedFile || importState === 'loading' ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {importState === 'loading' ? 'Uploading…' : 'Import'}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Spinner keyframe — injected as a style tag */}
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
 export default function InboxPage() {
   const params = useParams();
   const slug = (Array.isArray(params.orgSlug) ? params.orgSlug[0] : params.orgSlug) ?? '';
   const r = appRoutes(slug);
   const [activeStatus, setActiveStatus] = useState<FeedbackStatus | undefined>(undefined);
   const [search, setSearch] = useState('');
+  const [showCsvModal, setShowCsvModal] = useState(false);
+
+  const { workspace } = useWorkspace();
+  const { role } = useCurrentMemberRole();
+  const queryClient = useQueryClient();
+
   const { useFeedbackList } = useFeedback();
   const { data, isLoading, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useFeedbackList({
@@ -56,8 +401,26 @@ export default function InboxPage() {
 
   const allItems: Feedback[] = data?.pages?.flatMap((p) => p.data) ?? [];
 
+  // Only ADMIN and EDITOR may import CSV (mirrors backend @Roles guard)
+  const canImport =
+    role === WorkspaceRole.ADMIN || role === WorkspaceRole.EDITOR;
+
+  const handleImported = () => {
+    // Invalidate the feedback list so the new rows appear immediately
+    queryClient.invalidateQueries({ queryKey: ['feedback'] });
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      {/* CSV Import Modal */}
+      {showCsvModal && workspace?.id && (
+        <CsvImportModal
+          workspaceId={workspace.id}
+          onClose={() => setShowCsvModal(false)}
+          onImported={handleImported}
+        />
+      )}
+
       {/* Header row */}
       <div
         style={{
@@ -83,24 +446,52 @@ export default function InboxPage() {
             Triage and manage all incoming feedback.
           </p>
         </div>
-        <Link
-          href={r.inboxNew}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '0.4rem',
-            padding: '0.5rem 1.1rem',
-            borderRadius: '0.5rem',
-            background: '#20A4A4',
-            color: '#fff',
-            fontWeight: 700,
-            fontSize: '0.85rem',
-            textDecoration: 'none',
-            boxShadow: '0 1px 4px rgba(10,37,64,0.10)',
-          }}
-        >
-          + New Feedback
-        </Link>
+
+        {/* Action buttons */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          {/* Import CSV — only shown to ADMIN / EDITOR */}
+          {canImport && (
+            <button
+              onClick={() => setShowCsvModal(true)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                padding: '0.5rem 1.1rem',
+                borderRadius: '0.5rem',
+                background: '#fff',
+                color: '#0A2540',
+                fontWeight: 700,
+                fontSize: '0.85rem',
+                border: '1px solid #dee2e6',
+                cursor: 'pointer',
+                boxShadow: '0 1px 4px rgba(10,37,64,0.06)',
+              }}
+            >
+              ↑ Import CSV
+            </button>
+          )}
+
+          {/* New Feedback */}
+          <Link
+            href={r.inboxNew}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              padding: '0.5rem 1.1rem',
+              borderRadius: '0.5rem',
+              background: '#20A4A4',
+              color: '#fff',
+              fontWeight: 700,
+              fontSize: '0.85rem',
+              textDecoration: 'none',
+              boxShadow: '0 1px 4px rgba(10,37,64,0.10)',
+            }}
+          >
+            + New Feedback
+          </Link>
+        </div>
       </div>
 
       {/* Search + status filter */}

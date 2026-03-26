@@ -254,6 +254,24 @@ const apiClient = {
       api
         .post(`/workspaces/${workspaceId}/feedback/${feedbackId}/comments`, data)
         .then(handleResponse),
+    /**
+     * POST /workspaces/:id/feedback/import/csv
+     * Uploads a .csv file and bulk-imports feedback rows.
+     * Requires ADMIN or EDITOR role.
+     * Returns { imported, skipped, errors }.
+     */
+    importCsv: (
+      workspaceId: string,
+      file: File
+    ): Promise<{ imported: number; skipped: number; errors: string[] }> => {
+      const form = new FormData();
+      form.append('file', file);
+      return api
+        .post(`/workspaces/${workspaceId}/feedback/import/csv`, form, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })
+        .then(handleResponse);
+    },
   },
 
   themes: {
