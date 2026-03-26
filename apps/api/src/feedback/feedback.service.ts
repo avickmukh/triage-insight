@@ -64,7 +64,7 @@ export class FeedbackService {
 
     // Dispatch async AI analysis job — wrapped so Redis unavailability doesn't 500
     try {
-      await this.analysisQueue.add({ feedbackId: newFeedback.id });
+      await this.analysisQueue.add({ feedbackId: newFeedback.id, workspaceId });
     } catch (e) {
       console.warn('[FeedbackService] analysisQueue unavailable — skipping', (e as Error).message);
     }

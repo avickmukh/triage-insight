@@ -12,7 +12,7 @@ import { MoveFeedbackDto } from '../dto/move-feedback.dto';
 import { AuditLogAction } from '@prisma/client';
 import { CIQ_SCORING_QUEUE } from '../../ai/processors/ciq-scoring.processor';
 
-export const AI_CLUSTERING_QUEUE = 'ai-clustering';
+export const AI_CLUSTERING_QUEUE = 'theme-clustering';
 
 @Injectable()
 export class ThemeService {

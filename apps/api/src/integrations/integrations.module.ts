@@ -24,7 +24,7 @@ import { CIQ_SCORING_QUEUE } from '../ai/processors/ciq-scoring.processor';
     IntegrationService,
     SlackService,
     SlackIngestionService,
-
+    SlackIngestionProcessor,
   ],
   exports: [IntegrationService, SlackService, SlackIngestionService],
 })

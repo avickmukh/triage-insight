@@ -35,7 +35,7 @@ import { QUEUE_NAMES } from '../queue/queue.module';
   controllers: [PurgeWorkspaceController, PurgePlatformController],
   providers: [
     PurgeService,
-    
+    PurgeWorker,
     WorkspaceFreezeGuard,
     StoragePurgeStep,
     DatabasePurgeStep,

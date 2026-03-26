@@ -16,7 +16,7 @@ import { CIQ_SCORING_QUEUE } from '../ai/processors/ciq-scoring.processor';
     BullModule.registerQueue({ name: CIQ_SCORING_QUEUE }),
   ],
   controllers: [SurveyController, PublicSurveyController],
-  providers: [SurveyService, SurveyIntelligenceService],
+  providers: [SurveyService, SurveyIntelligenceService, SurveyIntelligenceProcessor],
   exports: [SurveyService],
 })
 export class SurveyModule {}

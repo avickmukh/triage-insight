@@ -12,7 +12,7 @@ import { DashboardAggregationService } from '../services/dashboard-aggregation.s
 import { ExecutiveInsightService } from '../services/executive-insight.service';
 import { DashboardCacheService } from '../services/dashboard-cache.service';
 
-export const DASHBOARD_QUEUE = 'DASHBOARD_QUEUE';
+export const DASHBOARD_QUEUE = 'dashboard-refresh';
 
 export const DASHBOARD_JOB_TYPES = {
   REFRESH_ALL:      'REFRESH_ALL',

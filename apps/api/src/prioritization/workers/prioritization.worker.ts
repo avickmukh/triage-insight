@@ -16,7 +16,7 @@ import type { Job, Queue } from 'bull';
 import { AggregationService } from '../services/aggregation.service';
 import { PrioritizationCacheService } from '../services/prioritization-cache.service';
 
-export const PRIORITIZATION_QUEUE = 'PRIORITIZATION_QUEUE';
+export const PRIORITIZATION_QUEUE = 'prioritization';
 
 export type PrioritizationJobType = 'WORKSPACE_RECOMPUTE' | 'THEME_RECOMPUTE';
 
