@@ -13,6 +13,7 @@ import { PortalCreateFeedbackDto } from './dto/portal-create-feedback.dto';
 import { PublicFeedbackQueryDto } from '../public/dto/public-feedback-query.dto';
 import { PublicVoteDto } from '../public/dto/public-vote.dto';
 import { PublicCommentDto } from '../public/dto/public-comment.dto';
+import { PortalVoicePresignedUrlDto, PortalFinalizeVoiceUploadDto } from './dto/portal-voice.dto';
 
 /**
  * Workspace-scoped public portal endpoints — no authentication required.
@@ -92,5 +93,27 @@ export class PortalController {
     @Body() dto: PublicCommentDto,
   ) {
     return this.service.addComment(orgSlug, id, dto);
+  }
+
+  // ─── 7. Voice Upload (Presigned URL) ──────────────────────────────────────
+
+  @Post('voice/presigned-url')
+  @HttpCode(HttpStatus.OK)
+  createPublicPresignedUrl(
+    @Param('orgSlug') orgSlug: string,
+    @Body() dto: PortalVoicePresignedUrlDto,
+  ) {
+    return this.service.createPublicPresignedUploadUrl(orgSlug, dto);
+  }
+
+  // ─── 8. Voice Upload (Finalize) ───────────────────────────────────────────
+
+  @Post('voice/finalize')
+  @HttpCode(HttpStatus.CREATED)
+  finalizePublicUpload(
+    @Param('orgSlug') orgSlug: string,
+    @Body() dto: PortalFinalizeVoiceUploadDto,
+  ) {
+    return this.service.finalizePublicUpload(orgSlug, dto);
   }
 }

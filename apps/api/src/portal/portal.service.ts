@@ -9,10 +9,12 @@ import type { Queue } from 'bull';
 import { PrismaService } from '../prisma/prisma.service';
 import { FeedbackStatus, FeedbackSourceType, WorkspaceStatus } from '@prisma/client';
 import { AI_ANALYSIS_QUEUE } from '../ai/processors/analysis.processor';
+import { VoiceService } from '../voice/services/voice.service';
 import { PortalCreateFeedbackDto } from './dto/portal-create-feedback.dto';
 import { PublicFeedbackQueryDto } from '../public/dto/public-feedback-query.dto';
 import { PublicVoteDto } from '../public/dto/public-vote.dto';
 import { PublicCommentDto } from '../public/dto/public-comment.dto';
+import { PortalVoicePresignedUrlDto, PortalFinalizeVoiceUploadDto } from './dto/portal-voice.dto';
 import {
   PORTAL_SIGNAL_QUEUE,
   PORTAL_SIGNAL_JOB,
@@ -24,14 +26,11 @@ export class PortalService {
     private readonly prisma: PrismaService,
     @InjectQueue(AI_ANALYSIS_QUEUE) private readonly analysisQueue: Queue,
     @InjectQueue(PORTAL_SIGNAL_QUEUE) private readonly signalQueue: Queue,
+    private readonly voiceService: VoiceService,
   ) {}
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
-  /**
-   * Resolve workspace by orgSlug, enforce it is ACTIVE, or throw.
-   * Cross-tenant safety: all downstream queries are scoped to workspace.id.
-   */
   private async resolveWorkspace(orgSlug: string) {
     const workspace = await this.prisma.workspace.findUnique({
       where: { slug: orgSlug },
@@ -53,10 +52,6 @@ export class PortalService {
     return workspace;
   }
 
-  /**
-   * Look up an existing PortalUser by (workspaceId, email), or create a new
-   * one. Returns null when no email is provided (fully anonymous).
-   */
   private async resolvePortalUser(
     workspaceId: string,
     email?: string,
@@ -77,7 +72,6 @@ export class PortalService {
     return created.id;
   }
 
-  /** Resolve a feedback item scoped to the workspace or throw 404. */
   private async resolveFeedback(workspaceId: string, feedbackId: string) {
     const feedback = await this.prisma.feedback.findFirst({
       where: { id: feedbackId, workspaceId },
@@ -198,7 +192,6 @@ export class PortalService {
       dto.name,
     );
 
-    // Synchronous normalization: trim before persisting
     const rawTitle = dto.title.trim();
     const rawDescription = dto.description.trim();
 
@@ -211,9 +204,7 @@ export class PortalService {
         normalizedText: rawDescription.toLowerCase(),
         sourceType: FeedbackSourceType.PUBLIC_PORTAL,
         status: FeedbackStatus.NEW,
-        // Link to resolved PortalUser (null for anonymous submissions)
         portalUserId: portalUserId ?? undefined,
-        // customerId is a CRM Customer FK — never set it to an email string
       },
       select: {
         id: true,
@@ -225,14 +216,12 @@ export class PortalService {
       },
     });
 
-    // Dispatch async AI analysis job (embedding + duplicate detection)
     try {
-    await this.analysisQueue.add({ feedbackId: feedback.id });
+      await this.analysisQueue.add({ feedbackId: feedback.id });
     } catch (queueErr) {
       console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
     }
 
-    // Publish portal signal (non-critical)
     this.signalQueue
       .add(
         PORTAL_SIGNAL_JOB.FEEDBACK_CREATED,
@@ -290,7 +279,6 @@ export class PortalService {
       dto.name,
     );
 
-    // Duplicate-vote guard
     if (portalUserId) {
       const existing = await this.prisma.feedbackVote.findFirst({
         where: { feedbackId, portalUserId },
@@ -323,7 +311,6 @@ export class PortalService {
       where: { feedbackId },
     });
 
-    // Publish portal signal (non-critical)
     this.signalQueue
       .add(
         PORTAL_SIGNAL_JOB.FEEDBACK_VOTED,
@@ -376,7 +363,6 @@ export class PortalService {
       },
     });
 
-    // Publish portal signal (non-critical)
     this.signalQueue
       .add(
         PORTAL_SIGNAL_JOB.FEEDBACK_COMMENTED,
@@ -396,5 +382,35 @@ export class PortalService {
       .catch(() => {/* non-critical */});
 
     return comment;
+  }
+
+  // ─── 7. Voice Upload (Presigned URL) ──────────────────────────────────────
+
+  async createPublicPresignedUploadUrl(orgSlug: string, dto: PortalVoicePresignedUrlDto) {
+    const workspace = await this.resolveWorkspace(orgSlug);
+    return this.voiceService.createPresignedUploadUrl(workspace.id, dto);
+  }
+
+  // ─── 8. Voice Upload (Finalize) ───────────────────────────────────────────
+
+  async finalizePublicUpload(orgSlug: string, dto: PortalFinalizeVoiceUploadDto) {
+    const workspace = await this.resolveWorkspace(orgSlug);
+    const portalUserId = await this.resolvePortalUser(
+      workspace.id,
+      dto.email,
+      dto.name,
+    );
+
+    return this.voiceService.finalizeUpload(workspace.id, {
+      s3Key: dto.s3Key,
+      s3Bucket: dto.s3Bucket,
+      fileName: dto.fileName,
+      mimeType: dto.mimeType,
+      sizeBytes: dto.sizeBytes,
+      label: dto.label,
+      submittedText: dto.description,
+      portalUserId: portalUserId ?? undefined,
+      anonymousId: dto.anonymousId,
+    });
   }
 }

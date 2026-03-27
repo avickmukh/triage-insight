@@ -26,6 +26,9 @@ export interface VoiceTranscriptionJobPayload {
   s3Bucket: string;
   mimeType: string;
   label?: string;
+  portalUserId?: string;
+  submittedText?: string;
+  anonymousId?: string;
 }
 
 /** Allowed audio MIME types */
@@ -110,7 +113,7 @@ export class VoiceService {
   async finalizeUpload(workspaceId: string, dto: FinalizeVoiceUploadDto) {
     // Accept both mimeType and contentType for backwards-compat
     const mimeType = dto.mimeType ?? dto.contentType ?? 'audio/mpeg';
-    const { s3Key, fileName, sizeBytes, label, customerId, dealId } = dto;
+    const { s3Key, fileName, sizeBytes, label, customerId, dealId, portalUserId, submittedText, anonymousId } = dto;
     const s3Bucket = dto.s3Bucket ?? this.bucket;
 
     // 1. Create UploadAsset record
@@ -136,7 +139,7 @@ export class VoiceService {
         status: AiJobStatus.QUEUED,
         entityType: 'UploadAsset',
         entityId: uploadAsset.id,
-        input: { s3Key, fileName, mimeType, sizeBytes, label },
+        input: { s3Key, fileName, mimeType, sizeBytes, label, portalUserId, submittedText, anonymousId },
       },
     });
 
@@ -150,6 +153,9 @@ export class VoiceService {
         s3Bucket,
         mimeType,
         label,
+        portalUserId,
+        submittedText,
+        anonymousId,
       },
       {
         attempts: 3,
@@ -206,6 +212,10 @@ export class VoiceService {
         s3Bucket: asset.s3Bucket,
         mimeType: asset.mimeType,
         label: asset.label ?? undefined,
+        // Reprocessing is always internal, so portal fields are null
+        portalUserId: undefined,
+        submittedText: undefined,
+        anonymousId: undefined,
       },
       {
         attempts: 3,
@@ -316,7 +326,7 @@ export class VoiceService {
             })
           : null;
 
-        // Find the extraction job for intelligence status
+        // Find the intelligence extraction job for that feedback
         const extractionJob = feedback
           ? await this.prisma.aiJobLog.findFirst({
               where: {
@@ -333,12 +343,8 @@ export class VoiceService {
 
         return {
           ...asset,
-          // Transcription state
           jobStatus: transcriptionJob?.status ?? null,
           jobId: transcriptionJob?.id ?? null,
-          transcript: (transcriptionJob?.output as { transcript?: string } | null)?.transcript ?? null,
-          error: transcriptionJob?.error ?? extractionJob?.error ?? null,
-          // Feedback linkage
           feedbackId: feedback?.id ?? null,
           feedbackTitle: feedback?.title ?? null,
           // Intelligence summary (from extraction job)

@@ -41,11 +41,10 @@ export class VoiceTranscriptionProcessor {
 
   @Process()
   async handleTranscription(job: Job<VoiceTranscriptionJobPayload>) {
-    const { uploadAssetId, aiJobLogId, workspaceId, s3Key, s3Bucket, mimeType, label } = job.data;
+    const { uploadAssetId, aiJobLogId, workspaceId, s3Key, s3Bucket, mimeType, label, portalUserId, submittedText, anonymousId } = job.data;
 
     this.logger.log(`Starting transcription job ${aiJobLogId} for asset ${uploadAssetId}`);
 
-    // ── Mark job as RUNNING ──────────────────────────────────────────────────
     await this.prisma.aiJobLog.update({
       where: { id: aiJobLogId },
       data: { status: AiJobStatus.RUNNING },
@@ -54,18 +53,13 @@ export class VoiceTranscriptionProcessor {
     let tempFilePath: string | null = null;
 
     try {
-      // ── 1. Download audio from S3 to a temp file ─────────────────────────
       tempFilePath = await this.downloadFromS3(s3Bucket, s3Key, mimeType);
-
-      // ── 2. Transcribe with Whisper ────────────────────────────────────────
       const transcript = await this.transcriptionService.transcribeFile(tempFilePath, mimeType);
 
       if (!transcript || transcript.trim().length === 0) {
         throw new Error('Transcription returned empty result');
       }
 
-      // ── 3. Generate a provisional title via summarization ─────────────────
-      //      (VoiceIntelligenceService will produce a better title in step 5)
       let title = label ?? 'Voice Feedback';
       try {
         title = await this.summarizationService.summarize(transcript);
@@ -73,27 +67,34 @@ export class VoiceTranscriptionProcessor {
         this.logger.warn(`Summarization failed, using label/default: ${(err as Error).message}`);
       }
 
-      // ── 4. Create Feedback record with sourceType = VOICE ─────────────────
+      // Combine submitted text with the transcript for a full record
+      const fullDescription = submittedText
+        ? `Submitted Comment:\n${submittedText}\n\n--- Transcript ---\n${transcript}`
+        : transcript;
+
       const feedback = await this.prisma.feedback.create({
         data: {
           workspaceId,
-          sourceType: FeedbackSourceType.VOICE,
+          // If portalUserId is present, this came from the public portal
+          sourceType: portalUserId ? FeedbackSourceType.PUBLIC_PORTAL : FeedbackSourceType.VOICE,
           sourceRef: uploadAssetId,
           title,
-          description: transcript,
-          rawText: transcript,
-          normalizedText: transcript.toLowerCase(),
+          description: fullDescription,
+          rawText: fullDescription,
+          normalizedText: fullDescription.toLowerCase(),
           language: 'en',
           status: FeedbackStatus.NEW,
+          portalUserId: portalUserId ?? null,
           metadata: {
             uploadAssetId,
             aiJobLogId,
             originalFileName: label ?? s3Key.split('/').pop(),
+            sourceChannel: 'voice',
+            anonymousId: anonymousId ?? null,
           },
         },
       });
 
-      // ── 5. Mark transcription job as COMPLETED ────────────────────────────
       await this.prisma.aiJobLog.update({
         where: { id: aiJobLogId },
         data: {
@@ -110,7 +111,6 @@ export class VoiceTranscriptionProcessor {
         `Transcription job ${aiJobLogId} completed. Feedback created: ${feedback.id}`,
       );
 
-      // ── 6. Enqueue voice intelligence extraction (async, non-blocking) ────
       await this.extractionQueue.add(
         {
           uploadAssetId,
@@ -143,10 +143,8 @@ export class VoiceTranscriptionProcessor {
         },
       });
 
-      // Re-throw so Bull can retry according to job options
       throw err;
     } finally {
-      // ── Cleanup temp file ─────────────────────────────────────────────────
       if (tempFilePath) {
         try {
           fs.unlinkSync(tempFilePath);
@@ -156,8 +154,6 @@ export class VoiceTranscriptionProcessor {
       }
     }
   }
-
-  // ─── Private: download S3 object to a temp file ───────────────────────────
 
   private async downloadFromS3(bucket: string, key: string, mimeType: string): Promise<string> {
     const ext = this.mimeToExt(mimeType);

@@ -1,4 +1,5 @@
 import {
+  MaxLength,
   IsString,
   IsNotEmpty,
   IsNumber,
@@ -69,6 +70,22 @@ export class FinalizeVoiceUploadDto {
   @IsOptional()
   @IsUUID()
   dealId?: string;
+
+  /** Optional PortalUser to link this recording to (for public portal submissions) */
+  @IsOptional()
+  @IsUUID()
+  portalUserId?: string;
+
+  /** Optional anonymousId to link this recording to (for public portal submissions) */
+  @IsOptional()
+  @IsString()
+  anonymousId?: string;
+
+  /** Optional text comment submitted alongside the audio file */
+  @IsOptional()
+  @IsString()
+  @MaxLength(10000)
+  submittedText?: string;
 }
 
 // ─── Request: link a voice upload to a theme ─────────────────────────────────

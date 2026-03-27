@@ -13,6 +13,142 @@ import { CommentSection } from '@/components/modules/feedback/comment-section/co
 import { DuplicateSuggestionsPanel } from '@/components/modules/feedback/duplicate-suggestions/component';
 import apiClient from '@/lib/api-client';
 
+// ─── Voice Feedback Panel ────────────────────────────────────────────────────────
+
+function VoiceFeedbackPanel({
+  uploadAssetId,
+  transcript,
+  workspaceId,
+}: {
+  uploadAssetId: string | null | undefined;
+  transcript: string | null;
+  workspaceId: string;
+}) {
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [loadingAudio, setLoadingAudio] = useState(false);
+  const [audioError, setAudioError] = useState<string | null>(null);
+  const [showTranscript, setShowTranscript] = useState(false);
+
+  const handleLoadAudio = async () => {
+    if (!uploadAssetId) return;
+    setLoadingAudio(true);
+    setAudioError(null);
+    try {
+      const detail = await apiClient.voice.getById(workspaceId, uploadAssetId);
+      setAudioUrl(detail.downloadUrl);
+    } catch (err) {
+      setAudioError((err as Error).message ?? 'Failed to load audio');
+    } finally {
+      setLoadingAudio(false);
+    }
+  };
+
+  if (!uploadAssetId) return null;
+
+  return (
+    <div
+      style={{
+        background: 'linear-gradient(135deg, #f0f9ff 0%, #e8f7f7 100%)',
+        border: '1px solid #bae6fd',
+        borderRadius: '0.75rem',
+        padding: '1rem 1.25rem',
+        marginBottom: '1.25rem',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', marginBottom: '0.75rem' }}>
+        <div
+          style={{
+            width: 32, height: 32,
+            background: '#20A4A4',
+            borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0,
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" fill="white" />
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2" stroke="white" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        </div>
+        <div>
+          <p style={{ fontSize: '0.8rem', fontWeight: 700, color: '#0a2540', margin: 0 }}>Voice Feedback</p>
+          <p style={{ fontSize: '0.72rem', color: '#6C757D', margin: 0 }}>Audio recorded and transcribed by AI</p>
+        </div>
+      </div>
+
+      {/* Audio player */}
+      {audioUrl ? (
+        <audio
+          controls
+          src={audioUrl}
+          style={{ width: '100%', height: 40, marginBottom: '0.75rem' }}
+        />
+      ) : (
+        <button
+          onClick={handleLoadAudio}
+          disabled={loadingAudio}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '0.5rem',
+            background: '#fff', border: '1px solid #20A4A4', color: '#20A4A4',
+            borderRadius: 6, padding: '0.4rem 0.875rem', fontSize: '0.8rem',
+            fontWeight: 600, cursor: loadingAudio ? 'wait' : 'pointer',
+            marginBottom: '0.75rem',
+          }}
+        >
+          {loadingAudio ? (
+            <>⏳ Loading audio…</>
+          ) : (
+            <>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <polygon points="5,3 19,12 5,21" fill="#20A4A4" />
+              </svg>
+              Load &amp; Play Audio
+            </>
+          )}
+        </button>
+      )}
+      {audioError && (
+        <p style={{ fontSize: '0.78rem', color: '#dc2626', marginBottom: '0.5rem' }}>{audioError}</p>
+      )}
+
+      {/* Transcript toggle */}
+      {transcript && (
+        <div>
+          <button
+            onClick={() => setShowTranscript((v) => !v)}
+            style={{
+              background: 'none', border: 'none', color: '#0369a1',
+              fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer',
+              padding: 0, display: 'flex', alignItems: 'center', gap: '0.3rem',
+            }}
+          >
+            {showTranscript ? '▲ Hide transcript' : '▼ Show AI transcript'}
+          </button>
+          {showTranscript && (
+            <div
+              style={{
+                marginTop: '0.625rem',
+                background: '#fff',
+                border: '1px solid #e0f2fe',
+                borderRadius: 6,
+                padding: '0.75rem 1rem',
+                fontSize: '0.82rem',
+                color: '#374151',
+                lineHeight: 1.65,
+                whiteSpace: 'pre-wrap',
+                maxHeight: 240,
+                overflowY: 'auto',
+              }}
+            >
+              {transcript}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Design tokens ─────────────────────────────────────────────────────────────
 
 const CARD: React.CSSProperties = {
@@ -434,6 +570,17 @@ export default function InboxItemPage({
             )}
           </div>
         </div>
+
+        {/* Voice Feedback Panel — shown when source is VOICE or PUBLIC_PORTAL with uploadAssetId */}
+        {(feedback.sourceType === FeedbackSourceType.VOICE ||
+          (feedback.sourceType === FeedbackSourceType.PUBLIC_PORTAL &&
+            (feedback as any).metadata?.uploadAssetId)) && (
+          <VoiceFeedbackPanel
+            uploadAssetId={(feedback as any).sourceRef ?? (feedback as any).metadata?.uploadAssetId}
+            transcript={(feedback as any).metadata?.transcript ?? null}
+            workspaceId={feedback.workspaceId}
+          />
+        )}
 
         {/* Description */}
         {feedback.description ? (

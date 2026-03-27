@@ -535,6 +535,35 @@ const apiClient = {
       api
         .post(`/portal/${orgSlug}/feedback/${feedbackId}/comments`, data)
         .then(handleResponse),
+
+    /** POST /portal/:orgSlug/voice/presigned-url */
+    getVoicePresignedUrl: (
+      orgSlug: string,
+      data: { fileName: string; mimeType: string; sizeBytes: number }
+    ): Promise<{ signedUrl: string; key: string; bucket: string }> =>
+      api
+        .post(`/portal/${orgSlug}/voice/presigned-url`, data)
+        .then(handleResponse),
+
+    /** POST /portal/:orgSlug/voice/finalize */
+    finalizeVoiceUpload: (
+      orgSlug: string,
+      data: {
+        s3Key: string;
+        s3Bucket?: string;
+        fileName: string;
+        mimeType: string;
+        sizeBytes: number;
+        label?: string;
+        description?: string;
+        email?: string;
+        name?: string;
+        anonymousId?: string;
+      }
+    ): Promise<{ uploadAssetId: string; aiJobLogId: string; status: string }> =>
+      api
+        .post(`/portal/${orgSlug}/voice/finalize`, data)
+        .then(handleResponse),
   },
 
   integrations: {
