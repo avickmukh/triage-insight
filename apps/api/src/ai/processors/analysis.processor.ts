@@ -8,6 +8,9 @@
  * 4. @OnQueueFailed DLQ handler — moves exhausted jobs to DEAD_LETTERED in AiJobLog
  * 5. __logId injected into job data for lifecycle tracking
  * 6. Re-throw on fatal failure so Bull marks job as failed and retries
+ *
+ * Pipeline order (Stage-1):
+ *   Feedback → Embedding → Sentiment → Summary → Persist → Dedup → Clustering → CIQ enqueue
  */
 import { Processor, Process, OnQueueFailed } from '@nestjs/bull';
 import type { Job } from 'bull';
@@ -15,6 +18,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { Injectable } from '@nestjs/common';
 import { EmbeddingService } from '../services/embedding.service';
 import { SummarizationService } from '../services/summarization.service';
+import { SentimentService } from '../services/sentiment.service';
 import { DuplicateDetectionService } from '../services/duplicate-detection.service';
 import { ThemeClusteringService } from '../services/theme-clustering.service';
 import { AiJobType } from '@prisma/client';
@@ -41,6 +45,7 @@ export class AiAnalysisProcessor {
     private readonly prisma: PrismaService,
     private readonly embeddingService: EmbeddingService,
     private readonly summarizationService: SummarizationService,
+    private readonly sentimentService: SentimentService,
     private readonly duplicateDetectionService: DuplicateDetectionService,
     private readonly themeClusteringService: ThemeClusteringService,
     private readonly idempotencyService: JobIdempotencyService,
@@ -85,7 +90,18 @@ export class AiAnalysisProcessor {
       this.logger.stepWarn(ctx, 'EMBEDDING', (err as Error).message);
     }
 
-    // ── 2. Generate Summary ──────────────────────────────────────────────────
+    // ── 2. Analyse Sentiment ─────────────────────────────────────────────────
+    // Score is in [-1, +1]: negative = frustrated/churning, 0 = neutral, positive = happy.
+    // Fallback to 0 (neutral) on any failure so the rest of the pipeline is not interrupted.
+    let sentiment = 0;
+    try {
+      sentiment = await this.sentimentService.analyseSentiment(feedback.description);
+    } catch (err) {
+      this.logger.stepWarn(ctx, 'SENTIMENT', (err as Error).message);
+      // sentiment remains 0 — neutral fallback
+    }
+
+    // ── 3. Generate Summary ──────────────────────────────────────────────────
     let summary: string | null = null;
     try {
       summary = await this.summarizationService.summarize(feedback.description);
@@ -93,10 +109,13 @@ export class AiAnalysisProcessor {
       this.logger.stepWarn(ctx, 'SUMMARIZATION', (err as Error).message);
     }
 
-    // ── 3. Persist AI data ───────────────────────────────────────────────────
+    // ── 4. Persist AI data ───────────────────────────────────────────────────
+    // sentiment is always written (0 = neutral fallback) so CiqService never
+    // encounters a null and can apply its sentimentPenalty / sentimentUrgency logic.
     await this.prisma.feedback.update({
       where: { id: feedbackId },
       data: {
+        sentiment,
         ...(summary && { summary }),
         normalizedText: feedback.description.toLowerCase(),
         language: 'en',
@@ -112,7 +131,7 @@ export class AiAnalysisProcessor {
       `;
     }
 
-    // ── 4. Duplicate detection ───────────────────────────────────────────────
+    // ── 5. Duplicate detection ───────────────────────────────────────────────
     try {
       await this.duplicateDetectionService.generateSuggestions(
         feedback.workspaceId,
@@ -123,7 +142,7 @@ export class AiAnalysisProcessor {
       this.logger.stepWarn(ctx, 'DUPLICATE_DETECTION', (err as Error).message);
     }
 
-    // ── 5. Theme clustering ──────────────────────────────────────────────────
+    // ── 6. Theme clustering ──────────────────────────────────────────────────
     try {
       await this.themeClusteringService.assignFeedbackToTheme(
         feedback.workspaceId,
