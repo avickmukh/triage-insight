@@ -40,6 +40,11 @@ export interface EmergingThemeRadar {
     isNew:            boolean;
     urgencyScore:     number;
     signal:           string;
+    // Stage-2 AI Narration fields
+    aiSummary:        string | null;
+    aiExplanation:    string | null;
+    aiRecommendation: string | null;
+    aiConfidence:     number | null;
   }[];
   spikeEvents: {
     clusterId:    string;
@@ -252,6 +257,7 @@ export class DashboardAggregationService {
         where: { workspaceId, status: ThemeStatus.ACTIVE },
         select: {
           id: true, title: true, urgencyScore: true, ciqScore: true, createdAt: true,
+          aiSummary: true, aiExplanation: true, aiRecommendation: true, aiConfidence: true,
           feedbacks: {
             select: {
               feedback: { select: { createdAt: true, ciqScore: true } },
@@ -306,6 +312,10 @@ export class DashboardAggregationService {
           isNew,
           urgencyScore:     parseFloat((t.urgencyScore ?? 0).toFixed(1)),
           signal,
+          aiSummary:        t.aiSummary ?? null,
+          aiExplanation:    t.aiExplanation ?? null,
+          aiRecommendation: t.aiRecommendation ?? null,
+          aiConfidence:     t.aiConfidence ?? null,
         };
       })
       .filter((t) => t.velocityScore > 0 || t.isNew)

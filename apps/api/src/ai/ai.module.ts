@@ -10,6 +10,7 @@ import { DuplicateSuggestionsService } from './services/duplicate-suggestions.se
 import { ThemeClusteringService } from './services/theme-clustering.service';
 import { CiqService } from './services/ciq.service';
 import { SentimentService } from './services/sentiment.service';
+import { ThemeNarrationService } from './services/theme-narration.service';
 import { AiController } from './ai.controller';
 import { DuplicateSuggestionsController } from './controllers/duplicate-suggestions.controller';
 import { MergeService } from './services/merge.service';
@@ -40,6 +41,7 @@ import { CiqEngineService } from '../ciq/ciq-engine.service';
     ThemeClusteringService,
     CiqService,
     SentimentService,
+    ThemeNarrationService,
     MergeService,
     AuditService,
     // NOTE: AiAnalysisProcessor and CiqScoringProcessor are NOT here.
@@ -56,6 +58,7 @@ import { CiqEngineService } from '../ciq/ciq-engine.service';
     ThemeClusteringService,
     CiqService,
     SentimentService,
+    ThemeNarrationService,
     MergeService,
     AuditService,
   ],

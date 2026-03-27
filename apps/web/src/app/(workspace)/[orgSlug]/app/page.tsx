@@ -533,6 +533,11 @@ function ThemesCard({ data, href }: { data: EmergingThemeRadar; href: string }) 
                     {isTopGrowing && !isUrgent && <Badge label="🚀 Growing" bg="#faf5ff" color={PURPLE} />}
                   </div>
                   <p style={{ fontSize: '0.78rem', color: GRAY, margin: 0 }}>{t.signal}</p>
+                  {t.aiSummary && (
+                    <p style={{ fontSize: '0.73rem', color: PURPLE, margin: '0.15rem 0 0', fontStyle: 'italic', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                      ✨ {t.aiSummary}
+                    </p>
+                  )}
                 </div>
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
                   <p style={{ fontSize: '0.85rem', fontWeight: 700, color: t.feedbackDelta7d >= 5 ? RED : PURPLE, margin: 0 }}>+{t.feedbackDelta7d}</p>

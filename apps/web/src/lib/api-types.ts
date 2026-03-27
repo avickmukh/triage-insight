@@ -257,6 +257,17 @@ export interface Theme {
   revenueInfluence?: number | null;
   /** Per-factor signal breakdown from the last CIQ scoring run (JSON) */
   signalBreakdown?: Record<string, unknown> | null;
+  // ─── Stage-2 AI Narration fields ───────────────────────────────────────────
+  /** LLM-generated 2–3 sentence summary of what this theme is about */
+  aiSummary?: string | null;
+  /** LLM-generated explanation of why this theme matters to the business */
+  aiExplanation?: string | null;
+  /** LLM-generated recommended action for the product team */
+  aiRecommendation?: string | null;
+  /** Confidence score (0–1) for the AI narration; null until first narration run */
+  aiConfidence?: number | null;
+  /** Timestamp of the last successful AI narration run */
+  aiNarratedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }

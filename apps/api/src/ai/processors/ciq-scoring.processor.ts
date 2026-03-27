@@ -13,6 +13,7 @@ import type { Job } from 'bull';
 import { Injectable } from '@nestjs/common';
 import { CiqService } from '../services/ciq.service';
 import { CiqEngineService } from '../../ciq/ciq-engine.service';
+import { ThemeNarrationService } from '../services/theme-narration.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AiJobType } from '@prisma/client';
 import { JobLogger } from '../../common/queue/job-logger';
@@ -42,6 +43,7 @@ export class CiqScoringProcessor {
   constructor(
     private readonly ciqService: CiqService,
     private readonly ciqEngineService: CiqEngineService,
+    private readonly themeNarrationService: ThemeNarrationService,
     private readonly prisma: PrismaService,
     private readonly idempotencyService: JobIdempotencyService,
   ) {}
@@ -114,6 +116,11 @@ export class CiqScoringProcessor {
           } else {
             this.logger.skip(ctx, `Score ${score.priorityScore} <= existing ${existingScore} — skipping overwrite`);
           }
+
+          // ── Stage-2: AI Narration ─────────────────────────────────────────
+          // Run after scoring so narration has access to the latest priorityScore.
+          // Failure is non-fatal — fallback narration is applied automatically.
+          await this.generateThemeNarration(workspaceId, themeId, ctx);
           break;
         }
 
@@ -191,6 +198,90 @@ export class CiqScoringProcessor {
       case 'THEME_SCORED':    return 'Theme';
       case 'ROADMAP_SCORED':  return 'RoadmapItem';
       case 'DEAL_SCORED':     return 'Deal';
+    }
+  }
+
+  /**
+   * Generate and persist AI narration for a theme.
+   * Collects context (feedback samples, sentiment, scores) then calls
+   * ThemeNarrationService. Falls back to rule-based narration on failure.
+   * Never throws — all errors are caught internally.
+   */
+  private async generateThemeNarration(
+    workspaceId: string,
+    themeId: string,
+    ctx: { jobType: string; workspaceId: string; entityId: string; jobId: string | number },
+  ): Promise<void> {
+    try {
+      // Load theme + up to 8 feedback samples with sentiment
+      const theme = await this.prisma.theme.findUnique({
+        where: { id: themeId },
+        select: {
+          title: true,
+          description: true,
+          priorityScore: true,
+          urgencyScore: true,
+          feedbacks: {
+            take: 8,
+            orderBy: { assignedAt: 'desc' },
+            include: {
+              feedback: {
+                select: { description: true, sentiment: true },
+              },
+            },
+          },
+          _count: { select: { feedbacks: true } },
+        },
+      });
+
+      if (!theme) {
+        this.logger.stepWarn(ctx, 'NARRATION', `Theme ${themeId} not found — skipping narration`);
+        return;
+      }
+
+      const feedbackSamples = theme.feedbacks.map((tf) => ({
+        text: tf.feedback.description,
+        sentiment: tf.feedback.sentiment,
+      }));
+
+      const sentiments = feedbackSamples
+        .map((s) => s.sentiment)
+        .filter((v): v is number => v !== null && v !== undefined);
+      const avgSentiment = sentiments.length > 0
+        ? sentiments.reduce((a, b) => a + b, 0) / sentiments.length
+        : null;
+
+      const input = {
+        themeId,
+        title: theme.title,
+        description: theme.description,
+        feedbackSamples,
+        feedbackCount: theme._count.feedbacks,
+        avgSentiment,
+        priorityScore: theme.priorityScore,
+        urgencyScore: theme.urgencyScore,
+      };
+
+      // Try LLM narration; fall back to rule-based if it returns null
+      const narration =
+        (await this.themeNarrationService.narrate(input)) ??
+        this.themeNarrationService.buildFallback(input);
+
+      await this.prisma.theme.update({
+        where: { id: themeId },
+        data: {
+          aiSummary:        narration.summary,
+          aiExplanation:    narration.explanation,
+          aiRecommendation: narration.recommendation,
+          aiConfidence:     narration.confidence,
+          aiNarratedAt:     new Date(),
+        },
+      });
+
+      this.logger.debug(ctx, 'Narration persisted', { confidence: narration.confidence });
+    } catch (err) {
+      // Non-fatal — log and continue; the scoring job is already complete
+      this.logger.stepWarn(ctx, 'NARRATION', (err as Error).message);
     }
   }
 }

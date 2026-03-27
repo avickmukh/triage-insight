@@ -675,6 +675,79 @@ export default function ThemeDetailPage() {
         </div>
       )}
 
+      {/* ── AI Intelligence Panel ── */}
+      <div
+        style={{
+          background: (theme.aiSummary || theme.aiExplanation || theme.aiRecommendation)
+            ? 'linear-gradient(135deg, #f5f3ff 0%, #eff6ff 100%)'
+            : '#fff',
+          border: '1px solid',
+          borderColor: (theme.aiSummary || theme.aiExplanation || theme.aiRecommendation)
+            ? '#ddd6fe'
+            : '#e9ecef',
+          borderRadius: '0.875rem',
+          padding: '1.5rem',
+          boxShadow: '0 1px 4px rgba(10,37,64,0.06)',
+        }}
+      >
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ fontSize: '1rem' }}>✨</span>
+            <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#5b21b6', margin: 0 }}>AI Intelligence</h2>
+          </div>
+          {theme.aiConfidence != null && (
+            <span
+              title={`AI confidence: ${Math.round(theme.aiConfidence * 100)}%`}
+              style={{
+                fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.04em',
+                padding: '0.2rem 0.6rem', borderRadius: '999px',
+                background: theme.aiConfidence >= 0.75 ? '#e8f5e9' : theme.aiConfidence >= 0.45 ? '#fff8e1' : '#f0f4f8',
+                color: theme.aiConfidence >= 0.75 ? '#2e7d32' : theme.aiConfidence >= 0.45 ? '#b8860b' : '#6C757D',
+              }}
+            >
+              {theme.aiConfidence >= 0.75 ? 'High confidence' : theme.aiConfidence >= 0.45 ? 'Medium confidence' : 'Low confidence'}
+            </span>
+          )}
+        </div>
+
+        {!(theme.aiSummary || theme.aiExplanation || theme.aiRecommendation) ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1rem', background: '#f8fafc', borderRadius: '0.5rem', border: '1px dashed #cbd5e1' }}>
+            <span style={{ fontSize: '1.25rem' }}>⏳</span>
+            <div>
+              <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600, color: '#475569' }}>AI insights pending</p>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: '#94a3b8' }}>Import feedback and run the AI pipeline to generate insights for this theme.</p>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            {/* AI Summary */}
+            {theme.aiSummary && (
+              <div>
+                <p style={{ fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.08em', color: '#7c3aed', textTransform: 'uppercase', margin: '0 0 0.375rem' }}>Summary</p>
+                <p style={{ fontSize: '0.9rem', color: '#1e293b', lineHeight: 1.65, margin: 0 }}>{theme.aiSummary}</p>
+              </div>
+            )}
+
+            {/* Why it matters */}
+            {theme.aiExplanation && (
+              <div style={{ padding: '0.875rem 1rem', background: '#fffbeb', borderRadius: '0.5rem', borderLeft: '3px solid #f59e0b' }}>
+                <p style={{ fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.08em', color: '#d97706', textTransform: 'uppercase', margin: '0 0 0.375rem' }}>💡 Why it matters</p>
+                <p style={{ fontSize: '0.875rem', color: '#1e293b', lineHeight: 1.6, margin: 0 }}>{theme.aiExplanation}</p>
+              </div>
+            )}
+
+            {/* Suggested action */}
+            {theme.aiRecommendation && (
+              <div style={{ padding: '0.875rem 1rem', background: '#f0fdf4', borderRadius: '0.5rem', borderLeft: '3px solid #22c55e' }}>
+                <p style={{ fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.08em', color: '#16a34a', textTransform: 'uppercase', margin: '0 0 0.375rem' }}>⚡ Suggested action</p>
+                <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#1e293b', lineHeight: 1.6, margin: 0 }}>{theme.aiRecommendation}</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* ── CIQ Priority Intelligence Panel ── */}
       <div
         style={{

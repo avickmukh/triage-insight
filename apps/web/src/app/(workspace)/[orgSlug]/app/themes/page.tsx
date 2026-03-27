@@ -170,6 +170,30 @@ function CreateThemeModal({
   );
 }
 
+// ─── AI Confidence Badge ─────────────────────────────────────────────────────
+function ConfidenceBadge({ confidence }: { confidence?: number | null }) {
+  if (confidence == null) return null;
+  const pct = Math.round(confidence * 100);
+  const style =
+    confidence >= 0.75
+      ? { bg: '#e8f5e9', color: '#2e7d32', label: 'High' }
+      : confidence >= 0.45
+      ? { bg: '#fff8e1', color: '#b8860b', label: 'Med' }
+      : { bg: '#f0f4f8', color: '#6C757D', label: 'Low' };
+  return (
+    <span
+      title={`AI confidence: ${pct}%`}
+      style={{
+        fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.04em',
+        padding: '0.15rem 0.5rem', borderRadius: '999px',
+        background: style.bg, color: style.color,
+      }}
+    >
+      ✨ {style.label}
+    </span>
+  );
+}
+
 // ─── Theme Card ───────────────────────────────────────────────────────────────
 function ThemeCard({ theme, href }: { theme: Theme; href: string }) {
   const statusStyle = STATUS_COLORS[theme.status] ?? { bg: '#f0f4f8', color: '#6C757D' };
@@ -220,10 +244,11 @@ function ThemeCard({ theme, href }: { theme: Theme; href: string }) {
               {theme.title}
             </h3>
           </div>
+          <ConfidenceBadge confidence={theme.aiConfidence} />
         </div>
 
-        {/* Description */}
-        {theme.description && (
+        {/* AI Summary (preferred) or manual description */}
+        {(theme.aiSummary || theme.description) && (
           <p
             style={{
               fontSize: '0.85rem', color: '#6C757D', margin: '0 0 0.875rem',
@@ -231,7 +256,22 @@ function ThemeCard({ theme, href }: { theme: Theme; href: string }) {
               overflow: 'hidden',
             }}
           >
-            {theme.description}
+            {theme.aiSummary || theme.description}
+          </p>
+        )}
+
+        {/* Why it matters — shown only if available */}
+        {theme.aiExplanation && (
+          <p
+            style={{
+              fontSize: '0.78rem', color: '#7c5cbf',
+              margin: '0 0 0.875rem',
+              display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+              fontStyle: 'italic',
+            }}
+          >
+            💡 {theme.aiExplanation}
           </p>
         )}
 

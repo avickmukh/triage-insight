@@ -790,6 +790,17 @@ model Theme {
   strategicTag     String?
   /// Free-text reason for the manual override (audit trail)
   overrideReason   String?
+  // ─── Stage-2 AI Narration fields ─────────────────────────────────────────────
+  /// LLM-generated 2–3 sentence summary of what this theme is about
+  aiSummary        String?
+  /// LLM-generated explanation of why this theme matters to the business
+  aiExplanation    String?
+  /// LLM-generated recommended action for the product team
+  aiRecommendation String?
+  /// Confidence score (0–1) for the AI narration; null until first narration run
+  aiConfidence     Float?
+  /// Timestamp of the last successful AI narration run
+  aiNarratedAt     DateTime?
 
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
