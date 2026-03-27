@@ -291,6 +291,22 @@ export class CiqService {
       label: 'Recent activity (30d)',
     };
 
+    // ── Normalise weights so the weighted sum always stays within 0–100 ──────────
+    // This guards against misconfigured PrioritizationSettings where weights
+    // do not sum to exactly 1.0 (e.g. the original defaults summed to 1.3).
+    const totalWeight = Object.values(explanation).reduce((sum, c) => sum + c.weight, 0);
+    const normFactor = totalWeight > 0 ? 1 / totalWeight : 1;
+    if (Math.abs(totalWeight - 1.0) > 0.001) {
+      // Re-scale contributions in-place so the breakdown UI still shows correct values
+      for (const key of Object.keys(explanation)) {
+        explanation[key] = {
+          ...explanation[key],
+          weight: explanation[key].weight * normFactor,
+          contribution: explanation[key].contribution * normFactor,
+        };
+      }
+    }
+
     // Sentiment penalty reduces the total score slightly
     const rawScore = Object.values(explanation).reduce((sum, c) => sum + c.contribution, 0);
     const penalisedScore = rawScore * (1 - sentimentPenalty * 0.1);

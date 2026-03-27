@@ -906,17 +906,19 @@ model PrioritizationSettings {
   workspaceId               String @id
 
   /// Core signal weights (0–1)
-  requestFrequencyWeight    Float @default(0.2)
-  customerCountWeight       Float @default(0.2)
-  arrValueWeight            Float @default(0.2)
-  accountPriorityWeight     Float @default(0.1)
-  dealValueWeight           Float @default(0.2)
-  strategicWeight           Float @default(0.1)
+  /// NOTE: All 9 weights below must sum to 1.0 to keep priorityScore in the 0–100 range.
+  /// Normalised from original proportions (0.2/0.2/0.2/0.1/0.2/0.1/0.15/0.1/0.05 → ÷1.3)
+  requestFrequencyWeight    Float @default(0.1538)
+  customerCountWeight       Float @default(0.1538)
+  arrValueWeight            Float @default(0.1538)
+  accountPriorityWeight     Float @default(0.0769)
+  dealValueWeight           Float @default(0.1538)
+  strategicWeight           Float @default(0.0769)
 
   /// Extended CIQ weights — PRD formula fields
-  voteWeight                Float @default(0.15)
-  sentimentWeight           Float @default(0.1)
-  recencyWeight             Float @default(0.05)
+  voteWeight                Float @default(0.1154)
+  sentimentWeight           Float @default(0.0769)
+  recencyWeight             Float @default(0.0385)
 
   /// Deal stage multipliers
   dealStageProspecting      Float @default(0.1)

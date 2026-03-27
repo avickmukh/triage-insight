@@ -6,13 +6,19 @@
  * feedback volume, or manual rank. Supports inline manual-rank editing.
  *
  * Columns:
- *   Rank | Title | Status | Impact (CIQ) | Feedback | AI Recommendation | Target | Manual Rank
+ *   # | Title | Status | Impact (CIQ) | Confidence | Feedback | AI Recommendation | Target | Manual Rank
  *
  * Sort signals:
  *   - priorityScore  (default) — AI-computed CIQ composite 0–100
  *   - feedbackCount            — number of linked feedback items
  *   - manualRank               — user-set integer rank (1 = highest priority)
  *   - createdAt / updatedAt    — temporal fallbacks
+ *
+ * Trust signals:
+ *   - AI confidence badge (from theme.aiConfidence) shows how reliable the AI output is
+ *   - Score bar gives visual weight to the numeric CIQ score
+ *   - AI Recommendation column shows the LLM-generated action item
+ *   - Hovering the Impact cell shows a tooltip explaining what drives the score
  */
 import React, { useState, useCallback } from 'react';
 import Link from 'next/link';
@@ -42,6 +48,14 @@ const STATUS_COLORS: Record<string, string> = {
   PLANNED:   '#f57c00',
   COMMITTED: '#b8860b',
   SHIPPED:   '#2e7d32',
+};
+
+const STATUS_BG: Record<string, string> = {
+  BACKLOG:   '#f8f9fa',
+  EXPLORING: '#e8f0fe',
+  PLANNED:   '#fff3e0',
+  COMMITTED: '#fff8e1',
+  SHIPPED:   '#e8f5e9',
 };
 
 const TH: React.CSSProperties = {
@@ -94,6 +108,119 @@ function SortIndicator({ field, current, order }: { field: RoadmapSortField; cur
   return <span style={{ color: '#0a2540', marginLeft: 4 }}>{order === 'desc' ? '↓' : '↑'}</span>;
 }
 
+/**
+ * AI Confidence badge — shows how reliable the AI narration is.
+ * Mirrors the logic used on the theme detail page.
+ */
+function AiConfidenceBadge({ confidence }: { confidence: number | null | undefined }) {
+  if (confidence == null) {
+    return (
+      <span
+        style={{ fontSize: '0.7rem', color: '#adb5bd', fontStyle: 'italic' }}
+        title="AI has not yet scored this item"
+      >
+        Pending
+      </span>
+    );
+  }
+  const pct = Math.round(confidence * 100);
+  const isHigh   = confidence >= 0.75;
+  const isMedium = confidence >= 0.45;
+  const bg    = isHigh ? '#e8f5e9' : isMedium ? '#fff8e1' : '#f0f4f8';
+  const color = isHigh ? '#2e7d32' : isMedium ? '#b8860b' : '#6C757D';
+  const label = isHigh ? 'High' : isMedium ? 'Med' : 'Low';
+  return (
+    <span
+      title={`AI confidence: ${pct}% — ${isHigh ? 'High confidence: strong signal data' : isMedium ? 'Medium confidence: moderate signal data' : 'Low confidence: limited signal data'}`}
+      style={{
+        display: 'inline-block',
+        padding: '0.15rem 0.45rem',
+        borderRadius: '999px',
+        background: bg,
+        color,
+        fontSize: '0.7rem',
+        fontWeight: 700,
+        cursor: 'help',
+      }}
+    >
+      {label} {pct}%
+    </span>
+  );
+}
+
+/**
+ * Score explanation tooltip — shows what drives the CIQ score.
+ * Reads from the theme's aiExplanation field.
+ */
+function ScoreExplainer({ score, explanation }: { score: number | null | undefined; explanation?: string | null }) {
+  const [open, setOpen] = useState(false);
+  if (score == null) return null;
+  const tier = score >= 75 ? 'Critical' : score >= 50 ? 'High' : score >= 25 ? 'Moderate' : 'Low';
+  const tierColor = score >= 75 ? '#b91c1c' : score >= 50 ? '#c2410c' : score >= 25 ? '#b45309' : '#15803d';
+  return (
+    <div style={{ position: 'relative', display: 'inline-block' }}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        title="What drives this score?"
+        style={{
+          background: 'none',
+          border: 'none',
+          padding: 0,
+          cursor: 'pointer',
+          color: '#adb5bd',
+          fontSize: '0.75rem',
+          lineHeight: 1,
+        }}
+        aria-label="Score explanation"
+      >
+        ⓘ
+      </button>
+      {open && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            zIndex: 100,
+            background: '#fff',
+            border: '1px solid #e9ecef',
+            borderRadius: '0.5rem',
+            padding: '0.75rem',
+            minWidth: 260,
+            maxWidth: 320,
+            boxShadow: '0 4px 16px rgba(10,37,64,0.12)',
+            fontSize: '0.8125rem',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+            <span style={{ fontWeight: 700, color: tierColor }}>{tier} Priority — Score {Math.round(score)}/100</span>
+            <button
+              onClick={() => setOpen(false)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#adb5bd', fontSize: '1rem', lineHeight: 1 }}
+            >
+              ×
+            </button>
+          </div>
+          <p style={{ margin: 0, color: '#374151', lineHeight: 1.5, fontSize: '0.8rem' }}>
+            {explanation
+              ? explanation
+              : score >= 75
+              ? 'This item scores in the critical tier. It is driven by high feedback volume, significant ARR at risk, and strong urgency signals from linked customers.'
+              : score >= 50
+              ? 'This item scores in the high tier. It has moderate feedback volume and revenue signals that warrant near-term attention.'
+              : score >= 25
+              ? 'This item scores in the moderate tier. Signal volume is growing but not yet urgent. Monitor for changes.'
+              : 'This item has limited signal data. The score will improve as more feedback is linked and customers engage.'}
+          </p>
+          <p style={{ margin: '0.5rem 0 0', color: '#adb5bd', fontSize: '0.75rem' }}>
+            CIQ score = weighted sum of demand strength, revenue impact, strategic importance, and urgency signals.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Inline editable rank cell */
 function RankCell({
   item,
@@ -144,7 +271,7 @@ function RankCell({
     <button
       onClick={() => setEditing(true)}
       data-testid={`rank-cell-${item.id}`}
-      title="Click to set manual rank"
+      title="Click to set manual rank (1 = highest priority). Leave blank to clear."
       style={{
         background: item.manualRank != null ? '#e8f0fe' : 'transparent',
         border: item.manualRank != null ? '1px solid #c5d8fc' : '1px dashed #dee2e6',
@@ -199,6 +326,10 @@ export default function PrioritizationBoardPage() {
   // Summary stats
   const critical = items.filter((i) => (i.priorityScore ?? 0) >= 75).length;
   const ranked   = items.filter((i) => i.manualRank != null).length;
+  const withAi   = items.filter((i) => {
+    const t = i.theme as { aiRecommendation?: string | null } | null | undefined;
+    return !!(t?.aiRecommendation);
+  }).length;
 
   return (
     <div style={{ padding: '2rem', maxWidth: 1400, margin: '0 auto' }}>
@@ -217,7 +348,7 @@ export default function PrioritizationBoardPage() {
           </h1>
           <p style={{ color: '#6C757D', margin: '0.25rem 0 0', fontSize: '0.875rem' }}>
             All roadmap items ranked by CIQ impact score, feedback volume, or manual priority.
-            Click any rank cell to override.
+            Click any rank cell to override. Hover ⓘ for score explanation.
           </p>
         </div>
 
@@ -231,6 +362,10 @@ export default function PrioritizationBoardPage() {
             <div style={{ padding: '0.5rem 1rem', background: '#e8f0fe', borderRadius: '0.75rem', textAlign: 'center', border: '1px solid #c5d8fc' }}>
               <p style={{ margin: 0, fontSize: '0.7rem', color: '#1a73e8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Manually Ranked</p>
               <p style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#1a73e8' }}>{ranked}</p>
+            </div>
+            <div style={{ padding: '0.5rem 1rem', background: '#e8f5e9', borderRadius: '0.75rem', textAlign: 'center', border: '1px solid #a5d6a7' }}>
+              <p style={{ margin: 0, fontSize: '0.7rem', color: '#2e7d32', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>AI Insights</p>
+              <p style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#2e7d32' }}>{withAi}</p>
             </div>
             <div style={{ padding: '0.5rem 1rem', background: '#f0f4f8', borderRadius: '0.75rem', textAlign: 'center', border: '1px solid #dee2e6' }}>
               <p style={{ margin: 0, fontSize: '0.7rem', color: '#6C757D', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Total Items</p>
@@ -335,9 +470,7 @@ export default function PrioritizationBoardPage() {
                   <th style={{ ...TH, width: 40, textAlign: 'center' }}>#</th>
 
                   {/* Sortable: Title */}
-                  <th
-                    style={{ ...TH, cursor: 'default', minWidth: 200 }}
-                  >
+                  <th style={{ ...TH, cursor: 'default', minWidth: 200 }}>
                     Title
                   </th>
 
@@ -346,12 +479,20 @@ export default function PrioritizationBoardPage() {
 
                   {/* Sortable: Impact Score */}
                   <th
-                    style={{ ...TH, cursor: 'pointer', minWidth: 160 }}
+                    style={{ ...TH, cursor: 'pointer', minWidth: 180 }}
                     onClick={() => handleSort('priorityScore')}
                     data-testid="sort-priorityScore"
                   >
                     Impact (CIQ)
                     <SortIndicator field="priorityScore" current={sortBy} order={sortOrder} />
+                  </th>
+
+                  {/* AI Confidence — trust signal */}
+                  <th
+                    style={{ ...TH, minWidth: 100 }}
+                    title="How confident the AI is in its assessment, based on signal richness"
+                  >
+                    AI Confidence
                   </th>
 
                   {/* Sortable: Feedback Count */}
@@ -384,7 +525,15 @@ export default function PrioritizationBoardPage() {
               <tbody>
                 {items.map((item, idx) => {
                   const statusColor = STATUS_COLORS[item.status] ?? '#6C757D';
-                  const aiRec = (item.theme as { aiRecommendation?: string | null } | null | undefined)?.aiRecommendation;
+                  const statusBg    = STATUS_BG[item.status] ?? '#f8f9fa';
+                  const themeData = item.theme as {
+                    aiRecommendation?: string | null;
+                    aiExplanation?: string | null;
+                    aiConfidence?: number | null;
+                  } | null | undefined;
+                  const aiRec        = themeData?.aiRecommendation;
+                  const aiExplain    = themeData?.aiExplanation;
+                  const aiConfidence = themeData?.aiConfidence;
 
                   return (
                     <tr
@@ -419,17 +568,35 @@ export default function PrioritizationBoardPage() {
 
                       {/* Status */}
                       <td style={TD}>
-                        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: statusColor }}>
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            padding: '0.2rem 0.6rem',
+                            borderRadius: '999px',
+                            background: statusBg,
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            color: statusColor,
+                          }}
+                        >
                           {item.status}
                         </span>
                       </td>
 
                       {/* Impact (CIQ) */}
-                      <td style={{ ...TD, minWidth: 160 }}>
+                      <td style={{ ...TD, minWidth: 180 }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                          <CiqImpactBadge score={item.priorityScore} showScore size="sm" />
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                            <CiqImpactBadge score={item.priorityScore} showScore size="sm" />
+                            <ScoreExplainer score={item.priorityScore} explanation={aiExplain} />
+                          </div>
                           <ScoreBar score={item.priorityScore} />
                         </div>
+                      </td>
+
+                      {/* AI Confidence */}
+                      <td style={{ ...TD, minWidth: 100 }}>
+                        <AiConfidenceBadge confidence={aiConfidence} />
                       </td>
 
                       {/* Feedback Count */}
@@ -461,11 +628,17 @@ export default function PrioritizationBoardPage() {
                               WebkitBoxOrient: 'vertical',
                               overflow: 'hidden',
                             }}
+                            title={aiRec}
                           >
                             {aiRec}
                           </span>
                         ) : (
-                          <span style={{ color: '#adb5bd', fontSize: '0.8125rem' }}>—</span>
+                          <span
+                            style={{ color: '#adb5bd', fontSize: '0.8125rem' }}
+                            title="AI recommendation will appear after the theme is scored"
+                          >
+                            Pending AI scoring
+                          </span>
                         )}
                       </td>
 
@@ -495,7 +668,7 @@ export default function PrioritizationBoardPage() {
       {!isLoading && items.length > 0 && (
         <p style={{ marginTop: '0.75rem', fontSize: '0.75rem', color: '#adb5bd', textAlign: 'right' }}>
           Click a column header to sort. Click a rank cell to set a manual override (1 = highest priority).
-          Leave blank to clear the manual rank.
+          Hover ⓘ to see what drives each CIQ score. Leave rank blank to clear.
         </p>
       )}
     </div>

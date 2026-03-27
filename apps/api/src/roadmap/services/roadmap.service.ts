@@ -156,9 +156,8 @@ export class RoadmapService {
         signalCount:        ciqScore.signalCount,
         customerCount:      ciqScore.uniqueCustomerCount,
       },
-      include: { theme: { select: { id: true, title: true, status: true, aiExplanation: true } } },
+      include: { theme: { select: { id: true, title: true, status: true, priorityScore: true, aiSummary: true, aiExplanation: true, aiRecommendation: true, aiConfidence: true } } },
     });
-
     await this.auditService.logAction(workspaceId, userId, AuditLogAction.ROADMAP_ITEM_CREATE, {
       id: roadmapItem.id,
       title: roadmapItem.title,
