@@ -2038,3 +2038,25 @@ export interface InvoiceRecord {
   createdAt: string;
   updatedAt: string;
 }
+
+// ── Semantic Search ───────────────────────────────────────────────────────────
+
+/** A single feedback item returned by the semantic search endpoint. */
+export interface SemanticSearchResult {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  sourceType: string;
+  sentiment: number | null;
+  createdAt: string;
+  /** Cosine similarity score in [0, 1] — higher is more relevant. */
+  similarity: number;
+}
+
+/** Response envelope from GET /feedback/semantic-search */
+export interface SemanticSearchResponse {
+  data: SemanticSearchResult[];
+  query: string;
+  model: string;
+}

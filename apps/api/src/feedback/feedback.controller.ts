@@ -19,6 +19,7 @@ import { FeedbackService } from './feedback.service';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
 import { UpdateFeedbackDto } from './dto/update-feedback.dto';
 import { QueryFeedbackDto } from './dto/query-feedback.dto';
+import { SemanticSearchDto } from './dto/semantic-search.dto';
 import { CreateAttachmentDto } from './dto/create-attachment.dto';
 import { ConfirmAttachmentDto } from './dto/confirm-attachment.dto';
 import { PublicFeedbackDto } from './dto/public-feedback.dto';
@@ -127,6 +128,25 @@ export class FeedbackController {
       confirmAttachmentDto.mimeType,
       confirmAttachmentDto.sizeBytes,
     );
+  }
+
+  // --- Semantic Search ---
+  /**
+   * GET /workspaces/:workspaceId/feedback/semantic-search?q=<query>&limit=<n>&threshold=<t>
+   *
+   * Generates an embedding for `q` and returns the top feedback items ranked
+   * by cosine similarity.  Only feedback that has been through the AI pipeline
+   * (embedding IS NOT NULL) is considered.
+   *
+   * IMPORTANT: declared before `:id` routes to avoid NestJS routing conflicts.
+   */
+  @Get('semantic-search')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
+  semanticSearch(
+    @Param('workspaceId') workspaceId: string,
+    @Query() dto: SemanticSearchDto,
+  ) {
+    return this.feedbackService.semanticSearch(workspaceId, dto);
   }
 
   // --- Duplicate Detection ---

@@ -272,6 +272,22 @@ const apiClient = {
         })
         .then(handleResponse);
     },
+    /**
+     * GET /workspaces/:id/feedback/semantic-search?q=&limit=&threshold=
+     * Generates an embedding for `q` and returns the top feedback items
+     * ranked by cosine similarity (pgvector).
+     */
+    semanticSearch: (
+      workspaceId: string,
+      q: string,
+      limit = 10,
+      threshold = 0.5
+    ): Promise<import('./api-types').SemanticSearchResponse> =>
+      api
+        .get(`/workspaces/${workspaceId}/feedback/semantic-search`, {
+          params: { q, limit, threshold },
+        })
+        .then(handleResponse),
   },
 
   themes: {

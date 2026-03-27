@@ -5,12 +5,26 @@ import { PlanLimitService } from '../billing/plan-limit.service';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
 import { UpdateFeedbackDto } from './dto/update-feedback.dto';
 import { QueryFeedbackDto } from './dto/query-feedback.dto';
+import { SemanticSearchDto } from './dto/semantic-search.dto';
 import { S3Service } from '../uploads/services/s3.service';
+import { EmbeddingService } from '../ai/services/embedding.service';
 import { Prisma } from '@prisma/client';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
 import { AI_ANALYSIS_QUEUE } from '../ai/processors/analysis.processor';
 import { CIQ_SCORING_QUEUE } from '../ai/processors/ciq-scoring.processor';
+
+// Shape returned by the pgvector raw query
+export interface SemanticRow {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  sourceType: string;
+  sentiment: number | null;
+  createdAt: Date;
+  similarity: number;
+}
 
 @Injectable()
 export class FeedbackService {
@@ -20,6 +34,7 @@ export class FeedbackService {
     @InjectQueue(AI_ANALYSIS_QUEUE) private readonly analysisQueue: Queue,
     @InjectQueue(CIQ_SCORING_QUEUE) private readonly ciqQueue: Queue,
     private readonly planLimit: PlanLimitService,
+    private readonly embeddingService: EmbeddingService,
   ) {}
 
   async create(workspaceId: string, createFeedbackDto: CreateFeedbackDto) {
@@ -310,5 +325,52 @@ export class FeedbackService {
       .filter((c) => c.score > 0)
       .sort((a, b) => b.score - a.score)
       .slice(0, limit);
+  }
+
+  // ── Semantic search ────────────────────────────────────────────────────────
+
+  /**
+   * GET /workspaces/:workspaceId/feedback/semantic-search?q=&limit=&threshold=
+   *
+   * Generates an embedding for the query string, then runs a pgvector cosine
+   * similarity search against Feedback.embedding.  Only feedback that has
+   * already been embedded (embedding IS NOT NULL) and belongs to the workspace
+   * is considered.  Results are ordered by similarity descending.
+   */
+  async semanticSearch(
+    workspaceId: string,
+    dto: SemanticSearchDto,
+  ): Promise<{ data: SemanticRow[]; query: string; model: string }> {
+    const { q, limit = 10, threshold = 0.5 } = dto;
+
+    // Generate embedding for the query string
+    const queryEmbedding = await this.embeddingService.generateEmbedding(q);
+    const vectorStr = `[${queryEmbedding.join(',')}]`;
+
+    // pgvector cosine similarity — scoped to workspace, only embedded items
+    const rows = await this.prisma.$queryRaw<SemanticRow[]>`
+      SELECT
+        id,
+        title,
+        description,
+        status,
+        "sourceType",
+        sentiment,
+        "createdAt",
+        ROUND((1 - (embedding <=> ${vectorStr}::vector))::numeric, 4) AS similarity
+      FROM "Feedback"
+      WHERE "workspaceId" = ${workspaceId}
+        AND embedding IS NOT NULL
+        AND status != 'MERGED'
+        AND 1 - (embedding <=> ${vectorStr}::vector) >= ${threshold}
+      ORDER BY similarity DESC
+      LIMIT ${limit};
+    `;
+
+    return {
+      data: rows,
+      query: q,
+      model: 'text-embedding-3-small',
+    };
   }
 }

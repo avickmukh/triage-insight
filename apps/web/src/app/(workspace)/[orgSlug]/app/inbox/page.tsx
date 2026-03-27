@@ -1,9 +1,9 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useRef, useState, useCallback } from 'react';
 import { useFeedback } from '@/hooks/use-feedback';
 import { useWorkspace, useCurrentMemberRole } from '@/hooks/use-workspace';
-import { Feedback, FeedbackSourceType, FeedbackStatus, ThemeFeedback, WorkspaceRole } from '@/lib/api-types';
+import { Feedback, FeedbackSourceType, FeedbackStatus, SemanticSearchResult, ThemeFeedback, WorkspaceRole } from '@/lib/api-types';
 import apiClient from '@/lib/api-client';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -388,9 +388,34 @@ export default function InboxPage() {
   const [search, setSearch] = useState('');
   const [showCsvModal, setShowCsvModal] = useState(false);
 
+  // ── AI Semantic Search state ─────────────────────────────────────────────
+  const [aiMode, setAiMode] = useState(false);
+  const [aiQuery, setAiQuery] = useState('');
+  const [aiResults, setAiResults] = useState<SemanticSearchResult[] | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
   const { workspace } = useWorkspace();
   const { role } = useCurrentMemberRole();
   const queryClient = useQueryClient();
+
+  const runAiSearch = useCallback(async (q: string) => {
+    if (!workspace?.id || !q.trim()) return;
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const res = await apiClient.feedback.semanticSearch(workspace.id, q.trim());
+      setAiResults(res.data);
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        (err instanceof Error ? err.message : 'AI search failed. Please try again.');
+      setAiError(msg);
+      setAiResults(null);
+    } finally {
+      setAiLoading(false);
+    }
+  }, [workspace?.id]);
 
   const { useFeedbackList } = useFeedback();
   const { data, isLoading, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage } =
@@ -496,49 +521,235 @@ export default function InboxPage() {
 
       {/* Search + status filter */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-        <input
-          type="text"
-          placeholder="Search feedback…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{
-            padding: '0.5rem 0.875rem',
-            borderRadius: '0.5rem',
-            border: '1px solid #dee2e6',
-            fontSize: '0.875rem',
-            color: '#0A2540',
-            outline: 'none',
-            width: '100%',
-            maxWidth: '28rem',
-            background: '#fff',
-          }}
-        />
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          {TABS.map((t) => (
-            <button
-              key={t.label}
-              onClick={() => setActiveStatus(t.value)}
+
+        {/* Search mode toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <button
+            onClick={() => { setAiMode(false); setAiResults(null); setAiError(null); }}
+            style={{
+              padding: '0.3rem 0.85rem',
+              borderRadius: '999px',
+              border: '1px solid',
+              fontSize: '0.78rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              borderColor: !aiMode ? '#0A2540' : '#dee2e6',
+              background: !aiMode ? '#0A2540' : '#fff',
+              color: !aiMode ? '#fff' : '#6C757D',
+              transition: 'all 0.15s',
+            }}
+          >
+            Keyword
+          </button>
+          <button
+            onClick={() => setAiMode(true)}
+            style={{
+              padding: '0.3rem 0.85rem',
+              borderRadius: '999px',
+              border: '1px solid',
+              fontSize: '0.78rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              borderColor: aiMode ? '#20A4A4' : '#dee2e6',
+              background: aiMode ? '#e8f7f7' : '#fff',
+              color: aiMode ? '#20A4A4' : '#6C757D',
+              transition: 'all 0.15s',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.3rem',
+            }}
+          >
+            <span style={{ fontSize: '0.7rem' }}>&#10024;</span> AI Search
+          </button>
+        </div>
+
+        {/* Keyword search input */}
+        {!aiMode && (
+          <input
+            type="text"
+            placeholder="Search feedback…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{
+              padding: '0.5rem 0.875rem',
+              borderRadius: '0.5rem',
+              border: '1px solid #dee2e6',
+              fontSize: '0.875rem',
+              color: '#0A2540',
+              outline: 'none',
+              width: '100%',
+              maxWidth: '28rem',
+              background: '#fff',
+            }}
+          />
+        )}
+
+        {/* AI semantic search input */}
+        {aiMode && (
+          <div style={{ display: 'flex', gap: '0.5rem', maxWidth: '36rem' }}>
+            <input
+              type="text"
+              placeholder="Describe what you’re looking for… e.g. “slowness during checkout”"
+              value={aiQuery}
+              onChange={(e) => setAiQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') runAiSearch(aiQuery); }}
               style={{
-                padding: '0.4rem 1rem',
-                borderRadius: '999px',
-                border: '1px solid',
-                fontSize: '0.82rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                borderColor: activeStatus === t.value ? '#20A4A4' : '#dee2e6',
-                background: activeStatus === t.value ? '#e8f7f7' : '#fff',
-                color: activeStatus === t.value ? '#20A4A4' : '#6C757D',
-                transition: 'all 0.15s',
+                flex: 1,
+                padding: '0.5rem 0.875rem',
+                borderRadius: '0.5rem',
+                border: '1px solid #20A4A4',
+                fontSize: '0.875rem',
+                color: '#0A2540',
+                outline: 'none',
+                background: '#fff',
+              }}
+            />
+            <button
+              onClick={() => runAiSearch(aiQuery)}
+              disabled={aiLoading || !aiQuery.trim()}
+              style={{
+                padding: '0.5rem 1.1rem',
+                borderRadius: '0.5rem',
+                border: 'none',
+                background: aiLoading || !aiQuery.trim() ? '#a0d4d4' : '#20A4A4',
+                color: '#fff',
+                fontWeight: 700,
+                fontSize: '0.85rem',
+                cursor: aiLoading || !aiQuery.trim() ? 'not-allowed' : 'pointer',
               }}
             >
-              {t.label}
+              {aiLoading ? 'Searching…' : 'Search'}
             </button>
-          ))}
-        </div>
+          </div>
+        )}
+
+        {/* Status filter tabs (keyword mode only) */}
+        {!aiMode && (
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {TABS.map((t) => (
+              <button
+                key={t.label}
+                onClick={() => setActiveStatus(t.value)}
+                style={{
+                  padding: '0.4rem 1rem',
+                  borderRadius: '999px',
+                  border: '1px solid',
+                  fontSize: '0.82rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  borderColor: activeStatus === t.value ? '#20A4A4' : '#dee2e6',
+                  background: activeStatus === t.value ? '#e8f7f7' : '#fff',
+                  color: activeStatus === t.value ? '#20A4A4' : '#6C757D',
+                  transition: 'all 0.15s',
+                }}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* List card */}
-      <div style={CARD}>
+      {/* AI Search Results */}
+      {aiMode && (
+        <div style={CARD}>
+          {/* AI mode header */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '1px solid #f0f4f8' }}>
+            <span style={{ fontSize: '0.8rem', color: '#20A4A4', fontWeight: 700 }}>&#10024; AI Semantic Search</span>
+            {aiResults !== null && (
+              <span style={{ fontSize: '0.75rem', color: '#6C757D' }}>
+                {aiResults.length} result{aiResults.length !== 1 ? 's' : ''} for &ldquo;{aiQuery}&rdquo;
+              </span>
+            )}
+          </div>
+
+          {aiLoading ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#20A4A4', fontSize: '0.88rem', fontWeight: 600, padding: '1rem 0' }}>
+              <span style={{ display: 'inline-block', width: '1rem', height: '1rem', border: '2px solid #20A4A4', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+              Searching with AI…
+            </div>
+          ) : aiError ? (
+            <div style={{ padding: '1rem', background: '#fef2f2', borderRadius: '0.5rem', color: '#c0392b', fontSize: '0.85rem', fontWeight: 600 }}>
+              {aiError}
+            </div>
+          ) : aiResults === null ? (
+            <div style={{ padding: '2rem 1rem', textAlign: 'center', color: '#6C757D', fontSize: '0.875rem' }}>
+              Enter a natural-language query above and press <strong>Search</strong> or <strong>Enter</strong>.
+            </div>
+          ) : aiResults.length === 0 ? (
+            <div style={{ padding: '2rem 1rem', textAlign: 'center' }}>
+              <p style={{ color: '#0A2540', fontWeight: 700, fontSize: '1rem', marginBottom: '0.35rem' }}>No similar feedback found</p>
+              <p style={{ color: '#6C757D', fontSize: '0.875rem' }}>Try rephrasing your query, or lower the similarity threshold.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {aiResults.map((fb, i) => {
+                const sc = STATUS_COLORS[fb.status] ?? { bg: '#f0f4f8', color: '#6C757D' };
+                const sourceLabel = SOURCE_LABELS[fb.sourceType] ?? fb.sourceType;
+                const pct = Math.round(fb.similarity * 100);
+                return (
+                  <Link
+                    key={fb.id}
+                    href={r.inboxItem(fb.id)}
+                    style={{
+                      textDecoration: 'none',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '0.875rem 0',
+                      borderBottom: i < aiResults.length - 1 ? '1px solid #f0f4f8' : 'none',
+                    }}
+                  >
+                    {/* Title + description */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: '0.9rem', fontWeight: 600, color: '#0A2540', marginBottom: '0.15rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {fb.title}
+                      </p>
+                      {fb.description && (
+                        <p style={{ fontSize: '0.8rem', color: '#6C757D', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {fb.description}
+                        </p>
+                      )}
+                    </div>
+                    {/* Badges */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: '1rem', flexShrink: 0 }}>
+                      {/* Similarity score badge */}
+                      <span
+                        title={`Cosine similarity: ${fb.similarity}`}
+                        style={{
+                          fontSize: '0.7rem',
+                          fontWeight: 700,
+                          padding: '0.15rem 0.5rem',
+                          borderRadius: '999px',
+                          background: pct >= 80 ? '#e8f5e9' : pct >= 60 ? '#e8f7f7' : '#f0f4f8',
+                          color: pct >= 80 ? '#2e7d32' : pct >= 60 ? '#20A4A4' : '#6C757D',
+                          border: '1px solid',
+                          borderColor: pct >= 80 ? '#c8e6c9' : pct >= 60 ? '#b2dfdb' : '#e9ecef',
+                        }}
+                      >
+                        {pct}% match
+                      </span>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: '999px', background: '#f0f4f8', color: '#6C757D', border: '1px solid #e9ecef' }}>
+                        {sourceLabel}
+                      </span>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.2rem 0.6rem', borderRadius: '999px', background: sc.bg, color: sc.color }}>
+                        {fb.status.replace('_', '\u00a0')}
+                      </span>
+                      <span style={{ fontSize: '0.78rem', color: '#adb5bd' }}>
+                        {new Date(fb.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      )}
+
+      {/* List card (keyword mode) */}
+      {!aiMode && <div style={CARD}>
         {isLoading ? (
           /* Skeleton shimmer */
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -758,7 +969,7 @@ export default function InboxPage() {
             {isFetchingNextPage ? 'Loading…' : 'Load more'}
           </button>
         )}
-      </div>
+      </div>}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bull';
 import { PrismaModule } from '../prisma/prisma.module';
 import { UploadsModule } from '../uploads/uploads.module';
+import { AiModule } from '../ai/ai.module';
 import { FeedbackService } from './feedback.service';
 import { FeedbackController, PublicFeedbackController } from './feedback.controller';
 import { PublicPortalService } from './ingestion/public-portal.service';
@@ -17,6 +18,7 @@ import { PlanLimitService } from '../billing/plan-limit.service';
   imports: [
     PrismaModule,
     UploadsModule,
+    AiModule,
     BullModule.registerQueue({ name: AI_ANALYSIS_QUEUE }),
     BullModule.registerQueue({ name: CIQ_SCORING_QUEUE }),
   ],
