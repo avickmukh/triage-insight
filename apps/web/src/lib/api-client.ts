@@ -103,6 +103,8 @@ import {
   RoadmapProgressReport,
   FeedbackVolumeReport,
   InvoiceRecord,
+  PromoteThemePreview,
+  PromoteThemeDto,
 } from "@/lib/api-types";
 
 const getApiBaseUrl = () => {
@@ -353,10 +355,13 @@ const apiClient = {
     /** DELETE /workspaces/:id/roadmap/:itemId */
     remove: (workspaceId: string, itemId: string): Promise<void> =>
       api.delete(`/workspaces/${workspaceId}/roadmap/${itemId}`).then(handleResponse),
-    /** POST /workspaces/:id/roadmap/from-theme/:themeId */
-    createFromTheme: (workspaceId: string, themeId: string): Promise<RoadmapItem> =>
+    /** GET /workspaces/:id/roadmap/from-theme/:themeId/preview — AI-prefilled suggestion, no side effects */
+    previewFromTheme: (workspaceId: string, themeId: string): Promise<PromoteThemePreview> =>
+      api.get(`/workspaces/${workspaceId}/roadmap/from-theme/${themeId}/preview`).then(handleResponse),
+    /** POST /workspaces/:id/roadmap/from-theme/:themeId — accepts optional override body */
+    createFromTheme: (workspaceId: string, themeId: string, override?: PromoteThemeDto): Promise<RoadmapItem> =>
       api
-        .post(`/workspaces/${workspaceId}/roadmap/from-theme/${themeId}`)
+        .post(`/workspaces/${workspaceId}/roadmap/from-theme/${themeId}`, override ?? {})
         .then(handleResponse),
   },
 

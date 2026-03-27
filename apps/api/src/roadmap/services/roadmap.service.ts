@@ -8,6 +8,7 @@ import { CIQ_SCORING_QUEUE } from "../../ai/processors/ciq-scoring.processor";
 import { CreateRoadmapItemDto } from "../dto/create-roadmap-item.dto";
 import { UpdateRoadmapItemDto } from "../dto/update-roadmap-item.dto";
 import { QueryRoadmapDto } from "../dto/query-roadmap.dto";
+import { PromoteThemeDto } from "../dto/promote-theme.dto";
 import { AuditLogAction, Prisma, RoadmapStatus } from "@prisma/client";
 
 type RoadmapOrderByField = 'createdAt' | 'updatedAt' | 'priorityScore';
@@ -70,7 +71,54 @@ export class RoadmapService {
     return enriched;
   }
 
-  async createFromTheme(workspaceId: string, userId: string, themeId: string) {
+  /**
+   * GET /roadmap/from-theme/:themeId/preview
+   * Returns a suggested roadmap item payload (title, description, priority) built
+   * from the theme's AI narration fields — WITHOUT persisting anything.
+   * Used by the UI modal to prefill the form before the user confirms.
+   */
+  async previewFromTheme(workspaceId: string, themeId: string) {
+    const theme = await this.prisma.theme.findUnique({
+      where: { id: themeId, workspaceId },
+      include: {
+        feedbacks: {
+          take: 5,
+          orderBy: { assignedAt: 'desc' },
+          include: {
+            feedback: { select: { id: true, title: true, sentiment: true, sourceType: true } },
+          },
+        },
+      },
+    });
+    if (!theme) throw new NotFoundException(`Theme with ID ${themeId} not found.`);
+
+    // Check if a roadmap item already exists for this theme
+    const existing = await this.prisma.roadmapItem.findFirst({ where: { workspaceId, themeId } });
+
+    // Build a rich description from AI narration fields
+    const descriptionParts: string[] = [];
+    if (theme.aiSummary)        descriptionParts.push(theme.aiSummary);
+    if (theme.aiExplanation)    descriptionParts.push(`Why it matters: ${theme.aiExplanation}`);
+    if (theme.aiRecommendation) descriptionParts.push(`Suggested action: ${theme.aiRecommendation}`);
+    const description = descriptionParts.length > 0
+      ? descriptionParts.join('\n\n')
+      : (theme.description ?? undefined);
+
+    return {
+      suggestedTitle:       theme.title,
+      suggestedDescription: description,
+      aiSummary:            theme.aiSummary,
+      aiExplanation:        theme.aiExplanation,
+      aiRecommendation:     theme.aiRecommendation,
+      aiConfidence:         theme.aiConfidence,
+      feedbackCount:        theme.feedbacks.length,
+      topFeedback:          theme.feedbacks.map((tf) => tf.feedback),
+      alreadyPromoted:      !!existing,
+      existingRoadmapItemId: existing?.id ?? null,
+    };
+  }
+
+  async createFromTheme(workspaceId: string, userId: string, themeId: string, override?: PromoteThemeDto) {
     const theme = await this.prisma.theme.findUnique({ where: { id: themeId, workspaceId } });
     if (!theme) throw new NotFoundException(`Theme with ID ${themeId} not found.`);
 
@@ -83,12 +131,23 @@ export class RoadmapService {
     // Use real CIQ scoring synchronously for the initial creation values
     const ciqScore = await this.ciqService.scoreTheme(workspaceId, themeId);
 
+    // Build a rich description from AI narration fields (unless the user overrode it)
+    let description: string | undefined = override?.description;
+    if (!description) {
+      const parts: string[] = [];
+      if (theme.aiSummary)        parts.push(theme.aiSummary);
+      if (theme.aiExplanation)    parts.push(`Why it matters: ${theme.aiExplanation}`);
+      if (theme.aiRecommendation) parts.push(`Suggested action: ${theme.aiRecommendation}`);
+      description = parts.length > 0 ? parts.join('\n\n') : (theme.description ?? undefined);
+    }
+
     const roadmapItem = await this.prisma.roadmapItem.create({
       data: {
         workspaceId,
         themeId,
-        title: theme.title,
-        description: theme.description ?? undefined,
+        title:              override?.title ?? theme.title,
+        description,
+        status:             override?.status ?? RoadmapStatus.EXPLORING,
         priorityScore:      ciqScore.priorityScore,
         confidenceScore:    ciqScore.confidenceScore,
         revenueImpactScore: ciqScore.revenueImpactScore,
@@ -97,14 +156,22 @@ export class RoadmapService {
         signalCount:        ciqScore.signalCount,
         customerCount:      ciqScore.uniqueCustomerCount,
       },
-      include: { theme: { select: { id: true, title: true, status: true } } },
+      include: { theme: { select: { id: true, title: true, status: true, aiExplanation: true } } },
     });
 
     await this.auditService.logAction(workspaceId, userId, AuditLogAction.ROADMAP_ITEM_CREATE, {
       id: roadmapItem.id,
       title: roadmapItem.title,
       fromThemeId: themeId,
+      aiAssisted: !!(theme.aiSummary || theme.aiExplanation),
     });
+
+    // Dispatch async CIQ re-scoring to ensure scores are fresh
+    try {
+      await this.ciqQueue.add({ type: 'ROADMAP_SCORED', workspaceId, roadmapItemId: roadmapItem.id });
+    } catch (queueErr) {
+      console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+    }
 
     const enriched = await this.enrichItem(roadmapItem);
     return enriched;

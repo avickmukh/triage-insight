@@ -211,6 +211,28 @@ export default function RoadmapItemDetailPage() {
         {/* Left column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
 
+          {/* Why This Was Created — shown when item was promoted from a theme with AI narration */}
+          {item.theme && (item.theme as { aiExplanation?: string | null }).aiExplanation && (
+            <div style={{
+              ...CARD,
+              background: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)',
+              border: '1px solid #ddd6fe',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.625rem' }}>
+                <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  AI Intelligence
+                </span>
+                <span style={{ fontSize: '0.65rem', color: '#a78bfa' }}>from theme “{item.theme.title}”</span>
+              </div>
+              <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#4c1d95', margin: '0 0 0.375rem 0' }}>
+                Why this was created
+              </p>
+              <p style={{ fontSize: '0.85rem', color: '#5b21b6', margin: 0, lineHeight: 1.6 }}>
+                {(item.theme as { aiExplanation?: string | null }).aiExplanation}
+              </p>
+            </div>
+          )}
+
           {/* Signal summary */}
           <div style={CARD}>
             <p style={SECTION_TITLE}>Signal Summary</p>

@@ -4,6 +4,7 @@ import { CiqService } from "../ai/services/ciq.service";
 import { CreateRoadmapItemDto } from "./dto/create-roadmap-item.dto";
 import { UpdateRoadmapItemDto } from "./dto/update-roadmap-item.dto";
 import { QueryRoadmapDto } from "./dto/query-roadmap.dto";
+import { PromoteThemeDto } from "./dto/promote-theme.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../workspace/guards/roles.guard";
 import { Roles } from "../workspace/decorators/roles.decorator";
@@ -27,14 +28,34 @@ export class RoadmapController {
     return this.roadmapService.create(workspaceId, req.user.sub, dto);
   }
 
+  /**
+   * GET /workspaces/:workspaceId/roadmap/from-theme/:themeId/preview
+   * Returns an AI-prefilled suggestion for a roadmap item WITHOUT creating it.
+   * Used by the UI modal to prefill the form before the user confirms.
+   */
+  @Get("from-theme/:themeId/preview")
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  previewFromTheme(
+    @Param("workspaceId") workspaceId: string,
+    @Param("themeId") themeId: string
+  ) {
+    return this.roadmapService.previewFromTheme(workspaceId, themeId);
+  }
+
+  /**
+   * POST /workspaces/:workspaceId/roadmap/from-theme/:themeId
+   * Creates a roadmap item from a theme, using AI narration fields for a rich
+   * description. Accepts an optional override body to customise title/description/status.
+   */
   @Post("from-theme/:themeId")
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
   createFromTheme(
     @Param("workspaceId") workspaceId: string,
     @Req() req: AuthenticatedRequest,
-    @Param("themeId") themeId: string
+    @Param("themeId") themeId: string,
+    @Body() override?: PromoteThemeDto
   ) {
-    return this.roadmapService.createFromTheme(workspaceId, req.user.sub, themeId);
+    return this.roadmapService.createFromTheme(workspaceId, req.user.sub, themeId, override);
   }
 
   @Get()

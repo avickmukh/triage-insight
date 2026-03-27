@@ -2060,3 +2060,31 @@ export interface SemanticSearchResponse {
   query: string;
   model: string;
 }
+
+// ── Promote to Roadmap ────────────────────────────────────────────────────────
+
+/** Response from GET /roadmap/from-theme/:themeId/preview */
+export interface PromoteThemePreview {
+  suggestedTitle: string;
+  suggestedDescription?: string | null;
+  aiSummary?: string | null;
+  aiExplanation?: string | null;
+  aiRecommendation?: string | null;
+  aiConfidence?: number | null;
+  feedbackCount: number;
+  topFeedback: Array<{
+    id: string;
+    title: string;
+    sentiment?: number | null;
+    sourceType?: string | null;
+  }>;
+  alreadyPromoted: boolean;
+  existingRoadmapItemId: string | null;
+}
+
+/** Body accepted by POST /roadmap/from-theme/:themeId */
+export interface PromoteThemeDto {
+  title?: string;
+  description?: string;
+  status?: RoadmapStatus;
+}

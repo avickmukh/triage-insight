@@ -8,9 +8,9 @@ import {
   useUpdateTheme,
   useRemoveFeedbackFromTheme,
 } from '@/hooks/use-themes';
-import { useCurrentMemberRole } from '@/hooks/use-workspace';
+import { useCurrentMemberRole, useWorkspace } from '@/hooks/use-workspace';
 import { useThemeCiqScore, useRecalculateThemeCiq, useThemeRevenueIntelligence } from '@/hooks/use-ciq';
-import { useCreateRoadmapFromTheme } from '@/hooks/use-roadmap';
+import { PromoteToRoadmapModal } from '@/components/roadmap/PromoteToRoadmapModal';
 import {
   CiqScoreOutput,
   FeedbackSourceType,
@@ -386,31 +386,24 @@ export default function ThemeDetailPage() {
   const r = appRoutes(slug);
 
   const { role } = useCurrentMemberRole();
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id ?? '';
   const canEdit = role === WorkspaceRole.ADMIN || role === WorkspaceRole.EDITOR;
 
   const { data: theme, isLoading, isError, error } = useThemeDetail(themeId);
   const { data: ciqScore, isLoading: ciqLoading } = useThemeCiqScore(themeId || null);
   const { data: revenueIntel, isLoading: revenueLoading } = useThemeRevenueIntelligence(themeId || null);
   const recalculate = useRecalculateThemeCiq();
-  const addToRoadmap = useCreateRoadmapFromTheme();
   const [rescoreToast, setRescoreToast] = useState<string | null>(null);
   const [actionToast, setActionToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [promoteModalOpen, setPromoteModalOpen] = useState(false);
 
-  const handleAddToRoadmap = () => {
-    if (!themeId) return;
-    addToRoadmap.mutate(
-      { themeId },
-      {
-        onSuccess: () => {
-          setActionToast({ message: 'Added to roadmap. You can now prioritize it there.', type: 'success' });
-          setTimeout(() => setActionToast(null), 5000);
-        },
-        onError: (err) => {
-          setActionToast({ message: err.message || 'Failed to add to roadmap.', type: 'error' });
-          setTimeout(() => setActionToast(null), 5000);
-        },
-      },
-    );
+  const handleAddToRoadmap = () => setPromoteModalOpen(true);
+
+  const handlePromoteSuccess = (roadmapItemId: string) => {
+    setActionToast({ message: 'Added to roadmap. You can now prioritize it there.', type: 'success' });
+    setTimeout(() => setActionToast(null), 5000);
+    router.push(`${r.roadmap}/${roadmapItemId}`);
   };
 
   const handleMarkInvestigating = () => {
@@ -640,15 +633,14 @@ export default function ThemeDetailPage() {
           <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#6C757D', marginRight: '0.25rem' }}>Next steps:</span>
           <button
             onClick={handleAddToRoadmap}
-            disabled={addToRoadmap.isPending}
             style={{
               padding: '0.4rem 0.875rem', borderRadius: '0.5rem',
               border: 'none', background: '#0a2540',
-              color: '#fff', fontSize: '0.8rem', cursor: addToRoadmap.isPending ? 'not-allowed' : 'pointer',
-              fontWeight: 600, opacity: addToRoadmap.isPending ? 0.6 : 1,
+              color: '#fff', fontSize: '0.8rem', cursor: 'pointer',
+              fontWeight: 600,
             }}
           >
-            {addToRoadmap.isPending ? 'Adding…' : '+ Add to Roadmap'}
+            + Add to Roadmap
           </button>
           <Link
             href={r.inbox}
@@ -1035,7 +1027,7 @@ export default function ThemeDetailPage() {
       </div>
 
       {/* ── Edit Modal ── */}
-      {showEdit && (
+       {showEdit && (
         <EditThemeModal
           themeId={themeId}
           initial={{
@@ -1047,7 +1039,17 @@ export default function ThemeDetailPage() {
           onClose={() => setShowEdit(false)}
         />
       )}
-
+      {/* ── Promote to Roadmap Modal ── */}
+      {promoteModalOpen && workspaceId && themeId && (
+        <PromoteToRoadmapModal
+          workspaceId={workspaceId}
+          themeId={themeId}
+          themeTitle={theme?.title ?? ''}
+          isOpen={promoteModalOpen}
+          onClose={() => setPromoteModalOpen(false)}
+          onSuccess={handlePromoteSuccess}
+        />
+      )}
       <style>{`@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
     </div>
   );
