@@ -4,8 +4,8 @@
  * This is the ONLY place in the entire codebase where BullMQ @Processor()
  * classes are registered as NestJS providers.
  *
- * Design rationale:
- * ─────────────────
+ * Design rationale
+ * ────────────────
  * Processors are worker-only runtime artefacts. They must never be
  * instantiated in the API process.
  *
@@ -13,25 +13,33 @@
  * and the worker. Processors have been removed from those shared modules'
  * providers[] arrays to prevent double-registration.
  *
- * This module imports each feature module so that the services processors
- * depend on are available in the DI container. Because processors are ONLY
- * here (not in the feature modules), there is no risk of Bull throwing
- * "Cannot define the same handler twice".
+ * Why AiModule is NOT imported here
+ * ──────────────────────────────────
+ * AiModule is marked @Global(). Its exported services (EmbeddingService,
+ * ThemeClusteringService, DuplicateDetectionService, CiqService, etc.) are
+ * therefore available in every module in the DI container without any explicit
+ * import. WorkerModule (the root) already imports AiModule; importing it again
+ * here would cause Bull to see the ai-analysis and ciq-scoring queue
+ * registrations twice and throw "Cannot define the same handler twice".
  *
- * NestJS module deduplication:
- * NestJS deduplicates module instances within a single module graph.
- * WorkerModule (the root) already imports most feature modules; importing
- * them again here is safe — NestJS reuses the same instance.
+ * The same logic applies to PrismaModule (also @Global()) and CommonModule
+ * (also @Global()): they are imported by WorkerModule and their providers are
+ * available everywhere — no need to import them here.
  *
- * AiModule and PrismaModule are marked @Global() so their services are
- * available here without needing to be imported explicitly.
+ * All other feature modules (ThemeModule, CustomerModule, etc.) are imported
+ * here so their exported services are resolvable by the processors that depend
+ * on them. NestJS deduplicates module instances, so each module is only
+ * instantiated once even though WorkerModule also imports them.
  */
 
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bull';
 
 // ── Feature modules (provide services that processors depend on) ──────────────
-import { AiModule } from '../../api/src/ai/ai.module';
+// NOTE: AiModule, PrismaModule, and CommonModule are intentionally excluded
+// because they are @Global() and already loaded by WorkerModule. Including them
+// here would cause duplicate BullModule.registerQueue calls for ai-analysis and
+// ciq-scoring queues, triggering Bull's "Cannot define the same handler twice".
 import { ThemeModule } from '../../api/src/theme/theme.module';
 import { CustomerModule } from '../../api/src/customer/customer.module';
 import { DigestModule } from '../../api/src/digest/digest.module';
@@ -124,7 +132,7 @@ import {
     // Feature modules — processors are NOT in their providers[], so importing
     // them here does not cause double-registration. NestJS reuses the same
     // module instance if it was already loaded by WorkerModule.
-    AiModule,
+    // AiModule is excluded — it is @Global() and already loaded by WorkerModule.
     ThemeModule,
     CustomerModule,
     DigestModule,
@@ -140,6 +148,10 @@ import {
     // Queue registrations — required for @InjectQueue() in processor constructors.
     // BullModule deduplicates registrations so registering the same queue name
     // twice (once in the feature module, once here) is safe.
+    // NOTE: AI_ANALYSIS_QUEUE and CIQ_SCORING_QUEUE are already registered by
+    // AiModule (loaded globally by WorkerModule). We re-register them here so
+    // the @InjectQueue() tokens in AiAnalysisProcessor and CiqScoringProcessor
+    // resolve correctly within this module's DI scope.
     BullModule.registerQueue({ name: AI_ANALYSIS_QUEUE }),
     BullModule.registerQueue({ name: CIQ_SCORING_QUEUE }),
     BullModule.registerQueue({ name: AI_CLUSTERING_QUEUE }),
