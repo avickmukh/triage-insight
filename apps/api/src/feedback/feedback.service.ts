@@ -327,6 +327,72 @@ export class FeedbackService {
       .slice(0, limit);
   }
 
+  // ── Related Feedback ──────────────────────────────────────────────────────
+
+  /**
+   * GET /workspaces/:workspaceId/feedback/:id/related
+   *
+   * Returns up to 10 semantically related feedback items for a given feedback
+   * item, using pgvector cosine similarity on the stored embedding.
+   * Excludes the source item itself and any MERGED items.
+   * Returns an empty array if the source has no embedding yet.
+   *
+   * Tenant isolation: all queries are scoped to workspaceId.
+   */
+  async findRelated(
+    workspaceId: string,
+    feedbackId: string,
+  ): Promise<{ data: SemanticRow[]; sourceId: string }> {
+    // Verify ownership
+    const source = await this.prisma.feedback.findFirst({
+      where: { id: feedbackId, workspaceId },
+      select: { id: true },
+    });
+    if (!source) {
+      throw new NotFoundException('Feedback not found');
+    }
+
+    // Check whether the source item has an embedding
+    const embeddingCheck = await this.prisma.$queryRaw<{ has_embedding: boolean }[]>`
+      SELECT (embedding IS NOT NULL) AS has_embedding
+      FROM "Feedback"
+      WHERE id = ${feedbackId}
+        AND "workspaceId" = ${workspaceId}
+      LIMIT 1;
+    `;
+    const hasEmbedding = embeddingCheck[0]?.has_embedding ?? false;
+    if (!hasEmbedding) {
+      return { data: [], sourceId: feedbackId };
+    }
+
+    // Use the stored embedding to find similar items in the same workspace
+    const rows = await this.prisma.$queryRaw<SemanticRow[]>`
+      SELECT
+        f.id,
+        f.title,
+        f.description,
+        f.status,
+        f."sourceType",
+        f.sentiment,
+        f."createdAt",
+        ROUND((1 - (f.embedding <=> src.embedding))::numeric, 4) AS similarity
+      FROM "Feedback" f
+      CROSS JOIN (
+        SELECT embedding FROM "Feedback"
+        WHERE id = ${feedbackId} AND "workspaceId" = ${workspaceId}
+      ) src
+      WHERE f."workspaceId" = ${workspaceId}
+        AND f.id != ${feedbackId}
+        AND f.embedding IS NOT NULL
+        AND f.status != 'MERGED'
+        AND 1 - (f.embedding <=> src.embedding) >= 0.5
+      ORDER BY similarity DESC
+      LIMIT 10;
+    `;
+
+    return { data: rows, sourceId: feedbackId };
+  }
+
   // ── Semantic search ────────────────────────────────────────────────────────
 
   /**

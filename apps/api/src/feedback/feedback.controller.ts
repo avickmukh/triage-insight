@@ -149,6 +149,25 @@ export class FeedbackController {
     return this.feedbackService.semanticSearch(workspaceId, dto);
   }
 
+  // --- Related Feedback ---
+
+  /**
+   * GET /workspaces/:workspaceId/feedback/:id/related
+   *
+   * Returns up to 10 semantically related feedback items using pgvector
+   * cosine similarity on the stored embedding. Excludes the source item
+   * itself and any MERGED items. Returns an empty array if the source
+   * item has not yet been embedded.
+   */
+  @Get(':id/related')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
+  findRelated(
+    @Param('workspaceId') workspaceId: string,
+    @Param('id') id: string,
+  ) {
+    return this.feedbackService.findRelated(workspaceId, id);
+  }
+
   // --- Duplicate Detection ---
 
   @Get(':id/potential-duplicates')
