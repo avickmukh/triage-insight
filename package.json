@@ -8,7 +8,11 @@
     "lint": "turbo run lint",
     "lint:check": "turbo run lint:check",
     "type-check": "turbo run type-check",
-    "test": "turbo run test"
+    "test": "turbo run test",
+    "test:e2e:api": "pnpm --filter api test:e2e",
+    "test:e2e:worker": "pnpm --filter worker test:e2e",
+    "test:e2e:web": "pnpm --filter @triage-insight/web test:e2e",
+    "test:e2e": "pnpm test:e2e:api && pnpm test:e2e:worker && pnpm test:e2e:web"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.0",

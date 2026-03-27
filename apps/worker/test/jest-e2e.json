@@ -4,6 +4,19 @@
   "testEnvironment": "node",
   "testRegex": ".e2e-spec.ts$",
   "transform": {
-    "^.+\\.(t|j)s$": "ts-jest"
+    "^.+\.(t|j)s$": "ts-jest"
+  },
+  "testTimeout": 30000,
+  "verbose": true,
+  "moduleNameMapper": {
+    "^@api/(.*)$": "<rootDir>/../../../api/src/$1"
+  },
+  "globals": {
+    "ts-jest": {
+      "tsconfig": {
+        "module": "commonjs",
+        "moduleResolution": "node"
+      }
+    }
   }
 }

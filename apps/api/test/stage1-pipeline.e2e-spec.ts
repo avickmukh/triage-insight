@@ -449,7 +449,7 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
     it('should call EmbeddingService.generateEmbedding with the feedback text', async () => {
       const job = makeJob({ feedbackId: 'fb-wifi-1', workspaceId: 'ws-tenant-a' });
 
-      await analysisProcessor.process(job);
+      await analysisProcessor.handleAnalysis(job);
 
       expect(embeddingService.generateEmbedding).toHaveBeenCalledTimes(1);
       expect(embeddingService.generateEmbedding).toHaveBeenCalledWith(
@@ -460,7 +460,7 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
     it('should persist the embedding vector via $executeRaw', async () => {
       const job = makeJob({ feedbackId: 'fb-wifi-1', workspaceId: 'ws-tenant-a' });
 
-      await analysisProcessor.process(job);
+      await analysisProcessor.handleAnalysis(job);
 
       expect(mockPrisma.$executeRaw).toHaveBeenCalledTimes(1);
       // Verify the raw SQL call contains the feedback ID
@@ -471,7 +471,7 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
     it('should call ThemeClusteringService.assignFeedbackToTheme', async () => {
       const job = makeJob({ feedbackId: 'fb-wifi-1', workspaceId: 'ws-tenant-a' });
 
-      await analysisProcessor.process(job);
+      await analysisProcessor.handleAnalysis(job);
 
       expect(themeClusteringService.assignFeedbackToTheme).toHaveBeenCalledWith(
         'ws-tenant-a',
@@ -483,7 +483,7 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
     it('should call DuplicateDetectionService.generateSuggestions', async () => {
       const job = makeJob({ feedbackId: 'fb-wifi-1', workspaceId: 'ws-tenant-a' });
 
-      await analysisProcessor.process(job);
+      await analysisProcessor.handleAnalysis(job);
 
       expect(duplicateDetectionService.generateSuggestions).toHaveBeenCalledWith(
         'ws-tenant-a',
@@ -496,7 +496,7 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
       const job = makeJob({ feedbackId: 'fb-nonexistent', workspaceId: 'ws-tenant-a' });
 
       // Should not throw — gracefully skip
-      await expect(analysisProcessor.process(job)).resolves.not.toThrow();
+      await expect(analysisProcessor.handleAnalysis(job)).resolves.not.toThrow();
 
       expect(embeddingService.generateEmbedding).not.toHaveBeenCalled();
       expect(themeClusteringService.assignFeedbackToTheme).not.toHaveBeenCalled();
@@ -509,7 +509,7 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
       });
 
       const job = makeJob({ feedbackId: 'fb-wifi-1', workspaceId: 'ws-tenant-a' });
-      await analysisProcessor.process(job);
+      await analysisProcessor.handleAnalysis(job);
 
       expect(embeddingService.generateEmbedding).not.toHaveBeenCalled();
     });
@@ -517,7 +517,7 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
     it('should mark job as completed in idempotency log on success', async () => {
       const job = makeJob({ feedbackId: 'fb-wifi-1', workspaceId: 'ws-tenant-a' });
 
-      await analysisProcessor.process(job);
+      await analysisProcessor.handleAnalysis(job);
 
       expect(mockIdempotency.markCompleted).toHaveBeenCalledWith(
         'mock-log-id',
@@ -577,7 +577,7 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
       };
 
       const job = { id: 'j1', data: { feedbackId: 'fb-wifi-1', workspaceId: 'ws-tenant-a' }, attemptsMade: 0 } as any;
-      await analysisProcessor.process(job);
+      await analysisProcessor.handleAnalysis(job);
 
       expect(themeClusteringService.assignFeedbackToTheme).toHaveBeenCalledWith(
         'ws-tenant-a',
@@ -604,7 +604,7 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
 
       for (const fb of feedbackItems) {
         const job = { id: `j-${fb.id}`, data: { feedbackId: fb.id, workspaceId: fb.workspaceId }, attemptsMade: 0 } as any;
-        await analysisProcessor.process(job);
+        await analysisProcessor.handleAnalysis(job);
       }
 
       // Theme clustering should have been called once per feedback item
@@ -626,7 +626,7 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
       };
 
       const job = { id: 'j1', data: { feedbackId: 'fb-bill-1', workspaceId: 'ws-tenant-a' }, attemptsMade: 0 } as any;
-      await analysisProcessor.process(job);
+      await analysisProcessor.handleAnalysis(job);
 
       expect(duplicateDetectionService.generateSuggestions).toHaveBeenCalledWith(
         'ws-tenant-a',
@@ -647,7 +647,7 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
       };
 
       const job = { id: 'j1', data: { feedbackId: 'fb-bill-1', workspaceId: 'ws-tenant-a' }, attemptsMade: 0 } as any;
-      await analysisProcessor.process(job);
+      await analysisProcessor.handleAnalysis(job);
 
       const callArgs = (duplicateDetectionService.generateSuggestions as jest.Mock).mock.calls[0];
       expect(callArgs[2]).toEqual(expectedEmbedding);
@@ -691,7 +691,7 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
         attemptsMade: 0,
       } as any;
 
-      await analysisProcessor.process(job);
+      await analysisProcessor.handleAnalysis(job);
 
       // ThemeClusteringService must receive tenant-b's workspaceId
       expect(themeClusteringService.assignFeedbackToTheme).toHaveBeenCalledWith(
@@ -727,7 +727,7 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
         attemptsMade: 0,
       } as any;
 
-      await analysisProcessor.process(job);
+      await analysisProcessor.handleAnalysis(job);
 
       // No embedding or theme work should happen for cross-tenant access
       expect(embeddingService.generateEmbedding).not.toHaveBeenCalled();
@@ -750,14 +750,14 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
       const job = { id: 'j1', data: { feedbackId: 'fb-wifi-1', workspaceId: 'ws-tenant-a' }, attemptsMade: 0 } as any;
 
       // First run — processes normally
-      await analysisProcessor.process(job);
+      await analysisProcessor.handleAnalysis(job);
       expect(embeddingService.generateEmbedding).toHaveBeenCalledTimes(1);
 
       jest.clearAllMocks();
 
       // Second run — idempotency guard blocks re-processing
       mockIdempotency.checkOrCreate.mockResolvedValueOnce({ logId: 'log-id', alreadyProcessed: true });
-      await analysisProcessor.process(job);
+      await analysisProcessor.handleAnalysis(job);
       expect(embeddingService.generateEmbedding).not.toHaveBeenCalled();
     });
 
@@ -776,7 +776,7 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
       const job = { id: 'j1', data: { feedbackId: 'fb-wifi-1', workspaceId: 'ws-tenant-a' }, attemptsMade: 0 } as any;
 
       // Processor should re-throw so Bull can retry with backoff
-      await expect(analysisProcessor.process(job)).rejects.toThrow('OpenAI API rate limit exceeded');
+      await expect(analysisProcessor.handleAnalysis(job)).rejects.toThrow('OpenAI API rate limit exceeded');
     });
 
     it('should not enqueue jobs when feedback creation fails', async () => {
@@ -809,7 +809,7 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
       const job = { id: 'j1', data: { feedbackId: 'fb-title-only', workspaceId: 'ws-tenant-a' }, attemptsMade: 0 } as any;
 
       // Should not throw — processor should use title as fallback text
-      await expect(analysisProcessor.process(job)).resolves.not.toThrow();
+      await expect(analysisProcessor.handleAnalysis(job)).resolves.not.toThrow();
     });
   });
 });

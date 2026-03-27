@@ -137,12 +137,11 @@ describe('EmbeddingService', () => {
     });
   });
 
-  // ── embed (alias) ────────────────────────────────────────────────────────
+  //  // ── generateEmbedding (repeated call) ──────────────────────────────
 
-  describe('embed', () => {
-    it('should behave identically to generateEmbedding', async () => {
-      // embed() is the alias used by ThemeClusteringService
-      const result = await service.embed('Some feedback text');
+  describe('generateEmbedding (repeated call)', () => {
+    it('should return consistent results across multiple calls', async () => {
+      const result = await service.generateEmbedding('Some feedback text');
 
       expect(result).toHaveLength(1536);
       expect(mockOpenAICreate).toHaveBeenCalledTimes(1);
