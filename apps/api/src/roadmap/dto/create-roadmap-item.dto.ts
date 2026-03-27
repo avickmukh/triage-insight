@@ -31,4 +31,9 @@ export class CreateRoadmapItemDto {
   @Min(2020)
   @Max(2050)
   targetYear?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  manualRank?: number;
 }

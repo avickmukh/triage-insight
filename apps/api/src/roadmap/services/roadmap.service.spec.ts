@@ -98,7 +98,7 @@ describe("RoadmapService", () => {
       ];
       prisma.roadmapItem.findMany.mockResolvedValue(items);
 
-      const result = await service.findAll("ws-1", {});
+      const result = await service.findAll("ws-1", {}) as Record<string, unknown[]>;
 
       expect(result.EXPLORING).toHaveLength(2);
       expect(result.PLANNED).toHaveLength(1);

@@ -333,6 +333,17 @@ const apiClient = {
     /** GET /workspaces/:id/roadmap — returns kanban-grouped columns */
     list: (workspaceId: string, params?: { search?: string; isPublic?: boolean }): Promise<RoadmapBoardResponse> =>
       api.get(`/workspaces/${workspaceId}/roadmap`, { params }).then(handleResponse),
+    /** GET /workspaces/:id/roadmap?flat=true — flat sorted array for the Prioritization Board */
+    listFlat: (
+      workspaceId: string,
+      params?: {
+        search?: string;
+        sortBy?: 'priorityScore' | 'manualRank' | 'feedbackCount' | 'createdAt' | 'updatedAt';
+        sortOrder?: 'asc' | 'desc';
+        status?: string[];
+      }
+    ): Promise<RoadmapItem[]> =>
+      api.get(`/workspaces/${workspaceId}/roadmap`, { params: { ...params, flat: true } }).then(handleResponse),
     /** GET /workspaces/:id/roadmap/:itemId — full detail with linkedFeedback + signalSummary */
     getById: (workspaceId: string, itemId: string): Promise<RoadmapItemDetail> =>
       api.get(`/workspaces/${workspaceId}/roadmap/${itemId}`).then(handleResponse),

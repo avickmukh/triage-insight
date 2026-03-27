@@ -311,6 +311,8 @@ export interface RoadmapItem {
   customerCount?: number | null;
   targetQuarter?: string | null;
   targetYear?: number | null;
+  /** User-set manual priority rank (1 = highest). Null means unranked. */
+  manualRank?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -648,6 +650,7 @@ export interface CreateRoadmapItemDto {
   themeId?: string;
   targetQuarter?: string;
   targetYear?: number;
+  manualRank?: number;
 }
 
 export interface UpdateRoadmapItemDto {
@@ -658,6 +661,8 @@ export interface UpdateRoadmapItemDto {
   themeId?: string | null;
   targetQuarter?: string | null;
   targetYear?: number | null;
+  /** Set to a positive integer to manually rank this item; null clears the rank. */
+  manualRank?: number | null;
 }
 
 // --- Integrations ---

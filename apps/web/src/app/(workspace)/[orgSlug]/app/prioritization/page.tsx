@@ -107,6 +107,10 @@ export default function PrioritizationPage() {
             style={{ padding: '0.5rem 1rem', background: '#f0f4f8', color: '#0a2540', borderRadius: '0.5rem', textDecoration: 'none', fontSize: '0.875rem', fontWeight: 500 }}>
             Roadmap Recs
           </Link>
+          <Link href={routes.prioritizationBoard}
+            style={{ padding: '0.5rem 1rem', background: '#e8f0fe', color: '#1a73e8', borderRadius: '0.5rem', textDecoration: 'none', fontSize: '0.875rem', fontWeight: 600, border: '1px solid #c5d8fc' }}>
+            Priority Board
+          </Link>
           <button
             onClick={() => recompute.mutate()}
             disabled={recompute.isPending}

@@ -11,7 +11,7 @@ import { QueryRoadmapDto } from "../dto/query-roadmap.dto";
 import { PromoteThemeDto } from "../dto/promote-theme.dto";
 import { AuditLogAction, Prisma, RoadmapStatus } from "@prisma/client";
 
-type RoadmapOrderByField = 'createdAt' | 'updatedAt' | 'priorityScore';
+type RoadmapOrderByField = 'createdAt' | 'updatedAt' | 'priorityScore' | 'manualRank' | 'feedbackCount';
 
 @Injectable()
 export class RoadmapService {
@@ -178,9 +178,9 @@ export class RoadmapService {
   }
 
   async findAll(workspaceId: string, query: QueryRoadmapDto) {
-    const { search, status, isPublic, sortBy = 'createdAt', sortOrder = 'desc' } = query;
+    const { search, status, isPublic, sortBy = 'createdAt', sortOrder = 'desc', flat = false } = query;
 
-    const allowedSortFields: RoadmapOrderByField[] = ['createdAt', 'updatedAt', 'priorityScore'];
+    const allowedSortFields: RoadmapOrderByField[] = ['createdAt', 'updatedAt', 'priorityScore', 'manualRank', 'feedbackCount'];
     const resolvedSortBy: RoadmapOrderByField = allowedSortFields.includes(sortBy as RoadmapOrderByField)
       ? (sortBy as RoadmapOrderByField)
       : 'createdAt';
@@ -192,20 +192,46 @@ export class RoadmapService {
       ...(search && { title: { contains: search, mode: 'insensitive' as const } }),
     };
 
-    const orderBy: Prisma.RoadmapItemOrderByWithRelationInput = {
-      [resolvedSortBy]: sortOrder,
-    };
+    // feedbackCount is a computed field (not stored), so we fetch with a DB-sortable fallback
+    // and then re-sort in memory after enrichment when feedbackCount is requested.
+    // manualRank: nulls last (items without a rank go to the bottom)
+    const dbSortBy: RoadmapOrderByField = resolvedSortBy === 'feedbackCount' ? 'priorityScore' : resolvedSortBy;
+    const orderBy: Prisma.RoadmapItemOrderByWithRelationInput =
+      dbSortBy === 'manualRank'
+        ? { manualRank: { sort: sortOrder, nulls: 'last' } }
+        : { [dbSortBy]: sortOrder };
 
     const items = await this.prisma.roadmapItem.findMany({
       where,
       orderBy,
-      include: { theme: { select: { id: true, title: true, status: true, priorityScore: true, aiExplanation: true } } },
+      include: {
+        theme: {
+          select: {
+            id: true, title: true, status: true,
+            priorityScore: true,
+            aiSummary: true,
+            aiExplanation: true,
+            aiRecommendation: true,
+            aiConfidence: true,
+          },
+        },
+      },
     });
 
     // Enrich each item with live feedbackCount / signalCount
-    const enriched = await Promise.all(items.map((item) => this.enrichItem(item)));
+    let enriched = await Promise.all(items.map((item) => this.enrichItem(item)));
 
-    // Group by status for Kanban frontend — all statuses present even if empty
+    // In-memory sort by feedbackCount (computed field not available in DB)
+    if (resolvedSortBy === 'feedbackCount') {
+      enriched = enriched.sort((a, b) =>
+        sortOrder === 'desc' ? b.feedbackCount - a.feedbackCount : a.feedbackCount - b.feedbackCount
+      );
+    }
+
+    // Flat mode: return a plain array (used by the Prioritization Board)
+    if (flat) return enriched;
+
+    // Default: group by status for Kanban frontend — all statuses present even if empty
     const columns = Object.values(RoadmapStatus).reduce(
       (acc, s) => { acc[s] = []; return acc; },
       {} as Record<RoadmapStatus, typeof enriched>

@@ -158,6 +158,48 @@ export const useCreateRoadmapFromTheme = () => {
   });
 };
 
+// ─── Prioritization Board (flat sorted list) ─────────────────────────────────
+
+export type RoadmapSortField = 'priorityScore' | 'manualRank' | 'feedbackCount' | 'createdAt' | 'updatedAt';
+
+export const useRoadmapPrioritizationBoard = (params?: {
+  search?: string;
+  sortBy?: RoadmapSortField;
+  sortOrder?: 'asc' | 'desc';
+  status?: string[];
+}) => {
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id;
+
+  return useQuery<RoadmapItem[], Error>({
+    queryKey: [ROADMAP_KEY, workspaceId, 'flat', params],
+    queryFn: () => {
+      if (!workspaceId) throw new Error('Workspace ID is not available');
+      return apiClient.roadmap.listFlat(workspaceId, params);
+    },
+    enabled: !!workspaceId,
+  });
+};
+
+/** Lightweight mutation to update only the manualRank of a roadmap item. */
+export const useUpdateRoadmapRank = () => {
+  const queryClient = useQueryClient();
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id;
+
+  return useMutation<RoadmapItem, Error, { itemId: string; manualRank: number | null }>({
+    mutationFn: ({ itemId, manualRank }) => {
+      if (!workspaceId) throw new Error('Workspace ID is not available');
+      return apiClient.roadmap.update(workspaceId, itemId, { manualRank });
+    },
+    onSuccess: () => {
+      // Invalidate both board and flat list caches
+      queryClient.invalidateQueries({ queryKey: [ROADMAP_KEY, workspaceId, 'flat'] });
+      queryClient.invalidateQueries({ queryKey: [ROADMAP_KEY, workspaceId, 'board'] });
+    },
+  });
+};
+
 // ─── Legacy composite hook (backward compat) ──────────────────────────────────
 
 export const useRoadmap = () => {

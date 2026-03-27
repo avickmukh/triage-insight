@@ -878,6 +878,9 @@ model RoadmapItem {
   revenueImpactValue Float?
   dealInfluenceValue Float?
   customerCount      Int?
+  /// Optional manual priority rank set by the user (1 = highest priority).
+  /// When present, the Prioritization Board can sort by this instead of priorityScore.
+  manualRank         Int?
 
   targetQuarter      String?
   targetYear         Int?
