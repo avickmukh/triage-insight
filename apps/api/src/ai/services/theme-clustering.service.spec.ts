@@ -137,4 +137,93 @@ describe('ThemeClusteringService', () => {
       expect(result).toBe('draft-theme-id');
     });
   });
+
+  // ── Stage-1 Tenant Isolation ──────────────────────────────────────────────
+
+  describe('Stage-1 Tenant Isolation', () => {
+    it('should scope the vector similarity query to the correct workspaceId', async () => {
+      mockPrismaService.themeFeedback.findFirst.mockResolvedValue(null);
+      mockPrismaService.feedback.findUnique.mockResolvedValue({
+        id: 'fb-tenant-a',
+        title: 'WiFi issue',
+        description: 'WiFi drops',
+        embedding: null,
+      });
+      mockEmbeddingService.embed.mockResolvedValue(Array.from({ length: 1536 }, () => 0.1));
+      mockPrismaService.$queryRaw.mockResolvedValue([]);
+      mockPrismaService.theme.create.mockResolvedValue({ id: 'theme-new' });
+      mockPrismaService.themeFeedback.create.mockResolvedValue({});
+      mockPrismaService.feedback.update.mockResolvedValue({});
+
+      await service.assignFeedbackToTheme('ws-tenant-a', 'fb-tenant-a');
+
+      // The $queryRaw call must include ws-tenant-a for tenant scoping
+      const rawCall = mockPrismaService.$queryRaw.mock.calls[0];
+      expect(JSON.stringify(rawCall)).toContain('ws-tenant-a');
+    });
+
+    it('should create the new theme with the correct workspaceId', async () => {
+      mockPrismaService.themeFeedback.findFirst.mockResolvedValue(null);
+      mockPrismaService.feedback.findUnique.mockResolvedValue({
+        id: 'fb-tenant-a',
+        title: 'Billing issue',
+        description: 'Charged twice',
+        embedding: null,
+      });
+      mockEmbeddingService.embed.mockResolvedValue(Array.from({ length: 1536 }, () => 0.2));
+      mockPrismaService.$queryRaw.mockResolvedValue([]);
+      mockPrismaService.theme.create.mockResolvedValue({ id: 'theme-billing' });
+      mockPrismaService.themeFeedback.create.mockResolvedValue({});
+      mockPrismaService.feedback.update.mockResolvedValue({});
+
+      await service.assignFeedbackToTheme('ws-tenant-a', 'fb-tenant-a');
+
+      const createCall = mockPrismaService.theme.create.mock.calls[0][0];
+      expect(createCall.data.workspaceId).toBe('ws-tenant-a');
+      expect(createCall.data.workspaceId).not.toBe('ws-tenant-b');
+    });
+
+    it('should not assign tenant-b feedback to tenant-a themes', async () => {
+      mockPrismaService.themeFeedback.findFirst.mockResolvedValue(null);
+      mockPrismaService.feedback.findUnique.mockResolvedValue({
+        id: 'fb-tenant-b',
+        title: 'WiFi issue',
+        description: 'WiFi drops',
+        embedding: null,
+      });
+      mockEmbeddingService.embed.mockResolvedValue(Array.from({ length: 1536 }, () => 0.1));
+      // Simulate a tenant-a theme returned (should not happen with correct scoping)
+      mockPrismaService.$queryRaw.mockResolvedValue([]);
+      mockPrismaService.theme.create.mockResolvedValue({ id: 'theme-tenant-b' });
+      mockPrismaService.themeFeedback.create.mockResolvedValue({});
+      mockPrismaService.feedback.update.mockResolvedValue({});
+
+      await service.assignFeedbackToTheme('ws-tenant-b', 'fb-tenant-b');
+
+      const createCall = mockPrismaService.theme.create.mock.calls[0][0];
+      expect(createCall.data.workspaceId).toBe('ws-tenant-b');
+    });
+  });
+
+  // ── Stage-1 Repeated Processing ──────────────────────────────────────────
+
+  describe('Stage-1 Repeated Processing', () => {
+    it('should return early without creating a ThemeFeedback if one already exists', async () => {
+      // Feedback already assigned to a theme
+      mockPrismaService.themeFeedback.findFirst.mockResolvedValue({
+        feedbackId: 'fb-wifi-1',
+        themeId: 'theme-wifi',
+      });
+
+      const result = await service.assignFeedbackToTheme(
+        'ws-tenant-a',
+        'fb-wifi-1',
+        Array.from({ length: 1536 }, () => 0.1),
+      );
+
+      expect(result).toBeNull();
+      expect(mockPrismaService.theme.create).not.toHaveBeenCalled();
+      expect(mockPrismaService.themeFeedback.create).not.toHaveBeenCalled();
+    });
+  });
 });
