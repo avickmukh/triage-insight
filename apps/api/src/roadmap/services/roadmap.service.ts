@@ -199,7 +199,7 @@ export class RoadmapService {
     const items = await this.prisma.roadmapItem.findMany({
       where,
       orderBy,
-      include: { theme: { select: { id: true, title: true, status: true } } },
+      include: { theme: { select: { id: true, title: true, status: true, priorityScore: true, aiExplanation: true } } },
     });
 
     // Enrich each item with live feedbackCount / signalCount
@@ -224,6 +224,7 @@ export class RoadmapService {
         theme: {
           select: {
             id: true, title: true, status: true, description: true,
+            priorityScore: true, aiExplanation: true, aiSummary: true,
             feedbacks: {
               take: 20,
               orderBy: { assignedAt: "desc" },

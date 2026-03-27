@@ -10,6 +10,8 @@ import {
 } from '@/hooks/use-themes';
 import { useCurrentMemberRole, useWorkspace } from '@/hooks/use-workspace';
 import { useThemeCiqScore, useRecalculateThemeCiq, useThemeRevenueIntelligence } from '@/hooks/use-ciq';
+import { CiqImpactBadge } from '@/components/ciq/CiqImpactBadge';
+import { CiqSignalBreakdown } from '@/components/ciq/CiqSignalBreakdown';
 import { PromoteToRoadmapModal } from '@/components/roadmap/PromoteToRoadmapModal';
 import {
   CiqScoreOutput,
@@ -751,9 +753,12 @@ export default function ThemeDetailPage() {
         {/* Header row */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
           <div>
-            <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#0a2540', margin: '0 0 0.125rem' }}>
-              Priority Intelligence
-            </h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', marginBottom: '0.125rem' }}>
+              <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#0a2540', margin: 0 }}>
+                Priority Intelligence
+              </h3>
+              <CiqImpactBadge score={ciqScore?.priorityScore ?? theme.priorityScore} showScore size="sm" />
+            </div>
             <p style={{ fontSize: '0.78rem', color: '#6C757D', margin: '0 0 0.25rem' }}>
               Composite score across ARR influence, deal pipeline, feedback volume, voice signals, survey demand, and support pressure.
               A higher score means more customers are affected and more revenue is at stake.
@@ -838,6 +843,13 @@ export default function ThemeDetailPage() {
                 <span style={{ fontSize: '0.8rem', color: '#1e3a5f' }}>
                   {ciqScore.scoreExplanation[ciqScore.dominantDriver].label} &mdash; contributing {ciqScore.scoreExplanation[ciqScore.dominantDriver].contribution.toFixed(1)} pts to the priority score
                 </span>
+              </div>
+            )}
+            {/* Sentiment contribution row */}
+            {ciqScore.sentimentScore != null && (
+              <div style={{ marginBottom: '0.875rem', padding: '0.5rem 0.75rem', background: '#fff', border: '1px solid #e3edf7', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#6C757D', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>Avg Sentiment</span>
+                <CiqSignalBreakdown breakdown={null} sentiment={ciqScore.sentimentScore} />
               </div>
             )}
             {/* Signal breakdown bars */}

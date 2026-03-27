@@ -10,6 +10,7 @@ import {
   useDeleteRoadmapItem,
 } from '@/hooks/use-roadmap';
 import { useCurrentMemberRole } from '@/hooks/use-workspace';
+import { CiqImpactBadge } from '@/components/ciq/CiqImpactBadge';
 import {
   CreateRoadmapItemDto,
   RoadmapItem,
@@ -162,6 +163,17 @@ function ItemCard({ item, canEdit, onEdit, onMove }: ItemCardProps) {
         )}
       </div>
 
+      {/* Inherited impact explanation from linked theme */}
+      {item.theme && (item.theme as { aiExplanation?: string | null }).aiExplanation && (
+        <p style={{
+          fontSize: '0.72rem', color: '#7c5cbf', margin: '0 0 0.375rem',
+          overflow: 'hidden', display: '-webkit-box',
+          WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', lineHeight: 1.4,
+        }}>
+          💡 {(item.theme as { aiExplanation?: string | null }).aiExplanation}
+        </p>
+      )}
+
       {/* Description */}
       {item.description && (
         <p style={{
@@ -185,7 +197,7 @@ function ItemCard({ item, canEdit, onEdit, onMove }: ItemCardProps) {
             {item.theme.title}
           </span>
         )}
-        <PriorityPill score={item.priorityScore} />
+        <CiqImpactBadge score={item.priorityScore} showScore size="xs" />
         <ConfidencePill score={item.confidenceScore} />
         {(item.revenueImpactValue ?? 0) > 0 && (
           <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#2e7d32', background: '#e8f5e9', padding: '0.1rem 0.45rem', borderRadius: '999px' }}>

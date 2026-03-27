@@ -7,6 +7,7 @@ import { useCurrentMemberRole } from '@/hooks/use-workspace';
 import { RoadmapStatus, UpdateRoadmapItemDto, WorkspaceRole } from '@/lib/api-types';
 import { appRoutes } from '@/lib/routes';
 import { IntelligenceBar } from '@/components/modules/roadmap/intelligence-bar';
+import { CiqImpactBadge } from '@/components/ciq/CiqImpactBadge';
 import { SignalSummary } from '@/components/modules/roadmap/signal-summary';
 import { LinkedFeedbackList } from '@/components/modules/roadmap/linked-feedback-list';
 
@@ -264,7 +265,10 @@ export default function RoadmapItemDetailPage() {
           {/* AI Intelligence */}
           <div style={CARD}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.875rem' }}>
-              <p style={{ ...SECTION_TITLE, margin: 0 }}>AI Intelligence</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <p style={{ ...SECTION_TITLE, margin: 0 }}>AI Intelligence</p>
+                <CiqImpactBadge score={item.priorityScore} showScore size="xs" />
+              </div>
               {canEdit && (
                 <button
                   onClick={() => refreshMutation.mutate(item.id)}
@@ -288,6 +292,15 @@ export default function RoadmapItemDetailPage() {
               <p style={{ fontSize: '0.8rem', color: '#adb5bd', fontStyle: 'italic', margin: 0 }}>
                 No AI scores yet.{canEdit ? ' Click Refresh to compute.' : ''}
               </p>
+            )}
+            {/* Inherited explanation from linked theme */}
+            {item.theme && (item.theme as { aiExplanation?: string | null }).aiExplanation && (
+              <div style={{ marginTop: '0.75rem', padding: '0.5rem 0.75rem', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: '0.5rem' }}>
+                <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block', marginBottom: '0.2rem' }}>Why this was prioritised</span>
+                <p style={{ fontSize: '0.78rem', color: '#4c1d95', margin: 0, lineHeight: 1.5 }}>
+                  {(item.theme as { aiExplanation?: string | null }).aiExplanation}
+                </p>
+              </div>
             )}
           </div>
 

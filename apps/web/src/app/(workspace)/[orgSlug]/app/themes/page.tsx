@@ -7,6 +7,7 @@ import { useThemeList, useCreateTheme, useTriggerRecluster } from '@/hooks/use-t
 import { useCurrentMemberRole } from '@/hooks/use-workspace';
 import { useRecalculateAllThemes } from '@/hooks/use-ciq';
 import { Theme, ThemeStatus, WorkspaceRole } from '@/lib/api-types';
+import { CiqImpactBadge } from '@/components/ciq/CiqImpactBadge';
 import { appRoutes } from '@/lib/routes';
 
 // ─── Design tokens (matching TriageInsight shell) ─────────────────────────────
@@ -233,6 +234,7 @@ function ThemeCard({ theme, href }: { theme: Theme; href: string }) {
               >
                 {STATUS_LABELS[theme.status]}
               </span>
+              <CiqImpactBadge score={theme.priorityScore} showScore size="xs" />
             </div>
             <h3
               style={{
