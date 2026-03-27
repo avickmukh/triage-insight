@@ -1,0 +1,40 @@
+# TriageInsight Local Development Infrastructure
+#
+# This Docker Compose file sets up the required backing services for local development:
+#   - PostgreSQL 16 with the pgvector extension for vector similarity search.
+#   - Redis for BullMQ background job processing.
+#
+# To run:
+#   docker-compose up -d
+#
+# To stop and remove volumes:
+#   docker-compose down -v
+
+version: "3.8"
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: triage-insight-postgres
+    environment:
+      - POSTGRES_USER=triage
+      - POSTGRES_PASSWORD=triage
+      - POSTGRES_DB=triageinsight
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: triage-insight-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:

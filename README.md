@@ -1,75 +1,64 @@
-# triage-insight
-Triage Insight codebase
+# TriageInsight
 
-## Local Development
+TriageInsight is a feedback intelligence platform that transforms raw customer feedback into actionable product decisions using AI-powered theme clustering, CIQ scoring, and a prioritization board.
 
-### Prerequisites
+---
 
-- Node.js (v18+)
-- pnpm
-- Docker and Docker Compose
-- A local PostgreSQL database
-- A local Redis instance
+## Quick Start
 
-### 1. Installation
+For a complete step-by-step guide to running the platform locally, see the **[Local Development Guide](./docs/LOCAL_DEVELOPMENT_GUIDE.md)**.
 
-Clone the repository and install dependencies:
+### TL;DR
 
 ```bash
+# 1. Clone and install
 git clone https://github.com/avickmukh/triage-insight.git
 cd triage-insight
 pnpm install
-```
 
-### 2. Environment Setup
+# 2. Start infrastructure (PostgreSQL + Redis)
+docker-compose up -d
 
-Copy the example environment file and fill in the required values:
-
-```bash
+# 3. Configure environment
 cp .env.example .env
+# Edit .env: set DATABASE_URL, JWT_SECRET, CORS_ORIGIN
+
+# 4. Run database migrations
+pnpm --filter api db:migrate
+
+# 5. Start all services (API + Web + Worker)
+pnpm dev
 ```
 
-You will need to provide:
+Once running, access the platform at:
 
-- `DATABASE_URL`: Your PostgreSQL connection string.
-- `JWT_SECRET`: A secure random string for signing tokens.
-- `REDIS_HOST` and `REDIS_PORT`: Connection details for your Redis instance.
+- **Web App**: [http://localhost:3002](http://localhost:3002)
+- **API**: [http://localhost:3000](http://localhost:3000)
+- **API Docs (Swagger)**: [http://localhost:3000/api/docs](http://localhost:3000/api/docs)
 
-### 3. Database Migration
+---
 
-Apply the Prisma schema to your database:
+## Documentation
 
-```bash
-pnpm --filter api prisma migrate dev
-```
+All project documentation is organized in the [`docs/`](./docs/README.md) folder. See the [Documentation Index](./docs/README.md) for a full list of available documents.
 
-### 4. Running the Applications
+---
 
-You can run the API, web, and worker applications in separate terminals:
+## Architecture
 
-```bash
-# Terminal 1: API Server
-pnpm --filter api start:dev
+The project is a monorepo managed with `pnpm` and `Turborepo`, consisting of three applications:
 
-# Terminal 2: Web Application
-pnpm --filter web start:dev
+| App | Description |
+| :--- | :--- |
+| `apps/api` | NestJS REST API server |
+| `apps/web` | Next.js frontend application |
+| `apps/worker` | Standalone NestJS BullMQ background worker |
 
-# Terminal 3: Worker Process
-pnpm --filter worker start:dev
-```
-
-The applications will be available at:
-
-- **API:** `http://localhost:3000`
-- **Web:** `http://localhost:3001`
+Shared packages live in `packages/` (UI components, types, config, i18n).
 
 ## Docker
 
-Dockerfiles are provided for the `api` and `worker` applications for production deployments.
-
-### Building the Images
-
-From the root of the monorepo, run:
+Dockerfiles are provided for the `api` and `worker` applications for production deployments. A `docker-compose.yml` is provided for running the local development infrastructure (PostgreSQL + Redis).
 
 ```bash
 # Build the API image
@@ -78,7 +67,3 @@ docker build -t triage-insight-api -f apps/api/Dockerfile .
 # Build the worker image
 docker build -t triage-insight-worker -f apps/worker/Dockerfile .
 ```
-
-### Running with Docker Compose
-
-A `docker-compose.yml` file is recommended for running the full stack in production. An example is not yet provided.
