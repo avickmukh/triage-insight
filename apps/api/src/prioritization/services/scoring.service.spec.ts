@@ -27,6 +27,8 @@ describe("ScoringService", () => {
     revenueImpactWeight: 0.35,
     strategicImportanceWeight: 0.20,
     urgencySignalWeight: 0.15,
+    supportWeight: 1.5,
+    voiceWeight: 1.2,
   };
 
   const mockThemeData: ThemeData = {

@@ -80,26 +80,36 @@ function CiqScoreBar({ score, label }: { score: number; label?: string }) {
   );
 }
 
-function SourceMixBar({ voice, survey, support }: { voice: number; survey: number; support: number }) {
+function SourceMixBar({
+  voice, survey, support, voiceCount, supportCount, feedbackCount
+}: {
+  voice: number; survey: number; support: number;
+  voiceCount?: number; supportCount?: number; feedbackCount?: number;
+}) {
   const total = voice + survey + support;
-  if (total === 0) return <span style={{ fontSize: '0.7rem', color: '#adb5bd' }}>No signals</span>;
+  // Use actual counts for labels when available, fall back to signal scores
+  const hasRealCounts = (voiceCount ?? 0) > 0 || (supportCount ?? 0) > 0 || (feedbackCount ?? 0) > 0;
+  if (total === 0 && !hasRealCounts) return <span style={{ fontSize: '0.7rem', color: '#adb5bd' }}>No signals</span>;
   const segments = [
-    { label: 'Voice', value: voice, color: '#2e7d32' },
-    { label: 'Survey', value: survey, color: '#f57c00' },
-    { label: 'Support', value: support, color: '#c62828' },
+    { label: 'Feedback', value: feedbackCount ?? (total > 0 ? Math.max(0, feedbackCount ?? 0) : 0), color: '#1a73e8', isCount: true },
+    { label: 'Voice', value: voiceCount ?? voice, color: '#2e7d32', isCount: hasRealCounts },
+    { label: 'Support', value: supportCount ?? support, color: '#c62828', isCount: hasRealCounts },
+    { label: 'Survey', value: survey, color: '#f57c00', isCount: false },
   ].filter(s => s.value > 0);
+  if (segments.length === 0) return <span style={{ fontSize: '0.7rem', color: '#adb5bd' }}>No signals</span>;
+  const segTotal = segments.reduce((s, seg) => s + seg.value, 0);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
       <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', gap: 1 }}>
         {segments.map(s => (
           <div
             key={s.label}
-            title={`${s.label}: ${Math.round(s.value)}`}
-            style={{ flex: s.value, background: s.color, minWidth: 2 }}
+            title={`${s.label}: ${Math.round(s.value)}${s.isCount ? '' : ' (signal)'}`}
+            style={{ flex: s.value / segTotal, background: s.color, minWidth: 2 }}
           />
         ))}
       </div>
-      <div style={{ display: 'flex', gap: '0.5rem' }}>
+      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
         {segments.map(s => (
           <span key={s.label} style={{ fontSize: '0.62rem', color: s.color, fontWeight: 600 }}>
             {s.label[0]} {Math.round(s.value)}
@@ -202,7 +212,7 @@ export default function CiqDashboardPage() {
             CIQ Dashboard
           </h1>
           <p style={{ color: '#6C757D', margin: '0.25rem 0 0', fontSize: '0.875rem' }}>
-            Customer Intelligence Quotient — real-time signal scoring across all channels
+            Customer Intelligence Quotient — unified scoring based on feedback, support tickets, and voice signals
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -368,10 +378,15 @@ export default function CiqDashboardPage() {
                               voice={theme.voiceSignalScore}
                               survey={theme.surveySignalScore}
                               support={theme.supportSignalScore}
+                              voiceCount={theme.voiceCount}
+                              supportCount={theme.supportCount}
+                              feedbackCount={theme.feedbackCount}
                             />
                           </td>
                           <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right', color: '#0a2540', fontWeight: 600 }}>
-                            {theme.feedbackCount}
+                            <span title={`Feedback: ${theme.feedbackCount - (theme.voiceCount ?? 0)}, Voice: ${theme.voiceCount ?? 0}, Support: ${theme.supportCount ?? 0}`}>
+                              {theme.totalSignalCount ?? theme.feedbackCount}
+                            </span>
                           </td>
                           <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right', color: '#6C757D' }}>
                             {theme.uniqueCustomerCount}

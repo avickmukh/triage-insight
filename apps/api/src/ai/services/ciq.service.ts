@@ -5,27 +5,32 @@
  * Computes priority scores for feedback, themes, and roadmap items
  * using only data that actually exists in the database.
  *
- * Scoring inputs (all real — no fabricated values):
- *  1. requestFrequency     — count of non-MERGED feedback linked to the theme
- *  2. uniqueCustomerCount  — distinct customers who submitted linked feedback
- *  3. arrValue             — sum of Customer.arrValue for linked customers (real CRM field)
- *  4. accountPriorityValue — numeric mapping of Customer.accountPriority (LOW=1…CRITICAL=4)
- *  5. dealInfluenceValue   — sum of Deal.annualValue × DealStage weight for deals linked
- *                            to the theme via DealThemeLink (real deal pipeline data)
- *  6. signalStrength       — sum of CustomerSignal.strength for signals linked to the theme
- *  7. sentimentPenalty     — mean negative sentiment across linked feedback (0 = neutral/positive)
+ * Unified CIQ Formula (PRD Phase 2):
  *
- * Intelligence gaps (schema fields exist but data not yet populated):
- *  - Feedback.impactScore  — never written by any service; kept as optional input
- *  - CustomerSignal.strength — populated by integrations; defaults to 0 if absent
+ *   CIQ = normalise(
+ *     feedbackCount   × feedbackWeight  +
+ *     supportCount    × supportWeight   +   ← direct SupportIssueCluster.ticketCount
+ *     voiceCount      × voiceWeight     +   ← ThemeFeedback where sourceType IN (VOICE, PUBLIC_PORTAL)
+ *     sentimentScore  × sentimentWeight +
+ *     recencyScore    × recencyWeight   +
+ *     arrValue        × arrValueWeight  +
+ *     dealInfluence   × dealValueWeight +
+ *     customerCount   × customerCountWeight +
+ *     accountPriority × accountPriorityWeight +
+ *     signalStrength  × strategicWeight +
+ *     voteCount       × voteWeight
+ *   )
  *
- * All methods return a CiqScoreOutput with a scoreExplanation map so the UI
- * can later show "why is this score high" without additional API calls.
+ * Weights: supportWeight > feedbackWeight (default 1.5×), voiceWeight >= feedbackWeight (default 1.2×).
+ * All weights are normalised so the sum always stays within 0–100.
+ *
+ * Source counts are persisted back to Theme.feedbackCount / voiceCount / supportCount
+ * so the UI can show "Based on feedback, support, and voice" with real numbers.
  */
 
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { AccountPriority, DealStage, DealStatus, PrioritizationSettings } from '@prisma/client';
+import { AccountPriority, DealStage, DealStatus, FeedbackSourceType } from '@prisma/client';
 
 // ─── Output types ─────────────────────────────────────────────────────────────
 
@@ -51,8 +56,14 @@ export interface CiqScoreOutput {
   revenueImpactValue: number;
   /** Raw deal influence value from linked deals */
   dealInfluenceValue: number;
-  /** Count of non-MERGED feedback items linked to this theme */
+  /** Count of non-MERGED feedback items linked to this theme (all sources) */
   feedbackCount: number;
+  /** Count of voice feedback items (sourceType VOICE or PUBLIC_PORTAL) */
+  voiceCount: number;
+  /** Count of support tickets from linked SupportIssueCluster rows */
+  supportCount: number;
+  /** Total signal count across all sources */
+  totalSignalCount: number;
   /** Count of CustomerSignal rows linked to this theme */
   signalCount: number;
   /** Number of distinct customers who submitted linked feedback */
@@ -95,6 +106,12 @@ const DEAL_STAGE_WEIGHT: Record<DealStage, number> = {
   [DealStage.CLOSED_LOST]: 0.0,
 };
 
+/** Voice source types — feedback from these channels is counted as voiceCount */
+const VOICE_SOURCE_TYPES: FeedbackSourceType[] = [
+  FeedbackSourceType.VOICE,
+  FeedbackSourceType.PUBLIC_PORTAL,
+];
+
 /** Normalise a raw value to 0–100 using a log10 scale (handles wide ARR ranges) */
 function logNorm(value: number, scale = 6): number {
   if (value <= 0) return 0;
@@ -107,8 +124,20 @@ function countNorm(value: number, cap = 50): number {
 }
 
 /** Confidence score: rises with data richness, asymptotically approaches 1 */
-function deriveConfidence(feedbackCount: number, signalCount: number, customerCount: number): number {
-  const raw = feedbackCount * 0.05 + signalCount * 0.1 + customerCount * 0.03;
+function deriveConfidence(
+  feedbackCount: number,
+  voiceCount: number,
+  supportCount: number,
+  signalCount: number,
+  customerCount: number,
+): number {
+  // Voice and support signals are higher-quality signals → higher confidence boost
+  const raw =
+    feedbackCount * 0.04 +
+    voiceCount    * 0.06 +
+    supportCount  * 0.05 +
+    signalCount   * 0.08 +
+    customerCount * 0.03;
   return parseFloat(Math.min(1, raw).toFixed(3));
 }
 
@@ -121,69 +150,115 @@ export class CiqService {
   // ─── Theme-level scoring ────────────────────────────────────────────────────
 
   /**
-   * Compute a full CIQ score for a theme.
+   * Compute a full CIQ score for a theme using the unified formula.
+   *
+   * Directly queries:
+   *  - ThemeFeedback (all sourceTypes, including VOICE / PUBLIC_PORTAL)
+   *  - SupportIssueCluster linked to this theme (for support ticket count)
+   *  - CustomerSignal, DealThemeLink, FeedbackVote
+   *
    * Uses workspace PrioritizationSettings for weights (falls back to defaults).
    */
   async scoreTheme(workspaceId: string, themeId: string): Promise<CiqScoreOutput> {
-    const [settings, feedbackRows, signalRows, dealLinks] = await Promise.all([
-      this.getSettings(workspaceId),
-      // Linked non-MERGED feedback with customer data
-      this.prisma.themeFeedback.findMany({
-        where: { themeId },
-        select: {
-          feedback: {
-            select: {
-              customerId: true,
-              sentiment: true,
-              impactScore: true,
-              status: true,
-              createdAt: true,
-              customer: {
-                select: {
-                  arrValue: true,
-                  accountPriority: true,
+    const [settings, feedbackRows, signalRows, dealLinks, supportClusters, voteRows] =
+      await Promise.all([
+        this.getSettings(workspaceId),
+
+        // ── All feedback linked to this theme (includes VOICE, PUBLIC_PORTAL) ──
+        this.prisma.themeFeedback.findMany({
+          where: { themeId },
+          select: {
+            feedback: {
+              select: {
+                customerId: true,
+                sentiment: true,
+                impactScore: true,
+                status: true,
+                sourceType: true,
+                createdAt: true,
+                customer: {
+                  select: {
+                    arrValue: true,
+                    accountPriority: true,
+                  },
                 },
               },
             },
           },
-        },
-      }),
-      // CustomerSignal strength for this theme
-      this.prisma.customerSignal.findMany({
-        where: { themeId, workspaceId },
-        select: { strength: true },
-      }),
-      // Deals linked to this theme via DealThemeLink
-      this.prisma.dealThemeLink.findMany({
-        where: { themeId },
-        select: {
-          deal: {
-            select: {
-              annualValue: true,
-              stage: true,
-              status: true,
+        }),
+
+        // ── CustomerSignal strength for this theme ──────────────────────────
+        this.prisma.customerSignal.findMany({
+          where: { themeId, workspaceId },
+          select: { strength: true },
+        }),
+
+        // ── Deals linked to this theme via DealThemeLink ────────────────────
+        this.prisma.dealThemeLink.findMany({
+          where: { themeId },
+          select: {
+            deal: {
+              select: {
+                annualValue: true,
+                stage: true,
+                status: true,
+              },
             },
           },
-        },
-      }),
-    ]);
+        }),
 
-    // Filter out MERGED feedback
+        // ── Support clusters directly linked to this theme ──────────────────
+        // SupportIssueCluster.themeId is set by ClusteringService.correlateWithFeedback()
+        this.prisma.supportIssueCluster.findMany({
+          where: { themeId, workspaceId },
+          select: {
+            ticketCount:        true,
+            avgSentiment:       true,
+            hasActiveSpike:     true,
+          },
+        }),
+
+        // ── Portal votes on linked feedback ─────────────────────────────────
+        this.prisma.feedbackVote.findMany({
+          where: {
+            feedback: {
+              themes:  { some: { themeId } },
+              status:  { not: 'MERGED' },
+            },
+          },
+          select: { id: true },
+        }),
+      ]);
+
+    // ── Filter out MERGED feedback ──────────────────────────────────────────
     const activeFeedback = feedbackRows.filter((tf) => tf.feedback.status !== 'MERGED');
-    const feedbackCount = activeFeedback.length;
 
-    // Unique customers
+    // ── Source breakdown counts ─────────────────────────────────────────────
+    const feedbackCount = activeFeedback.length;
+    const voiceCount    = activeFeedback.filter((tf) =>
+      VOICE_SOURCE_TYPES.includes(tf.feedback.sourceType as FeedbackSourceType),
+    ).length;
+    // Pure text/manual feedback (everything that is NOT voice)
+    const textFeedbackCount = feedbackCount - voiceCount;
+
+    // Support count: sum of ticketCount across all linked clusters
+    const supportCount = supportClusters.reduce(
+      (sum, c) => sum + (c.ticketCount ?? 0), 0,
+    );
+    const hasSupportSpike = supportClusters.some((c) => c.hasActiveSpike);
+
+    const totalSignalCount = feedbackCount + supportCount;
+
+    // ── Customer aggregates ─────────────────────────────────────────────────
     const customerIds = new Set(
       activeFeedback.map((tf) => tf.feedback.customerId).filter(Boolean),
     );
     const uniqueCustomerCount = customerIds.size;
 
-    // ARR: sum of Customer.arrValue for linked customers
-    const arrValue = activeFeedback.reduce((sum, tf) => {
-      return sum + (tf.feedback.customer?.arrValue ?? 0);
-    }, 0);
+    const arrValue = activeFeedback.reduce(
+      (sum, tf) => sum + (tf.feedback.customer?.arrValue ?? 0), 0,
+    );
 
-    // Account priority: mean numeric priority across linked customers
     const priorityValues = activeFeedback
       .map((tf) => tf.feedback.customer?.accountPriority)
       .filter((p): p is AccountPriority => p != null)
@@ -193,132 +268,164 @@ export class CiqService {
         ? priorityValues.reduce((a, b) => a + b, 0) / priorityValues.length
         : 0;
 
-    // Deal influence: sum of annualValue × stage weight for OPEN deals
+    // ── Deal influence ──────────────────────────────────────────────────────
     const dealInfluenceValue = dealLinks.reduce((sum, dl) => {
       if (dl.deal.status === DealStatus.LOST) return sum;
-      const stageWeight = DEAL_STAGE_WEIGHT[dl.deal.stage] ?? 0;
-      return sum + dl.deal.annualValue * stageWeight;
+      return sum + dl.deal.annualValue * (DEAL_STAGE_WEIGHT[dl.deal.stage] ?? 0);
     }, 0);
 
-    // Signal strength: sum of CustomerSignal.strength
-    const signalCount = signalRows.length;
+    // ── Signal strength ─────────────────────────────────────────────────────
+    const signalCount    = signalRows.length;
     const signalStrength = signalRows.reduce((sum, s) => sum + (s.strength ?? 0), 0);
 
-    // Sentiment penalty: mean of negative sentiments (0 = no penalty)
-    const sentiments = activeFeedback
+    // ── Sentiment ───────────────────────────────────────────────────────────
+    // Combine feedback sentiment with support cluster avg sentiment
+    const feedbackSentiments = activeFeedback
       .map((tf) => tf.feedback.sentiment)
       .filter((s): s is number => s != null);
-    const negativeSentiments = sentiments.filter((s) => s < 0);
+
+    const supportSentiments = supportClusters
+      .map((c) => c.avgSentiment)
+      .filter((s): s is number => s != null);
+
+    const allSentiments = [...feedbackSentiments, ...supportSentiments];
+    const negativeSentiments = allSentiments.filter((s) => s < 0);
     const sentimentPenalty =
       negativeSentiments.length > 0
         ? Math.abs(negativeSentiments.reduce((a, b) => a + b, 0) / negativeSentiments.length)
         : 0;
 
-    // ── Normalise each input to 0–100 ──────────────────────────────────────────
-    const normFrequency        = countNorm(feedbackCount, 50);
-    const normCustomerCount    = countNorm(uniqueCustomerCount, 20);
-    const normArr              = logNorm(arrValue, 7);          // $10M ARR → ~100
-    const normAccountPriority  = (accountPriorityValue / 4) * 100;
-    const normDealInfluence    = logNorm(dealInfluenceValue, 7);
-    const normSignalStrength   = logNorm(signalStrength + signalCount, 4);
-    const normSentimentPenalty = sentimentPenalty * 100;        // already 0–1
+    // Positive sentiment score (0–100): higher = more positive signal
+    const positiveSentiments = allSentiments.filter((s) => s > 0);
+    const avgPositiveSentiment =
+      positiveSentiments.length > 0
+        ? positiveSentiments.reduce((a, b) => a + b, 0) / positiveSentiments.length
+        : 0;
+    const normSentiment = avgPositiveSentiment * 100;
 
-    // ── Weighted sum using PrioritizationSettings ──────────────────────────────
-    const explanation: Record<string, CiqScoreComponent> = {
-      requestFrequency: {
-        value: normFrequency,
-        weight: settings.requestFrequencyWeight,
-        contribution: normFrequency * settings.requestFrequencyWeight,
-        label: 'Feedback frequency',
-      },
-      customerCount: {
-        value: normCustomerCount,
-        weight: settings.customerCountWeight,
-        contribution: normCustomerCount * settings.customerCountWeight,
-        label: 'Unique customers',
-      },
-      arrValue: {
-        value: normArr,
-        weight: settings.arrValueWeight,
-        contribution: normArr * settings.arrValueWeight,
-        label: 'Customer ARR',
-      },
-      accountPriority: {
-        value: normAccountPriority,
-        weight: settings.accountPriorityWeight,
-        contribution: normAccountPriority * settings.accountPriorityWeight,
-        label: 'Account priority',
-      },
-      dealInfluence: {
-        value: normDealInfluence,
-        weight: settings.dealValueWeight,
-        contribution: normDealInfluence * settings.dealValueWeight,
-        label: 'Deal pipeline influence',
-      },
-      signalStrength: {
-        value: normSignalStrength,
-        weight: settings.strategicWeight,
-        contribution: normSignalStrength * settings.strategicWeight,
-        label: 'Customer signal strength',
-      },
-    };
-
-    // ── Extended CIQ factors (vote weight, sentiment weight, recency weight) ──
-    // Vote count: total votes on linked feedback (portal upvotes)
-    const voteRows = await this.prisma.feedbackVote.findMany({
-      where: { feedback: { themes: { some: { themeId } }, status: { not: 'MERGED' } } },
-      select: { id: true },
-    });
-    const voteCount = voteRows.length;
-    const normVotes = countNorm(voteCount, 100);
-    explanation['voteSignal'] = {
-      value: normVotes,
-      weight: settings.voteWeight,
-      contribution: normVotes * settings.voteWeight,
-      label: 'Portal vote signal',
-    };
-
-    // Recency: boost themes with recent feedback (within last 30 days)
+    // ── Recency ─────────────────────────────────────────────────────────────
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const recentFeedbackCount = activeFeedback.filter(
       (tf) => tf.feedback.createdAt != null && new Date(tf.feedback.createdAt) > thirtyDaysAgo,
     ).length;
-    const normRecency = countNorm(recentFeedbackCount, 20);
-    explanation['recencySignal'] = {
-      value: normRecency,
-      weight: settings.recencyWeight,
-      contribution: normRecency * settings.recencyWeight,
-      label: 'Recent activity (30d)',
+
+    // ── Normalise each input to 0–100 ───────────────────────────────────────
+    const normTextFeedback    = countNorm(textFeedbackCount, 50);
+    const normVoice           = countNorm(voiceCount, 20);
+    const normSupport         = countNorm(supportCount, 30);
+    const normCustomerCount   = countNorm(uniqueCustomerCount, 20);
+    const normArr             = logNorm(arrValue, 7);
+    const normAccountPriority = (accountPriorityValue / 4) * 100;
+    const normDealInfluence   = logNorm(dealInfluenceValue, 7);
+    const normSignalStrength  = logNorm(signalStrength + signalCount, 4);
+    const normVotes           = countNorm(voteRows.length, 100);
+    const normRecency         = countNorm(recentFeedbackCount, 20);
+
+    // ── Spike bonus: active support spike adds urgency ──────────────────────
+    const spikeBonus = hasSupportSpike ? 10 : 0;
+
+    // ── Build explanation with unified weights ──────────────────────────────
+    // supportWeight and voiceWeight are multipliers on top of requestFrequencyWeight.
+    // We apply them as separate breakdown entries so the UI can show the full picture.
+    const effectiveSupportWeight = settings.requestFrequencyWeight * settings.supportWeight;
+    const effectiveVoiceWeight   = settings.requestFrequencyWeight * settings.voiceWeight;
+
+    const explanation: Record<string, CiqScoreComponent> = {
+      feedbackFrequency: {
+        value:        normTextFeedback,
+        weight:       settings.requestFrequencyWeight,
+        contribution: normTextFeedback * settings.requestFrequencyWeight,
+        label:        'Feedback frequency',
+      },
+      voiceSignal: {
+        value:        normVoice,
+        weight:       effectiveVoiceWeight,
+        contribution: normVoice * effectiveVoiceWeight,
+        label:        'Voice feedback signal',
+      },
+      supportSignal: {
+        value:        normSupport,
+        weight:       effectiveSupportWeight,
+        contribution: normSupport * effectiveSupportWeight,
+        label:        'Support ticket signal',
+      },
+      customerCount: {
+        value:        normCustomerCount,
+        weight:       settings.customerCountWeight,
+        contribution: normCustomerCount * settings.customerCountWeight,
+        label:        'Unique customers',
+      },
+      arrValue: {
+        value:        normArr,
+        weight:       settings.arrValueWeight,
+        contribution: normArr * settings.arrValueWeight,
+        label:        'Customer ARR',
+      },
+      accountPriority: {
+        value:        normAccountPriority,
+        weight:       settings.accountPriorityWeight,
+        contribution: normAccountPriority * settings.accountPriorityWeight,
+        label:        'Account priority',
+      },
+      dealInfluence: {
+        value:        normDealInfluence,
+        weight:       settings.dealValueWeight,
+        contribution: normDealInfluence * settings.dealValueWeight,
+        label:        'Deal pipeline influence',
+      },
+      signalStrength: {
+        value:        normSignalStrength,
+        weight:       settings.strategicWeight,
+        contribution: normSignalStrength * settings.strategicWeight,
+        label:        'Customer signal strength',
+      },
+      sentimentSignal: {
+        value:        normSentiment,
+        weight:       settings.sentimentWeight,
+        contribution: normSentiment * settings.sentimentWeight,
+        label:        'Positive sentiment signal',
+      },
+      recencySignal: {
+        value:        normRecency,
+        weight:       settings.recencyWeight,
+        contribution: normRecency * settings.recencyWeight,
+        label:        'Recent activity (30d)',
+      },
+      voteSignal: {
+        value:        normVotes,
+        weight:       settings.voteWeight,
+        contribution: normVotes * settings.voteWeight,
+        label:        'Portal vote signal',
+      },
     };
 
-    // ── Normalise weights so the weighted sum always stays within 0–100 ──────────
-    // This guards against misconfigured PrioritizationSettings where weights
-    // do not sum to exactly 1.0 (e.g. the original defaults summed to 1.3).
+    // ── Normalise weights so the sum always stays within 0–100 ─────────────
     const totalWeight = Object.values(explanation).reduce((sum, c) => sum + c.weight, 0);
-    const normFactor = totalWeight > 0 ? 1 / totalWeight : 1;
+    const normFactor  = totalWeight > 0 ? 1 / totalWeight : 1;
     if (Math.abs(totalWeight - 1.0) > 0.001) {
-      // Re-scale contributions in-place so the breakdown UI still shows correct values
       for (const key of Object.keys(explanation)) {
         explanation[key] = {
           ...explanation[key],
-          weight: explanation[key].weight * normFactor,
+          weight:       explanation[key].weight * normFactor,
           contribution: explanation[key].contribution * normFactor,
         };
       }
     }
 
-    // Sentiment penalty reduces the total score slightly
-    const rawScore = Object.values(explanation).reduce((sum, c) => sum + c.contribution, 0);
-    const penalisedScore = rawScore * (1 - sentimentPenalty * 0.1);
-    const priorityScore = parseFloat(Math.min(100, penalisedScore).toFixed(2));
+    // ── Compute final score ─────────────────────────────────────────────────
+    const rawScore      = Object.values(explanation).reduce((sum, c) => sum + c.contribution, 0);
+    // Sentiment penalty reduces total score slightly; spike bonus adds urgency
+    const adjustedScore = rawScore * (1 - sentimentPenalty * 0.1) + spikeBonus;
+    const priorityScore = parseFloat(Math.min(100, adjustedScore).toFixed(2));
 
-    // Revenue impact: log-normalised ARR + deal influence
     const revenueImpactValue = arrValue;
     const revenueImpactScore = parseFloat(
-      Math.min(100, (logNorm(arrValue, 7) * 0.6 + logNorm(dealInfluenceValue, 7) * 0.4)).toFixed(2),
+      Math.min(100, logNorm(arrValue, 7) * 0.6 + logNorm(dealInfluenceValue, 7) * 0.4).toFixed(2),
     );
 
-    const confidenceScore = deriveConfidence(feedbackCount, signalCount, uniqueCustomerCount);
+    const confidenceScore = deriveConfidence(
+      feedbackCount, voiceCount, supportCount, signalCount, uniqueCustomerCount,
+    );
 
     return {
       priorityScore,
@@ -327,6 +434,9 @@ export class CiqService {
       revenueImpactValue,
       dealInfluenceValue,
       feedbackCount,
+      voiceCount,
+      supportCount,
+      totalSignalCount,
       signalCount,
       uniqueCustomerCount,
       scoreExplanation: explanation,
@@ -343,12 +453,13 @@ export class CiqService {
     const feedback = await this.prisma.feedback.findUnique({
       where: { id: feedbackId, workspaceId },
       select: {
-        sentiment: true,
+        sentiment:  true,
         impactScore: true,
-        status: true,
+        status:     true,
+        sourceType: true,
         customer: {
           select: {
-            arrValue: true,
+            arrValue:        true,
             accountPriority: true,
           },
         },
@@ -360,51 +471,60 @@ export class CiqService {
 
     if (!feedback) {
       return {
-        impactScore: 0,
-        confidenceScore: 0,
-        customerArrValue: 0,
+        impactScore:          0,
+        confidenceScore:      0,
+        customerArrValue:     0,
         accountPriorityValue: 0,
-        sentiment: null,
-        scoreExplanation: {},
+        sentiment:            null,
+        scoreExplanation:     {},
       };
     }
 
-    const customerArrValue = feedback.customer?.arrValue ?? 0;
-    const accountPriorityRaw = feedback.customer?.accountPriority ?? AccountPriority.MEDIUM;
+    const customerArrValue    = feedback.customer?.arrValue ?? 0;
+    const accountPriorityRaw  = feedback.customer?.accountPriority ?? AccountPriority.MEDIUM;
     const accountPriorityValue = ACCOUNT_PRIORITY_MAP[accountPriorityRaw];
-    const sentiment = feedback.sentiment ?? null;
+    const sentiment            = feedback.sentiment ?? null;
 
-    // Normalise
+    // Voice feedback gets a small urgency bonus (higher signal quality)
+    const isVoice      = VOICE_SOURCE_TYPES.includes(feedback.sourceType as FeedbackSourceType);
+    const voiceBonus   = isVoice ? 8 : 0;
+
     const normArr      = logNorm(customerArrValue, 7);
     const normPriority = (accountPriorityValue / 4) * 100;
-    // Negative sentiment increases urgency (0 = neutral, 1 = very negative)
-    const sentimentUrgency = sentiment != null && sentiment < 0 ? Math.abs(sentiment) * 100 : 0;
-    const themeBonus = feedback.themes.length > 0 ? 10 : 0; // linked to a theme = more signal
+    const sentimentUrgency =
+      sentiment != null && sentiment < 0 ? Math.abs(sentiment) * 100 : 0;
+    const themeBonus = feedback.themes.length > 0 ? 10 : 0;
 
     const explanation: Record<string, CiqScoreComponent> = {
       customerArr: {
-        value: normArr,
-        weight: 0.4,
-        contribution: normArr * 0.4,
-        label: 'Customer ARR',
+        value:        normArr,
+        weight:       0.35,
+        contribution: normArr * 0.35,
+        label:        'Customer ARR',
       },
       accountPriority: {
-        value: normPriority,
-        weight: 0.3,
-        contribution: normPriority * 0.3,
-        label: 'Account priority',
+        value:        normPriority,
+        weight:       0.25,
+        contribution: normPriority * 0.25,
+        label:        'Account priority',
       },
       sentimentUrgency: {
-        value: sentimentUrgency,
-        weight: 0.2,
-        contribution: sentimentUrgency * 0.2,
-        label: 'Sentiment urgency',
+        value:        sentimentUrgency,
+        weight:       0.20,
+        contribution: sentimentUrgency * 0.20,
+        label:        'Sentiment urgency',
       },
       themeSignal: {
-        value: themeBonus,
-        weight: 0.1,
-        contribution: themeBonus * 0.1,
-        label: 'Theme cluster signal',
+        value:        themeBonus,
+        weight:       0.12,
+        contribution: themeBonus * 0.12,
+        label:        'Theme cluster signal',
+      },
+      voiceBonus: {
+        value:        voiceBonus,
+        weight:       0.08,
+        contribution: voiceBonus * 0.08,
+        label:        'Voice signal quality',
       },
     };
 
@@ -412,11 +532,14 @@ export class CiqService {
       Math.min(100, Object.values(explanation).reduce((s, c) => s + c.contribution, 0)).toFixed(2),
     );
 
-    // Confidence: higher if customer is known and sentiment is available
-    const hasCustomer = feedback.customer != null ? 1 : 0;
+    const hasCustomer  = feedback.customer != null ? 1 : 0;
     const hasSentiment = sentiment != null ? 1 : 0;
     const confidenceScore = parseFloat(
-      Math.min(1, (hasCustomer * 0.5 + hasSentiment * 0.3 + (feedback.themes.length > 0 ? 0.2 : 0))).toFixed(3),
+      Math.min(1, (
+        hasCustomer  * 0.5 +
+        hasSentiment * 0.3 +
+        (feedback.themes.length > 0 ? 0.2 : 0)
+      )).toFixed(3),
     );
 
     return {
@@ -447,16 +570,19 @@ export class CiqService {
 
     if (!item) {
       return {
-        priorityScore: 0,
-        confidenceScore: 0,
+        priorityScore:      0,
+        confidenceScore:    0,
         revenueImpactScore: 0,
         revenueImpactValue: 0,
         dealInfluenceValue: 0,
-        feedbackCount: 0,
-        signalCount: 0,
+        feedbackCount:      0,
+        voiceCount:         0,
+        supportCount:       0,
+        totalSignalCount:   0,
+        signalCount:        0,
         uniqueCustomerCount: 0,
-        scoreExplanation: {},
-        themeScored: false,
+        scoreExplanation:   {},
+        themeScored:        false,
       };
     }
 
@@ -465,7 +591,6 @@ export class CiqService {
       return { ...themeScore, themeScored: true };
     }
 
-    // No theme linked: use stored values only
     const revenueImpactValue = item.revenueImpactValue ?? 0;
     const dealInfluenceValue = item.dealInfluenceValue ?? 0;
     const revenueImpactScore = parseFloat(
@@ -473,20 +598,23 @@ export class CiqService {
     );
 
     return {
-      priorityScore: 0,
-      confidenceScore: 0,
+      priorityScore:      0,
+      confidenceScore:    0,
       revenueImpactScore,
       revenueImpactValue,
       dealInfluenceValue,
-      feedbackCount: 0,
-      signalCount: 0,
+      feedbackCount:      0,
+      voiceCount:         0,
+      supportCount:       0,
+      totalSignalCount:   0,
+      signalCount:        0,
       uniqueCustomerCount: 0,
       scoreExplanation: {
         storedRevenue: {
-          value: revenueImpactValue,
-          weight: 1,
+          value:        revenueImpactValue,
+          weight:       1,
           contribution: revenueImpactScore,
-          label: 'Stored revenue impact (no theme linked)',
+          label:        'Stored revenue impact (no theme linked)',
         },
       },
       themeScored: false,
@@ -497,7 +625,8 @@ export class CiqService {
 
   /**
    * Persist CIQ scores directly onto the Theme row.
-   * Writes: priorityScore, lastScoredAt, revenueInfluence, signalBreakdown.
+   * Writes: priorityScore, lastScoredAt, revenueInfluence, signalBreakdown,
+   *         feedbackCount, voiceCount, supportCount, totalSignalCount.
    * Safe to call fire-and-forget; errors are caught and logged.
    */
   async persistThemeScore(themeId: string, score: CiqScoreOutput): Promise<void> {
@@ -509,6 +638,11 @@ export class CiqService {
           lastScoredAt:     new Date(),
           revenueInfluence: score.revenueImpactValue,
           signalBreakdown:  score.scoreExplanation as object,
+          // Unified source counts (PRD Phase 3)
+          feedbackCount:    score.feedbackCount,
+          voiceCount:       score.voiceCount,
+          supportCount:     score.supportCount,
+          totalSignalCount: score.totalSignalCount,
         },
       });
     } catch (err) {

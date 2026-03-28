@@ -98,6 +98,12 @@ export interface ThemeRankingItem {
   voiceSignalScore: number;
   surveySignalScore: number;
   supportSignalScore: number;
+  /** Actual voice feedback count from Theme.voiceCount (persisted by unified CIQ scorer) */
+  voiceCount: number;
+  /** Actual support ticket count from Theme.supportCount (persisted by unified CIQ scorer) */
+  supportCount: number;
+  /** Total signal count across all sources */
+  totalSignalCount: number;
   lastScoredAt: Date | null;
   breakdown: Record<string, CiqScoreBreakdown>;
 }
@@ -276,6 +282,11 @@ export class CiqEngineService {
         revenueInfluence: true,
         lastScoredAt: true,
         signalBreakdown: true,
+        // Unified source counts persisted by CiqService.persistThemeScore()
+        feedbackCount:    true,
+        voiceCount:       true,
+        supportCount:     true,
+        totalSignalCount: true,
         feedbacks: {
           select: {
             feedback: {
@@ -381,6 +392,13 @@ export class CiqEngineService {
         Object.values(breakdown).reduce((s, c) => s + c.contribution, 0),
       );
 
+      // Use persisted counts from Theme row when available (set by unified CIQ scorer),
+      // otherwise fall back to live-computed counts from the feedback join.
+      const persistedFeedbackCount = theme.feedbackCount ?? feedbackCount;
+      const persistedVoiceCount    = theme.voiceCount    ?? 0;
+      const persistedSupportCount  = theme.supportCount  ?? 0;
+      const persistedTotalSignals  = theme.totalSignalCount ?? (feedbackCount + (theme.supportCount ?? 0));
+
       return {
         themeId:            theme.id,
         title:              theme.title,
@@ -388,12 +406,15 @@ export class CiqEngineService {
         ciqScore:           parseFloat(ciqScore.toFixed(2)),
         priorityScore:      theme.priorityScore,
         revenueInfluence:   theme.revenueInfluence ?? 0,
-        feedbackCount,
+        feedbackCount:      persistedFeedbackCount,
         uniqueCustomerCount,
         dealInfluenceValue,
         voiceSignalScore:   parseFloat(voiceSignalScore.toFixed(2)),
         surveySignalScore:  parseFloat(surveySignalScore.toFixed(2)),
         supportSignalScore: parseFloat(supportSignalScore.toFixed(2)),
+        voiceCount:         persistedVoiceCount,
+        supportCount:       persistedSupportCount,
+        totalSignalCount:   persistedTotalSignals,
         lastScoredAt:       theme.lastScoredAt,
         breakdown,
       };

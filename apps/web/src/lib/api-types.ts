@@ -1647,6 +1647,12 @@ export interface ThemeRankingItem {
   voiceSignalScore: number;
   surveySignalScore: number;
   supportSignalScore: number;
+  /** Actual voice feedback count from Theme.voiceCount (set by unified CIQ scorer) */
+  voiceCount: number;
+  /** Actual support ticket count from Theme.supportCount (set by unified CIQ scorer) */
+  supportCount: number;
+  /** Total signal count across all sources */
+  totalSignalCount: number;
   lastScoredAt: string | null;
   breakdown: Record<string, CiqScoreBreakdown>;
 }

@@ -934,7 +934,13 @@ model PrioritizationSettings {
   voteWeight                Float @default(0.1154)
   sentimentWeight           Float @default(0.0769)
   recencyWeight             Float @default(0.0385)
-
+  /// Unified source multipliers (PRD Phase 2)
+  /// Applied as multipliers on top of requestFrequencyWeight when counting
+  /// support tickets and voice feedback. supportWeight > 1 means support
+  /// tickets count for more than regular feedback; voiceWeight >= 1 means
+  /// voice feedback counts at least as much as regular feedback.
+  supportWeight             Float @default(1.5)
+  voiceWeight               Float @default(1.2)
   /// Deal stage multipliers
   dealStageProspecting      Float @default(0.1)
   dealStageQualifying       Float @default(0.3)
