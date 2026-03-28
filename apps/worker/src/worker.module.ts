@@ -5,17 +5,6 @@ import { QueueModule } from '../../api/src/queue/queue.module';
 import { CommonModule } from '../../api/src/common/common.module';
 import { EmailModule } from '../../api/src/email/email.module';
 import { AiModule } from '../../api/src/ai/ai.module';
-import { CustomerModule } from '../../api/src/customer/customer.module';
-import { DigestModule } from '../../api/src/digest/digest.module';
-import { IntegrationsModule } from '../../api/src/integrations/integrations.module';
-import { PrioritizationModule } from '../../api/src/prioritization/prioritization.module';
-import { PublicPortalModule } from '../../api/src/public/public-portal.module';
-import { PurgeModule } from '../../api/src/purge/purge.module';
-import { SupportModule } from '../../api/src/support/support.module';
-import { SurveyModule } from '../../api/src/survey/survey.module';
-import { ThemeModule } from '../../api/src/theme/theme.module';
-import { VoiceModule } from '../../api/src/voice/voice.module';
-import { DashboardModule } from '../../api/src/dashboard/dashboard.module';
 import { validationSchema } from '../../api/src/config/validation';
 import { WorkerProcessorsModule } from './processors.module';
 
@@ -33,10 +22,13 @@ import { WorkerProcessorsModule } from './processors.module';
  * same NestJS module graph (e.g. AiModule is imported by both WorkerModule
  * and ThemeModule, which is also imported by WorkerModule).
  *
- * Feature modules are imported here to make their exported services available
- * as global/shared providers. WorkerProcessorsModule then imports the same
- * feature modules — NestJS deduplicates module instances, so each module is
- * only instantiated once.
+ * Feature modules (SupportModule, ThemeModule, CustomerModule, etc.) are
+ * imported ONLY in WorkerProcessorsModule — NOT here. Importing them in both
+ * places causes BullModule.registerQueue() to be called twice for the same
+ * queue name, which triggers Bull's "Cannot define the same handler twice"
+ * error. NestJS module deduplication prevents double-instantiation of the
+ * module class, but does NOT prevent BullModule.registerQueue() from running
+ * twice when the same module is reachable via two different import paths.
  *
  * PrismaModule is marked @Global() so PrismaService is available everywhere.
  * AiModule is marked @Global() so AI services are available everywhere.
@@ -80,19 +72,8 @@ import { WorkerProcessorsModule } from './processors.module';
     // AiModule is @Global() — provides EmbeddingService, ThemeClusteringService,
     // DuplicateDetectionService, etc. everywhere
     AiModule,
-    // Feature modules — provide exported services to WorkerProcessorsModule
-    CustomerModule,
-    DigestModule,
-    IntegrationsModule,
-    PrioritizationModule,
-    PublicPortalModule,
-    PurgeModule,
-    SupportModule,
-    SurveyModule,
-    ThemeModule,
-    VoiceModule,
-    DashboardModule,
-    // WorkerProcessorsModule — the ONLY place processors are registered
+    // WorkerProcessorsModule — imports all feature modules AND registers all
+    // @Processor classes. Feature modules must NOT also be imported above.
     WorkerProcessorsModule,
   ],
 })
