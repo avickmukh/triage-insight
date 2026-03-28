@@ -70,6 +70,10 @@ export interface CiqScoreOutput {
   uniqueCustomerCount: number;
   /** Per-factor breakdown for explainability */
   scoreExplanation: Record<string, CiqScoreComponent>;
+  /** Key of the highest-contributing factor (e.g. "requestFrequency") */
+  dominantDriver?: string | null;
+  /** Aggregated sentiment score across all linked feedback (-1 to +1) */
+  sentimentScore?: number | null;
 }
 
 /** Lightweight feedback-level score (no theme aggregation needed) */

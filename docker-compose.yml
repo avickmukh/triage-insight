@@ -1,29 +1,46 @@
-# TriageInsight Local Development Infrastructure
+# TriageInsight — Full Local Stack
 #
-# This Docker Compose file sets up the required backing services for local development:
-#   - PostgreSQL 16 with the pgvector extension for vector similarity search.
-#   - Redis for BullMQ background job processing.
+# Starts all services needed to run TriageInsight locally:
+#   - postgres  : PostgreSQL 16 + pgvector (vector similarity search)
+#   - redis     : BullMQ background job queue
+#   - api       : NestJS REST API  (http://localhost:3001)   [profile: full]
+#   - worker    : NestJS background worker                   [profile: full]
+#   - web       : Next.js frontend  (http://localhost:3000)  [profile: full]
 #
-# To run:
-#   docker-compose up -d
+# Quick start (recommended for development):
+#   cp .env.example .env          # fill in OPENAI_API_KEY and JWT_SECRET
+#   docker-compose up -d          # start postgres + redis only
+#   pnpm install                  # install all workspace deps
+#   cd apps/api && npx prisma migrate deploy && npx prisma db seed
+#   pnpm dev                      # start api + worker + web with HMR
 #
-# To stop and remove volumes:
-#   docker-compose down -v
+# Full Docker start (all services in containers):
+#   docker-compose --profile full up -d
+#
+# Stop everything:
+#   docker-compose down
+#   docker-compose down -v        # also removes data volumes
 
 version: "3.8"
 
 services:
+  # ─── Infrastructure ─────────────────────────────────────────────────────────────────────────────
   postgres:
     image: pgvector/pgvector:pg16
     container_name: triage-insight-postgres
     environment:
-      - POSTGRES_USER=triage
-      - POSTGRES_PASSWORD=triage
-      - POSTGRES_DB=triageinsight
+      POSTGRES_USER: triage
+      POSTGRES_PASSWORD: triage
+      POSTGRES_DB: triageinsight
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U triage -d triageinsight"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     restart: unless-stopped
 
   redis:
@@ -33,6 +50,72 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # ─── Application services (profile: full) ────────────────────────────────────────────────────
+  # These are only started with: docker-compose --profile full up -d
+  # For local development, use `pnpm dev` instead (faster HMR, no rebuild needed).
+
+  api:
+    profiles: ["full"]
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: triage-insight-api
+    environment:
+      DATABASE_URL: postgresql://triage:triage@postgres:5432/triageinsight
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: production
+    env_file:
+      - .env
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    profiles: ["full"]
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    container_name: triage-insight-worker
+    environment:
+      DATABASE_URL: postgresql://triage:triage@postgres:5432/triageinsight
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: production
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    profiles: ["full"]
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: triage-insight-web
+    environment:
+      NEXT_PUBLIC_API_URL: http://api:3001
+      NODE_ENV: production
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
     restart: unless-stopped
 
 volumes:

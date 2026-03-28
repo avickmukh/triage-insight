@@ -293,6 +293,43 @@ export default function RoadmapItemDetailPage() {
                 No AI scores yet.{canEdit ? ' Click Refresh to compute.' : ''}
               </p>
             )}
+            {/* CIQ Score Breakdown — per-factor explainability */}
+            {item.scoreExplanation && Object.keys(item.scoreExplanation).length > 0 && (
+              <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: '#f8faff', border: '1px solid #dbeafe', borderRadius: '0.5rem' }}>
+                <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#1a56db', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block', marginBottom: '0.5rem' }}>CIQ Score Breakdown</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  {Object.entries(item.scoreExplanation)
+                    .sort(([, a], [, b]) => (b as { contribution: number }).contribution - (a as { contribution: number }).contribution)
+                    .map(([key, factor]) => {
+                      const f = factor as { label: string; value: number; weight: number; contribution: number };
+                      const isDominant = key === item.dominantDriver;
+                      const maxContrib = Math.max(...Object.values(item.scoreExplanation!).map((x) => (x as { contribution: number }).contribution));
+                      const pct = maxContrib > 0 ? Math.min(100, (f.contribution / maxContrib) * 100) : 0;
+                      return (
+                        <div key={key}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.15rem' }}>
+                            <span style={{ fontSize: '0.72rem', color: isDominant ? '#1a56db' : '#495057', fontWeight: isDominant ? 700 : 400 }}>
+                              {f.label}{isDominant ? ' ★' : ''}
+                            </span>
+                            <span style={{ fontSize: '0.68rem', color: '#6C757D' }}>{f.contribution.toFixed(1)}</span>
+                          </div>
+                          <div style={{ height: '4px', background: '#e9ecef', borderRadius: '999px' }}>
+                            <div style={{ width: `${pct}%`, height: '100%', background: isDominant ? '#1a56db' : '#93c5fd', borderRadius: '999px', transition: 'width 0.4s ease' }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+                {item.sentimentScore != null && (
+                  <div style={{ marginTop: '0.5rem', paddingTop: '0.4rem', borderTop: '1px solid #dbeafe', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.72rem', color: '#6C757D' }}>Avg sentiment</span>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: item.sentimentScore >= 0.2 ? '#20A4A4' : item.sentimentScore <= -0.2 ? '#ef4444' : '#b8860b' }}>
+                      {item.sentimentScore >= 0.2 ? '▲ Positive' : item.sentimentScore <= -0.2 ? '▼ Negative' : '→ Neutral'} ({item.sentimentScore.toFixed(2)})
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
             {/* Inherited explanation from linked theme */}
             {item.theme && (item.theme as { aiExplanation?: string | null }).aiExplanation && (
               <div style={{ marginTop: '0.75rem', padding: '0.5rem 0.75rem', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: '0.5rem' }}>

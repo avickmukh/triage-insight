@@ -291,7 +291,20 @@ export class RoadmapService {
       assignmentConfidence: tf.confidence,
     })) ?? [];
 
-    return { ...enriched, linkedFeedback, signalSummary, signalCount: signals.length };
+    // Fetch full CIQ breakdown for explainability on the detail view.
+    // Best-effort: if scoring fails the page still renders with stored scores.
+    let scoreExplanation: Record<string, unknown> = {};
+    let dominantDriver: string | null = null;
+    let sentimentScore: number | null = null;
+    try {
+      const ciqScore = await this.ciqService.scoreRoadmapItem(workspaceId, id);
+      scoreExplanation = ciqScore.scoreExplanation as Record<string, unknown>;
+      dominantDriver   = ciqScore.dominantDriver ?? null;
+      sentimentScore   = ciqScore.sentimentScore ?? null;
+    } catch {
+      // Non-fatal — explainability is best-effort on the detail view
+    }
+    return { ...enriched, linkedFeedback, signalSummary, signalCount: signals.length, scoreExplanation, dominantDriver, sentimentScore };
   }
 
   // ─── Refresh intelligence (manual trigger for ADMIN/EDITOR) ─────────────────

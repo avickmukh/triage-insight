@@ -9,7 +9,11 @@ import {
   DefaultValuePipe,
   HttpCode,
   HttpStatus,
+  UploadedFile,
+  UseInterceptors,
+  BadRequestException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -17,6 +21,8 @@ import { RolesGuard } from '../workspace/guards/roles.guard';
 import { Roles } from '../workspace/decorators/roles.decorator';
 import { WorkspaceRole } from '@prisma/client';
 import { TicketService } from './services/ticket.service';
+import { IngestionService } from './services/ingestion.service';
+import { IntegrationProvider } from '@prisma/client';
 import { SpikeDetectionService } from './services/spike-detection.service';
 import { SentimentService } from './services/sentiment.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -37,6 +43,7 @@ export class SupportController {
     private readonly ticketService: TicketService,
     private readonly spikeDetectionService: SpikeDetectionService,
     private readonly sentimentService: SentimentService,
+    private readonly ingestionService: IngestionService,
     private readonly prisma: PrismaService,
     @InjectQueue('support-clustering') private readonly clusteringQueue: Queue,
     @InjectQueue('support-spike-detection') private readonly spikeQueue: Queue,
@@ -368,6 +375,77 @@ export class SupportController {
       orderBy: { arrExposure: 'desc' },
     });
     return clusters.map((c) => ({ clusterId: c.id, title: c.title, arrExposure: c.arrExposure }));
+  }
+
+  // ─── POST /support/import-csv ────────────────────────────────────────────────
+  /**
+   * Upload a CSV file to bulk-import support tickets.
+   * Required columns: externalId, subject
+   * Optional columns: description, status, customerEmail, tags (pipe-separated), arrValue, createdAt
+   */
+  @Post('import-csv')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  @HttpCode(HttpStatus.CREATED)
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
+  async importCsv(
+    @Param('workspaceId') workspaceId: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('No file uploaded. Send multipart/form-data with field name "file".');
+    if (!file.originalname.toLowerCase().endsWith('.csv') && file.mimetype !== 'text/csv') {
+      throw new BadRequestException('Only CSV files are accepted.');
+    }
+
+    const csv = file.buffer.toString('utf-8');
+    const lines = csv.split(/\r?\n/).filter((l) => l.trim());
+    if (lines.length < 2) throw new BadRequestException('CSV must have a header row and at least one data row.');
+
+    const headers = lines[0].split(',').map((h) => h.trim().replace(/^"|"$/g, ''));
+    for (const col of ['externalId', 'subject']) {
+      if (!headers.includes(col)) throw new BadRequestException(`CSV is missing required column: "${col}"`);
+    }
+
+    const idx = (col: string) => headers.indexOf(col);
+    const cell = (row: string[], col: string) => idx(col) >= 0 ? (row[idx(col)] ?? '').replace(/^"|"$/g, '').trim() : '';
+
+    const tickets = lines.slice(1).map((line) => {
+      const row = line.split(',');
+      const externalId = cell(row, 'externalId');
+      if (!externalId) return null;
+      const tagsRaw = cell(row, 'tags');
+      const arrRaw = cell(row, 'arrValue');
+      const createdRaw = cell(row, 'createdAt');
+      const statusRaw = cell(row, 'status').toUpperCase();
+      const validStatuses = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'];
+      return {
+        externalId,
+        subject:           cell(row, 'subject') || '(no subject)',
+        description:       cell(row, 'description') || null,
+        status:            (validStatuses.includes(statusRaw) ? statusRaw : 'OPEN') as 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED',
+        customerEmail:     cell(row, 'customerEmail') || null,
+        tags:              tagsRaw ? tagsRaw.split('|').map((t) => t.trim()) : [],
+        arrValue:          arrRaw ? parseFloat(arrRaw) : undefined,
+        externalCreatedAt: createdRaw ? new Date(createdRaw) : undefined,
+      };
+    }).filter(Boolean) as Array<{
+      externalId: string; subject: string; description: string | null;
+      status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
+      customerEmail: string | null; tags: string[];
+      arrValue?: number; externalCreatedAt?: Date;
+    }>;
+
+    if (!tickets.length) throw new BadRequestException('No valid rows found in CSV.');
+
+    const imported = await this.ingestionService.ingestTickets(workspaceId, IntegrationProvider.EMAIL, tickets);
+
+    // Trigger background clustering + sentiment for the new tickets
+    const opts = { attempts: 3, backoff: { type: 'exponential', delay: 5000 } };
+    for (const [queue, label] of [[this.clusteringQueue, 'clustering'], [this.sentimentQueue, 'sentiment']] as [Queue, string][]) {
+      try { await queue.add({ workspaceId }, opts); }
+      catch (err) { console.warn(`[Queue] Redis unavailable — ${label} job skipped:`, (err as Error).message); }
+    }
+
+    return { imported: imported.length, total: tickets.length, message: `Successfully imported ${imported.length} of ${tickets.length} tickets.` };
   }
 
   // ─── POST /support/sync ───────────────────────────────────────────────────────

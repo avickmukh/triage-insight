@@ -319,6 +319,12 @@ export interface RoadmapItem {
 
 /** Extended detail view returned by GET /roadmap/:id */
 export interface RoadmapItemDetail extends RoadmapItem {
+  /** Full per-factor CIQ score breakdown for explainability */
+  scoreExplanation?: Record<string, { label: string; value: number; weight: number; contribution: number }> | null;
+  /** Key of the dominant scoring factor (e.g. "requestFrequency") */
+  dominantDriver?: string | null;
+  /** Aggregated sentiment score across all linked feedback (-1 to +1) */
+  sentimentScore?: number | null;
   linkedFeedback: Array<{
     id: string;
     title: string;
