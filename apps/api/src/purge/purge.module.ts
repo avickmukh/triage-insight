@@ -1,9 +1,7 @@
 import { Module } from '@nestjs/common';
-import { BullModule } from '@nestjs/bull';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from '../prisma/prisma.module';
-import { PurgeService, PURGE_QUEUE } from './purge.service';
-import { PurgeWorker } from './purge.worker';
+import { PurgeService } from './purge.service';
 import { PurgeWorkspaceController, PurgePlatformController } from './purge.controller';
 import { WorkspaceFreezeGuard } from './workspace-freeze.guard';
 import { StoragePurgeStep } from './steps/storage-purge.step';
@@ -16,9 +14,6 @@ import { QUEUE_NAMES } from '../queue/queue.module';
   imports: [
     PrismaModule,
     ConfigModule,
-    // Register the purge queue
-    // QueuePurgeStep needs to inject all existing queues to drain them
-
   ],
   controllers: [PurgeWorkspaceController, PurgePlatformController],
   providers: [

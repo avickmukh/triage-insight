@@ -1,8 +1,5 @@
 import { Global, Module } from '@nestjs/common';
-import { BullModule } from '@nestjs/bull';
 import { PrismaModule } from '../prisma/prisma.module';
-import { AI_ANALYSIS_QUEUE } from './processors/analysis.processor';
-import { CIQ_SCORING_QUEUE } from './processors/ciq-scoring.processor';
 import { EmbeddingService } from './services/embedding.service';
 import { SummarizationService } from './services/summarization.service';
 import { DuplicateDetectionService } from './services/duplicate-detection.service';

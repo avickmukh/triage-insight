@@ -7,14 +7,14 @@
  * ── Key architectural rule ───────────────────────────────────────────────────
  * DO NOT add any BullModule.registerQueue() calls here.
  *
- * Every queue is already registered by the feature module that owns it
- * (e.g. ThemeModule registers AI_CLUSTERING_QUEUE, VoiceModule registers
- * VOICE_TRANSCRIPTION_QUEUE, etc.). Those feature modules are imported below,
- * so their queue tokens are already available in this module's DI scope.
+ * ALL queues are registered ONCE in QueueModule (apps/api/src/queue/queue.module.ts).
+ * QueueModule is @Global() and is imported by WorkerModule, so every queue
+ * token (BullQueue_<name>) is available throughout the DI graph without any
+ * feature module needing to call BullModule.registerQueue().
  *
- * Adding BullModule.registerQueue({ name: X }) here when the feature module
- * that owns queue X is also imported here causes Bull to call
- * Queue.setHandler() twice for the same queue name, throwing:
+ * DO NOT call BullModule.registerQueue() anywhere other than QueueModule.
+ * Doing so creates a second provider token for the same queue, causing Bull
+ * to call Queue.setHandler() twice and throw:
  *   "Cannot define the same handler twice __default__"
  *
  * ── Why processors are not in the feature modules ───────────────────────────
@@ -26,8 +26,9 @@
  * AiModule, PrismaModule, and CommonModule are @Global() and are imported by
  * WorkerModule (the root). Their exported providers (EmbeddingService,
  * PrismaService, etc.) are available everywhere without re-importing.
- * AiModule is intentionally NOT imported here — it would re-register
- * AI_ANALYSIS_QUEUE and CIQ_SCORING_QUEUE a second time.
+ * AiModule is intentionally NOT imported here — it is @Global() and already
+ * loaded by WorkerModule via WorkerProcessorsModule → ThemeModule → AiModule.
+ * Re-importing it here would cause NestJS to instantiate its providers twice.
  */
 
 import { Module } from '@nestjs/common';
@@ -92,11 +93,10 @@ import { DashboardRefreshWorker } from '../../api/src/dashboard/workers/dashboar
 
 @Module({
   imports: [
-    // Feature modules supply both the services processors depend on AND the
-    // Bull queue tokens (@InjectQueue tokens) that processors inject.
-    // DO NOT add BullModule.registerQueue() here — the feature modules already
-    // register their own queues. Adding them again causes Bull to crash with
-    // "Cannot define the same handler twice __default__".
+    // Feature modules supply the services that processors depend on.
+    // Queue tokens (@InjectQueue) are resolved from QueueModule, which is
+    // @Global() and imported by WorkerModule. DO NOT call
+    // BullModule.registerQueue() here or in any feature module.
     ThemeModule,
     CustomerModule,
     DigestModule,
