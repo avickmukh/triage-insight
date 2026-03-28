@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import * as path from 'path';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './health/health.module';
 import { QueueModule } from './queue/queue.module';
@@ -34,10 +35,17 @@ import { DigestModule } from './digest/digest.module';
 import { SchedulerModule } from './scheduler/scheduler.module';
 import { validationSchema } from './config/validation';
 
+/** Resolve .env relative to this file so CWD does not matter */
+const API_ENV_PATH  = path.resolve(__dirname, '../.env');
+const ROOT_ENV_PATH = path.resolve(__dirname, '../../.env');
+
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      // Load apps/api/.env first (the canonical secrets file),
+      // then fall back to the monorepo root .env (Docker / CI).
+      envFilePath: [API_ENV_PATH, ROOT_ENV_PATH],
       validationSchema,
     }),
     // ── Global Rate Limiting ──────────────────────────────────────────────
