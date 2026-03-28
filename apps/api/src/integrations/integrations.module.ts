@@ -12,12 +12,6 @@ import { CIQ_SCORING_QUEUE } from '../ai/processors/ciq-scoring.processor';
 @Module({
   imports: [
     PrismaModule,
-    BullModule.registerQueue(
-      { name: 'support-sync' },
-      { name: SLACK_INGESTION_QUEUE },
-      { name: AI_ANALYSIS_QUEUE },
-      { name: CIQ_SCORING_QUEUE },
-    ),
   ],
   controllers: [IntegrationsController],
   providers: [

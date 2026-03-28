@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { BullModule } from '@nestjs/bull';
 import { PrismaModule } from '../prisma/prisma.module';
 import { IntegrationsModule } from '../integrations/integrations.module';
 import { SupportController } from './support.controller';
@@ -12,31 +11,17 @@ import { SentimentService } from './services/sentiment.service';
 /**
  * SupportModule — provides support-ticket services and the HTTP controller.
  *
- * IMPORTANT: Processor classes (SyncProcessor, ClusteringProcessor,
- * SpikeDetectionProcessor, SentimentProcessor) are intentionally NOT listed
- * in providers[]. They are registered exclusively in WorkerProcessorsModule
- * (apps/worker/src/processors.module.ts).
+ * Queue tokens (support-sync, support-clustering, support-spike-detection,
+ * support-sentiment, ciq-scoring) are resolved from the global QueueModule —
+ * no BullModule.registerQueue() calls needed here.
  *
- * Registering a @Process() handler in two NestJS modules that are both
- * imported by WorkerModule causes Bull to throw:
- *   "Cannot define the same handler twice __default__"
- *
- * The queues are still registered here so that services in this module can
- * call queue.add() (e.g. IngestionService enqueues support-sync jobs).
+ * Processor classes are NOT in providers[]. They live exclusively in
+ * WorkerProcessorsModule to prevent Bull "Cannot define the same handler twice".
  */
 @Module({
   imports: [
     PrismaModule,
     IntegrationsModule,
-    BullModule.registerQueue(
-      { name: 'support-sync' },
-      { name: 'support-clustering' },
-      { name: 'support-spike-detection' },
-      { name: 'support-sentiment' },
-      // Required by ClusteringProcessor which enqueues CIQ re-scoring jobs
-      // after correlateWithFeedback() links support clusters to themes.
-      { name: 'ciq-scoring' },
-    ),
   ],
   controllers: [SupportController],
   providers: [
@@ -45,9 +30,6 @@ import { SentimentService } from './services/sentiment.service';
     ClusteringService,
     SpikeDetectionService,
     SentimentService,
-    // Processors (SyncProcessor, ClusteringProcessor, SpikeDetectionProcessor,
-    // SentimentProcessor) are NOT here — registered exclusively in
-    // WorkerProcessorsModule to prevent Bull "same handler twice" crash.
   ],
   exports: [
     IngestionService,

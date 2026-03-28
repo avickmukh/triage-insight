@@ -10,7 +10,6 @@ import { PrismaModule } from '../prisma/prisma.module';
 @Module({
   imports: [
     PrismaModule,
-    BullModule.registerQueue({ name: DASHBOARD_QUEUE }),
   ],
   controllers: [DashboardController],
   providers: [

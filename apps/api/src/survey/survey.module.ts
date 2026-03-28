@@ -12,8 +12,7 @@ import { CIQ_SCORING_QUEUE } from '../ai/processors/ciq-scoring.processor';
   imports: [
     PrismaModule,
     AiModule,
-    BullModule.registerQueue({ name: SURVEY_INTELLIGENCE_QUEUE }),
-    BullModule.registerQueue({ name: CIQ_SCORING_QUEUE }),
+
   ],
   controllers: [SurveyController, PublicSurveyController],
   providers: [SurveyService, SurveyIntelligenceService],

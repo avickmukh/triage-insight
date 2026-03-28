@@ -14,8 +14,7 @@ import { CIQ_SCORING_QUEUE } from "../ai/processors/ciq-scoring.processor";
   imports: [
     PrismaModule,
     AiModule,
-    BullModule.registerQueue({ name: CIQ_SCORING_QUEUE }),
-    BullModule.registerQueue({ name: PRIORITIZATION_QUEUE }),
+
   ],
   controllers: [PrioritizationController],
   providers: [

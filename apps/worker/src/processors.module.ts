@@ -1,45 +1,40 @@
 /**
  * WorkerProcessorsModule
  *
- * This is the ONLY place in the entire codebase where BullMQ @Processor()
+ * This is the ONLY place in the entire codebase where Bull @Processor()
  * classes are registered as NestJS providers.
  *
- * Design rationale
- * ────────────────
- * Processors are worker-only runtime artefacts. They must never be
- * instantiated in the API process.
+ * ── Key architectural rule ───────────────────────────────────────────────────
+ * DO NOT add any BullModule.registerQueue() calls here.
  *
- * Feature modules (AiModule, ThemeModule, etc.) are shared between the API
- * and the worker. Processors have been removed from those shared modules'
- * providers[] arrays to prevent double-registration.
+ * Every queue is already registered by the feature module that owns it
+ * (e.g. ThemeModule registers AI_CLUSTERING_QUEUE, VoiceModule registers
+ * VOICE_TRANSCRIPTION_QUEUE, etc.). Those feature modules are imported below,
+ * so their queue tokens are already available in this module's DI scope.
  *
- * Why AiModule is NOT imported here
- * ──────────────────────────────────
- * AiModule is marked @Global(). Its exported services (EmbeddingService,
- * ThemeClusteringService, DuplicateDetectionService, CiqService, etc.) are
- * therefore available in every module in the DI container without any explicit
- * import. WorkerModule (the root) already imports AiModule; importing it again
- * here would cause Bull to see the ai-analysis and ciq-scoring queue
- * registrations twice and throw "Cannot define the same handler twice".
+ * Adding BullModule.registerQueue({ name: X }) here when the feature module
+ * that owns queue X is also imported here causes Bull to call
+ * Queue.setHandler() twice for the same queue name, throwing:
+ *   "Cannot define the same handler twice __default__"
  *
- * The same logic applies to PrismaModule (also @Global()) and CommonModule
- * (also @Global()): they are imported by WorkerModule and their providers are
- * available everywhere — no need to import them here.
+ * ── Why processors are not in the feature modules ───────────────────────────
+ * Processors are worker-only runtime artefacts. The API process imports the
+ * same feature modules but must never instantiate processors. Keeping
+ * processors exclusively here ensures they are only registered in the worker.
  *
- * All other feature modules (ThemeModule, CustomerModule, etc.) are imported
- * here so their exported services are resolvable by the processors that depend
- * on them. NestJS deduplicates module instances, so each module is only
- * instantiated once even though WorkerModule also imports them.
+ * ── @Global() modules ───────────────────────────────────────────────────────
+ * AiModule, PrismaModule, and CommonModule are @Global() and are imported by
+ * WorkerModule (the root). Their exported providers (EmbeddingService,
+ * PrismaService, etc.) are available everywhere without re-importing.
+ * AiModule is intentionally NOT imported here — it would re-register
+ * AI_ANALYSIS_QUEUE and CIQ_SCORING_QUEUE a second time.
  */
 
 import { Module } from '@nestjs/common';
-import { BullModule } from '@nestjs/bull';
 
-// ── Feature modules (provide services that processors depend on) ──────────────
-// NOTE: AiModule, PrismaModule, and CommonModule are intentionally excluded
-// because they are @Global() and already loaded by WorkerModule. Including them
-// here would cause duplicate BullModule.registerQueue calls for ai-analysis and
-// ciq-scoring queues, triggering Bull's "Cannot define the same handler twice".
+// ── Feature modules (provide services + queue tokens to processors) ───────────
+// AiModule is intentionally excluded — it is @Global() and already loaded by
+// WorkerModule. Re-importing it here would duplicate its queue registrations.
 import { ThemeModule } from '../../api/src/theme/theme.module';
 import { CustomerModule } from '../../api/src/customer/customer.module';
 import { DigestModule } from '../../api/src/digest/digest.module';
@@ -53,58 +48,31 @@ import { VoiceModule } from '../../api/src/voice/voice.module';
 import { DashboardModule } from '../../api/src/dashboard/dashboard.module';
 
 // ── AI ───────────────────────────────────────────────────────────────────────
-import {
-  AiAnalysisProcessor,
-  AI_ANALYSIS_QUEUE,
-} from '../../api/src/ai/processors/analysis.processor';
-import {
-  CiqScoringProcessor,
-  CIQ_SCORING_QUEUE,
-} from '../../api/src/ai/processors/ciq-scoring.processor';
+import { AiAnalysisProcessor } from '../../api/src/ai/processors/analysis.processor';
+import { CiqScoringProcessor } from '../../api/src/ai/processors/ciq-scoring.processor';
 
 // ── Theme ────────────────────────────────────────────────────────────────────
 import { ThemeClusteringProcessor } from '../../api/src/theme/processors/theme-clustering.processor';
-import { AI_CLUSTERING_QUEUE } from '../../api/src/theme/services/theme.service';
-import {
-  UnifiedAggregationProcessor,
-  UNIFIED_AGGREGATION_QUEUE,
-} from '../../api/src/theme/processors/unified-aggregation.processor';
+import { UnifiedAggregationProcessor } from '../../api/src/theme/processors/unified-aggregation.processor';
 
 // ── Customer ─────────────────────────────────────────────────────────────────
-import {
-  CustomerRevenueSignalProcessor,
-  CUSTOMER_REVENUE_SIGNAL_QUEUE,
-} from '../../api/src/customer/processors/customer-revenue-signal.processor';
-import {
-  CustomerSignalAggregationProcessor,
-  CUSTOMER_SIGNAL_AGGREGATION_QUEUE,
-} from '../../api/src/customer/processors/customer-signal-aggregation.processor';
+import { CustomerRevenueSignalProcessor } from '../../api/src/customer/processors/customer-revenue-signal.processor';
+import { CustomerSignalAggregationProcessor } from '../../api/src/customer/processors/customer-signal-aggregation.processor';
 
 // ── Digest ───────────────────────────────────────────────────────────────────
-import {
-  DigestProcessor,
-  DIGEST_QUEUE,
-} from '../../api/src/digest/digest.processor';
+import { DigestProcessor } from '../../api/src/digest/digest.processor';
 
 // ── Integrations ─────────────────────────────────────────────────────────────
-import {
-  SlackIngestionProcessor,
-  SLACK_INGESTION_QUEUE,
-} from '../../api/src/integrations/processors/slack-ingestion.processor';
+import { SlackIngestionProcessor } from '../../api/src/integrations/processors/slack-ingestion.processor';
 
 // ── Prioritization ───────────────────────────────────────────────────────────
-import {
-  PrioritizationWorker,
-  PRIORITIZATION_QUEUE,
-} from '../../api/src/prioritization/workers/prioritization.worker';
+import { PrioritizationWorker } from '../../api/src/prioritization/workers/prioritization.worker';
 
 // ── Public Portal ────────────────────────────────────────────────────────────
 import { PortalSignalProcessor } from '../../api/src/public/processors/portal-signal.processor';
-import { PORTAL_SIGNAL_QUEUE } from '../../api/src/public/portal-signal.constants';
 
 // ── Purge ────────────────────────────────────────────────────────────────────
 import { PurgeWorker } from '../../api/src/purge/purge.worker';
-import { PURGE_QUEUE } from '../../api/src/purge/purge.service';
 
 // ── Support ──────────────────────────────────────────────────────────────────
 import { SyncProcessor } from '../../api/src/support/processors/sync.processor';
@@ -113,31 +81,22 @@ import { SpikeDetectionProcessor } from '../../api/src/support/processors/spike-
 import { SentimentProcessor } from '../../api/src/support/processors/sentiment.processor';
 
 // ── Survey ───────────────────────────────────────────────────────────────────
-import {
-  SurveyIntelligenceProcessor,
-  SURVEY_INTELLIGENCE_QUEUE,
-} from '../../api/src/survey/processors/survey-intelligence.processor';
+import { SurveyIntelligenceProcessor } from '../../api/src/survey/processors/survey-intelligence.processor';
 
 // ── Voice ────────────────────────────────────────────────────────────────────
 import { VoiceTranscriptionProcessor } from '../../api/src/voice/processors/voice-transcription.processor';
-import {
-  VoiceExtractionProcessor,
-  VOICE_EXTRACTION_QUEUE,
-} from '../../api/src/voice/processors/voice-extraction.processor';
-import { VOICE_TRANSCRIPTION_QUEUE } from '../../api/src/voice/services/voice.service';
+import { VoiceExtractionProcessor } from '../../api/src/voice/processors/voice-extraction.processor';
 
 // ── Dashboard ────────────────────────────────────────────────────────────────
-import {
-  DashboardRefreshWorker,
-  DASHBOARD_QUEUE,
-} from '../../api/src/dashboard/workers/dashboard-refresh.worker';
+import { DashboardRefreshWorker } from '../../api/src/dashboard/workers/dashboard-refresh.worker';
 
 @Module({
   imports: [
-    // Feature modules — processors are NOT in their providers[], so importing
-    // them here does not cause double-registration. NestJS reuses the same
-    // module instance if it was already loaded by WorkerModule.
-    // AiModule is excluded — it is @Global() and already loaded by WorkerModule.
+    // Feature modules supply both the services processors depend on AND the
+    // Bull queue tokens (@InjectQueue tokens) that processors inject.
+    // DO NOT add BullModule.registerQueue() here — the feature modules already
+    // register their own queues. Adding them again causes Bull to crash with
+    // "Cannot define the same handler twice __default__".
     ThemeModule,
     CustomerModule,
     DigestModule,
@@ -149,40 +108,13 @@ import {
     SurveyModule,
     VoiceModule,
     DashboardModule,
-
-    // Queue registrations — required for @InjectQueue() in processor constructors.
-    // BullModule deduplicates registrations so registering the same queue name
-    // twice (once in the feature module, once here) is safe.
-    // NOTE: AI_ANALYSIS_QUEUE and CIQ_SCORING_QUEUE are already registered by
-    // AiModule (loaded globally by WorkerModule). We re-register them here so
-    // the @InjectQueue() tokens in AiAnalysisProcessor and CiqScoringProcessor
-    // resolve correctly within this module's DI scope.
-    BullModule.registerQueue({ name: AI_ANALYSIS_QUEUE }),
-    BullModule.registerQueue({ name: CIQ_SCORING_QUEUE }),
-    BullModule.registerQueue({ name: AI_CLUSTERING_QUEUE }),
-    BullModule.registerQueue({ name: UNIFIED_AGGREGATION_QUEUE }),
-    BullModule.registerQueue({ name: CUSTOMER_REVENUE_SIGNAL_QUEUE }),
-    BullModule.registerQueue({ name: CUSTOMER_SIGNAL_AGGREGATION_QUEUE }),
-    BullModule.registerQueue({ name: DIGEST_QUEUE }),
-    BullModule.registerQueue({ name: SLACK_INGESTION_QUEUE }),
-    BullModule.registerQueue({ name: PRIORITIZATION_QUEUE }),
-    BullModule.registerQueue({ name: PORTAL_SIGNAL_QUEUE }),
-    BullModule.registerQueue({ name: PURGE_QUEUE }),
-    BullModule.registerQueue({ name: 'support-sync' }),
-    BullModule.registerQueue({ name: 'support-clustering' }),
-    BullModule.registerQueue({ name: 'support-spike-detection' }),
-    BullModule.registerQueue({ name: 'support-sentiment' }),
-    BullModule.registerQueue({ name: SURVEY_INTELLIGENCE_QUEUE }),
-    BullModule.registerQueue({ name: VOICE_TRANSCRIPTION_QUEUE }),
-    BullModule.registerQueue({ name: VOICE_EXTRACTION_QUEUE }),
-    BullModule.registerQueue({ name: DASHBOARD_QUEUE }),
   ],
   providers: [
     // ── Stage-1: Semantic Intelligence ───────────────────────────────────────
-    AiAnalysisProcessor,       // ai-analysis → embeddings, dedup, theme clustering
-    CiqScoringProcessor,       // ciq-scoring → priority score computation
-    ThemeClusteringProcessor,  // theme-clustering → theme assignment
-    UnifiedAggregationProcessor, // unified-aggregation → cross-source counts + insight
+    AiAnalysisProcessor,          // ai-analysis      → embeddings, dedup, theme clustering
+    CiqScoringProcessor,          // ciq-scoring       → priority score computation
+    ThemeClusteringProcessor,     // theme-clustering  → theme assignment
+    UnifiedAggregationProcessor,  // unified-aggregation → cross-source counts + insight
     // ── Customer signals ─────────────────────────────────────────────────────
     CustomerRevenueSignalProcessor,
     CustomerSignalAggregationProcessor,

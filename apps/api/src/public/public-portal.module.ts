@@ -12,9 +12,7 @@ import { PortalSseGateway } from './gateway/portal-sse.gateway';
 @Module({
   imports: [
     PrismaModule,
-    BullModule.registerQueue({ name: PORTAL_SIGNAL_QUEUE }),
-    BullModule.registerQueue({ name: AI_ANALYSIS_QUEUE }),
-    BullModule.registerQueue({ name: CIQ_SCORING_QUEUE }),
+
   ],
   controllers: [PublicPortalController],
   providers: [

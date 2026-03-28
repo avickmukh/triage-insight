@@ -17,10 +17,6 @@ import { QUEUE_NAMES } from '../queue/queue.module';
   imports: [
     TerminusModule,
     PrismaModule,
-    BullModule.registerQueue(
-      { name: QUEUE_NAMES.AI_ANALYSIS },
-      { name: QUEUE_NAMES.CIQ_SCORING },
-    ),
   ],
   controllers: [HealthController],
 })

@@ -14,10 +14,8 @@ import { CIQ_SCORING_QUEUE } from '../ai/processors/ciq-scoring.processor';
 @Module({
   imports: [
     PrismaModule,
-    BullModule.registerQueue({ name: CUSTOMER_REVENUE_SIGNAL_QUEUE }),
-    BullModule.registerQueue({ name: CUSTOMER_SIGNAL_AGGREGATION_QUEUE }),
+
     // CIQ queue is needed so the revenue signal processor can enqueue re-scoring jobs
-    BullModule.registerQueue({ name: CIQ_SCORING_QUEUE }),
   ],
   controllers: [CustomerController],
   providers: [

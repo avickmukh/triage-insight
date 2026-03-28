@@ -28,8 +28,7 @@ import { CiqEngineService } from '../ciq/ciq-engine.service';
 @Module({
   imports: [
     PrismaModule,
-    BullModule.registerQueue({ name: AI_ANALYSIS_QUEUE }),
-    BullModule.registerQueue({ name: CIQ_SCORING_QUEUE }),
+
   ],
   controllers: [AiController, DuplicateSuggestionsController],
   providers: [

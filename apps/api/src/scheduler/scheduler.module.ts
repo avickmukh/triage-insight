@@ -10,7 +10,6 @@ import { DigestScheduler } from './digest.scheduler';
   imports: [
     ScheduleModule.forRoot(),
     PrismaModule,
-    BullModule.registerQueue({ name: DIGEST_QUEUE }),
     DigestModule,
   ],
   providers: [DigestScheduler],

@@ -14,9 +14,7 @@ import { UNIFIED_AGGREGATION_QUEUE } from './processors/unified-aggregation.proc
   imports: [
     PrismaModule,
     AiModule,
-    BullModule.registerQueue({ name: AI_CLUSTERING_QUEUE }),
-    BullModule.registerQueue({ name: CIQ_SCORING_QUEUE }),
-    BullModule.registerQueue({ name: UNIFIED_AGGREGATION_QUEUE }),
+
     DealModule,
   ],
   controllers: [ThemeController],

@@ -10,7 +10,6 @@ import { RoadmapService } from "./services/roadmap.service";
   imports: [
     PrismaModule,
     AiModule,
-    BullModule.registerQueue({ name: CIQ_SCORING_QUEUE }),
   ],
   controllers: [RoadmapController],
   providers: [RoadmapService],

@@ -17,20 +17,8 @@ import { QUEUE_NAMES } from '../queue/queue.module';
     PrismaModule,
     ConfigModule,
     // Register the purge queue
-    BullModule.registerQueue({ name: PURGE_QUEUE }),
     // QueuePurgeStep needs to inject all existing queues to drain them
-    BullModule.registerQueue({ name: QUEUE_NAMES.AI_ANALYSIS }),
-    BullModule.registerQueue({ name: QUEUE_NAMES.CIQ_SCORING }),
-    BullModule.registerQueue({ name: QUEUE_NAMES.VOICE_TRANSCRIPTION }),
-    BullModule.registerQueue({ name: QUEUE_NAMES.VOICE_EXTRACTION }),
-    BullModule.registerQueue({ name: QUEUE_NAMES.SURVEY_INTELLIGENCE }),
-    BullModule.registerQueue({ name: QUEUE_NAMES.SUPPORT_SYNC }),
-    BullModule.registerQueue({ name: QUEUE_NAMES.SUPPORT_CLUSTERING }),
-    BullModule.registerQueue({ name: QUEUE_NAMES.SUPPORT_SPIKE_DETECTION }),
-    BullModule.registerQueue({ name: QUEUE_NAMES.CUSTOMER_SIGNAL_AGGREGATION }),
-    BullModule.registerQueue({ name: QUEUE_NAMES.THEME_CLUSTERING }),
-    BullModule.registerQueue({ name: QUEUE_NAMES.PRIORITIZATION }),
-    BullModule.registerQueue({ name: QUEUE_NAMES.DASHBOARD_REFRESH }),
+
   ],
   controllers: [PurgeWorkspaceController, PurgePlatformController],
   providers: [

@@ -16,10 +16,8 @@ import { CIQ_SCORING_QUEUE } from '../ai/processors/ciq-scoring.processor';
     PrismaModule,
     UploadsModule,
     AiModule,
-    BullModule.registerQueue({ name: VOICE_TRANSCRIPTION_QUEUE }),
-    BullModule.registerQueue({ name: VOICE_EXTRACTION_QUEUE }),
+
     // Register the CIQ queue so the extraction processor can trigger re-scoring
-    BullModule.registerQueue({ name: CIQ_SCORING_QUEUE }),
   ],
   controllers: [VoiceController],
   providers: [

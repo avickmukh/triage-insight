@@ -10,7 +10,6 @@ import { DigestController } from './digest.controller';
 @Module({
   imports: [
     PrismaModule,
-    BullModule.registerQueue({ name: DIGEST_QUEUE }),
   ],
   controllers: [DigestController],
   providers: [DigestService],

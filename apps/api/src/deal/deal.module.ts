@@ -9,8 +9,7 @@ import { CIQ_SCORING_QUEUE } from '../ai/processors/ciq-scoring.processor';
 @Module({
   imports: [
     PrismaModule,
-    BullModule.registerQueue({ name: CUSTOMER_REVENUE_SIGNAL_QUEUE }),
-    BullModule.registerQueue({ name: CIQ_SCORING_QUEUE }),
+
   ],
   controllers: [DealController],
   providers: [DealService],

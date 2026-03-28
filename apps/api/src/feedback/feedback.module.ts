@@ -19,8 +19,7 @@ import { PlanLimitService } from '../billing/plan-limit.service';
     PrismaModule,
     UploadsModule,
     AiModule,
-    BullModule.registerQueue({ name: AI_ANALYSIS_QUEUE }),
-    BullModule.registerQueue({ name: CIQ_SCORING_QUEUE }),
+
   ],
   controllers: [FeedbackController, PublicFeedbackController],
   providers: [
