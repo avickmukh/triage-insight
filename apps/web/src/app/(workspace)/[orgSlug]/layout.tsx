@@ -137,6 +137,7 @@ function AuthenticatedShell({ slug, pathname, children }: { slug: string; pathna
 
             {/* Intelligence Hub — promoted to top-level */}
             <NavGroup label="Intelligence Hub" open={sidebarOpen}>
+              <SideNavItem href={r.ciq}                   pathname={pathname} open={sidebarOpen} icon={<IconIntelligence/>}>CIQ Dashboard</SideNavItem>
               <SideNavItem href={r.intelligence}          pathname={pathname} open={sidebarOpen} icon={<IconIntelligence/>}>CIQ Overview</SideNavItem>
               <SideNavItem href={r.intelligenceThemes}    pathname={pathname} open={sidebarOpen} icon={<IconThemeRank/>}>Theme Ranking</SideNavItem>
               <SideNavItem href={r.intelligenceFeatures}  pathname={pathname} open={sidebarOpen} icon={<IconFeatureRank/>}>Feature Ranking</SideNavItem>
@@ -210,6 +211,7 @@ function AuthenticatedShell({ slug, pathname, children }: { slug: string; pathna
                 <DrawerNavItem href={r.roadmap}   pathname={pathname} icon={<IconRoadmap/>}>Roadmap</DrawerNavItem>
               </NavGroupDrawer>
               <NavGroupDrawer label="Intelligence Hub">
+                <DrawerNavItem href={r.ciq}                   pathname={pathname} icon={<IconIntelligence/>}>CIQ Dashboard</DrawerNavItem>
                 <DrawerNavItem href={r.intelligence}          pathname={pathname} icon={<IconIntelligence/>}>CIQ Overview</DrawerNavItem>
                 <DrawerNavItem href={r.intelligenceThemes}    pathname={pathname} icon={<IconThemeRank/>}>Theme Ranking</DrawerNavItem>
                 <DrawerNavItem href={r.intelligenceFeatures}  pathname={pathname} icon={<IconFeatureRank/>}>Feature Ranking</DrawerNavItem>

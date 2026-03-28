@@ -3,15 +3,18 @@
  * CIQ Intelligence Hub — /:orgSlug/app/intelligence
  *
  * Strategic overview combining:
- *   - Roadmap recommendations from strategic signals
- *   - Top themes by CIQ score
+ *   - Roadmap recommendations from strategic signals (with Promote to Roadmap CTA)
+ *   - Top themes by CIQ score (with Promote to Roadmap CTA)
  *   - Voice / survey / support signal summaries
  *   - Signal feed (recent strategic events)
  */
+import React, { useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useCiqStrategicSignals, useCiqThemeRanking } from '@/hooks/use-ciq';
+import { useWorkspace } from '@/hooks/use-workspace';
 import { appRoutes } from '@/lib/routes';
+import { PromoteToRoadmapModal } from '@/components/roadmap/PromoteToRoadmapModal';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const CARD: React.CSSProperties = {
@@ -55,12 +58,17 @@ function CiqScoreBar({ score }: { score: number }) {
 export default function IntelligencePage() {
   const params = useParams<{ orgSlug: string }>();
   const orgSlug = params.orgSlug;
+  const router = useRouter();
   const routes = appRoutes(orgSlug);
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id ?? '';
 
   const { data: signals, isLoading: signalsLoading } = useCiqStrategicSignals();
   const { data: themeRanking, isLoading: themesLoading } = useCiqThemeRanking(10);
 
   const isLoading = signalsLoading || themesLoading;
+
+  const [promoteModal, setPromoteModal] = useState<{ themeId: string; themeTitle: string } | null>(null);
 
   return (
     <div style={{ padding: '2rem', maxWidth: 1400, margin: '0 auto' }}>
@@ -74,7 +82,11 @@ export default function IntelligencePage() {
             Strategic signals, roadmap recommendations, and cross-channel demand intelligence
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <Link href={routes.ciq}
+            style={{ padding: '0.5rem 1rem', background: '#0a2540', color: '#fff', borderRadius: '0.5rem', textDecoration: 'none', fontSize: '0.875rem', fontWeight: 600 }}>
+            CIQ Dashboard
+          </Link>
           <Link href={routes.intelligenceThemes}
             style={{ padding: '0.5rem 1rem', background: '#f0f4f8', color: '#0a2540', borderRadius: '0.5rem', textDecoration: 'none', fontSize: '0.875rem', fontWeight: 500 }}>
             Theme Ranking
@@ -162,6 +174,7 @@ export default function IntelligencePage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   {signals.roadmapRecommendations.slice(0, 8).map((rec) => {
                     const style = RECOMMENDATION_COLORS[rec.recommendation] ?? RECOMMENDATION_COLORS.monitor;
+                    const canPromote = rec.recommendation === 'promote_to_planned' || rec.recommendation === 'promote_to_committed';
                     return (
                       <div key={rec.themeId} style={{ padding: '0.875rem', background: '#f8f9fa', borderRadius: '0.5rem', borderLeft: `3px solid ${style.color}` }}>
                         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '0.375rem' }}>
@@ -175,6 +188,25 @@ export default function IntelligencePage() {
                         </div>
                         <div style={{ fontSize: '0.75rem', color: '#6C757D', marginBottom: '0.375rem' }}>{rec.rationale}</div>
                         <CiqScoreBar score={rec.ciqScore} />
+                        {canPromote && (
+                          <div style={{ marginTop: '0.5rem' }}>
+                            <button
+                              onClick={() => setPromoteModal({ themeId: rec.themeId, themeTitle: rec.title })}
+                              style={{
+                                padding: '0.2rem 0.6rem',
+                                background: '#e8f7f7',
+                                color: '#20A4A4',
+                                border: '1px solid #20A4A4',
+                                borderRadius: '0.35rem',
+                                cursor: 'pointer',
+                                fontSize: '0.7rem',
+                                fontWeight: 600,
+                              }}
+                            >
+                              + Promote to Roadmap
+                            </button>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -205,14 +237,33 @@ export default function IntelligencePage() {
                         {i + 1}
                       </span>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem', gap: '0.5rem' }}>
                           <Link href={routes.themeItem(theme.themeId)}
                             style={{ fontWeight: 600, color: '#0a2540', textDecoration: 'none', fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
                             {theme.title}
                           </Link>
-                          <span style={{ fontSize: '0.75rem', color: '#6C757D', marginLeft: '0.5rem', flexShrink: 0 }}>
-                            {theme.feedbackCount} signals
-                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
+                            <span style={{ fontSize: '0.72rem', color: '#6C757D' }}>
+                              {theme.feedbackCount} signals
+                            </span>
+                            <button
+                              onClick={() => setPromoteModal({ themeId: theme.themeId, themeTitle: theme.title })}
+                              title="Promote to Roadmap"
+                              style={{
+                                padding: '0.15rem 0.45rem',
+                                background: '#e8f7f7',
+                                color: '#20A4A4',
+                                border: '1px solid #20A4A4',
+                                borderRadius: '0.3rem',
+                                cursor: 'pointer',
+                                fontSize: '0.65rem',
+                                fontWeight: 700,
+                                lineHeight: 1.4,
+                              }}
+                            >
+                              + Roadmap
+                            </button>
+                          </div>
                         </div>
                         <CiqScoreBar score={theme.ciqScore} />
                       </div>
@@ -228,12 +279,12 @@ export default function IntelligencePage() {
           </div>
 
           {/* ── Signal Feed ── */}
-          {signals && signals.signals.length > 0 && (
+          {signals && signals.signals && signals.signals.length > 0 && (
             <div style={CARD}>
               <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#0a2540', margin: '0 0 1rem' }}>
                 Strategic Signal Feed
               </h2>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '0.75rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '0.75rem' }}>
                 {signals.signals.slice(0, 12).map((sig, i) => {
                   const sc = SIGNAL_COLORS[sig.type] ?? { bg: '#f0f4f8', color: '#6C757D' };
                   return (
@@ -246,10 +297,10 @@ export default function IntelligencePage() {
                           {sig.entityTitle}
                         </span>
                         <span style={{ fontSize: '0.7rem', color: '#6C757D', flexShrink: 0 }}>
-                          str: {(sig.strength * 100).toFixed(0)}%
+                          {(sig.strength * 100).toFixed(0)}%
                         </span>
                       </div>
-                      <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#0a2540', marginBottom: '0.25rem' }}>{sig.signal}</div>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#0a2540', marginBottom: '0.2rem' }}>{sig.signal}</div>
                       <div style={{ fontSize: '0.75rem', color: '#6C757D' }}>{sig.detail}</div>
                     </div>
                   );
@@ -258,6 +309,21 @@ export default function IntelligencePage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* ── Promote to Roadmap Modal ── */}
+      {promoteModal && workspaceId && (
+        <PromoteToRoadmapModal
+          workspaceId={workspaceId}
+          themeId={promoteModal.themeId}
+          themeTitle={promoteModal.themeTitle}
+          isOpen={true}
+          onClose={() => setPromoteModal(null)}
+          onSuccess={(roadmapItemId) => {
+            setPromoteModal(null);
+            router.push(routes.roadmapItem(roadmapItemId));
+          }}
+        />
       )}
     </div>
   );

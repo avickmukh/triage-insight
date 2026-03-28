@@ -945,6 +945,18 @@ const apiClient = {
      */
     getStrategicSignals: (workspaceId: string): Promise<StrategicSignalsOutput> =>
       api.get(`/workspaces/${workspaceId}/ciq/strategic-signals`).then(handleResponse),
+    /**
+     * GET /workspaces/:id/ciq/top
+     * Returns the top N feedback items by CIQ score (default 10, max 50).
+     */
+    getTop: (workspaceId: string, limit = 10): Promise<FeatureRankingItem[]> =>
+      api.get(`/workspaces/${workspaceId}/ciq/top`, { params: { limit } }).then(handleResponse),
+    /**
+     * POST /workspaces/:id/ciq/recompute
+     * Enqueues a full workspace CIQ recompute job.
+     */
+    recompute: (workspaceId: string): Promise<{ jobId: string | number; message: string }> =>
+      api.post(`/workspaces/${workspaceId}/ciq/recompute`).then(handleResponse),
   },
 
   domain: {

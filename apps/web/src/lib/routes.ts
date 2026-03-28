@@ -55,6 +55,7 @@ export const appRoutes = (slug: string) => ({
   intelligenceThemes: `/${slug}/app/intelligence/themes`,
   intelligenceFeatures: `/${slug}/app/intelligence/features`,
   intelligenceCustomers: `/${slug}/app/intelligence/customers`,
+  ciq: `/${slug}/app/ciq`,
   prioritization:              `/${slug}/app/prioritization`,
   prioritizationFeatures:      `/${slug}/app/prioritization/features`,
   prioritizationOpportunities: `/${slug}/app/prioritization/opportunities`,

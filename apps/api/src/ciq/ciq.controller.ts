@@ -3,6 +3,9 @@
  *
  * Exposes the CIQ Full Scoring Engine via workspace-scoped endpoints:
  *
+ *   GET /workspaces/:workspaceId/ciq/top
+ *     — Top N feedback items by CIQ score (convenience alias, default 10)
+ *
  *   GET /workspaces/:workspaceId/ciq/feature-ranking
  *     — Ranked list of feedback items by CIQ score (6-dimension composite)
  *
@@ -17,20 +20,59 @@
  *       voice sentiment summary, survey demand summary, support spike summary,
  *       and a composite signal feed
  *
+ *   POST /workspaces/:workspaceId/ciq/recompute
+ *     — Enqueue a full workspace CIQ recompute job (ADMIN / EDITOR only)
+ *
  * All endpoints require JWT auth + workspace membership.
  * Viewer role is sufficient for read-only access.
  */
-import { Controller, Get, Query, Param, UseGuards, ParseIntPipe, DefaultValuePipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Query,
+  Param,
+  Req,
+  UseGuards,
+  ParseIntPipe,
+  DefaultValuePipe,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { CiqEngineService } from './ciq-engine.service';
+import { PrioritizationService } from '../prioritization/services/prioritization.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../workspace/guards/roles.guard';
 import { Roles } from '../workspace/decorators/roles.decorator';
 import { WorkspaceRole } from '@prisma/client';
 
+interface AuthenticatedRequest {
+  user: { sub: string; email: string };
+}
+
 @Controller('workspaces/:workspaceId/ciq')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class CiqController {
-  constructor(private readonly ciqEngineService: CiqEngineService) {}
+  constructor(
+    private readonly ciqEngineService: CiqEngineService,
+    private readonly prioritizationService: PrioritizationService,
+  ) {}
+
+  /**
+   * GET /workspaces/:workspaceId/ciq/top
+   *
+   * Convenience alias: returns the top N feedback items by CIQ score.
+   * Equivalent to GET /ciq/feature-ranking?limit=N.
+   * Default limit is 10; maximum is 50.
+   */
+  @Get('top')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
+  getTop(
+    @Param('workspaceId') workspaceId: string,
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+  ) {
+    return this.ciqEngineService.getFeatureRanking(workspaceId, Math.min(limit, 50));
+  }
 
   /**
    * GET /workspaces/:workspaceId/ciq/feature-ranking
@@ -95,5 +137,22 @@ export class CiqController {
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
   getStrategicSignals(@Param('workspaceId') workspaceId: string) {
     return this.ciqEngineService.getStrategicSignals(workspaceId);
+  }
+
+  /**
+   * POST /workspaces/:workspaceId/ciq/recompute
+   *
+   * Enqueues a full workspace CIQ recompute job.
+   * Convenience alias for POST /prioritization/recompute.
+   * Requires ADMIN or EDITOR role.
+   */
+  @Post('recompute')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  @HttpCode(HttpStatus.ACCEPTED)
+  recompute(
+    @Param('workspaceId') workspaceId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.prioritizationService.enqueueFullRecompute(workspaceId, req.user.sub);
   }
 }

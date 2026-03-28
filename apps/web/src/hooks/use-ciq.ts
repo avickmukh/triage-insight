@@ -348,3 +348,40 @@ export const useCiqStrategicSignals = () => {
     staleTime: 3 * 60 * 1000,
   });
 };
+
+/**
+ * Fetch the top N feedback items by CIQ score (default 10, max 50).
+ * Calls GET /workspaces/:id/ciq/top
+ */
+export const useCiqTop = (limit = 10) => {
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id;
+  return useQuery<FeatureRankingItem[], Error>({
+    queryKey: [CIQ_ENGINE_KEY, workspaceId, "top", limit],
+    queryFn: () => {
+      if (!workspaceId) throw new Error("Workspace ID is not available");
+      return apiClient.ciqEngine.getTop(workspaceId, limit);
+    },
+    enabled: !!workspaceId,
+    staleTime: 2 * 60 * 1000,
+  });
+};
+
+/**
+ * Trigger a full workspace CIQ recompute job.
+ * Calls POST /workspaces/:id/ciq/recompute
+ */
+export const useCiqRecompute = () => {
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id;
+  const queryClient = useQueryClient();
+  return useMutation<{ jobId: string | number; message: string }, Error>({
+    mutationFn: () => {
+      if (!workspaceId) throw new Error("Workspace ID is not available");
+      return apiClient.ciqEngine.recompute(workspaceId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [CIQ_ENGINE_KEY, workspaceId] });
+    },
+  });
+};
