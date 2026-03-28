@@ -360,3 +360,66 @@ export const useThemes = (themeId?: string) => {
     isMovingFeedback,
   };
 };
+
+// ─── Unified Intelligence Hooks ──────────────────────────────────────────────
+
+import { UnifiedTopIssue, WorkspaceSourceSummary } from '@/lib/api-types';
+
+/**
+ * Fetches the top N themes ranked by cross-source signal count
+ * (feedback + support + voice combined).
+ */
+export const useTopIssues = (limit = 10) => {
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id;
+
+  return useQuery<UnifiedTopIssue[], Error>({
+    queryKey: [THEME_QUERY_KEY, workspaceId, 'top-issues', limit],
+    queryFn: () => {
+      if (!workspaceId) throw new Error('Workspace ID is not available');
+      return apiClient.themes.getTopIssues(workspaceId, limit);
+    },
+    enabled: !!workspaceId,
+    staleTime: 1000 * 60 * 5,
+  });
+};
+
+/**
+ * Fetches workspace-level source breakdown summary
+ * (total signals, per-source counts and percentages).
+ */
+export const useSourceSummary = () => {
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id;
+
+  return useQuery<WorkspaceSourceSummary, Error>({
+    queryKey: [THEME_QUERY_KEY, workspaceId, 'source-summary'],
+    queryFn: () => {
+      if (!workspaceId) throw new Error('Workspace ID is not available');
+      return apiClient.themes.getSourceSummary(workspaceId);
+    },
+    enabled: !!workspaceId,
+    staleTime: 1000 * 60 * 5,
+  });
+};
+
+/**
+ * Mutation to trigger a full workspace-wide cross-source aggregation.
+ * Admin only.
+ */
+export const useAggregateAll = () => {
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id;
+  const queryClient = useQueryClient();
+
+  return useMutation<{ queued: number }, Error, void>({
+    mutationFn: () => {
+      if (!workspaceId) throw new Error('Workspace ID is not available');
+      return apiClient.themes.aggregateAll(workspaceId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [THEME_QUERY_KEY, workspaceId, 'top-issues'] });
+      queryClient.invalidateQueries({ queryKey: [THEME_QUERY_KEY, workspaceId, 'source-summary'] });
+    },
+  });
+};

@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { ThemeService } from './services/theme.service';
 import { DealService } from '../deal/deal.service';
+import { UnifiedAggregationService } from './services/unified-aggregation.service';
 import { CreateThemeDto } from './dto/create-theme.dto';
 import { UpdateThemeDto } from './dto/update-theme.dto';
 import { QueryThemeDto } from './dto/query-theme.dto';
@@ -46,6 +47,7 @@ export class ThemeController {
   constructor(
     private readonly themeService: ThemeService,
     private readonly dealService: DealService,
+    private readonly unifiedAggregationService: UnifiedAggregationService,
   ) {}
 
   @Post()
@@ -72,6 +74,39 @@ export class ThemeController {
     return this.themeService.moveFeedback(workspaceId, req.user.sub, moveFeedbackDto);
   }
 
+  /**
+   * GET /workspaces/:workspaceId/themes/top-issues
+   * Returns top N themes ranked by totalSignalCount (cross-source: feedback + support + voice).
+   */
+  @Get('top-issues')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
+  getTopIssues(
+    @Param('workspaceId') workspaceId: string,
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+  ) {
+    return this.unifiedAggregationService.getTopIssues(workspaceId, limit);
+  }
+
+  /**
+   * GET /workspaces/:workspaceId/themes/source-summary
+   * Returns workspace-level signal counts by source (feedback / voice / support).
+   */
+  @Get('source-summary')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
+  getSourceSummary(@Param('workspaceId') workspaceId: string) {
+    return this.unifiedAggregationService.getWorkspaceSourceSummary(workspaceId);
+  }
+
+  /**
+   * POST /workspaces/:workspaceId/themes/aggregate-all
+   * Triggers a full workspace-wide cross-source aggregation (admin only).
+   */
+  @Post('aggregate-all')
+  @Roles(WorkspaceRole.ADMIN)
+  aggregateAll(@Param('workspaceId') workspaceId: string) {
+    return this.unifiedAggregationService.aggregateWorkspace(workspaceId);
+  }
+
   @Get(':id')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
   findOne(@Param('workspaceId') workspaceId: string, @Param('id') id: string) {
@@ -82,6 +117,19 @@ export class ThemeController {
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
   update(@Param('workspaceId') workspaceId: string, @Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() updateThemeDto: UpdateThemeDto) {
     return this.themeService.update(workspaceId, req.user.sub, id, updateThemeDto);
+  }
+
+  /**
+   * POST /workspaces/:workspaceId/themes/:id/aggregate
+   * Triggers cross-source aggregation for a single theme (admin/editor).
+   */
+  @Post(':id/aggregate')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  aggregateTheme(
+    @Param('workspaceId') _workspaceId: string,
+    @Param('id') id: string,
+  ) {
+    return this.unifiedAggregationService.aggregateTheme(id);
   }
 
   /** GET /workspaces/:workspaceId/themes/:id/feedback — list linked feedback (paginated) */

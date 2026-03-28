@@ -801,6 +801,21 @@ model Theme {
   aiConfidence     Float?
   /// Timestamp of the last successful AI narration run
   aiNarratedAt     DateTime?
+  // ─── Unified cross-source aggregation fields ─────────────────────────────
+  /// Total signal count across all sources (feedback + support tickets + voice)
+  totalSignalCount  Int?     @default(0)
+  /// Count of feedback entries linked to this theme (all sourceTypes)
+  feedbackCount     Int?     @default(0)
+  /// Count of support tickets linked via SupportIssueCluster.themeId
+  supportCount      Int?     @default(0)
+  /// Count of VOICE sourceType feedback entries linked to this theme
+  voiceCount        Int?     @default(0)
+  /// Sentiment distribution JSON: { positive: n, neutral: n, negative: n }
+  sentimentDistribution Json?
+  /// Timestamp of last cross-source aggregation run
+  lastAggregatedAt  DateTime?
+  /// AI-generated cross-source insight sentence (e.g. "rising across support and voice +32%")
+  crossSourceInsight String?
 
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt

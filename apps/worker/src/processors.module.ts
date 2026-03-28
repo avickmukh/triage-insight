@@ -65,6 +65,10 @@ import {
 // ── Theme ────────────────────────────────────────────────────────────────────
 import { ThemeClusteringProcessor } from '../../api/src/theme/processors/theme-clustering.processor';
 import { AI_CLUSTERING_QUEUE } from '../../api/src/theme/services/theme.service';
+import {
+  UnifiedAggregationProcessor,
+  UNIFIED_AGGREGATION_QUEUE,
+} from '../../api/src/theme/processors/unified-aggregation.processor';
 
 // ── Customer ─────────────────────────────────────────────────────────────────
 import {
@@ -155,6 +159,7 @@ import {
     BullModule.registerQueue({ name: AI_ANALYSIS_QUEUE }),
     BullModule.registerQueue({ name: CIQ_SCORING_QUEUE }),
     BullModule.registerQueue({ name: AI_CLUSTERING_QUEUE }),
+    BullModule.registerQueue({ name: UNIFIED_AGGREGATION_QUEUE }),
     BullModule.registerQueue({ name: CUSTOMER_REVENUE_SIGNAL_QUEUE }),
     BullModule.registerQueue({ name: CUSTOMER_SIGNAL_AGGREGATION_QUEUE }),
     BullModule.registerQueue({ name: DIGEST_QUEUE }),
@@ -175,6 +180,7 @@ import {
     AiAnalysisProcessor,       // ai-analysis → embeddings, dedup, theme clustering
     CiqScoringProcessor,       // ciq-scoring → priority score computation
     ThemeClusteringProcessor,  // theme-clustering → theme assignment
+    UnifiedAggregationProcessor, // unified-aggregation → cross-source counts + insight
     // ── Customer signals ─────────────────────────────────────────────────────
     CustomerRevenueSignalProcessor,
     CustomerSignalAggregationProcessor,

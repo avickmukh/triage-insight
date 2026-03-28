@@ -50,6 +50,8 @@ import {
   SupportCorrelation,
   Theme,
   ThemeListResponse,
+  UnifiedTopIssue,
+  WorkspaceSourceSummary,
   UpdateFeedbackDto,
   UpdateRoadmapItemDto,
   UpdateThemeDto,
@@ -330,6 +332,18 @@ const apiClient = {
     /** POST /workspaces/:id/themes/recluster — trigger workspace-wide reclustering job */
     triggerRecluster: (workspaceId: string): Promise<ThemeReclusterResponse> =>
       api.post(`/workspaces/${workspaceId}/themes/recluster`).then(handleResponse),
+    /** GET /workspaces/:id/themes/top-issues — top N themes by cross-source signal count */
+    getTopIssues: (workspaceId: string, limit?: number): Promise<UnifiedTopIssue[]> =>
+      api.get(`/workspaces/${workspaceId}/themes/top-issues`, { params: { limit } }).then(handleResponse),
+    /** GET /workspaces/:id/themes/source-summary — workspace-level source breakdown */
+    getSourceSummary: (workspaceId: string): Promise<WorkspaceSourceSummary> =>
+      api.get(`/workspaces/${workspaceId}/themes/source-summary`).then(handleResponse),
+    /** POST /workspaces/:id/themes/aggregate-all — trigger full workspace aggregation (admin) */
+    aggregateAll: (workspaceId: string): Promise<{ queued: number }> =>
+      api.post(`/workspaces/${workspaceId}/themes/aggregate-all`).then(handleResponse),
+    /** POST /workspaces/:id/themes/:themeId/aggregate — aggregate a single theme */
+    aggregateTheme: (workspaceId: string, themeId: string): Promise<UnifiedTopIssue> =>
+      api.post(`/workspaces/${workspaceId}/themes/${themeId}/aggregate`).then(handleResponse),
   },
 
   roadmap: {

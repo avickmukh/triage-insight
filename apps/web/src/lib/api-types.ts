@@ -2148,3 +2148,51 @@ export interface PromoteThemeDto {
   description?: string;
   status?: RoadmapStatus;
 }
+
+// ── Unified Intelligence Layer ────────────────────────────────────────────────
+
+/** Sentiment distribution across all signals for a theme */
+export interface SentimentDistribution {
+  positive: number;
+  neutral: number;
+  negative: number;
+}
+
+/** Single theme enriched with cross-source signal counts */
+export interface UnifiedTopIssue {
+  id: string;
+  title: string;
+  status: ThemeStatus;
+  /** Sum of feedbackCount + supportCount + voiceCount */
+  totalSignalCount: number;
+  feedbackCount: number;
+  supportCount: number;
+  voiceCount: number;
+  sentimentDistribution: SentimentDistribution;
+  /** CIQ priority score 0–100 */
+  priorityScore?: number | null;
+  aiSummary?: string | null;
+  aiRecommendation?: string | null;
+  aiConfidence?: number | null;
+  /** AI-generated cross-source insight sentence */
+  crossSourceInsight?: string | null;
+  /** ISO timestamp of last aggregation run */
+  lastAggregatedAt?: string | null;
+  revenueInfluence?: number | null;
+}
+
+/** Workspace-level source breakdown summary */
+export interface WorkspaceSourceSummary {
+  totalSignals: number;
+  feedbackCount: number;
+  supportCount: number;
+  voiceCount: number;
+  feedbackPct: number;
+  supportPct: number;
+  voicePct: number;
+  themeCount: number;
+  scoredThemeCount: number;
+  topThemeByFeedback?: string | null;
+  topThemeBySupport?: string | null;
+  topThemeByVoice?: string | null;
+}

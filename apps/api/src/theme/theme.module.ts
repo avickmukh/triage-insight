@@ -7,6 +7,8 @@ import { ThemeController } from './theme.controller';
 import { ThemeRepository } from './repositories/theme.repository';
 import { CIQ_SCORING_QUEUE } from '../ai/processors/ciq-scoring.processor';
 import { DealModule } from '../deal/deal.module';
+import { UnifiedAggregationService } from './services/unified-aggregation.service';
+import { UNIFIED_AGGREGATION_QUEUE } from './processors/unified-aggregation.processor';
 
 @Module({
   imports: [
@@ -14,12 +16,13 @@ import { DealModule } from '../deal/deal.module';
     AiModule,
     BullModule.registerQueue({ name: AI_CLUSTERING_QUEUE }),
     BullModule.registerQueue({ name: CIQ_SCORING_QUEUE }),
+    BullModule.registerQueue({ name: UNIFIED_AGGREGATION_QUEUE }),
     DealModule,
   ],
   controllers: [ThemeController],
-  providers: [ThemeService, ThemeRepository],
-  // ThemeService and ThemeRepository exported so WorkerProcessorsModule can
-  // resolve ThemeClusteringProcessor's dependencies.
-  exports: [ThemeService, ThemeRepository],
+  providers: [ThemeService, ThemeRepository, UnifiedAggregationService],
+  // ThemeService, ThemeRepository, and UnifiedAggregationService exported so
+  // WorkerProcessorsModule can resolve processor dependencies.
+  exports: [ThemeService, ThemeRepository, UnifiedAggregationService],
 })
 export class ThemeModule {}
