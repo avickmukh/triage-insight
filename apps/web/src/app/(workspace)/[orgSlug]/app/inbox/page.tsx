@@ -411,9 +411,17 @@ export default function InboxPage() {
       const res = await apiClient.feedback.semanticSearch(workspace.id, q.trim());
       setAiResults(res.data);
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-        (err instanceof Error ? err.message : 'AI search failed. Please try again.');
+      // NestJS can return message as a string OR an array of validation strings.
+      // Always coerce to a plain string so React never receives an object/array child.
+      const rawMsg =
+        (err as { response?: { data?: { message?: unknown } } })?.response?.data?.message;
+      const msg = Array.isArray(rawMsg)
+        ? rawMsg.join('; ')
+        : typeof rawMsg === 'string' && rawMsg
+        ? rawMsg
+        : err instanceof Error
+        ? err.message
+        : 'AI search failed. Please try again.';
       setAiError(msg);
       setAiResults(null);
     } finally {
@@ -737,7 +745,7 @@ export default function InboxPage() {
               {aiResults.map((fb, i) => {
                 const sc = STATUS_COLORS[fb.status] ?? { bg: '#f0f4f8', color: '#6C757D' };
                 const sourceLabel = SOURCE_LABELS[fb.sourceType] ?? fb.sourceType;
-                const pct = Math.round(fb.similarity * 100);
+                const pct = Math.round(Number(fb.similarity) * 100);
                 return (
                   <Link
                     key={fb.id}
@@ -830,7 +838,9 @@ export default function InboxPage() {
               Failed to load feedback
             </p>
             <p style={{ color: '#6C757D', fontSize: '0.85rem' }}>
-              {(error as Error)?.message ?? 'An unexpected error occurred. Please try again.'}
+              {typeof (error as Error)?.message === 'string'
+                ? (error as Error).message
+                : 'An unexpected error occurred. Please try again.'}
             </p>
           </div>
         ) : allItems.length === 0 ? (
