@@ -22,6 +22,9 @@ import { SentimentProcessor } from './processors/sentiment.processor';
       { name: 'support-clustering' },
       { name: 'support-spike-detection' },
       { name: 'support-sentiment' },
+      // Required by ClusteringProcessor which enqueues CIQ re-scoring jobs
+      // after correlateWithFeedback() links support clusters to themes.
+      { name: 'ciq-scoring' },
     ),
   ],
   controllers: [SupportController],
