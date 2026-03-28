@@ -92,3 +92,52 @@ export function useTriggerRecluster() {
     },
   });
 }
+
+export function useSupportNegativeTrends(limit?: number) {
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id ?? '';
+  return useQuery({
+    queryKey: ['support', workspaceId, 'negative-trends', limit],
+    queryFn: () => apiClient.support.getNegativeTrends(workspaceId, limit),
+    enabled: !!workspaceId,
+    staleTime: 3 * 60 * 1000,
+  });
+}
+
+export function useSupportLinkedThemes() {
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id ?? '';
+  return useQuery({
+    queryKey: ['support', workspaceId, 'linked-themes'],
+    queryFn: () => apiClient.support.getLinkedThemes(workspaceId),
+    enabled: !!workspaceId,
+    staleTime: 3 * 60 * 1000,
+  });
+}
+
+export function useSupportCorrelations() {
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id ?? '';
+  return useQuery({
+    queryKey: ['support', workspaceId, 'correlations'],
+    queryFn: () => apiClient.support.getCorrelations(workspaceId),
+    enabled: !!workspaceId,
+    staleTime: 3 * 60 * 1000,
+  });
+}
+
+export function useTriggerSentimentScoring() {
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id ?? '';
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiClient.support.triggerSentimentScoring(workspaceId),
+    onSuccess: () => {
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: supportKeys.all(workspaceId) });
+        queryClient.invalidateQueries({ queryKey: ['support', workspaceId, 'negative-trends'] });
+        queryClient.invalidateQueries({ queryKey: ['support', workspaceId, 'linked-themes'] });
+      }, 3000);
+    },
+  });
+}

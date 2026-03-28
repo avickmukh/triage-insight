@@ -45,6 +45,9 @@ import {
   SupportOverview,
   SupportCluster,
   SupportSpike,
+  SupportNegativeTrend,
+  SupportLinkedTheme,
+  SupportCorrelation,
   Theme,
   ThemeListResponse,
   UpdateFeedbackDto,
@@ -433,6 +436,14 @@ const apiClient = {
       api.post(`/workspaces/${workspaceId}/support/sync`).then(handleResponse),
     triggerRecluster: (workspaceId: string): Promise<{ message: string; workspaceId: string }> =>
       api.post(`/workspaces/${workspaceId}/support/recluster`).then(handleResponse),
+    triggerSentimentScoring: (workspaceId: string): Promise<{ message: string; workspaceId: string }> =>
+      api.post(`/workspaces/${workspaceId}/support/score-sentiment`).then(handleResponse),
+    getNegativeTrends: (workspaceId: string, limit?: number): Promise<SupportNegativeTrend[]> =>
+      api.get(`/workspaces/${workspaceId}/support/negative-trends`, { params: { limit } }).then(handleResponse),
+    getLinkedThemes: (workspaceId: string): Promise<SupportLinkedTheme[]> =>
+      api.get(`/workspaces/${workspaceId}/support/linked-themes`).then(handleResponse),
+    getCorrelations: (workspaceId: string): Promise<SupportCorrelation[]> =>
+      api.get(`/workspaces/${workspaceId}/support/correlations`).then(handleResponse),
   },
 
   public: {

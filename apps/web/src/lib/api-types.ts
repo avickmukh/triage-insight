@@ -411,6 +411,14 @@ export interface SupportCluster {
   description: string | null;
   ticketCount: number;
   arrExposure: number;
+  /** Average sentiment score across tickets in this cluster (-1 to +1). Null until sentiment scoring has run. */
+  avgSentiment: number | null;
+  /** Fraction of tickets with sentimentScore < -0.2 (0–1). Null until scoring has run. */
+  negativeTicketPct: number | null;
+  /** True when an IssueSpikeEvent exists within the last 7 days. */
+  hasActiveSpike: boolean;
+  /** Severity of the most recent spike event, if any. */
+  latestSpikeSeverity: SpikeSeverity | null;
   themeId: string | null;
   themeTitle: string | null;
   createdAt: string;
@@ -456,6 +464,53 @@ export interface SupportOverview {
   topClusters: SupportCluster[];
   activeSpikes: SupportSpike[];
   recentTickets: SupportRecentTicket[];
+}
+
+export interface SupportNegativeTrend {
+  id: string;
+  title: string;
+  avgSentiment: number | null;
+  negativeTicketPct: number | null;
+  ticketCount: number;
+  arrExposure: number;
+  hasActiveSpike: boolean;
+  themeId: string | null;
+  themeTitle: string | null;
+}
+
+export interface SupportLinkedCluster {
+  id: string;
+  title: string;
+  ticketCount: number;
+  arrExposure: number;
+  avgSentiment: number | null;
+  hasActiveSpike: boolean;
+}
+
+export interface SupportLinkedTheme {
+  themeId: string;
+  themeTitle: string;
+  themeCiqScore: number | null;
+  themeStatus: string;
+  feedbackCount: number;
+  totalTickets: number;
+  linkedClusters: SupportLinkedCluster[];
+}
+
+export interface SupportCorrelation {
+  id: string;
+  title: string;
+  description: string | null;
+  ticketCount: number;
+  arrExposure: number;
+  avgSentiment: number | null;
+  negativeTicketPct: number | null;
+  hasActiveSpike: boolean;
+  latestSpikeSeverity: SpikeSeverity | null;
+  themeId: string | null;
+  themeTitle: string | null;
+  themeCiqScore: number | null;
+  themeFeedbackCount: number;
 }
 
 // --- Public Portal ---

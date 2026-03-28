@@ -10,6 +10,8 @@ import { SpikeDetectionService } from './services/spike-detection.service';
 import { SyncProcessor } from './processors/sync.processor';
 import { ClusteringProcessor } from './processors/clustering.processor';
 import { SpikeDetectionProcessor } from './processors/spike-detection.processor';
+import { SentimentService } from './services/sentiment.service';
+import { SentimentProcessor } from './processors/sentiment.processor';
 
 @Module({
   imports: [
@@ -19,6 +21,7 @@ import { SpikeDetectionProcessor } from './processors/spike-detection.processor'
       { name: 'support-sync' },
       { name: 'support-clustering' },
       { name: 'support-spike-detection' },
+      { name: 'support-sentiment' },
     ),
   ],
   controllers: [SupportController],
@@ -27,8 +30,12 @@ import { SpikeDetectionProcessor } from './processors/spike-detection.processor'
     TicketService,
     ClusteringService,
     SpikeDetectionService,
+    SentimentService,
+    SyncProcessor,
+    ClusteringProcessor,
+    SpikeDetectionProcessor,
+    SentimentProcessor,
   ],
-  // IngestionService exported so SyncProcessor (in WorkerProcessorsModule) can resolve it
-  exports: [IngestionService, TicketService, ClusteringService, SpikeDetectionService],
+  exports: [IngestionService, TicketService, ClusteringService, SpikeDetectionService, SentimentService],
 })
 export class SupportModule {}

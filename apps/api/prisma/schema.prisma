@@ -978,6 +978,7 @@ model SupportTicket {
   customerEmail     String?
   tags              String[]
   arrValue          Float?
+  sentimentScore    Float?              /// Lexicon-based sentiment: -1.0 (very negative) to +1.0 (very positive)
   externalCreatedAt DateTime?
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
@@ -1003,6 +1004,9 @@ model SupportIssueCluster {
   themeId           String?
   ticketCount       Int      @default(0)
   arrExposure       Float    @default(0)
+  avgSentiment      Float?   /// Average sentiment across tickets in this cluster (-1 to +1)
+  negativeTicketPct Float?   /// Fraction of tickets with sentimentScore < -0.2 (0–1)
+  hasActiveSpike    Boolean  @default(false) /// Denormalised: true when an IssueSpikeEvent exists within last 7 days
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
