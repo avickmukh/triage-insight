@@ -36,6 +36,10 @@ export const validationSchema = Joi.object({
   // App degrades gracefully without Redis (queued jobs will not run).
   REDIS_HOST:             Joi.string().default('localhost'),
   REDIS_PORT:             Joi.number().default(6379),
+  // Set REDIS_PASSWORD for authenticated Redis instances (Upstash, Redis Cloud, etc.).
+  REDIS_PASSWORD:         Joi.string().default(''),
+  // Set REDIS_TLS=true for TLS-enabled Redis (required by most cloud Redis providers).
+  REDIS_TLS:              Joi.string().valid('true', 'false').default('false'),
 
   // ── AWS S3 File Uploads ───────────────────────────────────────────────────
   // Upload endpoints return 503 if not configured.

@@ -20,6 +20,13 @@
 # Stop everything:
 #   docker-compose down
 #   docker-compose down -v        # also removes data volumes
+#
+# ── Redis connection note ──────────────────────────────────────────────────────
+# REDIS_HOST and REDIS_PORT are set explicitly here instead of REDIS_URL.
+# queue.module.ts reads individual vars (REDIS_HOST/PORT/PASSWORD/TLS) and also
+# supports REDIS_URL for cloud providers. Inside Docker, the Redis service is
+# reachable at hostname "redis" (the service name), NOT "localhost".
+# Using REDIS_URL=redis://redis:6379 was silently ignored before this fix.
 
 version: "3.8"
 
@@ -69,7 +76,9 @@ services:
     container_name: triage-insight-api
     environment:
       DATABASE_URL: postgresql://triage:triage@postgres:5432/triageinsight
-      REDIS_URL: redis://redis:6379
+      # Redis: use service name "redis" as host inside Docker network
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
       NODE_ENV: production
     env_file:
       - .env
@@ -90,7 +99,9 @@ services:
     container_name: triage-insight-worker
     environment:
       DATABASE_URL: postgresql://triage:triage@postgres:5432/triageinsight
-      REDIS_URL: redis://redis:6379
+      # Redis: use service name "redis" as host inside Docker network
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
       NODE_ENV: production
     env_file:
       - .env

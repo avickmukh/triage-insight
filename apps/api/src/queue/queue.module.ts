@@ -18,11 +18,22 @@
  * directly — the token is resolved from this global module. No feature module
  * should ever call BullModule.registerQueue() for any queue listed here.
  *
- * ── Env vars (all optional with safe defaults) ───────────────────────────────
- *   JOB_MAX_ATTEMPTS         — max retry attempts per job (default: 5)
- *   JOB_BACKOFF_DELAY_MS     — initial exponential backoff delay in ms (default: 2000)
- *   JOB_REMOVE_ON_COMPLETE   — number of completed jobs to keep (default: 100)
- *   JOB_REMOVE_ON_FAIL       — number of failed jobs to keep (default: 500)
+ * ── Redis connection resolution (priority order) ─────────────────────────────
+ * 1. REDIS_URL  — full connection string, e.g. redis://:password@host:port
+ *                 (used by docker-compose and most cloud providers)
+ * 2. REDIS_HOST + REDIS_PORT + REDIS_PASSWORD + REDIS_TLS
+ *                 (used for explicit per-variable configuration)
+ *
+ * ── Env vars ─────────────────────────────────────────────────────────────────
+ *   REDIS_URL              — full Redis connection URL (takes priority)
+ *   REDIS_HOST             — Redis host (default: localhost)
+ *   REDIS_PORT             — Redis port (default: 6379)
+ *   REDIS_PASSWORD         — Redis password (required for Upstash, Redis Cloud, etc.)
+ *   REDIS_TLS              — set to "true" to enable TLS (required by most cloud Redis)
+ *   JOB_MAX_ATTEMPTS       — max retry attempts per job (default: 5)
+ *   JOB_BACKOFF_DELAY_MS   — initial exponential backoff delay in ms (default: 2000)
+ *   JOB_REMOVE_ON_COMPLETE — number of completed jobs to keep (default: 100)
+ *   JOB_REMOVE_ON_FAIL     — number of failed jobs to keep (default: 500)
  */
 import { Global, Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bull';
@@ -53,28 +64,62 @@ export const QUEUE_NAMES = {
   DLQ:                          'dlq',
 } as const;
 
+/**
+ * Parse a Redis connection URL into ioredis connection options.
+ * Supports: redis://host:port, redis://:password@host:port,
+ *           rediss://host:port (TLS), redis://user:password@host:port
+ */
+function parseRedisUrl(url: string): {
+  host: string;
+  port: number;
+  password?: string;
+  tls?: object;
+} {
+  const parsed = new URL(url);
+  const host     = parsed.hostname || 'localhost';
+  const port     = parsed.port ? parseInt(parsed.port, 10) : 6379;
+  const password = parsed.password || undefined;
+  const tls      = parsed.protocol === 'rediss:' ? {} : undefined;
+  return { host, port, ...(password ? { password } : {}), ...(tls ? { tls } : {}) };
+}
+
 @Global()
 @Module({
   imports: [
     BullModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
-        redis: {
-          host:           configService.get<string>('REDIS_HOST', 'localhost'),
-          port:           configService.get<number>('REDIS_PORT', 6379),
-          lazyConnect:    true,
-          connectTimeout: 5000,
-        },
-        defaultJobOptions: {
-          attempts:        configService.get<number>('JOB_MAX_ATTEMPTS', 5),
-          backoff: {
-            type:  'exponential',
-            delay: configService.get<number>('JOB_BACKOFF_DELAY_MS', 2000),
+      useFactory: async (configService: ConfigService) => {
+        // ── Redis connection: REDIS_URL takes priority over individual vars ──
+        const redisUrl      = configService.get<string>('REDIS_URL', '');
+        const redisPassword = configService.get<string>('REDIS_PASSWORD', '');
+        const redisTls      = configService.get<string>('REDIS_TLS', 'false') === 'true';
+
+        const redisConfig = redisUrl
+          ? parseRedisUrl(redisUrl)
+          : {
+              host:     configService.get<string>('REDIS_HOST', 'localhost'),
+              port:     configService.get<number>('REDIS_PORT', 6379),
+              ...(redisPassword ? { password: redisPassword } : {}),
+              ...(redisTls ? { tls: {} } : {}),
+            };
+
+        return {
+          redis: {
+            ...redisConfig,
+            connectTimeout:       10000,
+            maxRetriesPerRequest: null,
           },
-          removeOnComplete: configService.get<number>('JOB_REMOVE_ON_COMPLETE', 100),
-          removeOnFail:     configService.get<number>('JOB_REMOVE_ON_FAIL', 500),
-        },
-      }),
+          defaultJobOptions: {
+            attempts:        configService.get<number>('JOB_MAX_ATTEMPTS', 5),
+            backoff: {
+              type:  'exponential',
+              delay: configService.get<number>('JOB_BACKOFF_DELAY_MS', 2000),
+            },
+            removeOnComplete: configService.get<number>('JOB_REMOVE_ON_COMPLETE', 100),
+            removeOnFail:     configService.get<number>('JOB_REMOVE_ON_FAIL', 500),
+          },
+        };
+      },
       inject: [ConfigService],
     }),
     /**

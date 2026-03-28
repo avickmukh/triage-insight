@@ -8,7 +8,6 @@ import { StoragePurgeStep } from './steps/storage-purge.step';
 import { DatabasePurgeStep } from './steps/database-purge.step';
 import { QueuePurgeStep } from './steps/queue-purge.step';
 import { TokenRevocationStep } from './steps/token-revocation.step';
-import { QUEUE_NAMES } from '../queue/queue.module';
 
 @Module({
   imports: [
