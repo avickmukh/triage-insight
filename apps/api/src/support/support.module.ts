@@ -7,12 +7,23 @@ import { IngestionService } from './services/ingestion.service';
 import { TicketService } from './services/ticket.service';
 import { ClusteringService } from './services/clustering.service';
 import { SpikeDetectionService } from './services/spike-detection.service';
-import { SyncProcessor } from './processors/sync.processor';
-import { ClusteringProcessor } from './processors/clustering.processor';
-import { SpikeDetectionProcessor } from './processors/spike-detection.processor';
 import { SentimentService } from './services/sentiment.service';
-import { SentimentProcessor } from './processors/sentiment.processor';
 
+/**
+ * SupportModule — provides support-ticket services and the HTTP controller.
+ *
+ * IMPORTANT: Processor classes (SyncProcessor, ClusteringProcessor,
+ * SpikeDetectionProcessor, SentimentProcessor) are intentionally NOT listed
+ * in providers[]. They are registered exclusively in WorkerProcessorsModule
+ * (apps/worker/src/processors.module.ts).
+ *
+ * Registering a @Process() handler in two NestJS modules that are both
+ * imported by WorkerModule causes Bull to throw:
+ *   "Cannot define the same handler twice __default__"
+ *
+ * The queues are still registered here so that services in this module can
+ * call queue.add() (e.g. IngestionService enqueues support-sync jobs).
+ */
 @Module({
   imports: [
     PrismaModule,
@@ -34,11 +45,16 @@ import { SentimentProcessor } from './processors/sentiment.processor';
     ClusteringService,
     SpikeDetectionService,
     SentimentService,
-    SyncProcessor,
-    ClusteringProcessor,
-    SpikeDetectionProcessor,
-    SentimentProcessor,
+    // Processors (SyncProcessor, ClusteringProcessor, SpikeDetectionProcessor,
+    // SentimentProcessor) are NOT here — registered exclusively in
+    // WorkerProcessorsModule to prevent Bull "same handler twice" crash.
   ],
-  exports: [IngestionService, TicketService, ClusteringService, SpikeDetectionService, SentimentService],
+  exports: [
+    IngestionService,
+    TicketService,
+    ClusteringService,
+    SpikeDetectionService,
+    SentimentService,
+  ],
 })
 export class SupportModule {}

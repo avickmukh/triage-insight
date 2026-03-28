@@ -110,6 +110,7 @@ import { PURGE_QUEUE } from '../../api/src/purge/purge.service';
 import { SyncProcessor } from '../../api/src/support/processors/sync.processor';
 import { ClusteringProcessor } from '../../api/src/support/processors/clustering.processor';
 import { SpikeDetectionProcessor } from '../../api/src/support/processors/spike-detection.processor';
+import { SentimentProcessor } from '../../api/src/support/processors/sentiment.processor';
 
 // ── Survey ───────────────────────────────────────────────────────────────────
 import {
@@ -170,6 +171,7 @@ import {
     BullModule.registerQueue({ name: 'support-sync' }),
     BullModule.registerQueue({ name: 'support-clustering' }),
     BullModule.registerQueue({ name: 'support-spike-detection' }),
+    BullModule.registerQueue({ name: 'support-sentiment' }),
     BullModule.registerQueue({ name: SURVEY_INTELLIGENCE_QUEUE }),
     BullModule.registerQueue({ name: VOICE_TRANSCRIPTION_QUEUE }),
     BullModule.registerQueue({ name: VOICE_EXTRACTION_QUEUE }),
@@ -198,6 +200,7 @@ import {
     SyncProcessor,
     ClusteringProcessor,
     SpikeDetectionProcessor,
+    SentimentProcessor,
     // ── Survey ───────────────────────────────────────────────────────────────
     SurveyIntelligenceProcessor,
     // ── Voice ────────────────────────────────────────────────────────────────
