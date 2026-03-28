@@ -42,6 +42,7 @@ export class SurveyController {
   }
 
   @Get()
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
   list(
     @Param('workspaceId') workspaceId: string,
     @Query() query: SurveyQueryDto,
@@ -50,6 +51,7 @@ export class SurveyController {
   }
 
   @Get(':surveyId')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
   detail(
     @Param('workspaceId') workspaceId: string,
     @Param('surveyId') surveyId: string,
@@ -144,6 +146,7 @@ export class SurveyController {
   // ─── Responses ─────────────────────────────────────────────────────────────
 
   @Get(':surveyId/responses')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
   listResponses(
     @Param('workspaceId') workspaceId: string,
     @Param('surveyId') surveyId: string,
@@ -156,6 +159,7 @@ export class SurveyController {
   // ─── Intelligence ───────────────────────────────────────────────────────────
 
   @Get(':surveyId/intelligence')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
   intelligence(
     @Param('workspaceId') workspaceId: string,
     @Param('surveyId') surveyId: string,
