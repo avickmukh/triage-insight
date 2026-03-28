@@ -61,8 +61,10 @@ export class FeedbackService {
     await this.planLimit.assertCanAddFeedback(workspaceId);
 
     // Synchronous normalization: trim and store raw text before any mutation
-    const rawTitle = createFeedbackDto.title.trim();
-    const rawDescription = createFeedbackDto.description.trim();
+    // Use nullish coalescing to guard against undefined values from CSV import
+    // or any caller that omits optional fields.
+    const rawTitle = (createFeedbackDto.title ?? '').trim() || 'Untitled';
+    const rawDescription = (createFeedbackDto.description ?? '').trim();
 
     const newFeedback = await this.prisma.feedback.create({
       data: {
