@@ -171,17 +171,17 @@ function CsvImportModal({
             lineHeight: 1.6,
           }}
         >
-          <strong>Expected columns:</strong>{' '}
+          <strong>Flexible column names accepted:</strong>{' '}
           <code style={{ fontSize: '0.78rem', background: '#e9ecef', padding: '0.1rem 0.3rem', borderRadius: '0.25rem' }}>
-            title
+            title / feedback / text / subject
           </code>
           {', '}
           <code style={{ fontSize: '0.78rem', background: '#e9ecef', padding: '0.1rem 0.3rem', borderRadius: '0.25rem' }}>
-            description
+            description / body / content
           </code>
           {', '}
           <code style={{ fontSize: '0.78rem', background: '#e9ecef', padding: '0.1rem 0.3rem', borderRadius: '0.25rem' }}>
-            customerEmail
+            source / sourceType
           </code>{' '}
           (optional){'. '}
           Max file size: <strong>10 MB</strong>.
@@ -388,6 +388,10 @@ export default function InboxPage() {
   const [search, setSearch] = useState('');
   const [showCsvModal, setShowCsvModal] = useState(false);
 
+  // ── AI Pipeline re-trigger state ───────────────────────────────────────
+  const [pipelineState, setPipelineState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [pipelineResult, setPipelineResult] = useState<{ enqueued: number; total: number } | null>(null);
+
   // ── AI Semantic Search state ─────────────────────────────────────────────
   const [aiMode, setAiMode] = useState(false);
   const [aiQuery, setAiQuery] = useState('');
@@ -435,6 +439,21 @@ export default function InboxPage() {
     queryClient.invalidateQueries({ queryKey: ['feedback'] });
   };
 
+  const handleReprocessPipeline = useCallback(async () => {
+    if (!workspace?.id) return;
+    setPipelineState('loading');
+    setPipelineResult(null);
+    try {
+      const res = await apiClient.feedback.reprocessPipeline(workspace.id);
+      setPipelineResult(res);
+      setPipelineState('done');
+      // Refresh list after a short delay so newly-processed items appear
+      setTimeout(() => queryClient.invalidateQueries({ queryKey: ['feedback'] }), 3000);
+    } catch {
+      setPipelineState('error');
+    }
+  }, [workspace?.id, queryClient]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       {/* CSV Import Modal */}
@@ -474,6 +493,38 @@ export default function InboxPage() {
 
         {/* Action buttons */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          {/* Run AI Pipeline — only shown to ADMIN / EDITOR */}
+          {canImport && (
+            <button
+              onClick={handleReprocessPipeline}
+              disabled={pipelineState === 'loading'}
+              title={pipelineResult ? `Last run: ${pipelineResult.enqueued}/${pipelineResult.total} jobs enqueued` : 'Re-run AI pipeline (embedding → sentiment → theme clustering) on all unprocessed feedback'}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                padding: '0.5rem 1.1rem',
+                borderRadius: '0.5rem',
+                background: pipelineState === 'done' ? '#d4edda' : pipelineState === 'error' ? '#f8d7da' : '#fff',
+                color: pipelineState === 'done' ? '#155724' : pipelineState === 'error' ? '#721c24' : '#0A2540',
+                fontWeight: 700,
+                fontSize: '0.85rem',
+                border: `1px solid ${pipelineState === 'done' ? '#c3e6cb' : pipelineState === 'error' ? '#f5c6cb' : '#dee2e6'}`,
+                cursor: pipelineState === 'loading' ? 'not-allowed' : 'pointer',
+                boxShadow: '0 1px 4px rgba(10,37,64,0.06)',
+                opacity: pipelineState === 'loading' ? 0.7 : 1,
+              }}
+            >
+              {pipelineState === 'loading'
+                ? '⏳ Processing…'
+                : pipelineState === 'done'
+                ? `✓ ${pipelineResult?.enqueued ?? 0} jobs queued`
+                : pipelineState === 'error'
+                ? '✗ Pipeline failed'
+                : '⚡ Run AI Pipeline'}
+            </button>
+          )}
+
           {/* Import CSV — only shown to ADMIN / EDITOR */}
           {canImport && (
             <button

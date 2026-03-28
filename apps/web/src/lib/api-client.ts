@@ -280,6 +280,18 @@ const apiClient = {
         .then(handleResponse);
     },
     /**
+     * POST /workspaces/:id/feedback/reprocess-pipeline
+     * Re-enqueues the AI analysis job for all unprocessed feedback.
+     * Use after a CSV import when the worker was not running.
+     * Returns { enqueued, total }.
+     */
+    reprocessPipeline: (
+      workspaceId: string
+    ): Promise<{ enqueued: number; total: number }> =>
+      api
+        .post(`/workspaces/${workspaceId}/feedback/reprocess-pipeline`)
+        .then(handleResponse),
+    /**
      * GET /workspaces/:id/feedback/semantic-search?q=&limit=&threshold=
      * Generates an embedding for `q` and returns the top feedback items
      * ranked by cosine similarity (pgvector).

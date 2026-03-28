@@ -179,6 +179,28 @@ export class FeedbackController {
     return this.feedbackService.findPotentialDuplicates(workspaceId, id);
   }
 
+  // --- Bulk AI pipeline re-trigger ---
+
+  /**
+   * POST /workspaces/:workspaceId/feedback/reprocess-pipeline
+   *
+   * Re-enqueues the AI analysis job (embedding → sentiment → clustering) for
+   * every feedback item in this workspace that has not yet been processed
+   * (embedding IS NULL) or has never been assigned to a theme.
+   *
+   * Use this after a CSV import when the worker was not running, or to
+   * recover from a Redis outage that dropped jobs.
+   *
+   * Returns { enqueued, total } so the caller knows how many jobs were queued.
+   */
+  @Post('reprocess-pipeline')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  reprocessPipeline(
+    @Param('workspaceId') workspaceId: string,
+  ) {
+    return this.feedbackService.reprocessPipeline(workspaceId);
+  }
+
   // --- Ingestion ---
 
   @Post('import/csv')

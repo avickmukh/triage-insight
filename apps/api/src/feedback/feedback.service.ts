@@ -232,6 +232,61 @@ export class FeedbackService {
   }
 
   /**
+   * Re-enqueue the AI analysis pipeline for all unprocessed feedback in a workspace.
+   *
+   * Targets feedback where:
+   *   - embedding IS NULL (never processed), OR
+   *   - no ThemeFeedback link exists (processed but not yet clustered)
+   *
+   * Jobs are added in batches of 50 to avoid overwhelming the queue.
+   * Returns { enqueued, total }.
+   */
+  async reprocessPipeline(workspaceId: string): Promise<{ enqueued: number; total: number }> {
+    // Find all feedback that needs processing: no embedding OR no theme link
+    const unprocessed = await this.prisma.feedback.findMany({
+      where: {
+        workspaceId,
+        status: { not: 'MERGED' },
+        OR: [
+          // Never went through the AI pipeline
+          { normalizedText: null },
+          // Went through pipeline but was never assigned to a theme
+          { themes: { none: {} } },
+        ],
+      },
+      select: { id: true },
+    });
+
+    const total = unprocessed.length;
+    let enqueued = 0;
+    const opts = { attempts: 3, backoff: { type: 'exponential', delay: 5000 } };
+
+    // Batch into groups of 50 to avoid overwhelming the queue
+    const BATCH = 50;
+    for (let i = 0; i < unprocessed.length; i += BATCH) {
+      const batch = unprocessed.slice(i, i + BATCH);
+      await Promise.all(
+        batch.map(async ({ id: feedbackId }) => {
+          try {
+            await this.analysisQueue.add({ feedbackId, workspaceId }, opts);
+            enqueued++;
+          } catch (e) {
+            console.warn(
+              `[FeedbackService] reprocessPipeline: queue unavailable for ${feedbackId}`,
+              (e as Error).message,
+            );
+          }
+        }),
+      );
+    }
+
+    console.log(
+      `[FeedbackService] reprocessPipeline: enqueued ${enqueued}/${total} jobs for workspace ${workspaceId}`,
+    );
+    return { enqueued, total };
+  }
+
+  /**
    * Trigger CIQ re-scoring for all themes linked to a feedback item.
    * Called after feedback is merged or its customer ARR changes.
    */
