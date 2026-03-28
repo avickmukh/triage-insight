@@ -4,10 +4,17 @@
  * Replaces the original rule-based digest with an LLM-generated narrative.
  *
  * Context fed to the LLM:
- *   - Top 5 themes by feedback volume (with AI narration fields if available)
- *   - Average sentiment across the period
+ *   - Top 5 themes by feedback volume with CIQ score, urgency score,
+ *     cross-source signal counts (feedback / support / voice), AI narration
+ *   - Average sentiment + WoW trend
  *   - Feedback volume delta vs prior period
- *   - Spike events (if any)
+ *   - Active spike events (z-score ranked)
+ *
+ * Estimated token usage per digest:
+ *   ~400–700 prompt tokens + ~250–350 completion tokens ≈ 700–1050 total
+ *   At gpt-4.1-mini pricing (~$0.15/1M input, $0.60/1M output):
+ *   ≈ $0.0003–$0.0005 per digest run — negligible at any scale.
+ *   Recommendation: run at most once per workspace per day; weekly is ideal.
  *
  * LLM output format:
  *   {
@@ -75,7 +82,14 @@ export class DigestService {
             title: true,
             description: true,
             priorityScore: true,
+            ciqScore: true,
             urgencyScore: true,
+            revenueScore: true,
+            totalSignalCount: true,
+            feedbackCount: true,
+            supportCount: true,
+            voiceCount: true,
+            crossSourceInsight: true,
             aiSummary: true,
             aiExplanation: true,
             aiRecommendation: true,
@@ -153,7 +167,15 @@ export class DigestService {
         id: t.id,
         title: t.title,
         feedbackCount: t._count.feedbacks,
+        // Persisted CIQ/signal counts from the Theme model
+        ciqScore: t.ciqScore,
         priorityScore: t.priorityScore,
+        urgencyScore: t.urgencyScore,
+        revenueScore: t.revenueScore,
+        totalSignalCount: t.totalSignalCount,
+        supportCount: t.supportCount,
+        voiceCount: t.voiceCount,
+        crossSourceInsight: t.crossSourceInsight,
         aiSummary: t.aiSummary,
         aiRecommendation: t.aiRecommendation,
       })),
@@ -187,6 +209,34 @@ export class DigestService {
     return digestRun;
   }
 
+  /**
+   * Returns the most recently generated digest for a workspace.
+   * Returns null if no digest has been generated yet.
+   */
+  async getLatest(workspaceId: string) {
+    return this.prisma.digestRun.findFirst({
+      where: { workspaceId },
+      orderBy: { sentAt: 'desc' },
+    });
+  }
+
+  /**
+   * Returns the last N digest runs for a workspace (newest first).
+   * Used to power a digest history view.
+   */
+  async getHistory(workspaceId: string, limit = 10) {
+    return this.prisma.digestRun.findMany({
+      where: { workspaceId },
+      orderBy: { sentAt: 'desc' },
+      take: limit,
+      select: {
+        id: true,
+        sentAt: true,
+        summary: true,
+      },
+    });
+  }
+
   // ── Private helpers ────────────────────────────────────────────────────────
 
   private async callLlm(context: {
@@ -195,7 +245,14 @@ export class DigestService {
       title: string;
       description?: string | null;
       priorityScore?: number | null;
+      ciqScore?: number | null;
       urgencyScore?: number | null;
+      revenueScore?: number | null;
+      totalSignalCount?: number | null;
+      feedbackCount?: number | null;
+      supportCount?: number | null;
+      voiceCount?: number | null;
+      crossSourceInsight?: string | null;
       aiSummary?: string | null;
       aiRecommendation?: string | null;
       _count: { feedbacks: number };
@@ -210,13 +267,29 @@ export class DigestService {
     if (!apiKey) throw new Error('OPENAI_API_KEY not set');
 
     const themesBlock = context.topThemes
-      .map(
-        (t, i) =>
-          `${i + 1}. "${t.title}" — ${t._count.feedbacks} signals` +
-          (t.priorityScore != null ? `, CIQ: ${Math.round(t.priorityScore * 100)}%` : '') +
-          (t.aiSummary ? `\n   Summary: ${t.aiSummary}` : '') +
-          (t.aiRecommendation ? `\n   Suggested action: ${t.aiRecommendation}` : ''),
-      )
+      .map((t, i) => {
+        const ciq = t.ciqScore != null
+          ? Math.round(t.ciqScore)
+          : t.priorityScore != null
+          ? Math.round(t.priorityScore * 100)
+          : null;
+        const urgency = t.urgencyScore != null ? Math.round(t.urgencyScore) : null;
+        const revenue = t.revenueScore != null ? Math.round(t.revenueScore) : null;
+        const sources: string[] = [];
+        if ((t.feedbackCount ?? 0) > 0) sources.push(`${t.feedbackCount} feedback`);
+        if ((t.supportCount ?? 0) > 0) sources.push(`${t.supportCount} support tickets`);
+        if ((t.voiceCount ?? 0) > 0) sources.push(`${t.voiceCount} voice calls`);
+        const sourceStr = sources.length > 0 ? sources.join(' + ') : `${t._count.feedbacks} signals`;
+
+        let line = `${i + 1}. "${t.title}" — ${sourceStr}`;
+        if (ciq != null) line += `, CIQ: ${ciq}/100`;
+        if (urgency != null && urgency > 30) line += `, Urgency: ${urgency}/100`;
+        if (revenue != null && revenue > 10) line += `, Revenue impact: ${revenue}/100`;
+        if (t.crossSourceInsight) line += `\n   Cross-source signal: ${t.crossSourceInsight}`;
+        if (t.aiSummary) line += `\n   AI summary: ${t.aiSummary}`;
+        if (t.aiRecommendation) line += `\n   Suggested action: ${t.aiRecommendation}`;
+        return line;
+      })
       .join('\n');
 
     const spikesBlock =
@@ -226,29 +299,45 @@ export class DigestService {
             .join('\n')
         : 'None';
 
+    const sentimentLabel =
+      context.avgSentiment != null
+        ? context.avgSentiment >= 0.3 ? 'positive' : context.avgSentiment <= -0.3 ? 'negative' : 'neutral'
+        : 'unknown';
     const sentimentStr =
       context.avgSentiment != null
-        ? `${context.avgSentiment >= 0.3 ? 'positive' : context.avgSentiment <= -0.3 ? 'negative' : 'neutral'} (${context.avgSentiment.toFixed(2)}), trend: ${context.sentimentTrend}`
+        ? `${sentimentLabel} (score: ${context.avgSentiment.toFixed(2)}, trend: ${context.sentimentTrend})`
         : 'unknown';
 
     const prompt = `
-You are a product intelligence analyst writing a ${context.periodLabel} digest for a SaaS product team.
+You are a senior product intelligence analyst preparing a ${context.periodLabel} digest for a VP of Product or founder.
 
-Data:
+Your job is to produce a concise, executive-ready intelligence briefing — not a data dump.
+Write as if you are advising a product leader who has 90 seconds to read this.
+
+RULES:
+- Be specific. Use the theme names, signal counts, and scores provided.
+- Do NOT repeat raw numbers without interpretation. Explain what they mean.
+- Highlight what is NEW, WORSENING, or SURPRISING this period.
+- Recommendations must be concrete product or process actions, not vague suggestions.
+- Avoid phrases like "consider reviewing" or "it may be worth". Be direct.
+- If sentiment is declining, say so clearly and link it to a theme if possible.
+- If a spike is present, treat it as urgent.
+
+WORKSPACE DATA (${context.periodLabel}):
 - Feedback volume: ${context.currentCount} items (${context.volumeDelta >= 0 ? '+' : ''}${context.volumeDelta} vs prior period)
 - Overall sentiment: ${sentimentStr}
-- Active support spikes:
+- Active support spikes (anomalous ticket surges):
 ${spikesBlock}
 
-Top themes by signal volume:
+TOP THEMES BY SIGNAL VOLUME:
 ${themesBlock}
 
 Return ONLY a JSON object with exactly these keys:
 {
-  "topIssues": ["<3-5 concise bullet points describing the top customer issues>"],
-  "emergingTrends": ["<1-3 emerging trends worth watching>"],
-  "recommendations": ["<2-3 concrete recommended actions for the product team>"],
-  "narrativeSummary": "<2-3 sentence executive summary suitable for a VP of Product>"
+  "topIssues": ["<3-5 specific, insight-driven bullet points — each must reference a theme name and explain the business impact>"],
+  "emergingTrends": ["<1-3 trends that are new or accelerating this period — be specific about what changed>"],
+  "recommendations": ["<2-3 direct, actionable product or process recommendations — each must be tied to a specific signal>"],
+  "narrativeSummary": "<2-3 sentence executive summary. Start with the most important finding. End with the single most urgent action.>"
 }
 `.trim();
 
@@ -258,12 +347,12 @@ Return ONLY a JSON object with exactly these keys:
         {
           role: 'system',
           content:
-            'You are a product intelligence analyst. Return ONLY a JSON object — no markdown, no explanation.',
+            'You are a senior product intelligence analyst. Return ONLY a valid JSON object — no markdown fences, no explanation, no preamble.',
         },
         { role: 'user', content: prompt },
       ],
-      temperature: 0.4,
-      max_tokens: 600,
+      temperature: 0.3,
+      max_tokens: 700,
       response_format: { type: 'json_object' },
     });
 

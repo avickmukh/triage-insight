@@ -980,6 +980,8 @@ export interface CiqScoreOutput {
   dominantDriver?: string;
   /** True when the score was derived from a linked theme (vs. stored values only) */
   themeScored?: boolean;
+  /** Average sentiment score across linked feedback (-1 to +1). Null until sentiment scoring has run. */
+  sentimentScore?: number | null;
 }
 
 /**
@@ -1857,6 +1859,8 @@ export interface EmergingThemeItem {
   isNew:            boolean;
   urgencyScore:     number;
   signal:           string;
+  /** LLM-generated summary for this emerging theme (optional) */
+  aiSummary?:       string | null;
 }
 
 export interface DashboardSpikeEvent {
@@ -2201,4 +2205,63 @@ export interface WorkspaceSourceSummary {
   topThemeByFeedback?: string | null;
   topThemeBySupport?: string | null;
   topThemeByVoice?: string | null;
+}
+
+// ── Digest types ──────────────────────────────────────────────────────────────
+
+export interface DigestNarration {
+  topIssues: string[];
+  emergingTrends: string[];
+  recommendations: string[];
+  narrativeSummary: string;
+}
+
+export interface DigestTopTheme {
+  id: string;
+  title: string;
+  feedbackCount: number;
+  ciqScore?: number | null;
+  priorityScore?: number | null;
+  urgencyScore?: number | null;
+  revenueScore?: number | null;
+  totalSignalCount?: number | null;
+  supportCount?: number | null;
+  voiceCount?: number | null;
+  crossSourceInsight?: string | null;
+  aiSummary?: string | null;
+  aiRecommendation?: string | null;
+}
+
+export interface DigestSummary {
+  topThemes: DigestTopTheme[];
+  sentimentSummary: {
+    _avg: { sentiment: number | null };
+    trend: string;
+  };
+  feedbackVolume: {
+    current: number;
+    previous: number;
+    delta: number;
+  };
+  spikeEvents: Array<{
+    clusterTitle: string;
+    ticketCount: number;
+    zScore: number;
+  }>;
+  narration: DigestNarration | null;
+  summaryText: string;
+  generatedBy: 'llm' | 'rule-based';
+}
+
+export interface DigestRun {
+  id: string;
+  workspaceId: string;
+  sentAt: string;
+  summary: DigestSummary | null;
+}
+
+export interface DigestHistoryItem {
+  id: string;
+  sentAt: string;
+  summary: DigestSummary | null;
 }

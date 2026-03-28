@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { apiClient } from "@/lib/api-client";
+import apiClient from "@/lib/api-client";
 import { PromoteThemePreview, RoadmapStatus } from "@/lib/api-types";
 import { AiConfidenceBadge } from "@/components/ai/AiConfidenceBadge";
 

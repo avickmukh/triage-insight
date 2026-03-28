@@ -1161,6 +1161,10 @@ const apiClient = {
   digest: {
     generate: (workspaceId: string): Promise<void> =>
       api.post(`/workspaces/${workspaceId}/digest/generate`).then(handleResponse),
+    getLatest: (workspaceId: string): Promise<import('./api-types').DigestRun | null> =>
+      api.get(`/workspaces/${workspaceId}/digest/latest`).then(handleResponse),
+    getHistory: (workspaceId: string, limit?: number): Promise<import('./api-types').DigestHistoryItem[]> =>
+      api.get(`/workspaces/${workspaceId}/digest/history${limit ? `?limit=${limit}` : ''}`).then(handleResponse),
   },
 };
 
