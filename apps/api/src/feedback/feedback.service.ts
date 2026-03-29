@@ -620,6 +620,12 @@ export class FeedbackService {
     // Scope to jobs created in the last 24 hours to capture the current batch
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
+    // A RUNNING record is considered stale (orphaned) if it has been in that
+    // state for more than 10 minutes — the idempotency TTL window. Stale
+    // records are excluded from the pending count so they don't block
+    // completion detection forever.
+    const staleThreshold = new Date(Date.now() - 10 * 60 * 1000);
+
     const [total, completed, failed, pending, runningJobs, workspace] = await Promise.all([
       this.prisma.aiJobLog.count({
         where: { workspaceId, createdAt: { gte: since } },
@@ -630,8 +636,15 @@ export class FeedbackService {
       this.prisma.aiJobLog.count({
         where: { workspaceId, status: { in: ['FAILED', 'DEAD_LETTERED'] }, createdAt: { gte: since } },
       }),
+      // Only count RUNNING records (markStarted never creates QUEUED records).
+      // Exclude stale RUNNING records older than 10 min (orphaned / crashed jobs).
       this.prisma.aiJobLog.count({
-        where: { workspaceId, status: { in: ['QUEUED', 'RUNNING'] }, createdAt: { gte: since } },
+        where: {
+          workspaceId,
+          status: 'RUNNING',
+          createdAt: { gte: since },
+          startedAt: { gte: staleThreshold },
+        },
       }),
       this.prisma.aiJobLog.findMany({
         where: { workspaceId, status: 'RUNNING', createdAt: { gte: since } },
