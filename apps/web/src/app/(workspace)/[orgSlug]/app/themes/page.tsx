@@ -20,22 +20,22 @@ const CARD: React.CSSProperties = {
 };
 
 const STATUS_COLORS: Record<ThemeStatus, { bg: string; color: string }> = {
-  [ThemeStatus.ACTIVE]:   { bg: '#e8f5e9', color: '#2e7d32' },
-  [ThemeStatus.DRAFT]:    { bg: '#fff8e1', color: '#b8860b' },
-  [ThemeStatus.ARCHIVED]: { bg: '#f0f4f8', color: '#6C757D' },
+  [ThemeStatus.AI_GENERATED]: { bg: '#e8f7f7', color: '#20A4A4' },
+  [ThemeStatus.VERIFIED]:     { bg: '#e8f5e9', color: '#2e7d32' },
+  [ThemeStatus.ARCHIVED]:     { bg: '#f0f4f8', color: '#6C757D' },
 };
 
 const STATUS_LABELS: Record<ThemeStatus, string> = {
-  [ThemeStatus.ACTIVE]:   'Active',
-  [ThemeStatus.DRAFT]:    'Draft',
-  [ThemeStatus.ARCHIVED]: 'Archived',
+  [ThemeStatus.AI_GENERATED]: 'AI Generated',
+  [ThemeStatus.VERIFIED]:     'Verified',
+  [ThemeStatus.ARCHIVED]:     'Archived',
 };
 
 const TABS: { label: string; value: string | undefined }[] = [
-  { label: 'All',      value: undefined },
-  { label: 'Active',   value: ThemeStatus.ACTIVE },
-  { label: 'Draft',    value: ThemeStatus.DRAFT },
-  { label: 'Archived', value: ThemeStatus.ARCHIVED },
+  { label: 'All',          value: undefined },
+  { label: 'AI Generated', value: ThemeStatus.AI_GENERATED },
+  { label: 'Verified',     value: ThemeStatus.VERIFIED },
+  { label: 'Archived',     value: ThemeStatus.ARCHIVED },
 ];
 
 // ─── Skeleton shimmer ─────────────────────────────────────────────────────────

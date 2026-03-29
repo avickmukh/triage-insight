@@ -254,7 +254,7 @@ export class DashboardAggregationService {
 
     const [themes, spikeEvents, totalActive] = await Promise.all([
       this.prisma.theme.findMany({
-        where: { workspaceId, status: ThemeStatus.ACTIVE },
+        where: { workspaceId, status: { not: ThemeStatus.ARCHIVED } },
         select: {
           id: true, title: true, urgencyScore: true, ciqScore: true, createdAt: true,
           aiSummary: true, aiExplanation: true, aiRecommendation: true, aiConfidence: true,
@@ -276,7 +276,7 @@ export class DashboardAggregationService {
         orderBy: { zScore: 'desc' },
         take: 10,
       }),
-      this.prisma.theme.count({ where: { workspaceId, status: ThemeStatus.ACTIVE } }),
+      this.prisma.theme.count({ where: { workspaceId, status: { not: ThemeStatus.ARCHIVED } } }),
     ]);
 
     const emerging = themes
@@ -428,7 +428,7 @@ export class DashboardAggregationService {
         select: { sentiment: true },
       }),
       this.prisma.theme.findMany({
-        where: { workspaceId, status: ThemeStatus.ACTIVE },
+        where: { workspaceId, status: { not: ThemeStatus.ARCHIVED } },
         select: {
           id: true, title: true,
           feedbacks: {
@@ -569,7 +569,7 @@ export class DashboardAggregationService {
         orderBy: { priorityScore: { sort: 'desc', nulls: 'last' } },
       }),
       this.prisma.theme.findMany({
-        where: { workspaceId, status: ThemeStatus.ACTIVE, priorityScore: { gte: 0.5 } },
+        where: { workspaceId, status: { not: ThemeStatus.ARCHIVED }, priorityScore: { gte: 0.5 } },
         select: {
           id: true, title: true, priorityScore: true, revenueScore: true,
           roadmapItems: { select: { id: true }, take: 1 },

@@ -741,7 +741,7 @@ function EmptyState({ r, onRefresh, isRefreshing }: { r: ReturnType<typeof appRo
     {
       num: '1',
       title: 'Add customer feedback',
-      desc: 'Paste feedback manually, import a CSV, or connect Slack. Even 5 items will activate the AI.',
+      desc: 'Paste feedback manually, import a CSV, or connect Slack. Even 5 items will start the AI pipeline.',
       href: r.inboxNew,
       cta: 'Add feedback →',
       color: TEAL,

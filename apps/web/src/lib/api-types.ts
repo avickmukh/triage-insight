@@ -74,8 +74,11 @@ export enum FeedbackSourceType {
 }
 
 export enum ThemeStatus {
-  DRAFT = 'DRAFT',
-  ACTIVE = 'ACTIVE',
+  /** AI-created theme — participates in CIQ, dashboard, and rankings immediately. */
+  AI_GENERATED = 'AI_GENERATED',
+  /** Human-reviewed and confirmed — trust signal only, does NOT gate CIQ. */
+  VERIFIED = 'VERIFIED',
+  /** Soft-deleted — excluded from all intelligence queries. */
   ARCHIVED = 'ARCHIVED',
 }
 

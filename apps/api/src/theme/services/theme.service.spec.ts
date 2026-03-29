@@ -14,7 +14,7 @@ const mockTheme = {
   workspaceId: 'ws-1',
   title: 'Bug Reports',
   description: null,
-  status: ThemeStatus.DRAFT,
+  status: ThemeStatus.AI_GENERATED,
   pinned: false,
   createdAt: new Date(),
   updatedAt: new Date(),

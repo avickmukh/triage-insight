@@ -105,8 +105,12 @@ enum DuplicateSuggestionStatus {
 }
 
 enum ThemeStatus {
-  DRAFT
-  ACTIVE
+  /// AI-created theme — fully participates in CIQ, dashboard, and rankings.
+  /// This is the default state for all themes created by the pipeline.
+  AI_GENERATED
+  /// Human-reviewed and confirmed — trust signal only, does NOT affect CIQ.
+  VERIFIED
+  /// Soft-deleted — excluded from all intelligence queries.
   ARCHIVED
 }
 
@@ -767,7 +771,7 @@ model Theme {
   title            String
   description      String?
   embedding        Unsupported("vector(1536)")?
-  status           ThemeStatus          @default(DRAFT)
+  status           ThemeStatus          @default(AI_GENERATED)
   pinned           Boolean              @default(false)
 
   /// CIQ-computed priority score (0–100); null until first scoring run

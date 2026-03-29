@@ -136,7 +136,7 @@ export class ReportingService {
     const themes = await this.prisma.theme.findMany({
       where: {
         workspaceId,
-        status: ThemeStatus.ACTIVE,
+        status: { not: ThemeStatus.ARCHIVED },
         ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {}),
       },
       select: {
@@ -154,7 +154,7 @@ export class ReportingService {
     });
 
     const totalActiveThemes = await this.prisma.theme.count({
-      where: { workspaceId, status: ThemeStatus.ACTIVE },
+      where: { workspaceId, status: { not: ThemeStatus.ARCHIVED } },
     });
 
     return {
@@ -259,7 +259,7 @@ export class ReportingService {
     const themes = await this.prisma.theme.findMany({
       where: {
         workspaceId,
-        status: ThemeStatus.ACTIVE,
+        status: { not: ThemeStatus.ARCHIVED },
         ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {}),
       },
       select: {

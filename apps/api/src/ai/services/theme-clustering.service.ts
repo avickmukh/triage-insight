@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bull';
+import type { Queue } from 'bull';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmbeddingService } from './embedding.service';
+import { CIQ_SCORING_QUEUE } from '../processors/ciq-scoring.processor';
 
 /**
  * ThemeClusteringService
@@ -8,8 +11,11 @@ import { EmbeddingService } from './embedding.service';
  * Semantic clustering using pgvector cosine similarity.
  * Assigns a single feedback item to the best-matching existing theme in the
  * same workspace. If no theme scores above the similarity threshold, a new
- * DRAFT candidate theme is created and its embedding is stored for future
- * incremental clustering.
+ * AI_GENERATED candidate theme is created and its embedding is stored for
+ * future incremental clustering.
+ *
+ * After a new theme is created, a CIQ scoring job is immediately enqueued so
+ * that the theme appears in dashboards and rankings without any manual step.
  *
  * Tenant isolation is enforced by scoping all queries to `workspaceId`.
  * Clustering is async via BullMQ (see ThemeClusteringProcessor).
@@ -24,6 +30,7 @@ export class ThemeClusteringService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly embeddingService: EmbeddingService,
+    @InjectQueue(CIQ_SCORING_QUEUE) private readonly ciqQueue: Queue,
   ) {}
 
   // ─── Public API ───────────────────────────────────────────────────────────
@@ -84,8 +91,9 @@ export class ThemeClusteringService {
 
     const vectorStr = `[${feedbackEmbedding.join(',')}]`;
 
-    // Find the most similar theme using pgvector cosine similarity
-    // Scoped to the workspace for tenant isolation
+    // Find the most similar theme using pgvector cosine similarity.
+    // Scoped to the workspace for tenant isolation.
+    // Excludes ARCHIVED themes only — AI_GENERATED and VERIFIED both participate.
     const similarThemes = await this.prisma.$queryRaw<Array<{ id: string; similarity: number }>>`
       SELECT
         id,
@@ -116,6 +124,12 @@ export class ThemeClusteringService {
       this.logger.log(
         `Assigned feedback ${feedbackId} to theme ${themeId} (similarity=${similarThemes[0].similarity.toFixed(3)})`,
       );
+      // Re-score the existing theme so the new feedback signal is reflected immediately
+      try {
+        await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId });
+      } catch (queueErr) {
+        this.logger.warn(`[CIQ] Redis unavailable — re-score job skipped: ${(queueErr as Error).message}`);
+      }
       return themeId;
     }
 
@@ -170,10 +184,13 @@ export class ThemeClusteringService {
   // ─── Private helpers ──────────────────────────────────────────────────────
 
   /**
-   * Create a new DRAFT candidate theme seeded from a single feedback item.
+   * Create a new AI_GENERATED candidate theme seeded from a single feedback item.
    * The theme title is derived from the feedback title (truncated to 80 chars).
    * If a feedbackEmbedding is provided, it is stored as the theme's embedding
    * for future incremental clustering.
+   *
+   * A CIQ scoring job is immediately enqueued so the new theme appears in
+   * dashboards and rankings without any manual activation step.
    */
   private async createCandidateTheme(
     workspaceId: string,
@@ -188,7 +205,9 @@ export class ThemeClusteringService {
       data: {
         workspaceId,
         title: candidateTitle,
-        status: 'DRAFT',
+        // AI_GENERATED is the default — no manual activation required.
+        // The theme participates in CIQ, dashboard, and rankings immediately.
+        status: 'AI_GENERATED',
         feedbacks: {
           create: { feedbackId, assignedBy: 'ai', confidence: 1.0 },
         },
@@ -206,8 +225,17 @@ export class ThemeClusteringService {
     }
 
     this.logger.log(
-      `Created candidate theme "${theme.title}" (${theme.id}) for feedback ${feedbackId}`,
+      `Created AI_GENERATED theme "${theme.title}" (${theme.id}) for feedback ${feedbackId}`,
     );
+
+    // Immediately trigger CIQ scoring for the new theme so it appears in
+    // dashboards and rankings without any manual activation step.
+    try {
+      await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId: theme.id });
+    } catch (queueErr) {
+      this.logger.warn(`[CIQ] Redis unavailable — initial score job skipped: ${(queueErr as Error).message}`);
+    }
+
     return theme.id;
   }
 }

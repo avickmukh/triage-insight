@@ -109,7 +109,7 @@ describe('ThemeClusteringService', () => {
       expect(result).toBe('existing-theme-id');
     });
 
-    it('should create a new DRAFT theme when no existing theme meets the similarity threshold', async () => {
+    it('should create a new AI_GENERATED theme when no existing theme meets the similarity threshold', async () => {
       mockPrismaService.themeFeedback.findFirst.mockResolvedValue(null);
       mockPrismaService.feedback.findUnique.mockResolvedValue({
         id: 'feedback-id',
@@ -123,7 +123,7 @@ describe('ThemeClusteringService', () => {
 
       // No themes above threshold
       mockPrismaService.$queryRaw.mockResolvedValue([]);
-      mockPrismaService.theme.create.mockResolvedValue({ id: 'draft-theme-id' });
+      mockPrismaService.theme.create.mockResolvedValue({ id: 'ai-generated-theme-id' });
       mockPrismaService.themeFeedback.create.mockResolvedValue({});
       mockPrismaService.feedback.update.mockResolvedValue({});
 
@@ -131,10 +131,10 @@ describe('ThemeClusteringService', () => {
 
       expect(mockPrismaService.theme.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ status: 'DRAFT', workspaceId: 'ws-id' }),
+          data: expect.objectContaining({ status: 'AI_GENERATED', workspaceId: 'ws-id' }),
         }),
       );
-      expect(result).toBe('draft-theme-id');
+      expect(result).toBe('ai-generated-theme-id');
     });
   });
 

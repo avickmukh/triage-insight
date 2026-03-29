@@ -31,7 +31,8 @@ export class PrioritizationService {
   ) {}
 
   /**
-   * Return all ACTIVE themes ordered by their stored priorityScore (desc).
+   * Return all non-archived themes ordered by their stored priorityScore (desc).
+   * Includes both AI_GENERATED and VERIFIED themes.
    * Themes that have never been scored appear last (null score).
    */
   async getPrioritizedThemes(workspaceId: string, query: QueryPrioritizationDto) {
@@ -39,7 +40,7 @@ export class PrioritizationService {
 
     const [themes, total] = await this.prisma.$transaction([
       this.prisma.theme.findMany({
-        where: { workspaceId, status: ThemeStatus.ACTIVE },
+        where: { workspaceId, status: { not: ThemeStatus.ARCHIVED } },
         orderBy: [
           { priorityScore: { sort: "desc", nulls: "last" } },
           { createdAt: "desc" },
@@ -48,7 +49,7 @@ export class PrioritizationService {
         take: limit,
         include: { _count: { select: { feedbacks: true } } },
       }),
-      this.prisma.theme.count({ where: { workspaceId, status: ThemeStatus.ACTIVE } }),
+      this.prisma.theme.count({ where: { workspaceId, status: { not: ThemeStatus.ARCHIVED } } }),
     ]);
 
     return { data: themes, total, page, limit };
@@ -188,11 +189,12 @@ export class PrioritizationService {
   }
 
   /**
-   * Enqueue CIQ scoring jobs for ALL active themes in a workspace.
+   * Enqueue CIQ scoring jobs for all non-archived themes in a workspace.
+   * Includes both AI_GENERATED and VERIFIED themes.
    */
   async enqueueWorkspaceRescore(workspaceId: string, userId: string) {
     const themes = await this.prisma.theme.findMany({
-      where: { workspaceId, status: ThemeStatus.ACTIVE },
+      where: { workspaceId, status: { not: ThemeStatus.ARCHIVED } },
       select: { id: true },
     });
 

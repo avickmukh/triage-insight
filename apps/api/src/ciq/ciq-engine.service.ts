@@ -264,15 +264,16 @@ export class CiqEngineService {
   // ─── 2. Theme Ranking ──────────────────────────────────────────────────────
 
   /**
-   * Rank all ACTIVE themes by their full CIQ score, enriched with voice,
+   * Rank all non-archived themes by their full CIQ score, enriched with voice,
    * survey, and support signals beyond the base CiqService.scoreTheme.
+   * Includes both AI_GENERATED and VERIFIED themes.
    */
   async getThemeRanking(
     workspaceId: string,
     limit = 50,
   ): Promise<ThemeRankingItem[]> {
     const themes = await this.prisma.theme.findMany({
-      where: { workspaceId, status: ThemeStatus.ACTIVE },
+      where: { workspaceId, status: { not: ThemeStatus.ARCHIVED } },
       select: {
         id: true,
         title: true,
@@ -526,9 +527,9 @@ export class CiqEngineService {
    */
   async getStrategicSignals(workspaceId: string): Promise<StrategicSignalsOutput> {
     const [themes, surveyResponses, supportSpikes, customerSignals] = await Promise.all([
-      // Top 20 ACTIVE themes with roadmap linkage
+      // Top 20 non-archived themes with roadmap linkage (AI_GENERATED + VERIFIED)
       this.prisma.theme.findMany({
-        where: { workspaceId, status: ThemeStatus.ACTIVE },
+        where: { workspaceId, status: { not: ThemeStatus.ARCHIVED } },
         select: {
           id: true,
           title: true,

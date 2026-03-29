@@ -13,8 +13,8 @@
  *      response envelope — the real server-side count.
  *
  *   2. activeThemeCount — was counting loaded items via pages.flatMap().length
- *      (only the first page, default 20).  Now uses useThemeCount(ACTIVE) which
- *      calls GET /themes?status=ACTIVE&limit=1 and reads `total`.
+ *      (only the first page, default 20).  Now uses useThemeCount(AI_GENERATED) which
+ *      calls GET /themes?status=AI_GENERATED&limit=1 and reads `total`.
  *
  *   3. committedCount / shippedCount — roadmap is RoadmapBoardResponse
  *      ({ [status: string]: RoadmapItem[] }), NOT an array.  The previous code
@@ -133,7 +133,8 @@ export default function AdminDashboardPage() {
   const newFeedback  = useFeedbackCount(FeedbackStatus.NEW);
 
   // ── Fix 2: server-side count via useThemeCount (reads `total` from envelope)
-  const activeThemes = useThemeCount(ThemeStatus.ACTIVE);
+  // Count AI_GENERATED themes (all auto-clustered themes, regardless of verification)
+  const activeThemes = useThemeCount(ThemeStatus.AI_GENERATED);
 
   // ── Fix 3: roadmap is RoadmapBoardResponse = { [status: string]: RoadmapItem[] }
   //    Array.isArray(board) is always false — read keyed columns directly.

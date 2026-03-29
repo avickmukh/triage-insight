@@ -148,7 +148,7 @@ function whyItMatters(item: ThemeRankingItem): string {
     if (item.feedbackCount > 0) {
       return `${item.feedbackCount} signal${item.feedbackCount > 1 ? 's' : ''} collected — needs more data to fully rank.`;
     }
-    return 'No signals yet — add feedback to activate ranking.';
+    return 'No signals yet — add feedback to start ranking.'
   }
 
   return parts.join(' · ') + '.';
@@ -172,7 +172,7 @@ export default function IntelligenceThemesPage() {
         <div style={{ flex: 1 }}>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0a2540', margin: 0 }}>Theme CIQ Ranking</h1>
           <p style={{ color: '#6C757D', margin: '0.25rem 0 0', fontSize: '0.875rem' }}>
-            ACTIVE themes ranked by composite CIQ score — feedback frequency, ARR influence, voice signals, survey demand, and support spikes.
+            All non-archived themes ranked by composite CIQ score — feedback frequency, ARR influence, voice signals, survey demand, and support spikes.
             Trend indicators show momentum based on signal velocity.
           </p>
         </div>
@@ -194,7 +194,7 @@ export default function IntelligenceThemesPage() {
             CIQ scores are calculated automatically once themes have linked feedback.
           </p>
           <p style={{ color: '#6C757D', fontSize: '0.825rem', maxWidth: '440px', margin: '0 auto 1.5rem', lineHeight: 1.6 }}>
-            <strong>How insights activate:</strong> Add feedback → AI clusters it into themes → CIQ scoring runs automatically → rankings appear here within minutes.
+            <strong>How it works:</strong> Add feedback → AI clusters it into themes → CIQ scoring runs automatically → rankings appear here within minutes.
           </p>
           <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
             <Link
@@ -317,10 +317,10 @@ export default function IntelligenceThemesPage() {
                         <span style={{
                           padding: '0.2rem 0.5rem', borderRadius: '0.375rem',
                           fontSize: '0.7rem', fontWeight: 600,
-                          background: theme.status === 'ACTIVE' ? '#e8f7f7' : '#f0f4f8',
-                          color: theme.status === 'ACTIVE' ? '#20A4A4' : '#6C757D',
+                          background: theme.status === 'VERIFIED' ? '#e8f5e9' : theme.status === 'AI_GENERATED' ? '#e8f7f7' : '#f0f4f8',
+                          color: theme.status === 'VERIFIED' ? '#2e7d32' : theme.status === 'AI_GENERATED' ? '#20A4A4' : '#6C757D',
                         }}>
-                          {theme.status}
+                          {theme.status === 'AI_GENERATED' ? 'AI Generated' : theme.status === 'VERIFIED' ? 'Verified' : theme.status}
                         </span>
                       </td>
                     </tr>

@@ -34,9 +34,9 @@ const CARD: React.CSSProperties = {
 };
 
 const STATUS_COLORS: Record<ThemeStatus, { bg: string; color: string }> = {
-  [ThemeStatus.ACTIVE]:   { bg: '#e8f5e9', color: '#2e7d32' },
-  [ThemeStatus.DRAFT]:    { bg: '#fff8e1', color: '#b8860b' },
-  [ThemeStatus.ARCHIVED]: { bg: '#f0f4f8', color: '#6C757D' },
+  [ThemeStatus.AI_GENERATED]: { bg: '#e8f7f7', color: '#20A4A4' },
+  [ThemeStatus.VERIFIED]:     { bg: '#e8f5e9', color: '#2e7d32' },
+  [ThemeStatus.ARCHIVED]:     { bg: '#f0f4f8', color: '#6C757D' },
 };
 
 const FEEDBACK_STATUS_COLORS: Record<FeedbackStatus, { bg: string; color: string }> = {
@@ -100,7 +100,7 @@ function EditThemeModal({
   const { mutate: updateTheme, isPending, isError, error } = useUpdateTheme(themeId);
   const [title, setTitle] = useState(initial.title ?? '');
   const [description, setDescription] = useState(initial.description ?? '');
-  const [status, setStatus] = useState<ThemeStatus>(initial.status ?? ThemeStatus.ACTIVE);
+  const [status, setStatus] = useState<ThemeStatus>(initial.status ?? ThemeStatus.AI_GENERATED);
   const [pinned, setPinned] = useState<boolean>(initial.pinned ?? false);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -177,8 +177,8 @@ function EditThemeModal({
                   fontSize: '0.9rem', outline: 'none', background: '#fff',
                 }}
               >
-                <option value={ThemeStatus.ACTIVE}>Active</option>
-                <option value={ThemeStatus.DRAFT}>Draft</option>
+                <option value={ThemeStatus.AI_GENERATED}>AI Generated</option>
+                <option value={ThemeStatus.VERIFIED}>Verified</option>
                 <option value={ThemeStatus.ARCHIVED}>Archived</option>
               </select>
             </div>
@@ -555,9 +555,9 @@ export default function ThemeDetailPage() {
                   AI-clustered by semantic similarity
                 </span>
               )}
-              {theme.status === 'ACTIVE' && (
-                <span style={{ fontSize: '0.75rem', background: '#fff8e1', color: '#b8860b', borderRadius: '0.375rem', padding: '0.2rem 0.6rem', fontWeight: 500 }}>
-                  Active — receiving new signals
+              {theme.status === 'VERIFIED' && (
+                <span style={{ fontSize: '0.75rem', background: '#e8f5e9', color: '#2e7d32', borderRadius: '0.375rem', padding: '0.2rem 0.6rem', fontWeight: 500 }}>
+                  Verified by your team
                 </span>
               )}
             </div>

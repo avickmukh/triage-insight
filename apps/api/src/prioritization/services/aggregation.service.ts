@@ -299,7 +299,7 @@ export class AggregationService {
   async getThemePriorityRanking(workspaceId: string, limit = 50): Promise<ThemePriorityItem[]> {
     const [themes, settings, supportSpikes] = await Promise.all([
       this.prisma.theme.findMany({
-        where: { workspaceId, status: ThemeStatus.ACTIVE },
+        where: { workspaceId, status: { not: ThemeStatus.ARCHIVED } },
         select: {
           id: true, title: true, status: true, priorityScore: true, ciqScore: true,
           revenueScore: true, urgencyScore: true, revenueInfluence: true, lastScoredAt: true,
@@ -548,7 +548,7 @@ export class AggregationService {
   async getOpportunities(workspaceId: string, limit = 20): Promise<PrioritizationOpportunity[]> {
     const [themes, feedbacks] = await Promise.all([
       this.prisma.theme.findMany({
-        where: { workspaceId, status: ThemeStatus.ACTIVE },
+        where: { workspaceId, status: { not: ThemeStatus.ARCHIVED } },
         select: {
           id: true, title: true, priorityScore: true, ciqScore: true,
           revenueScore: true, urgencyScore: true, revenueInfluence: true,
