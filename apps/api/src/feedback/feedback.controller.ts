@@ -56,6 +56,10 @@ export class FeedbackController {
     private readonly csvImportService: CsvImportService,
   ) {}
 
+  // ─── Collection routes (no :id segment) ────────────────────────────────────
+  // IMPORTANT: All static routes MUST be declared before any :id routes to
+  // prevent NestJS from matching e.g. GET /semantic-search as GET /:id.
+
   @Post()
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
   create(
@@ -73,6 +77,66 @@ export class FeedbackController {
   ) {
     return this.feedbackService.findAll(workspaceId, query);
   }
+
+  // --- Semantic Search ---
+  /**
+   * GET /workspaces/:workspaceId/feedback/semantic-search?q=<query>&limit=<n>&threshold=<t>
+   *
+   * Generates an embedding for `q` and returns the top feedback items ranked
+   * by cosine similarity.  Only feedback that has been through the AI pipeline
+   * (embedding IS NOT NULL) is considered.
+   *
+   * MUST be declared before `:id` routes to avoid NestJS routing conflicts
+   * (otherwise NestJS matches 'semantic-search' as the :id parameter).
+   */
+  @Get('semantic-search')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
+  semanticSearch(
+    @Param('workspaceId') workspaceId: string,
+    @Query() dto: SemanticSearchDto,
+  ) {
+    return this.feedbackService.semanticSearch(workspaceId, dto);
+  }
+
+  // --- Bulk AI pipeline re-trigger ---
+  /**
+   * POST /workspaces/:workspaceId/feedback/reprocess-pipeline
+   *
+   * Re-enqueues the AI analysis job (embedding → sentiment → clustering) for
+   * every feedback item in this workspace that has not yet been processed
+   * (embedding IS NULL) or has never been assigned to a theme.
+   *
+   * MUST be declared before `:id` routes to avoid NestJS routing conflicts.
+   */
+  @Post('reprocess-pipeline')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  reprocessPipeline(
+    @Param('workspaceId') workspaceId: string,
+  ) {
+    return this.feedbackService.reprocessPipeline(workspaceId);
+  }
+
+  // --- Ingestion ---
+  /**
+   * POST /workspaces/:workspaceId/feedback/import/csv
+   * MUST be declared before `:id` routes to avoid NestJS routing conflicts.
+   */
+  @Post('import/csv')
+  @UseInterceptors(FileInterceptor('file'))
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  importCsv(
+    @Param('workspaceId') workspaceId: string,
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 })], // 10MB
+      }),
+    )
+    file: Express.Multer.File,
+  ) {
+    return this.csvImportService.import(workspaceId, file.buffer);
+  }
+
+  // ─── Item routes (:id segment) ──────────────────────────────────────────────
 
   @Get(':id')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
@@ -130,27 +194,37 @@ export class FeedbackController {
     );
   }
 
-  // --- Semantic Search ---
+  // --- Comments ---
   /**
-   * GET /workspaces/:workspaceId/feedback/semantic-search?q=<query>&limit=<n>&threshold=<t>
-   *
-   * Generates an embedding for `q` and returns the top feedback items ranked
-   * by cosine similarity.  Only feedback that has been through the AI pipeline
-   * (embedding IS NOT NULL) is considered.
-   *
-   * IMPORTANT: declared before `:id` routes to avoid NestJS routing conflicts.
+   * GET /workspaces/:workspaceId/feedback/:id/comments
+   * Returns all comments for a feedback item, ordered by createdAt ascending.
    */
-  @Get('semantic-search')
+  @Get(':id/comments')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
-  semanticSearch(
+  getComments(
     @Param('workspaceId') workspaceId: string,
-    @Query() dto: SemanticSearchDto,
+    @Param('id') id: string,
   ) {
-    return this.feedbackService.semanticSearch(workspaceId, dto);
+    return this.feedbackService.getComments(workspaceId, id);
+  }
+
+  /**
+   * POST /workspaces/:workspaceId/feedback/:id/comments
+   * Adds a comment to a feedback item. The authenticated user is recorded as
+   * the author. Returns the created FeedbackComment.
+   */
+  @Post(':id/comments')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  addComment(
+    @Param('workspaceId') workspaceId: string,
+    @Param('id') id: string,
+    @Body() body: { content: string },
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.feedbackService.addComment(workspaceId, id, body.content, req.user.sub);
   }
 
   // --- Related Feedback ---
-
   /**
    * GET /workspaces/:workspaceId/feedback/:id/related
    *
@@ -177,44 +251,5 @@ export class FeedbackController {
     @Param('id') id: string,
   ) {
     return this.feedbackService.findPotentialDuplicates(workspaceId, id);
-  }
-
-  // --- Bulk AI pipeline re-trigger ---
-
-  /**
-   * POST /workspaces/:workspaceId/feedback/reprocess-pipeline
-   *
-   * Re-enqueues the AI analysis job (embedding → sentiment → clustering) for
-   * every feedback item in this workspace that has not yet been processed
-   * (embedding IS NULL) or has never been assigned to a theme.
-   *
-   * Use this after a CSV import when the worker was not running, or to
-   * recover from a Redis outage that dropped jobs.
-   *
-   * Returns { enqueued, total } so the caller knows how many jobs were queued.
-   */
-  @Post('reprocess-pipeline')
-  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
-  reprocessPipeline(
-    @Param('workspaceId') workspaceId: string,
-  ) {
-    return this.feedbackService.reprocessPipeline(workspaceId);
-  }
-
-  // --- Ingestion ---
-
-  @Post('import/csv')
-  @UseInterceptors(FileInterceptor('file'))
-  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
-  importCsv(
-    @Param('workspaceId') workspaceId: string,
-    @UploadedFile(
-      new ParseFilePipe({
-        validators: [new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 })], // 10MB
-      }),
-    )
-    file: Express.Multer.File,
-  ) {
-    return this.csvImportService.import(workspaceId, file.buffer);
   }
 }

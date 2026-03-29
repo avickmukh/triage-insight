@@ -688,19 +688,23 @@ export default function InboxItemPage({
               Linked Themes
             </p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-              {(feedback as any).themes.map((th: Theme) => (
-                <Link
-                  key={th.id}
-                  href={`/${slug}/app/themes/${th.id}`}
-                  style={{
-                    background: '#ede9fe', color: '#7c3aed',
-                    padding: '0.25rem 0.75rem', borderRadius: '999px',
-                    fontSize: '0.8125rem', fontWeight: 500, textDecoration: 'none',
-                    display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
-                  }}
-                >
-                  ⬡ {th.title}
-                </Link>
+              {/* feedback.themes is an array of ThemeFeedback join records;
+                  each record has a nested .theme object with { id, title, status } */}
+              {(feedback as any).themes.map((link: { theme: Theme }) => (
+                link.theme && (
+                  <Link
+                    key={link.theme.id}
+                    href={`/${slug}/app/themes/${link.theme.id}`}
+                    style={{
+                      background: '#ede9fe', color: '#7c3aed',
+                      padding: '0.25rem 0.75rem', borderRadius: '999px',
+                      fontSize: '0.8125rem', fontWeight: 500, textDecoration: 'none',
+                      display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+                    }}
+                  >
+                    ⬡ {link.theme.title}
+                  </Link>
+                )
               ))}
             </div>
           </div>

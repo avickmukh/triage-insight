@@ -496,4 +496,66 @@ export class FeedbackService {
       model: 'text-embedding-3-small',
     };
   }
+
+  // ── Comments ───────────────────────────────────────────────────────────────────
+
+  /**
+   * GET /workspaces/:workspaceId/feedback/:id/comments
+   * Returns all FeedbackComment rows for the given feedback item,
+   * ordered by createdAt ascending, with the author user record included.
+   */
+  async getComments(workspaceId: string, feedbackId: string) {
+    const feedback = await this.prisma.feedback.findFirst({
+      where: { id: feedbackId, workspaceId },
+      select: { id: true },
+    });
+    if (!feedback) throw new NotFoundException('Feedback not found');
+
+    return this.prisma.feedbackComment.findMany({
+      where: { feedbackId, workspaceId },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        user: { select: { id: true, firstName: true, lastName: true, email: true } },
+      },
+    });
+  }
+
+  /**
+   * POST /workspaces/:workspaceId/feedback/:id/comments
+   * Creates a new FeedbackComment authored by the authenticated workspace user.
+   * Returns the created comment with the author user record.
+   */
+  async addComment(
+    workspaceId: string,
+    feedbackId: string,
+    content: string,
+    userId: string,
+  ) {
+    const feedback = await this.prisma.feedback.findFirst({
+      where: { id: feedbackId, workspaceId },
+      select: { id: true },
+    });
+    if (!feedback) throw new NotFoundException('Feedback not found');
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { firstName: true, lastName: true, email: true },
+    });
+
+    return this.prisma.feedbackComment.create({
+      data: {
+        workspaceId,
+        feedbackId,
+        userId,
+        body: content,
+        authorName: user
+          ? `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() || user.email
+          : undefined,
+        authorEmail: user?.email,
+      },
+      include: {
+        user: { select: { id: true, firstName: true, lastName: true, email: true } },
+      },
+    });
+  }
 }

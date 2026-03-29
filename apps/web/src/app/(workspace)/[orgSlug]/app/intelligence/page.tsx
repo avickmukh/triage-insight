@@ -225,12 +225,14 @@ function UnifiedIssueRow({
             </span>
           </div>
 
-          {/* Sentiment pills */}
-          <div style={{ display: 'flex', gap: '0.35rem', marginBottom: '0.4rem', flexWrap: 'wrap' }}>
-            <SentimentPill label="✓" count={issue.sentimentDistribution.positive} color="#2e7d32" />
-            <SentimentPill label="~" count={issue.sentimentDistribution.neutral} color="#6C757D" />
-            <SentimentPill label="✗" count={issue.sentimentDistribution.negative} color="#c62828" />
-          </div>
+          {/* Sentiment pills — sentimentDistribution may be null before CIQ pipeline runs */}
+          {issue.sentimentDistribution && (
+            <div style={{ display: 'flex', gap: '0.35rem', marginBottom: '0.4rem', flexWrap: 'wrap' }}>
+              <SentimentPill label="✓" count={issue.sentimentDistribution.positive ?? 0} color="#2e7d32" />
+              <SentimentPill label="~" count={issue.sentimentDistribution.neutral ?? 0} color="#6C757D" />
+              <SentimentPill label="✗" count={issue.sentimentDistribution.negative ?? 0} color="#c62828" />
+            </div>
+          )}
 
           {/* CIQ score bar */}
           {ciq > 0 && (
