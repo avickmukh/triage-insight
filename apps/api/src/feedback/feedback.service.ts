@@ -558,4 +558,58 @@ export class FeedbackService {
       },
     });
   }
+
+  /**
+   * Returns a snapshot of the current AI pipeline state for the workspace.
+   * The frontend polls this every 3 seconds to show a blocking progress bar.
+   * Because the state is persisted in AiJobLog, it survives tab close/re-login.
+   */
+  async getPipelineStatus(workspaceId: string): Promise<{
+    isRunning: boolean;
+    total: number;
+    completed: number;
+    failed: number;
+    pending: number;
+    pct: number;
+    estimatedSecondsLeft: number | null;
+  }> {
+    // Scope to jobs created in the last 24 hours to capture the current batch
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const [total, completed, failed, pending] = await Promise.all([
+      this.prisma.aiJobLog.count({
+        where: { workspaceId, createdAt: { gte: since } },
+      }),
+      this.prisma.aiJobLog.count({
+        where: { workspaceId, status: 'COMPLETED', createdAt: { gte: since } },
+      }),
+      this.prisma.aiJobLog.count({
+        where: { workspaceId, status: { in: ['FAILED', 'DEAD_LETTERED'] }, createdAt: { gte: since } },
+      }),
+      this.prisma.aiJobLog.count({
+        where: { workspaceId, status: { in: ['QUEUED', 'RUNNING'] }, createdAt: { gte: since } },
+      }),
+    ]);
+
+    const isRunning = pending > 0;
+    const pct = total === 0 ? 100 : Math.round(((completed + failed) / total) * 100);
+
+    // Estimate seconds remaining based on average completed job duration
+    let estimatedSecondsLeft: number | null = null;
+    if (isRunning && completed > 0) {
+      const avgDuration = await this.prisma.aiJobLog.aggregate({
+        where: {
+          workspaceId,
+          status: 'COMPLETED',
+          createdAt: { gte: since },
+          durationMs: { not: null },
+        },
+        _avg: { durationMs: true },
+      });
+      const avgMs = avgDuration._avg.durationMs ?? 2000;
+      estimatedSecondsLeft = Math.ceil((pending * avgMs) / 1000);
+    }
+
+    return { isRunning, total, completed, failed, pending, pct, estimatedSecondsLeft };
+  }
 }

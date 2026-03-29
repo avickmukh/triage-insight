@@ -307,6 +307,25 @@ const apiClient = {
           params: { q, limit, threshold },
         })
         .then(handleResponse),
+    /**
+     * GET /workspaces/:id/feedback/pipeline-status
+     * Returns the current AI pipeline progress for the workspace.
+     * Polls this to show a blocking progress bar.
+     */
+    getPipelineStatus: (
+      workspaceId: string
+    ): Promise<{
+      isRunning: boolean;
+      total: number;
+      completed: number;
+      failed: number;
+      pending: number;
+      pct: number;
+      estimatedSecondsLeft: number | null;
+    }> =>
+      api
+        .get(`/workspaces/${workspaceId}/feedback/pipeline-status`)
+        .then(handleResponse),
   },
 
   themes: {

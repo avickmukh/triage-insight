@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { appRoutes } from '@/lib/routes';
 import { useQueryClient } from '@tanstack/react-query';
+import { markPipelineStarted } from '@/components/pipeline/AIPipelineProgress';
 
 const CARD: React.CSSProperties = {
   background: '#fff',
@@ -85,6 +86,9 @@ function CsvImportModal({
       const res = await apiClient.feedback.importCsv(workspaceId, selectedFile);
       setResult(res);
       setImportState('success');
+      // Mark pipeline as started so the progress overlay appears immediately
+      // and persists if the user closes the tab
+      markPipelineStarted(workspaceId);
       onImported();
     } catch (err: unknown) {
       const msg =
@@ -455,6 +459,8 @@ export default function InboxPage() {
       const res = await apiClient.feedback.reprocessPipeline(workspace.id);
       setPipelineResult(res);
       setPipelineState('done');
+      // Mark pipeline as started so the progress overlay appears
+      markPipelineStarted(workspace.id);
       // Refresh list after a short delay so newly-processed items appear
       setTimeout(() => queryClient.invalidateQueries({ queryKey: ['feedback'] }), 3000);
     } catch {

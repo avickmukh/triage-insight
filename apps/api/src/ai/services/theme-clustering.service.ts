@@ -53,7 +53,8 @@ export class ThemeClusteringService {
   /** Dynamic thresholds based on cluster size. */
   private readonly THRESHOLD_LARGE = 0.80;   // ≥ 10 items
   private readonly THRESHOLD_MEDIUM = 0.78;  // 5–9 items
-  private readonly THRESHOLD_SMALL = 0.75;   // < 5 items
+  private readonly THRESHOLD_SMALL = 0.72;   // 1–4 items
+  private readonly THRESHOLD_NEW    = 0.65;  // 0 items (brand-new theme, centroid = first feedback)
 
   /** Hybrid score below this value marks a feedback item as a potential outlier. */
   private readonly OUTLIER_THRESHOLD = 0.72;
@@ -93,7 +94,28 @@ export class ThemeClusteringService {
       return existingLink.themeId;
     }
 
-    const feedback = await this.prisma.feedback.findUnique({
+    // ── Workspace-level advisory lock ────────────────────────────────────────
+    // Prevents concurrent clustering jobs for the same workspace from racing
+    // against each other and creating duplicate themes.
+    // pg_advisory_xact_lock is automatically released at transaction end.
+    // We derive a stable integer key from the workspace UUID.
+    return this.prisma.$transaction(async (tx) => {
+      // Hash the workspaceId to a 32-bit int for the advisory lock key
+      const lockKey = workspaceIdToLockKey(workspaceId);
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockKey})`;
+      return this._assignFeedbackToThemeInTx(tx as unknown as PrismaService, workspaceId, feedbackId, embedding);
+    }, { timeout: 60_000 });
+  }
+
+  /** Inner implementation — runs inside the advisory-locked transaction. */
+  private async _assignFeedbackToThemeInTx(
+    prisma: PrismaService,
+    workspaceId: string,
+    feedbackId: string,
+    embedding?: number[],
+  ): Promise<string | null> {
+
+    const feedback = await prisma.feedback.findUnique({
       where: { id: feedbackId },
       select: {
         id: true,
@@ -128,7 +150,7 @@ export class ThemeClusteringService {
     // ── Step 1: Retrieve top-N candidates by embedding similarity ─────────
     // Scoped to workspace, excludes ARCHIVED themes.
     // We fetch top-5 and re-rank with keyword overlap.
-    const candidates = await this.prisma.$queryRaw<Array<{
+    const candidates = await prisma.$queryRaw<Array<{
       id: string;
       similarity: number;
       topKeywords: string | null;
@@ -181,7 +203,7 @@ export class ThemeClusteringService {
     const threshold = this.getDynamicThreshold(bestClusterSize);
 
     if (bestThemeId && bestHybridScore >= threshold) {
-      await this.prisma.themeFeedback.upsert({
+      await prisma.themeFeedback.upsert({
         where: { themeId_feedbackId: { themeId: bestThemeId, feedbackId } },
         create: {
           themeId: bestThemeId,
@@ -281,8 +303,9 @@ export class ThemeClusteringService {
    */
   private getDynamicThreshold(clusterSize: number): number {
     if (clusterSize >= 10) return this.THRESHOLD_LARGE;
-    if (clusterSize >= 5) return this.THRESHOLD_MEDIUM;
-    return this.THRESHOLD_SMALL;
+    if (clusterSize >= 5)  return this.THRESHOLD_MEDIUM;
+    if (clusterSize >= 1)  return this.THRESHOLD_SMALL;
+    return this.THRESHOLD_NEW; // brand-new theme: centroid = first feedback embedding
   }
 
   /**
@@ -492,4 +515,24 @@ function extractKeywords(text: string): string[] {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 8)
     .map(([w]) => w);
+}
+
+// ─── Utility: workspace advisory lock key ────────────────────────────────────
+
+/**
+ * Derive a stable 32-bit integer from a workspace UUID for use as a
+ * PostgreSQL advisory lock key (pg_advisory_xact_lock takes a bigint).
+ *
+ * We XOR the four 32-bit words of the UUID together to get a single int.
+ * Collisions are theoretically possible but astronomically unlikely for a
+ * small number of workspaces, and a collision would only cause unnecessary
+ * serialisation (not incorrect behaviour).
+ */
+function workspaceIdToLockKey(workspaceId: string): number {
+  const hex = workspaceId.replace(/-/g, '');
+  let key = 0;
+  for (let i = 0; i < hex.length; i += 8) {
+    key ^= parseInt(hex.slice(i, i + 8), 16) | 0;
+  }
+  return key;
 }

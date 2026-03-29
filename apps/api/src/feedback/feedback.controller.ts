@@ -136,6 +136,20 @@ export class FeedbackController {
     return this.csvImportService.import(workspaceId, file.buffer);
   }
 
+  // --- Pipeline status ---
+  /**
+   * GET /workspaces/:workspaceId/feedback/pipeline-status
+   *
+   * Returns the current AI pipeline progress for the workspace.
+   * Used by the frontend to show a blocking progress indicator.
+   * Survives tab close/re-login because state is persisted in AiJobLog.
+   */
+  @Get('pipeline-status')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
+  getPipelineStatus(@Param('workspaceId') workspaceId: string) {
+    return this.feedbackService.getPipelineStatus(workspaceId);
+  }
+
   // ─── Item routes (:id segment) ──────────────────────────────────────────────
 
   @Get(':id')
