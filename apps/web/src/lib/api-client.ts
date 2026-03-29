@@ -270,7 +270,7 @@ const apiClient = {
     importCsv: (
       workspaceId: string,
       file: File
-    ): Promise<{ imported: number; skipped: number; errors: string[] }> => {
+    ): Promise<{ importedCount: number; total: number; batchId: string }> => {
       const form = new FormData();
       form.append('file', file);
       return api
@@ -279,6 +279,26 @@ const apiClient = {
         })
         .then(handleResponse);
     },
+    /**
+     * GET /workspaces/:id/imports/:batchId/status
+     * Returns batch-scoped pipeline progress (total = rows in this upload, NOT workspace total).
+     */
+    getBatchStatus: (
+      workspaceId: string,
+      batchId: string
+    ): Promise<{
+      batchId: string;
+      stage: string;
+      isRunning: boolean;
+      total: number;
+      completed: number;
+      failed: number;
+      pending: number;
+      pct: number;
+    }> =>
+      api
+        .get(`/workspaces/${workspaceId}/imports/${batchId}/status`)
+        .then(handleResponse),
     /**
      * POST /workspaces/:id/feedback/reprocess-pipeline
      * Re-enqueues the AI analysis job for all unprocessed feedback.

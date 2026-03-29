@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { parse } from 'csv-parse';
 import { FeedbackService } from '../feedback.service';
+import { PrismaService } from '../../prisma/prisma.service';
 import { FeedbackSourceType } from '@prisma/client';
 
 /**
@@ -54,11 +55,39 @@ function resolveColumn(record: Record<string, string>, candidates: string[]): st
 
 @Injectable()
 export class CsvImportService {
-  constructor(private readonly feedbackService: FeedbackService) {}
+  private readonly logger = new Logger(CsvImportService.name);
 
-  async import(workspaceId: string, fileBuffer: Buffer) {
+  constructor(
+    private readonly feedbackService: FeedbackService,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  async import(workspaceId: string, fileBuffer: Buffer): Promise<{ importedCount: number; total: number; batchId: string }> {
     const records = await this.parseCsv(fileBuffer);
+
+    // Count valid rows first so we can set totalRows on the batch
+    const validRecords = records.filter((r) => {
+      const rawTitle = resolveColumn(r, ['title', 'text', 'feedback', 'subject', 'summary']);
+      const rawDescription = resolveColumn(r, ['description', 'body', 'content', 'detail', 'details', 'message', 'comment']);
+      return !!(rawTitle || rawDescription);
+    });
+
+    // Create an ImportBatch row scoped to this upload
+    const batch = await this.prisma.importBatch.create({
+      data: {
+        workspaceId,
+        status: 'PROCESSING',
+        stage: 'UPLOADED',
+        totalRows: validRecords.length,
+        completedRows: 0,
+        failedRows: 0,
+      },
+    });
+
+    this.logger.log(`[CsvImport] Created batch ${batch.id} with ${validRecords.length} valid rows for workspace ${workspaceId}`);
+
     let importedCount = 0;
+    let failedCount = 0;
 
     for (const record of records) {
       try {
@@ -74,7 +103,7 @@ export class CsvImportService {
 
         // Skip rows with no usable text at all
         if (!rawTitle && !rawDescription) {
-          console.warn(`[CsvImport] Skipping row with no title or description: ${JSON.stringify(record)}`);
+          this.logger.warn(`[CsvImport] Skipping row with no title or description: ${JSON.stringify(record)}`);
           continue;
         }
 
@@ -98,19 +127,34 @@ export class CsvImportService {
           : undefined;
 
         await this.feedbackService.create(workspaceId, {
-          title:       (rawTitle ?? rawDescription ?? '').trim() || 'Untitled',
-          description: (rawDescription ?? '').trim(),
+          title:         (rawTitle ?? rawDescription ?? '').trim() || 'Untitled',
+          description:   (rawDescription ?? '').trim(),
           customerId,
           sourceType,
+          importBatchId: batch.id,
           ...(sentiment !== undefined && { sentiment }),
         });
         importedCount++;
       } catch (error) {
-        console.error(`[CsvImport] Failed to import row: ${JSON.stringify(record)}`, error);
+        failedCount++;
+        this.logger.error(`[CsvImport] Failed to import row: ${JSON.stringify(record)}`, error);
       }
     }
 
-    return { importedCount, total: records.length };
+    // Update batch: stage moves to ANALYZING (pipeline will update to CLUSTERING/COMPLETED)
+    await this.prisma.importBatch.update({
+      where: { id: batch.id },
+      data: {
+        totalRows:     importedCount + failedCount,
+        failedRows:    failedCount,
+        stage:         'ANALYZING',
+        status:        'PROCESSING',
+      },
+    });
+
+    this.logger.log(`[CsvImport] Batch ${batch.id}: imported=${importedCount}, failed=${failedCount}`);
+
+    return { importedCount, total: records.length, batchId: batch.id };
   }
 
   private parseCsv(buffer: Buffer): Promise<Record<string, string>[]> {

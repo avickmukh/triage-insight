@@ -22,4 +22,12 @@ export class CreateFeedbackDto {
   @IsOptional()
   @IsString()
   customerId?: string;
+
+  /**
+   * Optional: links this feedback to a CSV import batch.
+   * Set by CsvImportService; never exposed through the public API.
+   */
+  @IsOptional()
+  @IsString()
+  importBatchId?: string;
 }

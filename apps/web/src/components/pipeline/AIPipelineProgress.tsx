@@ -4,14 +4,18 @@
  * AIPipelineProgress
  *
  * Inline dashboard banner — NOT a full-page overlay.
- * Polls GET /workspaces/:id/feedback/pipeline-status every 3 seconds.
- * Renders a compact progress bar + stage label inside the dashboard page.
- * Disappears automatically when the pipeline finishes.
+ *
+ * When a `batchId` is provided (set after a CSV upload), polls:
+ *   GET /workspaces/:id/imports/:batchId/status
+ * This returns total = rows in THIS upload (e.g. 50), not workspace history (2307).
+ *
+ * When no `batchId` is provided, falls back to the workspace-level endpoint:
+ *   GET /workspaces/:id/feedback/pipeline-status
  *
  * Persistence across tab close / re-login:
- *   - Checks localStorage as a fast-path before the first poll resolves.
- *   - When the pipeline finishes (stage = COMPLETED | FAILED), clears both.
- *   - Callers should call `markPipelineStarted(workspaceId)` immediately after
+ *   - batchId is stored in localStorage so the correct endpoint is polled on re-login.
+ *   - When the pipeline finishes (stage = COMPLETED | FAILED), localStorage is cleared.
+ *   - Callers should call `markPipelineStarted(workspaceId, batchId)` immediately after
  *     triggering an import to show the banner without waiting for the first poll.
  */
 
@@ -26,15 +30,18 @@ export interface PipelineStatus {
   failed: number;
   pending: number;
   pct: number;
-  estimatedSecondsLeft: number | null;
+  estimatedSecondsLeft?: number | null;
+  batchId?: string;
 }
 
-const LS_KEY = (workspaceId: string) => `pipelineRunning_${workspaceId}`;
+const LS_RUNNING_KEY = (workspaceId: string) => `pipelineRunning_${workspaceId}`;
+const LS_BATCH_KEY   = (workspaceId: string) => `pipelineBatchId_${workspaceId}`;
 const POLL_INTERVAL_MS = 3000;
 
 /** Human-readable label for each pipeline stage. */
 const STAGE_LABELS: Record<string, string> = {
   IDLE:       'Idle',
+  UPLOADED:   'Upload complete — queuing for analysis…',
   QUEUED:     'Queued — waiting to start…',
   ANALYZING:  'Analysing feedback — generating embeddings & summaries…',
   CLUSTERING: 'Clustering — grouping similar feedback into themes…',
@@ -42,10 +49,16 @@ const STAGE_LABELS: Record<string, string> = {
   FAILED:     'Some items failed — retrying automatically…',
 };
 
-/** Call this immediately after triggering a CSV import or reprocess. */
-export function markPipelineStarted(workspaceId: string) {
+/**
+ * Call this immediately after triggering a CSV import or reprocess.
+ * Stores the batchId (if provided) so polling survives tab close / re-login.
+ */
+export function markPipelineStarted(workspaceId: string, batchId?: string) {
   try {
-    localStorage.setItem(LS_KEY(workspaceId), String(Date.now()));
+    localStorage.setItem(LS_RUNNING_KEY(workspaceId), String(Date.now()));
+    if (batchId) {
+      localStorage.setItem(LS_BATCH_KEY(workspaceId), batchId);
+    }
   } catch {
     // localStorage unavailable (SSR, private mode) — silently ignore
   }
@@ -53,7 +66,8 @@ export function markPipelineStarted(workspaceId: string) {
 
 function clearPipelineFlag(workspaceId: string) {
   try {
-    localStorage.removeItem(LS_KEY(workspaceId));
+    localStorage.removeItem(LS_RUNNING_KEY(workspaceId));
+    localStorage.removeItem(LS_BATCH_KEY(workspaceId));
   } catch {
     // ignore
   }
@@ -61,35 +75,67 @@ function clearPipelineFlag(workspaceId: string) {
 
 function hasPipelineFlag(workspaceId: string): boolean {
   try {
-    return !!localStorage.getItem(LS_KEY(workspaceId));
+    return !!localStorage.getItem(LS_RUNNING_KEY(workspaceId));
   } catch {
     return false;
   }
 }
 
+function getStoredBatchId(workspaceId: string): string | null {
+  try {
+    return localStorage.getItem(LS_BATCH_KEY(workspaceId));
+  } catch {
+    return null;
+  }
+}
+
 interface Props {
   workspaceId: string;
+  /** batchId returned by the CSV import endpoint — scopes progress to this upload. */
+  batchId?: string;
   /** Called when the pipeline transitions from running → done. */
   onComplete?: () => void;
 }
 
-export function AIPipelineProgress({ workspaceId, onComplete }: Props) {
+export function AIPipelineProgress({ workspaceId, batchId: propBatchId, onComplete }: Props) {
   const [status, setStatus] = useState<PipelineStatus | null>(null);
   const [visible, setVisible] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
 
+  // Resolve effective batchId: prop takes priority, then localStorage
+  const effectiveBatchId = propBatchId ?? getStoredBatchId(workspaceId) ?? undefined;
+
   const poll = useCallback(async () => {
     try {
-      const s = await apiClient.feedback.getPipelineStatus(workspaceId) as PipelineStatus;
+      let s: PipelineStatus;
+
+      if (effectiveBatchId) {
+        // Batch-scoped endpoint: total = rows in this upload (e.g. 50, NOT 2307)
+        const batchStatus = await apiClient.feedback.getBatchStatus(workspaceId, effectiveBatchId);
+        s = {
+          isRunning: batchStatus.isRunning,
+          stage:     batchStatus.stage,
+          total:     batchStatus.total,
+          completed: batchStatus.completed,
+          failed:    batchStatus.failed,
+          pending:   batchStatus.pending,
+          pct:       batchStatus.pct,
+          batchId:   batchStatus.batchId,
+        };
+      } else {
+        // Workspace-level fallback (used when no batchId is available)
+        s = await apiClient.feedback.getPipelineStatus(workspaceId) as PipelineStatus;
+      }
+
       setStatus(s);
 
-      const active = s.isRunning || s.stage === 'QUEUED';
+      const active = s.isRunning || s.stage === 'QUEUED' || s.stage === 'UPLOADED';
 
       if (active) {
         setVisible(true);
-        markPipelineStarted(workspaceId); // refresh the LS timestamp
+        markPipelineStarted(workspaceId, effectiveBatchId); // refresh the LS timestamp
       } else {
         // Pipeline finished (COMPLETED or FAILED)
         if (visible) {
@@ -111,7 +157,7 @@ export function AIPipelineProgress({ workspaceId, onComplete }: Props) {
     } catch {
       // Network error — keep polling silently
     }
-  }, [workspaceId, visible]);
+  }, [workspaceId, effectiveBatchId, visible]);
 
   useEffect(() => {
     // On mount: show banner immediately if localStorage flag is set
@@ -128,14 +174,14 @@ export function AIPipelineProgress({ workspaceId, onComplete }: Props) {
       if (timerRef.current) clearInterval(timerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId]);
+  }, [workspaceId, effectiveBatchId]);
 
   if (!visible || !status) return null;
 
   const pct = status.pct;
   const stage = status.stage ?? 'QUEUED';
   const stageLabel = STAGE_LABELS[stage] ?? stage;
-  const eta = status.estimatedSecondsLeft;
+  const eta = status.estimatedSecondsLeft ?? null;
   const etaLabel =
     eta === null
       ? ''

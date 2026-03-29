@@ -166,6 +166,17 @@ export class AiAnalysisProcessor {
     const durationMs = Date.now() - startedAt;
     await this.idempotencyService.markCompleted(logId, durationMs);
     this.logger.complete({ ...ctx, durationMs });
+
+    // ── 7. Increment ImportBatch progress ────────────────────────────────────
+    // Non-critical: if the feedback belongs to a batch, increment completedRows.
+    // This keeps ImportBatch.completedRows in sync so the status endpoint can
+    // report accurate progress without re-counting AiJobLog every poll.
+    if (feedback.importBatchId) {
+      this.prisma.importBatch.update({
+        where: { id: feedback.importBatchId },
+        data: { completedRows: { increment: 1 } },
+      }).catch(() => { /* non-critical */ });
+    }
   }
 
   @OnQueueFailed()

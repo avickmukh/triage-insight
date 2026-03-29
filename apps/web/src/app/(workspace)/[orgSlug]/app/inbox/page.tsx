@@ -9,7 +9,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { appRoutes } from '@/lib/routes';
 import { useQueryClient } from '@tanstack/react-query';
-import { markPipelineStarted } from '@/components/pipeline/AIPipelineProgress';
+import { AIPipelineProgress, markPipelineStarted } from '@/components/pipeline/AIPipelineProgress';
 
 const CARD: React.CSSProperties = {
   background: '#fff',
@@ -50,9 +50,9 @@ const TABS: { label: string; value: FeedbackStatus | undefined }[] = [
 type ImportState = 'idle' | 'loading' | 'success' | 'error';
 
 interface CsvImportResult {
-  imported: number;
-  skipped: number;
-  errors: string[];
+  importedCount: number;
+  total: number;
+  batchId: string;
 }
 
 function CsvImportModal({
@@ -62,7 +62,7 @@ function CsvImportModal({
 }: {
   workspaceId: string;
   onClose: () => void;
-  onImported: () => void;
+  onImported: (batchId: string) => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -87,9 +87,10 @@ function CsvImportModal({
       setResult(res);
       setImportState('success');
       // Mark pipeline as started so the progress overlay appears immediately
-      // and persists if the user closes the tab
-      markPipelineStarted(workspaceId);
-      onImported();
+      // and persists if the user closes the tab.
+      // Pass batchId so polling uses the batch-scoped endpoint (total = 50, not 2307).
+      markPipelineStarted(workspaceId, res.batchId);
+      onImported(res.batchId);
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
@@ -265,22 +266,11 @@ function CsvImportModal({
           >
             <p style={{ fontWeight: 700, marginBottom: '0.35rem' }}>✓ Import complete</p>
             <p>
-              <strong>{result.imported}</strong> rows imported
-              {result.skipped > 0 && <>, <strong>{result.skipped}</strong> skipped</>}.
+              <strong>{result.importedCount}</strong> rows imported
+              {result.total > result.importedCount && (
+                <>, <strong>{result.total - result.importedCount}</strong> skipped</>
+              )}.
             </p>
-            {result.errors && result.errors.length > 0 && (
-              <div style={{ marginTop: '0.5rem' }}>
-                <p style={{ fontWeight: 600, color: '#c0392b', marginBottom: '0.25rem' }}>
-                  {result.errors.length} row{result.errors.length > 1 ? 's' : ''} had errors:
-                </p>
-                <ul style={{ paddingLeft: '1.1rem', margin: 0, fontSize: '0.78rem', color: '#c0392b' }}>
-                  {result.errors.slice(0, 5).map((e, i) => (
-                    <li key={i}>{e}</li>
-                  ))}
-                  {result.errors.length > 5 && <li>…and {result.errors.length - 5} more</li>}
-                </ul>
-              </div>
-            )}
           </div>
         )}
 
@@ -391,6 +381,7 @@ export default function InboxPage() {
   const [activeStatus, setActiveStatus] = useState<FeedbackStatus | undefined>(undefined);
   const [search, setSearch] = useState('');
   const [showCsvModal, setShowCsvModal] = useState(false);
+  const [currentBatchId, setCurrentBatchId] = useState<string | undefined>(undefined);
 
   // ── AI Pipeline re-trigger state ───────────────────────────────────────
   const [pipelineState, setPipelineState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
@@ -446,7 +437,9 @@ export default function InboxPage() {
   const canImport =
     role === WorkspaceRole.ADMIN || role === WorkspaceRole.EDITOR;
 
-  const handleImported = () => {
+  const handleImported = (batchId: string) => {
+    // Store batchId so AIPipelineProgress polls the batch-scoped endpoint
+    setCurrentBatchId(batchId);
     // Invalidate the feedback list so the new rows appear immediately
     queryClient.invalidateQueries({ queryKey: ['feedback'] });
   };
@@ -476,6 +469,15 @@ export default function InboxPage() {
           workspaceId={workspace.id}
           onClose={() => setShowCsvModal(false)}
           onImported={handleImported}
+        />
+      )}
+
+      {/* AI Pipeline progress banner — scoped to the current batch */}
+      {workspace?.id && (
+        <AIPipelineProgress
+          workspaceId={workspace.id}
+          batchId={currentBatchId}
+          onComplete={() => queryClient.invalidateQueries({ queryKey: ['feedback'] })}
         />
       )}
 

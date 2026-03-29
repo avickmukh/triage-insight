@@ -275,6 +275,20 @@ enum AiJobStatus {
   DEAD_LETTERED
 }
 
+enum ImportBatchStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum ImportBatchStage {
+  UPLOADED
+  ANALYZING
+  CLUSTERING
+  COMPLETED
+}
+
 enum PublicPortalVisibility {
   PUBLIC
   PRIVATE
@@ -412,6 +426,7 @@ model Workspace {
   platformAuditLogs     PlatformAuditLog[]  @relation("PlatformAuditWorkspace")
   featureOverrides      WorkspaceFeatureOverride[]
   deletionRequests      WorkspaceDeletionRequest[]
+  importBatches         ImportBatch[]
 }
 
 /// Tracks the full lifecycle of a workspace data purge request.
@@ -661,10 +676,11 @@ model Feedback {
 
   embedding       Unsupported("vector(1536)")?
 
-  mergedIntoId    String?
+   mergedIntoId    String?
+  importBatchId   String?
   mergedInto      Feedback?           @relation("FeedbackMergeRelation", fields: [mergedIntoId], references: [id], onDelete: SetNull)
   mergedFrom      Feedback[]          @relation("FeedbackMergeRelation")
-
+  importBatch     ImportBatch?        @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
   workspace       Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   customer        Customer?           @relation(fields: [customerId], references: [id], onDelete: SetNull)
   portalUser      PortalUser?         @relation(fields: [portalUserId], references: [id], onDelete: SetNull)
@@ -684,6 +700,7 @@ model Feedback {
   @@index([sourceType])
   @@index([createdAt])
   @@index([submittedAt])
+  @@index([importBatchId])
 }
 
 model FeedbackAttachment {
@@ -1545,4 +1562,26 @@ model WorkspaceFeatureOverride {
 
   @@unique([workspaceId, feature])
   @@index([workspaceId])
+}
+
+// ─── Import Batch ────────────────────────────────────────────────────────────
+// Tracks a single CSV / manual import event so pipeline-status can be scoped
+// to the current upload rather than all historical workspace jobs.
+model ImportBatch {
+  id            String            @id @default(cuid())
+  workspaceId   String
+  status        ImportBatchStatus @default(PENDING)
+  stage         ImportBatchStage  @default(UPLOADED)
+  totalRows     Int               @default(0)
+  completedRows Int               @default(0)
+  failedRows    Int               @default(0)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  workspace     Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  feedbacks     Feedback[]
+
+  @@index([workspaceId])
+  @@index([status])
+  @@index([createdAt])
 }
