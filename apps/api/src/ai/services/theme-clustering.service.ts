@@ -414,10 +414,24 @@ export class ThemeClusteringService {
             `[cosine=${sim.toFixed(3)}]`,
           );
 
-          // Re-assign all ThemeFeedback from source → target
-          await this.prisma.themeFeedback.updateMany({
+          // Re-assign all ThemeFeedback from source → target.
+          // Use raw SQL with ON CONFLICT DO NOTHING to handle the case where
+          // a feedback item is already linked to the target theme (composite PK violation).
+          await this.prisma.$executeRaw`
+            INSERT INTO "ThemeFeedback" ("themeId", "feedbackId", "assignedBy", "confidence", "assignedAt")
+            SELECT
+              ${target.id}::text,
+              tf."feedbackId",
+              tf."assignedBy",
+              tf."confidence",
+              NOW()
+            FROM "ThemeFeedback" tf
+            WHERE tf."themeId" = ${source.id}
+            ON CONFLICT ("themeId", "feedbackId") DO NOTHING;
+          `;
+          // Delete the old source rows (already moved or skipped due to conflict)
+          await this.prisma.themeFeedback.deleteMany({
             where: { themeId: source.id },
-            data: { themeId: target.id },
           });
 
           // Archive the source theme (preserve history)

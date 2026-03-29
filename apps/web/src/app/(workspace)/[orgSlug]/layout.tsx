@@ -23,7 +23,6 @@ import { useWorkspace, useCurrentMemberRole } from '@/hooks/use-workspace';
 import { useAuth } from '@/lib/auth';
 import { WorkspaceStatus, WorkspaceRole } from '@/lib/api-types';
 import { appRoutes, orgAdminRoutes } from '@/lib/routes';
-import { AIPipelineProgress } from '@/components/pipeline/AIPipelineProgress';
 
 const NAVY      = '#0A2540';
 const TEAL      = '#20A4A4';
@@ -98,11 +97,6 @@ function AuthenticatedShell({ slug, pathname, children }: { slug: string; pathna
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', fontFamily: "Inter, 'Helvetica Neue', Arial, sans-serif", background: '#F8F9FA', color: NAVY }}>
-
-      {/* ── AI Pipeline Progress Overlay ──────────────────────────────────────── */}
-      {workspaceId && (
-        <AIPipelineProgress workspaceId={workspaceId} />
-      )}
 
       {/* ── Desktop Sidebar ────────────────────────────────────────────────────── */}
       {!isMobile && (

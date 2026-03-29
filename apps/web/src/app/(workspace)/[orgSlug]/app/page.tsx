@@ -25,6 +25,7 @@ import { useThemeCount } from '@/hooks/use-themes';
 import { useOnboarding } from '@/components/onboarding/use-onboarding';
 import { OnboardingChecklist } from '@/components/onboarding/OnboardingChecklist';
 import { AiProcessingBanner } from '@/components/onboarding/AiProcessingBanner';
+import { AIPipelineProgress } from '@/components/pipeline/AIPipelineProgress';
 import { FirstInsightHighlight } from '@/components/onboarding/FirstInsightHighlight';
 import { TeamInvitePrompt, DigestExpectationBanner, PortalActivationPrompt } from '@/components/onboarding/OnboardingPrompts';
 import {
@@ -956,6 +957,7 @@ export default function HomeDashboardPage() {
             />
           )}
           {/* Step 3: AI processing state */}
+          {workspace?.id && <AIPipelineProgress workspaceId={workspace.id} />}
           <AiProcessingBanner feedbackCount={feedbackCount} themeCount={themeCount} />
           {/* Step 4: First insight highlight */}
           <FirstInsightHighlight

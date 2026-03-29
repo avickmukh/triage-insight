@@ -3,16 +3,16 @@
 /**
  * AIPipelineProgress
  *
+ * Inline dashboard banner — NOT a full-page overlay.
  * Polls GET /workspaces/:id/feedback/pipeline-status every 3 seconds.
- * While the pipeline is running it renders a full-page blocking overlay
- * with a progress bar, stage label, and estimated time remaining.
+ * Renders a compact progress bar + stage label inside the dashboard page.
+ * Disappears automatically when the pipeline finishes.
  *
  * Persistence across tab close / re-login:
- *   - On mount, checks Workspace.pipelineStatus (server-side) via the first poll.
- *   - Also checks localStorage as a fast-path before the first poll resolves.
+ *   - Checks localStorage as a fast-path before the first poll resolves.
  *   - When the pipeline finishes (stage = COMPLETED | FAILED), clears both.
  *   - Callers should call `markPipelineStarted(workspaceId)` immediately after
- *     triggering an import to show the overlay without waiting for the first poll.
+ *     triggering an import to show the banner without waiting for the first poll.
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -38,7 +38,7 @@ const STAGE_LABELS: Record<string, string> = {
   QUEUED:     'Queued — waiting to start…',
   ANALYZING:  'Analysing feedback — generating embeddings & summaries…',
   CLUSTERING: 'Clustering — grouping similar feedback into themes…',
-  COMPLETED:  'Analysis complete',
+  COMPLETED:  'Analysis complete ✓',
   FAILED:     'Some items failed — retrying automatically…',
 };
 
@@ -93,12 +93,12 @@ export function AIPipelineProgress({ workspaceId, onComplete }: Props) {
       } else {
         // Pipeline finished (COMPLETED or FAILED)
         if (visible) {
-          // Brief delay so user sees 100%
+          // Brief delay so user sees 100% / "complete" state
           setTimeout(() => {
             setVisible(false);
             clearPipelineFlag(workspaceId);
             onCompleteRef.current?.();
-          }, 1800);
+          }, 2500);
         } else {
           clearPipelineFlag(workspaceId);
         }
@@ -114,7 +114,7 @@ export function AIPipelineProgress({ workspaceId, onComplete }: Props) {
   }, [workspaceId, visible]);
 
   useEffect(() => {
-    // On mount: show overlay immediately if localStorage flag is set
+    // On mount: show banner immediately if localStorage flag is set
     // (fast-path before first poll resolves)
     if (hasPipelineFlag(workspaceId)) {
       setVisible(true);
@@ -143,102 +143,98 @@ export function AIPipelineProgress({ workspaceId, onComplete }: Props) {
       ? `~${eta}s remaining`
       : `~${Math.ceil(eta / 60)}m remaining`;
 
-  // Stage step indicator
-  const STAGES = ['QUEUED', 'ANALYZING', 'CLUSTERING', 'COMPLETED'];
-  const stageIndex = STAGES.indexOf(stage);
+  const isCompleted = stage === 'COMPLETED';
+  const isFailed = stage === 'FAILED';
+  const barColor = isCompleted
+    ? '#2e7d32'
+    : isFailed
+    ? '#c62828'
+    : 'linear-gradient(90deg, #20A4A4, #1a73e8)';
 
   return (
-    /* Full-page blocking overlay */
+    /* Inline dashboard banner — not a blocking overlay */
     <div
       style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 9999,
-        background: 'rgba(10, 37, 64, 0.75)',
-        backdropFilter: 'blur(4px)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        background: isCompleted ? '#e8f5e9' : isFailed ? '#ffebee' : '#e3f2fd',
+        border: `1px solid ${isCompleted ? '#a5d6a7' : isFailed ? '#ef9a9a' : '#90caf9'}`,
+        borderRadius: '0.75rem',
+        padding: '1rem 1.25rem',
+        marginBottom: '1.5rem',
       }}
       aria-live="polite"
       aria-label="AI pipeline processing"
     >
-      <div
-        style={{
-          background: '#fff',
-          borderRadius: '1rem',
-          padding: '2.5rem 3rem',
-          maxWidth: '520px',
-          width: '90%',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-          textAlign: 'center',
-        }}
-      >
-        {/* Spinner */}
-        <div style={{ marginBottom: '1.25rem' }}>
+      {/* Header row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.6rem' }}>
+        {/* Spinner or check icon */}
+        {isCompleted ? (
+          <span style={{ fontSize: '1.25rem' }}>✅</span>
+        ) : isFailed ? (
+          <span style={{ fontSize: '1.25rem' }}>⚠️</span>
+        ) : (
           <svg
-            width="48"
-            height="48"
-            viewBox="0 0 48 48"
-            style={{ animation: 'spin 1.2s linear infinite', display: 'inline-block' }}
+            width="20"
+            height="20"
+            viewBox="0 0 20 20"
+            style={{ animation: 'spin 1.2s linear infinite', flexShrink: 0 }}
           >
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-            <circle cx="24" cy="24" r="20" fill="none" stroke="#e9ecef" strokeWidth="4" />
+            <circle cx="10" cy="10" r="8" fill="none" stroke="#90caf9" strokeWidth="2.5" />
             <path
-              d="M24 4 a20 20 0 0 1 20 20"
+              d="M10 2 a8 8 0 0 1 8 8"
               fill="none"
-              stroke="#20A4A4"
-              strokeWidth="4"
+              stroke="#1a73e8"
+              strokeWidth="2.5"
               strokeLinecap="round"
             />
           </svg>
+        )}
+
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#0a2540' }}>
+            {isCompleted ? 'AI Analysis Complete' : 'AI Pipeline Running'}
+          </div>
+          <div style={{ fontSize: '0.78rem', color: '#546e7a', marginTop: '0.1rem' }}>
+            {stageLabel}
+            {status.total > 0 && !isCompleted && (
+              <> — <strong>{status.completed}</strong> / <strong>{status.total}</strong> items</>
+            )}
+            {etaLabel && !isCompleted && <> · {etaLabel}</>}
+          </div>
         </div>
 
-        <h2 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0a2540', margin: '0 0 0.35rem' }}>
-          AI Pipeline Running
-        </h2>
+        {/* Percentage badge */}
+        {!isCompleted && (
+          <span
+            style={{
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              color: '#1a73e8',
+              background: '#fff',
+              border: '1px solid #90caf9',
+              borderRadius: '999px',
+              padding: '0.15rem 0.6rem',
+              flexShrink: 0,
+            }}
+          >
+            {pct}%
+          </span>
+        )}
+      </div>
 
-        {/* Current stage label */}
-        <p style={{ fontSize: '0.875rem', color: '#1a73e8', fontWeight: 600, margin: '0 0 0.5rem' }}>
-          {stageLabel}
-        </p>
-
-        <p style={{ fontSize: '0.85rem', color: '#6C757D', margin: '0 0 1.5rem' }}>
-          {status.total > 0
-            ? <>Processing <strong>{status.completed}</strong> of <strong>{status.total}</strong> items.</>
-            : 'Preparing to process your feedback…'}
-        </p>
-
-        {/* Stage step dots */}
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginBottom: '1.25rem' }}>
-          {STAGES.slice(0, 3).map((s, i) => (
-            <div
-              key={s}
-              title={s}
-              style={{
-                width: '10px',
-                height: '10px',
-                borderRadius: '50%',
-                background: i <= stageIndex ? '#20A4A4' : '#e9ecef',
-                transition: 'background 0.4s ease',
-              }}
-            />
-          ))}
-        </div>
-
-        {/* Progress bar */}
+      {/* Progress bar */}
+      {!isCompleted && (
         <div
           style={{
-            background: '#e9ecef',
+            background: '#fff',
             borderRadius: '999px',
-            height: '10px',
+            height: '6px',
             overflow: 'hidden',
-            marginBottom: '0.6rem',
           }}
         >
           <div
             style={{
-              background: 'linear-gradient(90deg, #20A4A4, #1a73e8)',
+              background: barColor,
               height: '100%',
               width: `${pct}%`,
               borderRadius: '999px',
@@ -246,29 +242,14 @@ export function AIPipelineProgress({ workspaceId, onComplete }: Props) {
             }}
           />
         </div>
+      )}
 
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            fontSize: '0.78rem',
-            color: '#6C757D',
-          }}
-        >
-          <span>{pct}% complete</span>
-          {etaLabel && <span>{etaLabel}</span>}
-        </div>
-
-        {status.failed > 0 && (
-          <p style={{ fontSize: '0.75rem', color: '#c62828', marginTop: '0.75rem' }}>
-            {status.failed} item{status.failed > 1 ? 's' : ''} failed — retrying automatically.
-          </p>
-        )}
-
-        <p style={{ fontSize: '0.72rem', color: '#adb5bd', marginTop: '1.25rem' }}>
-          You can close this tab — progress will resume when you return.
+      {/* Failed items warning */}
+      {status.failed > 0 && (
+        <p style={{ fontSize: '0.75rem', color: '#c62828', margin: '0.5rem 0 0' }}>
+          ⚠ {status.failed} item{status.failed > 1 ? 's' : ''} failed — retrying automatically.
         </p>
-      </div>
+      )}
     </div>
   );
 }
