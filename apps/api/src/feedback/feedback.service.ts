@@ -252,6 +252,11 @@ export class FeedbackService {
    *   - embedding IS NULL (never processed), OR
    *   - no ThemeFeedback link exists (processed but not yet clustered)
    *
+   * IMPORTANT: Before re-queuing, we delete COMPLETED and FAILED AiJobLog records
+   * for these feedback IDs. Without this, the JobIdempotencyService would see the
+   * previous COMPLETED record (from a run where clustering failed silently) and
+   * skip the job entirely — meaning themes would never be created on re-run.
+   *
    * Jobs are added in batches of 50 to avoid overwhelming the queue.
    * Returns { enqueued, total }.
    */
@@ -272,15 +277,36 @@ export class FeedbackService {
     });
 
     const total = unprocessed.length;
+    if (total === 0) {
+      console.log(`[FeedbackService] reprocessPipeline: nothing to process for workspace ${workspaceId}`);
+      return { enqueued: 0, total: 0 };
+    }
+
+    const feedbackIds = unprocessed.map((f) => f.id);
+
+    // Clear stale idempotency records so the processor does not skip these jobs.
+    // We only delete COMPLETED and FAILED records — RUNNING records are left
+    // so we do not duplicate a job that is currently in-flight.
+    const deleted = await this.prisma.aiJobLog.deleteMany({
+      where: {
+        workspaceId,
+        entityId: { in: feedbackIds },
+        status: { in: ['COMPLETED', 'FAILED', 'DEAD_LETTERED'] },
+      },
+    });
+    console.log(
+      `[FeedbackService] reprocessPipeline: cleared ${deleted.count} stale idempotency records`,
+    );
+
     let enqueued = 0;
     const opts = { attempts: 3, backoff: { type: 'exponential', delay: 5000 } };
 
     // Batch into groups of 50 to avoid overwhelming the queue
     const BATCH = 50;
-    for (let i = 0; i < unprocessed.length; i += BATCH) {
-      const batch = unprocessed.slice(i, i + BATCH);
+    for (let i = 0; i < feedbackIds.length; i += BATCH) {
+      const batch = feedbackIds.slice(i, i + BATCH);
       await Promise.all(
-        batch.map(async ({ id: feedbackId }) => {
+        batch.map(async (feedbackId) => {
           try {
             await this.analysisQueue.add({ feedbackId, workspaceId }, opts);
             enqueued++;

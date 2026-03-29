@@ -153,15 +153,15 @@ export class AiAnalysisProcessor {
     }
 
     // ── 6. Theme clustering ──────────────────────────────────────────────────
-    try {
-      await this.themeClusteringService.assignFeedbackToTheme(
-        feedback.workspaceId,
-        feedbackId,
-        embedding.length > 0 ? embedding : undefined,
-      );
-    } catch (err) {
-      this.logger.stepWarn(ctx, 'THEME_CLUSTERING', (err as Error).message);
-    }
+    // NOTE: We do NOT catch clustering errors here. If clustering fails, the job
+    // should be retried (Bull will re-queue it with exponential backoff) rather
+    // than silently completing. A silent COMPLETED record would block reprocessPipeline
+    // from re-queuing the same feedback via the idempotency check.
+    await this.themeClusteringService.assignFeedbackToTheme(
+      feedback.workspaceId,
+      feedbackId,
+      embedding.length > 0 ? embedding : undefined,
+    );
 
     const durationMs = Date.now() - startedAt;
     await this.idempotencyService.markCompleted(logId, durationMs);

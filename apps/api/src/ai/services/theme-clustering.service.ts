@@ -176,7 +176,7 @@ export class ThemeClusteringService {
         t.title,
         1 - (t.embedding <=> ${vectorStr}::vector) AS similarity,
         t."topKeywords",
-        COUNT(tf.id)::int AS "liveCount"
+        COUNT(*)::int AS "liveCount"
       FROM "Theme" t
       LEFT JOIN "ThemeFeedback" tf ON tf."themeId" = t.id
       WHERE t."workspaceId" = ${workspaceId}
@@ -369,14 +369,14 @@ export class ThemeClusteringService {
       SELECT
         t.id,
         t.title,
-        COUNT(tf.id)::int AS "liveCount"
+        COUNT(*)::int AS "liveCount"
       FROM "Theme" t
       LEFT JOIN "ThemeFeedback" tf ON tf."themeId" = t.id
       WHERE t."workspaceId" = ${workspaceId}
         AND t.embedding IS NOT NULL
         AND t.status != 'ARCHIVED'
       GROUP BY t.id, t.title
-      ORDER BY COUNT(tf.id) DESC;
+      ORDER BY COUNT(*) DESC;
     `;
 
     if (themes.length < 2) return 0;
