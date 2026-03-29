@@ -390,6 +390,6 @@ export class ThemeController {
   runTrends(
     @Param('workspaceId') workspaceId: string,
   ) {
-    return this.trendComputationService.computeTrendsForWorkspace(workspaceId);
+    return this.trendComputationService.computeWorkspaceTrends(workspaceId);
   }
 }

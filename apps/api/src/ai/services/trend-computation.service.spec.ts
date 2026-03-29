@@ -53,7 +53,7 @@ describe('TrendComputationService', () => {
       .mockResolvedValueOnce(6);  // prevWeek
     mockPrisma.theme.update.mockResolvedValue({});
 
-    await service.computeTrendsForWorkspace('ws-1');
+    await service.computeWorkspaceTrends('ws-1');
 
     expect(mockPrisma.theme.update).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -78,7 +78,7 @@ describe('TrendComputationService', () => {
       .mockResolvedValueOnce(10); // prevWeek
     mockPrisma.theme.update.mockResolvedValue({});
 
-    await service.computeTrendsForWorkspace('ws-1');
+    await service.computeWorkspaceTrends('ws-1');
 
     const updateCall = mockPrisma.theme.update.mock.calls[0][0];
     expect(updateCall.data.trendDirection).toBe('DOWN');
@@ -95,7 +95,7 @@ describe('TrendComputationService', () => {
       .mockResolvedValueOnce(10); // prevWeek
     mockPrisma.theme.update.mockResolvedValue({});
 
-    await service.computeTrendsForWorkspace('ws-1');
+    await service.computeWorkspaceTrends('ws-1');
 
     const updateCall = mockPrisma.theme.update.mock.calls[0][0];
     expect(updateCall.data.trendDirection).toBe('STABLE');
@@ -110,7 +110,7 @@ describe('TrendComputationService', () => {
       .mockResolvedValueOnce(0); // prevWeek (no data)
     mockPrisma.theme.update.mockResolvedValue({});
 
-    await expect(service.computeTrendsForWorkspace('ws-1')).resolves.not.toThrow();
+    await expect(service.computeWorkspaceTrends('ws-1')).resolves.not.toThrow();
 
     const updateCall = mockPrisma.theme.update.mock.calls[0][0];
     // When prevWeek = 0 and currentWeek > 0, direction should be UP
@@ -130,7 +130,7 @@ describe('TrendComputationService', () => {
     mockPrisma.themeFeedback.count.mockResolvedValue(5);
     mockPrisma.theme.update.mockResolvedValue({});
 
-    const result = await service.computeTrendsForWorkspace('ws-1');
+    const result = await service.computeWorkspaceTrends('ws-1');
 
     expect(mockPrisma.theme.update).toHaveBeenCalledTimes(3);
     expect(result).toEqual(expect.objectContaining({ processed: 3 }));

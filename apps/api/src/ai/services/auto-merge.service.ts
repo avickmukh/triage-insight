@@ -76,12 +76,18 @@ export class AutoMergeService {
     );
 
     // Load all themes with embeddings and keywords
+    // NOTE: embedding is Unsupported("vector") — filter for non-null via raw SQL,
+    // then fetch the metadata fields via findMany without the embedding filter.
+    const themesWithEmbedding = await this.prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM "Theme"
+      WHERE "workspaceId" = ${workspaceId}
+        AND embedding IS NOT NULL
+        AND status != 'ARCHIVED'
+    `;
+    const themeIds = themesWithEmbedding.map((t) => t.id);
+
     const themes = await this.prisma.theme.findMany({
-      where: {
-        workspaceId,
-        embedding: { not: null },
-        status: { not: 'ARCHIVED' },
-      },
+      where: { id: { in: themeIds } },
       select: {
         id: true,
         title: true,
@@ -277,7 +283,7 @@ export class AutoMergeService {
       },
     });
 
-    const results = [];
+    const results: Array<{ sourceId: string; sourceTitle: string; targetId: string; targetTitle: string; similarity: number }> = [];
     for (const c of candidates) {
       if (!c.autoMergeTargetId) continue;
       const target = await this.prisma.theme.findUnique({
@@ -296,6 +302,26 @@ export class AutoMergeService {
     }
 
     return results;
+  }
+
+  /**
+   * Dismiss an auto-merge suggestion for a theme — clears the candidate flag
+   * without executing a merge.
+   */
+  async dismissAutoMerge(workspaceId: string, themeId: string): Promise<{ ok: boolean }> {
+    await this.prisma.theme.update({
+      where: { id: themeId, workspaceId },
+      data: { autoMergeCandidate: false, autoMergeTargetId: null, autoMergeSimilarity: null },
+    });
+    return { ok: true };
+  }
+
+  /**
+   * Alias for detectAndMerge used by the theme controller dismiss endpoint.
+   * Clears the candidate flag on a specific theme without merging.
+   */
+  async dismissMergeCandidate(workspaceId: string, themeId: string): Promise<{ ok: boolean }> {
+    return this.dismissAutoMerge(workspaceId, themeId);
   }
 }
 

@@ -46,11 +46,8 @@ describe('ExplainableInsightsService', () => {
   });
 
   // Helper to access private method via type cast
-  function heuristic(
-    theme: Parameters<ExplainableInsightsService['heuristicSentence' as keyof ExplainableInsightsService]>[0],
-    customerCount: number,
-  ): string {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function heuristic(theme: any, customerCount: number): string {
     return (service as any).heuristicSentence(theme, customerCount);
   }
 

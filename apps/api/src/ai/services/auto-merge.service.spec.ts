@@ -152,7 +152,7 @@ describe('AutoMergeService', () => {
       mockPrisma.theme.findMany.mockResolvedValue([themeA, themeB]);
       mockPrisma.theme.update.mockResolvedValue({});
 
-      await service.detectMergeCandidates('ws-1');
+      await service.detectAndMerge('ws-1');
 
       // At least one update call should set autoMergeCandidate = true
       const updateCalls = mockPrisma.theme.update.mock.calls;
@@ -170,7 +170,7 @@ describe('AutoMergeService', () => {
       mockPrisma.theme.findMany.mockResolvedValue([themeA, themeB]);
       mockPrisma.theme.update.mockResolvedValue({});
 
-      await service.detectMergeCandidates('ws-1');
+      await service.detectAndMerge('ws-1');
 
       const updateCalls = mockPrisma.theme.update.mock.calls;
       const flaggedCalls = updateCalls.filter(
@@ -185,7 +185,7 @@ describe('AutoMergeService', () => {
 
       mockPrisma.theme.findMany.mockResolvedValue([themeA, themeB]);
 
-      await service.detectMergeCandidates('ws-1');
+      await service.detectAndMerge('ws-1');
 
       // No updates should be made when embeddings are missing
       expect(mockPrisma.theme.update).not.toHaveBeenCalledWith(
@@ -258,7 +258,7 @@ describe('AutoMergeService', () => {
     it('should clear the autoMergeCandidate flag on the theme', async () => {
       mockPrisma.theme.update.mockResolvedValue({});
 
-      await service.dismissMergeCandidate('ws-1', 'theme-1');
+      await service.dismissAutoMerge('ws-1', 'theme-1');
 
       expect(mockPrisma.theme.update).toHaveBeenCalledWith(
         expect.objectContaining({
