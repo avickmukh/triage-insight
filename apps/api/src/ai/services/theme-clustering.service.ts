@@ -51,10 +51,20 @@ export class ThemeClusteringService {
    * Lowered from previous values to fix the "1 feedback = 1 theme" problem.
    * The effective cosine similarity needed = threshold / EMBEDDING_WEIGHT when keyword=0.
    */
-  private readonly THRESHOLD_LARGE  = 0.72;  // ≥ 10 items  → needs cosine ≥ 0.69 (was 0.80)
-  private readonly THRESHOLD_MEDIUM = 0.65;  //  5–9 items  → needs cosine ≥ 0.57 (was 0.78)
-  private readonly THRESHOLD_SMALL  = 0.55;  //  1–4 items  → needs cosine ≥ 0.44 (was 0.72)
-  private readonly THRESHOLD_NEW    = 0.50;  //    0 items  → needs cosine ≥ 0.36 (was 0.65)
+  // Hybrid score = embedding×0.7 + keyword×0.3
+  // Minimum cosine similarity needed (with 0 keyword overlap) = threshold / 0.7
+  //
+  // THRESHOLD_NEW  = 0.60 → needs cosine ≥ 0.86  (brand-new theme)
+  // THRESHOLD_SMALL = 0.62 → needs cosine ≥ 0.89  (1–4 items)
+  // THRESHOLD_MEDIUM = 0.68 → needs cosine ≥ 0.97  (5–9 items, well-formed)
+  // THRESHOLD_LARGE  = 0.72 → needs cosine ≥ 1.03  (≥10 items, keyword overlap required)
+  //
+  // These values prevent over-grouping of unrelated feedback while still
+  // consolidating genuinely similar items (e.g. 15 "Login issue" variants).
+  private readonly THRESHOLD_LARGE  = 0.72;  // ≥ 10 items
+  private readonly THRESHOLD_MEDIUM = 0.68;  //  5–9 items
+  private readonly THRESHOLD_SMALL  = 0.62;  //  1–4 items
+  private readonly THRESHOLD_NEW    = 0.60;  //    0 items  (brand-new theme)
 
   /** Hybrid score below this value marks a feedback item as a potential outlier. */
   private readonly OUTLIER_THRESHOLD = 0.50;

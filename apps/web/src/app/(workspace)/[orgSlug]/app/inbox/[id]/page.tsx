@@ -702,7 +702,7 @@ export default function InboxItemPage({
                       display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
                     }}
                   >
-                    ⬡ {link.theme.title}
+                    ⬡ {(link.theme as any).shortLabel || link.theme.title}
                   </Link>
                 )
               ))}

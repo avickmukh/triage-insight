@@ -134,13 +134,18 @@ export class FeedbackService {
               lifecycleStage: true,
             },
           },
-          // Include linked themes so the Inbox list can show theme identifier pills
+          // Include linked themes so the Inbox list can show theme identifier pills.
+          // Exclude ARCHIVED themes (absorbed by post-merge pass) so pills show
+          // canonical theme names only.
           themes: {
+            where: { theme: { status: { not: 'ARCHIVED' } } },
             include: {
               theme: {
-                select: { id: true, title: true },
+                select: { id: true, title: true, shortLabel: true },
               },
             },
+            orderBy: { confidence: 'desc' },
+            take: 3,
           },
         },
       }),
@@ -168,13 +173,22 @@ export class FeedbackService {
             churnRisk: true,
           },
         },
-        // Include AI-assigned themes so the detail page can render theme pills
+        // Include AI-assigned themes so the detail page can render theme pills.
+        // Exclude ARCHIVED themes — these are themes absorbed by the post-clustering
+        // merge pass. Showing them would display old sentence-style titles instead
+        // of the canonical merged theme name. Sort by confidence desc so the best
+        // match appears first. Include shortLabel for a cleaner display label.
         themes: {
+          where: {
+            theme: { status: { not: 'ARCHIVED' } },
+          },
           include: {
             theme: {
-              select: { id: true, title: true, status: true },
+              select: { id: true, title: true, status: true, shortLabel: true },
             },
           },
+          orderBy: { confidence: 'desc' },
+          take: 5,
         },
         // Include AI-generated duplicate suggestions (PENDING) for the detail page
         duplicateSuggestionsAsSource: {

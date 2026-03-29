@@ -51,7 +51,17 @@ export class AiAnalysisProcessor {
     private readonly idempotencyService: JobIdempotencyService,
   ) {}
 
-  @Process()
+  /**
+   * Concurrency is set to 1 so that only one analysis job runs at a time
+   * per worker process. This ensures the Postgres advisory lock inside
+   * ThemeClusteringService.assignFeedbackToTheme() fully serialises
+   * clustering — preventing two workers from racing to create duplicate
+   * themes for the same workspace when a batch of feedback is imported.
+   *
+   * If horizontal scaling is needed, keep QUEUE_CONCURRENCY=1 and run
+   * multiple single-worker replicas instead of raising concurrency.
+   */
+  @Process({ concurrency: 1 })
   async handleAnalysis(job: Job<AnalysisJobPayload>) {
     const { feedbackId, workspaceId } = job.data;
     const ctx = { jobType: 'AI_ANALYSIS', workspaceId, entityId: feedbackId, jobId: job.id };
