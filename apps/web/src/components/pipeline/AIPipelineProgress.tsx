@@ -16,7 +16,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { apiClient } from '@/lib/api-client';
+import apiClient from '@/lib/api-client';
 
 export interface PipelineStatus {
   isRunning: boolean;
