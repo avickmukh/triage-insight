@@ -62,6 +62,8 @@ export interface CiqScoreOutput {
   voiceCount: number;
   /** Count of support tickets from linked SupportIssueCluster rows */
   supportCount: number;
+  /** Count of survey responses linked to this theme */
+  surveyCount: number;
   /** Total signal count across all sources */
   totalSignalCount: number;
   /** Count of CustomerSignal rows linked to this theme */
@@ -114,6 +116,10 @@ const DEAL_STAGE_WEIGHT: Record<DealStage, number> = {
 const VOICE_SOURCE_TYPES: FeedbackSourceType[] = [
   FeedbackSourceType.VOICE,
   FeedbackSourceType.PUBLIC_PORTAL,
+];
+/** Survey source type — feedback from SURVEY channel is counted separately as surveyCount */
+const SURVEY_SOURCE_TYPES: FeedbackSourceType[] = [
+  FeedbackSourceType.SURVEY,
 ];
 
 /** Normalise a raw value to 0–100 using a log10 scale (handles wide ARR ranges) */
@@ -242,8 +248,11 @@ export class CiqService {
     const voiceCount    = activeFeedback.filter((tf) =>
       VOICE_SOURCE_TYPES.includes(tf.feedback.sourceType as FeedbackSourceType),
     ).length;
-    // Pure text/manual feedback (everything that is NOT voice)
-    const textFeedbackCount = feedbackCount - voiceCount;
+    const surveyCount   = activeFeedback.filter((tf) =>
+      SURVEY_SOURCE_TYPES.includes(tf.feedback.sourceType as FeedbackSourceType),
+    ).length;
+    // Pure text/manual feedback (everything that is NOT voice or survey)
+    const textFeedbackCount = feedbackCount - voiceCount - surveyCount;
 
     // Support count: sum of ticketCount across all linked clusters
     const supportCount = supportClusters.reduce(
@@ -251,7 +260,7 @@ export class CiqService {
     );
     const hasSupportSpike = supportClusters.some((c) => c.hasActiveSpike);
 
-    const totalSignalCount = feedbackCount + supportCount;
+    const totalSignalCount = feedbackCount + supportCount + surveyCount;
 
     // ── Customer aggregates ─────────────────────────────────────────────────
     const customerIds = new Set(
@@ -440,6 +449,7 @@ export class CiqService {
       feedbackCount,
       voiceCount,
       supportCount,
+      surveyCount,
       totalSignalCount,
       signalCount,
       uniqueCustomerCount,
@@ -646,6 +656,7 @@ export class CiqService {
           feedbackCount:    score.feedbackCount,
           voiceCount:       score.voiceCount,
           supportCount:     score.supportCount,
+          surveyCount:      score.surveyCount,
           totalSignalCount: score.totalSignalCount,
         },
       });

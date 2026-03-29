@@ -814,6 +814,8 @@ model Theme {
   supportCount      Int?     @default(0)
   /// Count of VOICE sourceType feedback entries linked to this theme
   voiceCount        Int?     @default(0)
+  /// Count of SurveyResponse entries linked to this theme (via ThemeFeedback where sourceType = SURVEY)
+  surveyCount       Int?     @default(0)
   /// Sentiment distribution JSON: { positive: n, neutral: n, negative: n }
   sentimentDistribution Json?
   /// Timestamp of last cross-source aggregation run

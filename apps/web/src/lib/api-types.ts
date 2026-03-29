@@ -2187,6 +2187,7 @@ export interface UnifiedTopIssue {
   feedbackCount: number;
   supportCount: number;
   voiceCount: number;
+  surveyCount: number;
   sentimentDistribution: SentimentDistribution;
   /** CIQ priority score 0–100 */
   priorityScore?: number | null;
@@ -2206,14 +2207,17 @@ export interface WorkspaceSourceSummary {
   feedbackCount: number;
   supportCount: number;
   voiceCount: number;
+  surveyCount: number;
   feedbackPct: number;
   supportPct: number;
   voicePct: number;
+  surveyPct: number;
   themeCount: number;
   scoredThemeCount: number;
   topThemeByFeedback?: string | null;
   topThemeBySupport?: string | null;
   topThemeByVoice?: string | null;
+  topThemeBySurvey?: string | null;
 }
 
 // ── Digest types ──────────────────────────────────────────────────────────────

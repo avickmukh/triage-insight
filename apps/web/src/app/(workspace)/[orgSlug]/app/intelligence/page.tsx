@@ -171,7 +171,7 @@ function UnifiedIssueRow({
   onAssign: (id: string, title: string) => void;
   onResolve: (id: string, title: string) => void;
 }) {
-  const { feedbackCount, supportCount, voiceCount, totalSignalCount } = issue;
+  const { feedbackCount, supportCount, voiceCount, surveyCount, totalSignalCount } = issue;
   const ciq = issue.priorityScore ?? 0;
 
   return (
@@ -218,6 +218,11 @@ function UnifiedIssueRow({
             {voiceCount > 0 && (
               <span style={{ fontSize: '0.72rem', padding: '0.15rem 0.4rem', background: '#e8f5e9', color: '#2e7d32', borderRadius: '0.3rem', fontWeight: 600 }}>
                 🎙 {voiceCount} voice
+              </span>
+            )}
+            {surveyCount > 0 && (
+              <span style={{ fontSize: '0.72rem', padding: '0.15rem 0.4rem', background: '#fff8e1', color: '#f57c00', borderRadius: '0.3rem', fontWeight: 600 }}>
+                📋 {surveyCount} survey
               </span>
             )}
             <span style={{ fontSize: '0.72rem', color: '#6C757D', marginLeft: 'auto' }}>
@@ -281,7 +286,7 @@ export default function IntelligencePage() {
             Unified Intelligence Hub
           </h1>
           <p style={{ color: '#6C757D', margin: '0.25rem 0 0', fontSize: '0.875rem' }}>
-            Cross-source signals from feedback, support tickets, and voice — unified into a single intelligence layer
+            Cross-source signals from feedback, support tickets, voice, and surveys — unified into a single intelligence layer
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -337,6 +342,13 @@ export default function IntelligencePage() {
               <div style={{ fontSize: '0.78rem', color: '#6C757D', marginTop: '0.25rem' }}>{sourceSummary?.voicePct ?? 0}% of all signals</div>
               {sourceSummary?.topThemeByVoice && <div style={{ fontSize: '0.72rem', color: '#2e7d32', marginTop: '0.2rem' }}>Top: {sourceSummary.topThemeByVoice}</div>}
             </div>
+            {/* Surveys */}
+            <div style={{ ...CARD, borderLeft: '4px solid #f57c00' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#6C757D', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Surveys</div>
+              <div style={{ fontSize: '1.75rem', fontWeight: 700, color: '#0a2540' }}>{(sourceSummary?.surveyCount ?? 0).toLocaleString()}</div>
+              <div style={{ fontSize: '0.78rem', color: '#6C757D', marginTop: '0.25rem' }}>{sourceSummary?.surveyPct ?? 0}% of all signals</div>
+              {sourceSummary?.topThemeBySurvey && <div style={{ fontSize: '0.72rem', color: '#f57c00', marginTop: '0.2rem' }}>Top: {sourceSummary.topThemeBySurvey}</div>}
+            </div>
             {/* Source Mix Chart (visual bar) */}
             {sourceSummary && (
               <div style={{ ...CARD, gridColumn: 'span 1' }}>
@@ -344,6 +356,7 @@ export default function IntelligencePage() {
                 <SourceBar label="Feedback" count={sourceSummary.feedbackCount} total={sourceSummary.totalSignals} color="#1a73e8" />
                 <SourceBar label="Support" count={sourceSummary.supportCount} total={sourceSummary.totalSignals} color="#c62828" />
                 <SourceBar label="Voice" count={sourceSummary.voiceCount} total={sourceSummary.totalSignals} color="#2e7d32" />
+                <SourceBar label="Surveys" count={sourceSummary.surveyCount ?? 0} total={sourceSummary.totalSignals} color="#f57c00" />
               </div>
             )}
           </div>
@@ -354,7 +367,7 @@ export default function IntelligencePage() {
               <div>
                 <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#0a2540', margin: 0 }}>Top Issues — All Sources</h2>
                 <p style={{ fontSize: '0.78rem', color: '#6C757D', margin: '0.2rem 0 0' }}>
-                  Ranked by combined signal volume (feedback + support + voice). AI insights shown in blue.
+                  Ranked by combined signal volume (feedback + support + voice + surveys). AI insights shown in blue.
                 </p>
               </div>
               <Link href={routes.intelligenceThemes}

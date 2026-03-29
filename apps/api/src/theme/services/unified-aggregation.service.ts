@@ -180,6 +180,7 @@ export class UnifiedAggregationService {
       feedbackCount: number;
       voiceCount: number;
       supportCount: number;
+      surveyCount: number;
       sentimentDistribution: { positive: number; neutral: number; negative: number } | null;
       crossSourceInsight: string | null;
       aiRecommendation: string | null;
@@ -197,6 +198,7 @@ export class UnifiedAggregationService {
         feedbackCount: number | null;
         voiceCount: number | null;
         supportCount: number | null;
+        surveyCount: number | null;
         sentimentDistribution: string | null;
         crossSourceInsight: string | null;
         aiRecommendation: string | null;
@@ -213,6 +215,7 @@ export class UnifiedAggregationService {
         "feedbackCount",
         "voiceCount",
         "supportCount",
+        "surveyCount",
         "sentimentDistribution",
         "crossSourceInsight",
         "aiRecommendation",
@@ -235,6 +238,7 @@ export class UnifiedAggregationService {
       feedbackCount: Number(r.feedbackCount ?? 0),
       voiceCount: Number(r.voiceCount ?? 0),
       supportCount: Number(r.supportCount ?? 0),
+      surveyCount: Number(r.surveyCount ?? 0),
       sentimentDistribution: r.sentimentDistribution
         ? (typeof r.sentimentDistribution === 'string'
             ? JSON.parse(r.sentimentDistribution)
@@ -256,17 +260,20 @@ export class UnifiedAggregationService {
     feedbackCount: number;
     voiceCount: number;
     supportCount: number;
+    surveyCount: number;
     totalSignals: number;
     feedbackPct: number;
     voicePct: number;
     supportPct: number;
+    surveyPct: number;
     themeCount: number;
     scoredThemeCount: number;
     topThemeByFeedback: string | null;
     topThemeBySupport: string | null;
     topThemeByVoice: string | null;
+    topThemeBySurvey: string | null;
   }> {
-    const [feedbackBySource, supportAgg, themeStats, topByFeedback, topBySupport, topByVoice] =
+    const [feedbackBySource, supportAgg, themeStats, topByFeedback, topBySupport, topByVoice, topBySurvey] =
       await Promise.all([
         this.prisma.feedback.groupBy({
           by: ['sourceType'],
@@ -297,6 +304,12 @@ export class UnifiedAggregationService {
           WHERE "workspaceId" = ${workspaceId} AND status != 'ARCHIVED'
           ORDER BY COALESCE("voiceCount", 0) DESC LIMIT 1
         `,
+        // Top theme by survey signal count
+        this.prisma.$queryRaw<Array<{ title: string }>>`
+          SELECT title FROM "Theme"
+          WHERE "workspaceId" = ${workspaceId} AND status != 'ARCHIVED'
+          ORDER BY COALESCE("surveyCount", 0) DESC LIMIT 1
+        `,
       ]);
 
     const scoredThemeCount = await this.prisma.theme.count({
@@ -305,11 +318,14 @@ export class UnifiedAggregationService {
 
     const totalVoice =
       feedbackBySource.find((r) => r.sourceType === 'VOICE')?._count.id ?? 0;
+    const totalSurvey =
+      feedbackBySource.find((r) => r.sourceType === 'SURVEY')?._count.id ?? 0;
+    // Feedback count excludes VOICE and SURVEY (those are shown as separate sources)
     const totalFeedback = feedbackBySource
-      .filter((r) => r.sourceType !== 'VOICE')
+      .filter((r) => r.sourceType !== 'VOICE' && r.sourceType !== 'SURVEY')
       .reduce((sum, r) => sum + r._count.id, 0);
     const totalSupport = supportAgg._sum.ticketCount ?? 0;
-    const totalSignals = totalFeedback + totalVoice + totalSupport;
+    const totalSignals = totalFeedback + totalVoice + totalSupport + totalSurvey;
 
     const pct = (n: number) =>
       totalSignals > 0 ? Math.round((n / totalSignals) * 100) : 0;
@@ -318,15 +334,18 @@ export class UnifiedAggregationService {
       feedbackCount: totalFeedback,
       voiceCount: totalVoice,
       supportCount: totalSupport,
+      surveyCount: totalSurvey,
       totalSignals,
       feedbackPct: pct(totalFeedback),
       voicePct: pct(totalVoice),
       supportPct: pct(totalSupport),
+      surveyPct: pct(totalSurvey),
       themeCount: themeStats._count.id,
       scoredThemeCount,
       topThemeByFeedback: topByFeedback[0]?.title ?? null,
       topThemeBySupport: topBySupport[0]?.title ?? null,
       topThemeByVoice: topByVoice[0]?.title ?? null,
+      topThemeBySurvey: topBySurvey[0]?.title ?? null,
     };
   }
 
