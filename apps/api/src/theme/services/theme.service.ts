@@ -481,8 +481,25 @@ export class ThemeService {
     return { success: true, message: 'Customer unlinked from theme.' };
   }
 
-  // ─── Reclustering ─────────────────────────────────────────────────────────
+   // ─── Auto-merge ───────────────────────────────────────────────────────────
 
+  /**
+   * Dismiss an auto-merge suggestion for a theme.
+   * Clears autoMergeCandidate, autoMergeTargetId, and autoMergeSimilarity.
+   */
+  async dismissAutoMerge(workspaceId: string, themeId: string) {
+    const theme = await this.prisma.theme.findUnique({ where: { id: themeId } });
+    if (!theme || theme.workspaceId !== workspaceId) {
+      throw new NotFoundException('Theme not found');
+    }
+    await this.prisma.theme.update({
+      where: { id: themeId },
+      data: { autoMergeCandidate: false, autoMergeTargetId: null, autoMergeSimilarity: null },
+    });
+    return { success: true, message: 'Auto-merge suggestion dismissed.' };
+  }
+
+  // ─── Reclustering ─────────────────────────────────────────────────────────
   async triggerReclustering(workspaceId: string) {
     let jobId: string | undefined;
     try {

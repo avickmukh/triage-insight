@@ -12,6 +12,10 @@ import { AiController } from './ai.controller';
 import { DuplicateSuggestionsController } from './controllers/duplicate-suggestions.controller';
 import { MergeService } from './services/merge.service';
 import { AuditService } from './services/audit.service';
+import { AutoMergeService } from './services/auto-merge.service';
+import { ThemeLabelService } from './services/theme-label.service';
+import { TrendComputationService } from './services/trend-computation.service';
+import { ExplainableInsightsService } from './services/explainable-insights.service';
 // CiqEngineService is provided here so CiqScoringProcessor can inject it
 // without creating a circular dependency (CiqModule → AiModule → CiqModule)
 import { CiqEngineService } from '../ciq/ciq-engine.service';
@@ -40,6 +44,10 @@ import { CiqEngineService } from '../ciq/ciq-engine.service';
     ThemeNarrationService,
     MergeService,
     AuditService,
+    AutoMergeService,
+    ThemeLabelService,
+    TrendComputationService,
+    ExplainableInsightsService,
     // NOTE: AiAnalysisProcessor and CiqScoringProcessor are NOT here.
     // They are registered only in WorkerProcessorsModule
     // (apps/worker/src/processors.module.ts) to prevent double-registration
@@ -57,6 +65,10 @@ import { CiqEngineService } from '../ciq/ciq-engine.service';
     ThemeNarrationService,
     MergeService,
     AuditService,
+    AutoMergeService,
+    ThemeLabelService,
+    TrendComputationService,
+    ExplainableInsightsService,
   ],
 })
 export class AiModule {}

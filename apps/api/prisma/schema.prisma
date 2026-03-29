@@ -833,6 +833,31 @@ model Theme {
   topKeywords        Json?
   /// Dominant signal phrase: the most common complaint/request pattern in the cluster
   dominantSignal     String?
+  // ─── Trend + auto-merge + label fields ──────────────────────────────────────
+  /// Trend direction: 'UP' | 'STABLE' | 'DOWN' — computed weekly by TrendComputationService
+  trendDirection     String?   @default("STABLE")
+  /// Percentage change in signal count vs. previous week (positive = growing)
+  trendDelta         Float?    @default(0)
+  /// Timestamp of the last trend computation run
+  lastTrendedAt      DateTime?
+  /// Signal count in the current 7-day window (used for trend delta)
+  currentWeekSignals Int?      @default(0)
+  /// Signal count in the previous 7-day window (used for trend delta)
+  prevWeekSignals    Int?      @default(0)
+  /// Whether this theme is flagged as a candidate for auto-merge (similarity > 0.85 with another theme)
+  autoMergeCandidate Boolean   @default(false)
+  /// The themeId this theme should be merged into (set by AutoMergeService)
+  autoMergeTargetId  String?
+  /// Auto-merge similarity score (0–1) with the target theme
+  autoMergeSimilarity Float?
+  /// AI-generated short label (≤ 6 words, specific, no generic names)
+  shortLabel         String?
+  /// Timestamp of last shortLabel generation
+  shortLabelAt       DateTime?
+  /// AI-generated impact sentence: "X increased Y% this week due to Z"
+  impactSentence     String?
+  /// Timestamp of last centroid embedding update
+  centroidUpdatedAt  DateTime?
 
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt

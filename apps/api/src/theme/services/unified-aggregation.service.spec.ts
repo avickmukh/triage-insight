@@ -279,6 +279,71 @@ describe('UnifiedAggregationService', () => {
     });
   });
 
+  // ─── getTopPriorityThemes ──────────────────────────────────────────────────
+
+  describe('getTopPriorityThemes', () => {
+    it('should return themes mapped with correct field types', async () => {
+      mockPrisma.$queryRaw.mockResolvedValue([
+        {
+          id: 'theme-1',
+          title: 'Payment Failures',
+          shortLabel: 'Payment Failures',
+          ciqScore: 85,
+          trendDirection: 'UP',
+          trendDelta: 25,
+          impactSentence: 'Payment failures increased 25% this week.',
+          revenueInfluence: 120000,
+          totalSignalCount: 45,
+          customerCount: BigInt(34),
+        },
+      ]);
+
+      const result = await service.getTopPriorityThemes('ws-1', 3);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        id: 'theme-1',
+        ciqScore: 85,
+        trendDirection: 'UP',
+        trendDelta: 25,
+        priorityRank: 1,
+      });
+      // BigInt should be converted to number
+      expect(typeof result[0].customerCount).toBe('number');
+      expect(result[0].customerCount).toBe(34);
+    });
+
+    it('should assign priorityRank sequentially starting from 1', async () => {
+      mockPrisma.$queryRaw.mockResolvedValue([
+        { id: 'a', title: 'A', shortLabel: null, ciqScore: 90, trendDirection: 'UP', trendDelta: 30, impactSentence: null, revenueInfluence: null, totalSignalCount: 50, customerCount: BigInt(10) },
+        { id: 'b', title: 'B', shortLabel: null, ciqScore: 70, trendDirection: 'STABLE', trendDelta: 0, impactSentence: null, revenueInfluence: null, totalSignalCount: 30, customerCount: BigInt(5) },
+        { id: 'c', title: 'C', shortLabel: null, ciqScore: 50, trendDirection: 'DOWN', trendDelta: -20, impactSentence: null, revenueInfluence: null, totalSignalCount: 10, customerCount: BigInt(2) },
+      ]);
+
+      const result = await service.getTopPriorityThemes('ws-1', 3);
+
+      expect(result[0].priorityRank).toBe(1);
+      expect(result[1].priorityRank).toBe(2);
+      expect(result[2].priorityRank).toBe(3);
+    });
+
+    it('should default trendDirection to STABLE when null', async () => {
+      mockPrisma.$queryRaw.mockResolvedValue([
+        { id: 'x', title: 'X', shortLabel: null, ciqScore: 60, trendDirection: null, trendDelta: null, impactSentence: null, revenueInfluence: null, totalSignalCount: 20, customerCount: BigInt(0) },
+      ]);
+
+      const result = await service.getTopPriorityThemes('ws-1', 3);
+      expect(result[0].trendDirection).toBe('STABLE');
+      expect(result[0].trendDelta).toBe(0);
+    });
+
+    it('should return empty array when no themes qualify', async () => {
+      mockPrisma.$queryRaw.mockResolvedValue([]);
+      const result = await service.getTopPriorityThemes('ws-empty', 3);
+      expect(result).toHaveLength(0);
+    });
+  });
+
   // ─── getWorkspaceSourceSummary ─────────────────────────────────────────────
 
   describe('getWorkspaceSourceSummary', () => {

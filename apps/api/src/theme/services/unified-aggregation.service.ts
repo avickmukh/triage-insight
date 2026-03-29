@@ -187,6 +187,12 @@ export class UnifiedAggregationService {
       crossSourceInsight: string | null;
       aiRecommendation: string | null;
       lastAggregatedAt: Date | null;
+      trendDirection: string | null;
+      trendDelta: number | null;
+      shortLabel: string | null;
+      impactSentence: string | null;
+      revenueInfluence: number | null;
+      customerCount: number;
     }>
   > {
     const rows = await this.prisma.$queryRaw<
@@ -207,30 +213,44 @@ export class UnifiedAggregationService {
         crossSourceInsight: string | null;
         aiRecommendation: string | null;
         lastAggregatedAt: Date | null;
+        trendDirection: string | null;
+        trendDelta: number | null;
+        shortLabel: string | null;
+        impactSentence: string | null;
+        revenueInfluence: number | null;
+        customerCount: bigint;
       }>
     >`
       SELECT
-        id,
-        title,
-        status,
-        "ciqScore",
-        "priorityScore",
-        "totalSignalCount",
-        "feedbackCount",
-        "voiceCount",
-        "supportCount",
-        "surveyCount",
-        "clusterConfidence",
-        "outlierCount",
-        "sentimentDistribution",
-        "crossSourceInsight",
-        "aiRecommendation",
-        "lastAggregatedAt"
-      FROM "Theme"
-      WHERE "workspaceId" = ${workspaceId}
-        AND status != 'ARCHIVED'
-      ORDER BY COALESCE("totalSignalCount", 0) DESC,
-               COALESCE("ciqScore", 0) DESC
+        t.id,
+        t.title,
+        t.status,
+        t."ciqScore",
+        t."priorityScore",
+        t."totalSignalCount",
+        t."feedbackCount",
+        t."voiceCount",
+        t."supportCount",
+        t."surveyCount",
+        t."clusterConfidence",
+        t."outlierCount",
+        t."sentimentDistribution",
+        t."crossSourceInsight",
+        t."aiRecommendation",
+        t."lastAggregatedAt",
+        t."trendDirection",
+        t."trendDelta",
+        t."shortLabel",
+        t."impactSentence",
+        t."revenueInfluence",
+        COUNT(DISTINCT cs."customerId") AS "customerCount"
+      FROM "Theme" t
+      LEFT JOIN "CustomerSignal" cs ON cs."themeId" = t.id
+      WHERE t."workspaceId" = ${workspaceId}
+        AND t.status != 'ARCHIVED'
+      GROUP BY t.id
+      ORDER BY COALESCE(t."totalSignalCount", 0) DESC,
+               COALESCE(t."ciqScore", 0) DESC
       LIMIT ${limit}
     `;
 
@@ -255,6 +275,12 @@ export class UnifiedAggregationService {
       crossSourceInsight: r.crossSourceInsight,
       aiRecommendation: r.aiRecommendation,
       lastAggregatedAt: r.lastAggregatedAt,
+      trendDirection: r.trendDirection ?? 'STABLE',
+      trendDelta: r.trendDelta != null ? Number(r.trendDelta) : 0,
+      shortLabel: r.shortLabel ?? null,
+      impactSentence: r.impactSentence ?? null,
+      revenueInfluence: r.revenueInfluence != null ? Number(r.revenueInfluence) : null,
+      customerCount: Number(r.customerCount ?? 0),
     }));
   }
 
@@ -430,6 +456,91 @@ Write one sentence that highlights the most important pattern across these sourc
 
     // Rule-based fallback
     return this.generateInsight(params);
+  }
+
+  // ─── Top Priority Panel (PRD Part 5) ────────────────────────────────────────────────────────────────────
+
+  /**
+   * Returns the top 1–3 highest-priority themes for the dashboard spotlight panel.
+   *
+   * Priority score = CIQ × 0.4 + trendBoost × 0.3 + signalVolume × 0.3
+   * where trendBoost = 1.0 (UP), 0.5 (STABLE), 0.0 (DOWN)
+   * and signalVolume = normalised totalSignalCount (0–1, capped at 100 signals)
+   *
+   * Returns each theme with: title, shortLabel, CIQ, trendDirection, trendDelta,
+   * impactSentence, revenueInfluence, customerCount.
+   */
+  async getTopPriorityThemes(
+    workspaceId: string,
+    limit = 3,
+  ): Promise<Array<{
+    id: string;
+    title: string;
+    shortLabel: string | null;
+    ciqScore: number | null;
+    trendDirection: string;
+    trendDelta: number;
+    impactSentence: string | null;
+    revenueInfluence: number | null;
+    customerCount: number;
+    totalSignalCount: number;
+    priorityRank: number;
+  }>> {
+    const rows = await this.prisma.$queryRaw<Array<{
+      id: string;
+      title: string;
+      shortLabel: string | null;
+      ciqScore: number | null;
+      trendDirection: string | null;
+      trendDelta: number | null;
+      impactSentence: string | null;
+      revenueInfluence: number | null;
+      totalSignalCount: number | null;
+      customerCount: bigint;
+    }>>`
+      SELECT
+        t.id,
+        t.title,
+        t."shortLabel",
+        t."ciqScore",
+        t."trendDirection",
+        t."trendDelta",
+        t."impactSentence",
+        t."revenueInfluence",
+        t."totalSignalCount",
+        COUNT(DISTINCT cs."customerId") AS "customerCount"
+      FROM "Theme" t
+      LEFT JOIN "CustomerSignal" cs ON cs."themeId" = t.id
+      WHERE t."workspaceId" = ${workspaceId}
+        AND t.status != 'ARCHIVED'
+        AND COALESCE(t."totalSignalCount", 0) > 0
+      GROUP BY t.id
+      ORDER BY
+        (
+          COALESCE(t."ciqScore", 0) * 0.4
+          + CASE COALESCE(t."trendDirection", 'STABLE')
+              WHEN 'UP'   THEN 30.0
+              WHEN 'DOWN' THEN 0.0
+              ELSE 15.0
+            END
+          + LEAST(COALESCE(t."totalSignalCount", 0), 100) * 0.3
+        ) DESC
+      LIMIT ${limit};
+    `;
+
+    return rows.map((r, idx) => ({
+      id: r.id,
+      title: r.title,
+      shortLabel: r.shortLabel ?? null,
+      ciqScore: r.ciqScore != null ? Number(r.ciqScore) : null,
+      trendDirection: r.trendDirection ?? 'STABLE',
+      trendDelta: r.trendDelta != null ? Number(r.trendDelta) : 0,
+      impactSentence: r.impactSentence ?? null,
+      revenueInfluence: r.revenueInfluence != null ? Number(r.revenueInfluence) : null,
+      customerCount: Number(r.customerCount ?? 0),
+      totalSignalCount: Number(r.totalSignalCount ?? 0),
+      priorityRank: idx + 1,
+    }));
   }
 
   /**

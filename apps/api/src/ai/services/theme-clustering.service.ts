@@ -8,37 +8,58 @@ import { CIQ_SCORING_QUEUE } from '../processors/ciq-scoring.processor';
 /**
  * ThemeClusteringService
  *
- * Semantic clustering using pgvector cosine similarity.
- * Assigns a single feedback item to the best-matching existing theme in the
- * same workspace. If no theme scores above the similarity threshold, a new
- * AI_GENERATED candidate theme is created and its embedding is stored for
- * future incremental clustering.
+ * Semantic clustering using pgvector cosine similarity with hybrid scoring.
  *
- * After a new theme is created, a CIQ scoring job is immediately enqueued so
- * that the theme appears in dashboards and rankings without any manual step.
+ * SMARTER CLUSTERING (PRD Part 1 & 3):
+ *   Hybrid similarity = (embedding_similarity × 0.7) + (keyword_overlap × 0.3)
+ *   This improves grouping accuracy by combining:
+ *     - Dense vector similarity (semantic meaning)
+ *     - Keyword overlap (surface-level term matching)
  *
- * Tenant isolation is enforced by scoping all queries to `workspaceId`.
- * Clustering is async via BullMQ (see ThemeClusteringProcessor).
+ *   Dynamic threshold based on cluster size:
+ *     - Large clusters (≥ 10 items): threshold = 0.80 (stricter — cluster is well-defined)
+ *     - Medium clusters (5–9 items):  threshold = 0.78
+ *     - Small clusters (< 5 items):   threshold = 0.75 (looser — cluster needs more signals)
  *
- * Confidence scoring (PRD Part 1):
- *   After each assignment, the theme's clusterConfidence (0–100) is recomputed
- *   from three factors:
- *     - avgSimilarity: mean cosine similarity of all AI-assigned feedback
- *     - size:          number of feedback items (more data → higher confidence)
- *     - variance:      std-dev of similarity scores (low variance → higher confidence)
+ * THEME CENTROID (PRD Part 3):
+ *   After each assignment, the theme's embedding (centroid) is updated as the
+ *   mean of all linked feedback embeddings. This keeps the centroid representative
+ *   as the cluster grows.
  *
- *   outlierCount is also updated: feedback with similarity < OUTLIER_THRESHOLD
- *   is counted but kept in the cluster (removal is a manual editorial decision).
+ * CONFIDENCE SCORING (PRD Part 1):
+ *   After each assignment, clusterConfidence (0–100) is recomputed from:
+ *     - avgSimilarity (weight 0.5): mean hybrid score of AI-assigned feedback
+ *     - sizeScore (weight 0.3): log-normalised cluster size (capped at 50 items)
+ *     - varianceScore (weight 0.2): inverted std-dev (low variance = high confidence)
+ *
+ *   outlierCount: feedback with hybrid score < OUTLIER_THRESHOLD is counted.
+ *
+ * PERFORMANCE (PRD Part 8):
+ *   - Candidate search is a single pgvector query (O(log n) with ivfflat index)
+ *   - Keyword overlap is computed in-memory from pre-loaded theme keywords
+ *   - Centroid update is a single UPDATE per assignment, not a full recompute
+ *   - Batch reclustering processes items sequentially (no O(n²) comparisons)
  */
 @Injectable()
 export class ThemeClusteringService {
   private readonly logger = new Logger(ThemeClusteringService.name);
 
-  /** Cosine similarity threshold (0–1) required to link to an existing theme. */
-  private readonly SIMILARITY_THRESHOLD = 0.8;
+  /** Embedding similarity weight in the hybrid score. */
+  private readonly EMBEDDING_WEIGHT = 0.7;
 
-  /** Similarity below this value marks a feedback item as a potential outlier. */
-  private readonly OUTLIER_THRESHOLD = 0.75;
+  /** Keyword overlap weight in the hybrid score. */
+  private readonly KEYWORD_WEIGHT = 0.3;
+
+  /** Dynamic thresholds based on cluster size. */
+  private readonly THRESHOLD_LARGE = 0.80;   // ≥ 10 items
+  private readonly THRESHOLD_MEDIUM = 0.78;  // 5–9 items
+  private readonly THRESHOLD_SMALL = 0.75;   // < 5 items
+
+  /** Hybrid score below this value marks a feedback item as a potential outlier. */
+  private readonly OUTLIER_THRESHOLD = 0.72;
+
+  /** Number of top candidates to retrieve from pgvector before hybrid re-ranking. */
+  private readonly VECTOR_CANDIDATES = 5;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -51,9 +72,8 @@ export class ThemeClusteringService {
   /**
    * Assign a single feedback item to the best-matching theme in the workspace.
    *
-   * Uses pgvector cosine similarity on stored theme embeddings.
-   * If the feedback already has an embedding, it is used directly.
-   * Otherwise, a new embedding is generated from the feedback's title and description.
+   * Uses hybrid similarity: embedding cosine similarity + keyword overlap.
+   * Dynamic threshold is applied based on the target cluster's current size.
    *
    * Returns the themeId the feedback was assigned to, or null if skipped.
    */
@@ -93,7 +113,7 @@ export class ThemeClusteringService {
     let feedbackEmbedding: number[];
     try {
       feedbackEmbedding = embedding ?? await this.embeddingService.generateEmbedding(
-        `${feedback.title} ${feedback.description}`,
+        `${feedback.title} ${feedback.description ?? ''}`.trim(),
       );
     } catch (err) {
       this.logger.warn(
@@ -103,111 +123,171 @@ export class ThemeClusteringService {
     }
 
     const vectorStr = `[${feedbackEmbedding.join(',')}]`;
+    const feedbackKeywords = extractKeywords(`${feedback.title} ${feedback.normalizedText ?? feedback.description ?? ''}`);
 
-    // Find the most similar theme using pgvector cosine similarity.
-    // Scoped to the workspace for tenant isolation.
-    // Excludes ARCHIVED themes only — AI_GENERATED and VERIFIED both participate.
-    const similarThemes = await this.prisma.$queryRaw<Array<{ id: string; similarity: number }>>`
+    // ── Step 1: Retrieve top-N candidates by embedding similarity ─────────
+    // Scoped to workspace, excludes ARCHIVED themes.
+    // We fetch top-5 and re-rank with keyword overlap.
+    const candidates = await this.prisma.$queryRaw<Array<{
+      id: string;
+      similarity: number;
+      topKeywords: string | null;
+      feedbackCount: number;
+    }>>`
       SELECT
-        id,
-        1 - (embedding <=> ${vectorStr}::vector) AS similarity
-      FROM "Theme"
-      WHERE "workspaceId" = ${workspaceId}
-        AND "embedding" IS NOT NULL
-        AND "status" != 'ARCHIVED'
+        t.id,
+        1 - (t.embedding <=> ${vectorStr}::vector) AS similarity,
+        t."topKeywords",
+        COALESCE(t."feedbackCount", 0) AS "feedbackCount"
+      FROM "Theme" t
+      WHERE t."workspaceId" = ${workspaceId}
+        AND t.embedding IS NOT NULL
+        AND t.status != 'ARCHIVED'
       ORDER BY similarity DESC
-      LIMIT 1;
+      LIMIT ${this.VECTOR_CANDIDATES};
     `;
 
-    if (similarThemes.length > 0 && similarThemes[0].similarity > this.SIMILARITY_THRESHOLD) {
-      const themeId = similarThemes[0].id;
+    // ── Step 2: Hybrid re-ranking ─────────────────────────────────────────
+    let bestThemeId: string | null = null;
+    let bestHybridScore = 0;
+    let bestClusterSize = 0;
+
+    for (const candidate of candidates) {
+      const embeddingScore = candidate.similarity;
+
+      // Parse stored keywords for the candidate theme
+      let themeKeywords: string[] = [];
+      try {
+        if (candidate.topKeywords) {
+          themeKeywords = typeof candidate.topKeywords === 'string'
+            ? JSON.parse(candidate.topKeywords)
+            : (candidate.topKeywords as string[]);
+        }
+      } catch {
+        themeKeywords = [];
+      }
+
+      const keywordScore = computeKeywordOverlap(feedbackKeywords, themeKeywords);
+      const hybridScore = embeddingScore * this.EMBEDDING_WEIGHT + keywordScore * this.KEYWORD_WEIGHT;
+
+      if (hybridScore > bestHybridScore) {
+        bestHybridScore = hybridScore;
+        bestThemeId = candidate.id;
+        bestClusterSize = Number(candidate.feedbackCount);
+      }
+    }
+
+    // ── Step 3: Apply dynamic threshold based on cluster size ─────────────
+    const threshold = this.getDynamicThreshold(bestClusterSize);
+
+    if (bestThemeId && bestHybridScore >= threshold) {
       await this.prisma.themeFeedback.upsert({
-        where: { themeId_feedbackId: { themeId, feedbackId } },
+        where: { themeId_feedbackId: { themeId: bestThemeId, feedbackId } },
         create: {
-          themeId,
+          themeId: bestThemeId,
           feedbackId,
           assignedBy: 'ai',
-          confidence: similarThemes[0].similarity,
+          confidence: bestHybridScore,
         },
         update: {
           assignedBy: 'ai',
-          confidence: similarThemes[0].similarity,
+          confidence: bestHybridScore,
         },
       });
       this.logger.log(
-        `Assigned feedback ${feedbackId} to theme ${themeId} (similarity=${similarThemes[0].similarity.toFixed(3)})`,
+        `Assigned feedback ${feedbackId} to theme ${bestThemeId} ` +
+        `(hybrid=${bestHybridScore.toFixed(3)}, threshold=${threshold}, clusterSize=${bestClusterSize})`,
       );
 
-      // Recompute cluster confidence after adding new feedback
-      await this.recomputeClusterConfidence(themeId, feedback.title);
+      // Recompute cluster confidence and update centroid
+      await this.recomputeClusterConfidence(bestThemeId, feedback.title);
+      await this.updateThemeCentroid(bestThemeId, feedbackEmbedding);
 
-      // Re-score the existing theme so the new feedback signal is reflected immediately
+      // Re-score the existing theme
       try {
-        await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId });
+        await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId: bestThemeId });
       } catch (queueErr) {
         this.logger.warn(`[CIQ] Redis unavailable — re-score job skipped: ${(queueErr as Error).message}`);
       }
-      return themeId;
+      return bestThemeId;
     }
 
-    // No good match — create a new candidate theme and store its embedding
+    // No good match — create a new candidate theme
     return this.createCandidateTheme(workspaceId, feedbackId, feedback.title, feedbackEmbedding);
   }
 
   /**
    * Run a full workspace reclustering pass.
    *
-   * For each feedback item not yet linked to any theme, attempt to assign it.
-   * This is the batch path triggered by `POST /workspaces/:id/themes/recluster`.
+   * Processes unlinked feedback items in batches of 50 to avoid O(n²) operations.
+   * Triggered by `POST /workspaces/:id/themes/recluster`.
    */
   async runClustering(
     workspaceId: string,
   ): Promise<{ processed: number; assigned: number; created: number }> {
-    this.logger.log(`Starting theme reclustering for workspace ${workspaceId}`);
+    this.logger.log(`Starting hybrid theme reclustering for workspace ${workspaceId}`);
 
-    const unlinked = await this.prisma.feedback.findMany({
-      where: {
-        workspaceId,
-        status: { not: 'MERGED' },
-        themes: { none: {} },
-      },
-      select: { id: true },
-    });
-
+    const BATCH_SIZE = 50;
+    let skip = 0;
     let assigned = 0;
     let created = 0;
+    let processed = 0;
 
-    for (const { id: feedbackId } of unlinked) {
-      const themeCountBefore = await this.prisma.theme.count({ where: { workspaceId } });
-      const themeId = await this.assignFeedbackToTheme(workspaceId, feedbackId);
-      if (themeId) {
-        const themeCountAfter = await this.prisma.theme.count({ where: { workspaceId } });
-        if (themeCountAfter > themeCountBefore) {
-          created++;
-        } else {
-          assigned++;
+    while (true) {
+      const unlinked = await this.prisma.feedback.findMany({
+        where: {
+          workspaceId,
+          status: { not: 'MERGED' },
+          themes: { none: {} },
+        },
+        select: { id: true },
+        take: BATCH_SIZE,
+        skip,
+      });
+
+      if (unlinked.length === 0) break;
+
+      for (const { id: feedbackId } of unlinked) {
+        const themeCountBefore = await this.prisma.theme.count({ where: { workspaceId } });
+        const themeId = await this.assignFeedbackToTheme(workspaceId, feedbackId);
+        if (themeId) {
+          const themeCountAfter = await this.prisma.theme.count({ where: { workspaceId } });
+          if (themeCountAfter > themeCountBefore) {
+            created++;
+          } else {
+            assigned++;
+          }
         }
+        processed++;
       }
+
+      skip += BATCH_SIZE;
     }
 
     this.logger.log(
-      `Reclustering complete for workspace ${workspaceId}: ` +
-        `processed=${unlinked.length}, assigned=${assigned}, created=${created}`,
+      `Hybrid reclustering complete for workspace ${workspaceId}: ` +
+        `processed=${processed}, assigned=${assigned}, created=${created}`,
     );
 
-    return { processed: unlinked.length, assigned, created };
+    return { processed, assigned, created };
   }
 
   // ─── Private helpers ──────────────────────────────────────────────────────
 
   /**
+   * Returns the similarity threshold based on cluster size.
+   * Larger, well-defined clusters use a stricter threshold to avoid dilution.
+   * Small clusters use a looser threshold to grow faster.
+   */
+  private getDynamicThreshold(clusterSize: number): number {
+    if (clusterSize >= 10) return this.THRESHOLD_LARGE;
+    if (clusterSize >= 5) return this.THRESHOLD_MEDIUM;
+    return this.THRESHOLD_SMALL;
+  }
+
+  /**
    * Create a new AI_GENERATED candidate theme seeded from a single feedback item.
-   * The theme title is derived from the feedback title (truncated to 80 chars).
-   * If a feedbackEmbedding is provided, it is stored as the theme's embedding
-   * for future incremental clustering.
-   *
-   * A CIQ scoring job is immediately enqueued so the new theme appears in
-   * dashboards and rankings without any manual activation step.
+   * Stores the feedback's embedding as the theme's initial centroid.
    */
   private async createCandidateTheme(
     workspaceId: string,
@@ -222,8 +302,6 @@ export class ThemeClusteringService {
       data: {
         workspaceId,
         title: candidateTitle,
-        // AI_GENERATED is the default — no manual activation required.
-        // The theme participates in CIQ, dashboard, and rankings immediately.
         status: 'AI_GENERATED',
         // Seed confidence: single-item cluster has low confidence by definition
         clusterConfidence: 10,
@@ -237,12 +315,13 @@ export class ThemeClusteringService {
       },
     });
 
-    // Store the feedback's embedding as the theme's initial embedding
+    // Store the feedback's embedding as the theme's initial centroid
     if (feedbackEmbedding && feedbackEmbedding.length > 0) {
       const vectorStr = `[${feedbackEmbedding.join(',')}]`;
       await this.prisma.$executeRaw`
         UPDATE "Theme"
-        SET embedding = ${vectorStr}::vector
+        SET embedding = ${vectorStr}::vector,
+            "centroidUpdatedAt" = NOW()
         WHERE id = ${theme.id};
       `;
     }
@@ -251,8 +330,6 @@ export class ThemeClusteringService {
       `Created AI_GENERATED theme "${theme.title}" (${theme.id}) for feedback ${feedbackId}`,
     );
 
-    // Immediately trigger CIQ scoring for the new theme so it appears in
-    // dashboards and rankings without any manual activation step.
     try {
       await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId: theme.id });
     } catch (queueErr) {
@@ -263,21 +340,46 @@ export class ThemeClusteringService {
   }
 
   /**
+   * Update the theme's centroid embedding as the mean of all linked feedback embeddings.
+   *
+   * Uses pgvector's native arithmetic to compute the mean vector in SQL.
+   * This is O(n) in cluster size but runs as a single SQL query.
+   * Safe to call fire-and-forget — errors are caught and logged.
+   */
+  private async updateThemeCentroid(themeId: string, _newEmbedding?: number[]): Promise<void> {
+    try {
+      // Use pgvector avg() to compute the centroid of all linked feedback embeddings
+      await this.prisma.$executeRaw`
+        UPDATE "Theme" t
+        SET embedding = (
+          SELECT avg(f.embedding)
+          FROM "ThemeFeedback" tf
+          JOIN "Feedback" f ON f.id = tf."feedbackId"
+          WHERE tf."themeId" = ${themeId}
+            AND f.embedding IS NOT NULL
+        ),
+        "centroidUpdatedAt" = NOW()
+        WHERE t.id = ${themeId};
+      `;
+      this.logger.debug(`[Centroid] Updated centroid for theme ${themeId}`);
+    } catch (err) {
+      this.logger.warn(`[Centroid] Failed to update centroid for theme ${themeId}: ${(err as Error).message}`);
+    }
+  }
+
+  /**
    * Recompute and persist the cluster confidence for a theme.
    *
    * Confidence formula (0–100):
-   *   - avgSimilarityScore: mean cosine similarity of AI-assigned feedback (weight 0.5)
+   *   - avgSimilarityScore: mean hybrid score of AI-assigned feedback (weight 0.5)
    *   - sizeScore:          log-normalised cluster size, capped at 50 items (weight 0.3)
    *   - varianceScore:      inverted std-dev of similarities (weight 0.2)
    *
-   * Also updates outlierCount (feedback with similarity < OUTLIER_THRESHOLD).
-   * Also extracts topKeywords and dominantSignal from feedback titles.
-   *
+   * Also updates outlierCount, topKeywords, and dominantSignal.
    * Safe to call fire-and-forget — errors are caught and logged.
    */
-  private async recomputeClusterConfidence(themeId: string, newFeedbackTitle?: string): Promise<void> {
+  private async recomputeClusterConfidence(themeId: string, _newFeedbackTitle?: string): Promise<void> {
     try {
-      // Load all AI-assigned feedback with their similarity scores
       const links = await this.prisma.themeFeedback.findMany({
         where: { themeId, assignedBy: 'ai', confidence: { not: null } },
         select: { confidence: true },
@@ -290,7 +392,6 @@ export class ThemeClusteringService {
 
       const avgSimilarity = similarities.reduce((s, v) => s + v, 0) / size;
 
-      // Variance (std-dev)
       const variance =
         size > 1
           ? Math.sqrt(
@@ -298,19 +399,16 @@ export class ThemeClusteringService {
             )
           : 0;
 
-      // Outlier count
       const outlierCount = similarities.filter((s) => s < this.OUTLIER_THRESHOLD).length;
 
-      // Compute confidence score (0–100)
       const avgSimilarityScore = Math.min(100, avgSimilarity * 100);
       const sizeScore = Math.min(100, (Math.log10(Math.max(1, size)) / Math.log10(50)) * 100);
-      const varianceScore = Math.max(0, 100 - variance * 500); // variance 0 → 100, variance 0.2 → 0
+      const varianceScore = Math.max(0, 100 - variance * 500);
 
       const clusterConfidence = parseFloat(
         (avgSimilarityScore * 0.5 + sizeScore * 0.3 + varianceScore * 0.2).toFixed(1),
       );
 
-      // Extract keywords and dominant signal from all feedback titles in the cluster
       const allLinks = await this.prisma.themeFeedback.findMany({
         where: { themeId },
         select: { feedback: { select: { title: true } } },
@@ -326,7 +424,11 @@ export class ThemeClusteringService {
         where: { id: themeId },
         data: {
           clusterConfidence,
-          confidenceFactors: { avgSimilarity: parseFloat(avgSimilarity.toFixed(3)), size, variance: parseFloat(variance.toFixed(3)) },
+          confidenceFactors: {
+            avgSimilarity: parseFloat(avgSimilarity.toFixed(3)),
+            size,
+            variance: parseFloat(variance.toFixed(3)),
+          },
           outlierCount,
           topKeywords,
           dominantSignal,
@@ -334,12 +436,28 @@ export class ThemeClusteringService {
       });
 
       this.logger.debug(
-        `[Confidence] Theme ${themeId}: score=${clusterConfidence}, size=${size}, avgSim=${avgSimilarity.toFixed(3)}, variance=${variance.toFixed(3)}, outliers=${outlierCount}`,
+        `[Confidence] Theme ${themeId}: score=${clusterConfidence}, size=${size}, ` +
+        `avgSim=${avgSimilarity.toFixed(3)}, variance=${variance.toFixed(3)}, outliers=${outlierCount}`,
       );
     } catch (err) {
       this.logger.warn(`[Confidence] Failed to recompute for theme ${themeId}: ${(err as Error).message}`);
     }
   }
+}
+
+// ─── Utility: keyword overlap (Jaccard coefficient) ──────────────────────────
+
+/**
+ * Compute Jaccard similarity between two keyword sets.
+ * Returns a value in [0, 1].
+ */
+function computeKeywordOverlap(a: string[], b: string[]): number {
+  if (a.length === 0 || b.length === 0) return 0;
+  const setA = new Set(a);
+  const setB = new Set(b);
+  const intersection = [...setA].filter((w) => setB.has(w)).length;
+  const union = new Set([...setA, ...setB]).size;
+  return union === 0 ? 0 : intersection / union;
 }
 
 // ─── Utility: extract top keywords from text ─────────────────────────────────

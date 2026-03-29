@@ -423,3 +423,27 @@ export const useAggregateAll = () => {
     },
   });
 };
+
+/**
+ * Fetch the top 1–3 highest-priority themes for the dashboard spotlight panel.
+ * Ranked by CIQ × trend momentum × signal volume.
+ */
+export const useTopPriorityThemes = (limit = 3) => {
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id;
+
+  return useQuery<import('@/lib/api-types').TopPriorityTheme[], Error>({
+    queryKey: [THEME_QUERY_KEY, workspaceId, 'top-priority', limit],
+    queryFn: async () => {
+      if (!workspaceId) throw new Error('Workspace ID is not available');
+      const res = await fetch(`/api/workspaces/${workspaceId}/themes/top-priority?limit=${limit}`, {
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error(`Failed to fetch top-priority themes: ${res.status}`);
+      return res.json();
+    },
+    enabled: !!workspaceId,
+    staleTime: 1000 * 60 * 5,
+  });
+};

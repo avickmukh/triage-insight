@@ -282,8 +282,47 @@ export interface Theme {
   topKeywords?: string[] | null;
   /** Dominant signal phrase: the most common complaint/request pattern in the cluster */
   dominantSignal?: string | null;
+  // ─── Trend + auto-merge + label fields ─────────────────────────────────────────────────────────────────────
+  /** Trend direction: 'UP' | 'STABLE' | 'DOWN' */
+  trendDirection?: 'UP' | 'STABLE' | 'DOWN' | null;
+  /** Percentage change in signal count vs. previous week */
+  trendDelta?: number | null;
+  /** AI-generated short label (≤ 6 words, specific) */
+  shortLabel?: string | null;
+  /** AI-generated impact sentence */
+  impactSentence?: string | null;
+  /** Whether this theme is flagged as an auto-merge candidate */
+  autoMergeCandidate?: boolean;
+  /** The themeId this theme should be merged into */
+  autoMergeTargetId?: string | null;
+  /** Auto-merge similarity score (0–1) */
+  autoMergeSimilarity?: number | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Top-priority theme returned by GET /themes/top-priority */
+export interface TopPriorityTheme {
+  id: string;
+  title: string;
+  shortLabel: string | null;
+  ciqScore: number | null;
+  trendDirection: 'UP' | 'STABLE' | 'DOWN';
+  trendDelta: number;
+  impactSentence: string | null;
+  revenueInfluence: number | null;
+  customerCount: number;
+  totalSignalCount: number;
+  priorityRank: number;
+}
+
+/** Auto-merge suggestion returned by GET /themes/auto-merge/suggestions */
+export interface AutoMergeSuggestion {
+  sourceId: string;
+  sourceTitle: string;
+  targetId: string;
+  targetTitle: string;
+  similarity: number;
 }
 
 export interface ThemeListResponse {
@@ -2214,6 +2253,16 @@ export interface UnifiedTopIssue {
   /** ISO timestamp of last aggregation run */
   lastAggregatedAt?: string | null;
   revenueInfluence?: number | null;
+  /** Trend direction: 'UP' | 'STABLE' | 'DOWN' */
+  trendDirection?: 'UP' | 'STABLE' | 'DOWN' | null;
+  /** Percentage change in signal count vs. previous week */
+  trendDelta?: number | null;
+  /** AI-generated short label (≤ 6 words) */
+  shortLabel?: string | null;
+  /** AI-generated impact sentence */
+  impactSentence?: string | null;
+  /** Number of distinct customers linked to this theme */
+  customerCount?: number;
 }
 
 /** Workspace-level source breakdown summary */

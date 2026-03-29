@@ -17,7 +17,8 @@ import { useTopIssues, useSourceSummary, useAggregateAll } from '@/hooks/use-the
 import { useWorkspace } from '@/hooks/use-workspace';
 import { appRoutes } from '@/lib/routes';
 import { PromoteToRoadmapModal } from '@/components/roadmap/PromoteToRoadmapModal';
-import { UnifiedTopIssue } from '@/lib/api-types';
+import { UnifiedTopIssue, TopPriorityTheme } from '@/lib/api-types';
+import { useTopPriorityThemes } from '@/hooks/use-themes';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const CARD: React.CSSProperties = {
@@ -265,6 +266,36 @@ function UnifiedIssueRow({
             </div>
           )}
 
+          {/* Trend pill + impact sentence */}
+          {(issue.trendDirection || issue.impactSentence) && (
+            <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginBottom: '0.35rem', alignItems: 'center' }}>
+              {issue.trendDirection && (
+                <span
+                  title={`Signal trend: ${issue.trendDelta != null ? (issue.trendDelta >= 0 ? '+' : '') + issue.trendDelta.toFixed(0) + '% vs last week' : 'no trend data'}`}
+                  style={{
+                    fontSize: '0.68rem', fontWeight: 700, padding: '0.1rem 0.4rem', borderRadius: '0.3rem', cursor: 'help',
+                    background: issue.trendDirection === 'UP' ? '#e8f5e9' : issue.trendDirection === 'DOWN' ? '#fdecea' : '#f0f4f8',
+                    color: issue.trendDirection === 'UP' ? '#2e7d32' : issue.trendDirection === 'DOWN' ? '#c62828' : '#6C757D',
+                  }}
+                >
+                  {issue.trendDirection === 'UP' ? '↑' : issue.trendDirection === 'DOWN' ? '↓' : '→'}
+                  {' '}{issue.trendDirection}
+                  {issue.trendDelta != null && ` ${Math.abs(issue.trendDelta).toFixed(0)}%`}
+                </span>
+              )}
+              {issue.customerCount != null && issue.customerCount > 0 && (
+                <span style={{ fontSize: '0.68rem', fontWeight: 600, padding: '0.1rem 0.4rem', borderRadius: '0.3rem', background: '#fce8ff', color: '#7c3aed' }}>
+                  👤 {issue.customerCount} customer{issue.customerCount !== 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+          )}
+          {issue.impactSentence && (
+            <div style={{ fontSize: '0.75rem', color: '#0a2540', fontStyle: 'italic', marginBottom: '0.35rem', padding: '0.3rem 0.5rem', background: '#f0f4f8', borderRadius: '0.3rem', borderLeft: '2px solid #20A4A4' }}>
+              {issue.impactSentence}
+            </div>
+          )}
+
           {/* CIQ score bar */}
           {ciq > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -273,6 +304,67 @@ function UnifiedIssueRow({
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Top Priority Spotlight ──────────────────────────────────────────────────────────────────────
+function TopPrioritySpotlight({ themes, routes }: { themes: TopPriorityTheme[]; routes: ReturnType<typeof appRoutes> }) {
+  if (!themes || themes.length === 0) return null;
+  const rankColors = ['#0a2540', '#20A4A4', '#f57c00'];
+  return (
+    <div style={{ background: 'linear-gradient(135deg, #0a2540 0%, #1a3a5c 100%)', borderRadius: '0.875rem', padding: '1.5rem', boxShadow: '0 4px 16px rgba(10,37,64,0.18)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+        <div>
+          <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#fff', margin: 0 }}>Top Priority — Act Now</h2>
+          <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.65)', margin: '0.2rem 0 0' }}>Ranked by CIQ × trend momentum × signal volume</p>
+        </div>
+        <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', fontStyle: 'italic' }}>Auto-refreshed on re-aggregate</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
+        {themes.map((t, i) => (
+          <Link key={t.id} href={routes.themeItem(t.id)} style={{ textDecoration: 'none' }}>
+            <div style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '0.75rem', padding: '1rem', cursor: 'pointer', transition: 'background 0.15s' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                <span style={{ width: 24, height: 24, borderRadius: '50%', background: rankColors[i] ?? '#6C757D', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                  {t.priorityRank}
+                </span>
+                <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                  {t.shortLabel ?? t.title}
+                </span>
+                <span style={{
+                  fontSize: '0.68rem', fontWeight: 700, padding: '0.1rem 0.35rem', borderRadius: '0.3rem', flexShrink: 0,
+                  background: t.trendDirection === 'UP' ? 'rgba(46,125,50,0.3)' : t.trendDirection === 'DOWN' ? 'rgba(198,40,40,0.3)' : 'rgba(108,117,125,0.3)',
+                  color: t.trendDirection === 'UP' ? '#a5d6a7' : t.trendDirection === 'DOWN' ? '#ef9a9a' : '#ced4da',
+                }}>
+                  {t.trendDirection === 'UP' ? '↑' : t.trendDirection === 'DOWN' ? '↓' : '→'} {t.trendDirection}
+                </span>
+              </div>
+              {t.impactSentence && (
+                <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.75)', margin: '0 0 0.5rem', lineHeight: 1.4, fontStyle: 'italic' }}>
+                  {t.impactSentence}
+                </p>
+              )}
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                {t.ciqScore != null && (
+                  <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '0.1rem 0.4rem', borderRadius: '0.3rem', background: 'rgba(32,164,164,0.25)', color: '#80deea' }}>
+                    CIQ {Math.round(t.ciqScore)}
+                  </span>
+                )}
+                <span style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.55)' }}>{t.totalSignalCount} signals</span>
+                {t.customerCount > 0 && (
+                  <span style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.55)' }}>· {t.customerCount} customers</span>
+                )}
+                {t.revenueInfluence != null && t.revenueInfluence > 0 && (
+                  <span style={{ fontSize: '0.68rem', color: '#ffd54f', fontWeight: 600 }}>
+                    · ${Math.round(t.revenueInfluence / 1000)}K ARR
+                  </span>
+                )}
+              </div>
+            </div>
+          </Link>
+        ))}
       </div>
     </div>
   );
@@ -293,6 +385,7 @@ export default function IntelligencePage() {
   const { data: themeRanking, isLoading: themesLoading } = useCiqThemeRanking(10);
   const { data: topIssues, isLoading: topIssuesLoading } = useTopIssues(15);
   const { data: sourceSummary, isLoading: summaryLoading } = useSourceSummary();
+  const { data: topPriority } = useTopPriorityThemes(3);
   const { mutate: triggerAggregate, isPending: aggregating } = useAggregateAll();
 
   const isLoading = signalsLoading || themesLoading || topIssuesLoading || summaryLoading;
@@ -339,7 +432,12 @@ export default function IntelligencePage() {
       ) : (
         <div style={{ display: 'grid', gap: '1.5rem' }}>
 
-          {/* ── 1. Source Breakdown Summary ── */}
+          {/* ── 0. Top Priority Spotlight ── */}
+          {topPriority && topPriority.length > 0 && (
+            <TopPrioritySpotlight themes={topPriority} routes={routes} />
+          )}
+
+          {/* ── 1. Source Breakdown Summary ── */
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
             {/* Total Signals */}
             <div style={{ ...CARD, borderLeft: '4px solid #0a2540' }}>

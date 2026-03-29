@@ -276,6 +276,46 @@ function ThemeCard({ theme, href }: { theme: Theme; href: string }) {
           </div>
         )}
 
+        {/* Trend + auto-merge row */}
+        {(theme.trendDirection || theme.autoMergeCandidate || theme.shortLabel) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+            {theme.trendDirection && (
+              <span
+                title={`Signal trend: ${theme.trendDelta != null ? (theme.trendDelta >= 0 ? '+' : '') + theme.trendDelta.toFixed(0) + '% vs last week' : 'no data'}`}
+                style={{
+                  fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '999px', cursor: 'help',
+                  background: theme.trendDirection === 'UP' ? '#e8f5e9' : theme.trendDirection === 'DOWN' ? '#fdecea' : '#f0f4f8',
+                  color: theme.trendDirection === 'UP' ? '#2e7d32' : theme.trendDirection === 'DOWN' ? '#c62828' : '#6C757D',
+                }}
+              >
+                {theme.trendDirection === 'UP' ? '↑' : theme.trendDirection === 'DOWN' ? '↓' : '→'}
+                {' '}{theme.trendDirection}
+                {theme.trendDelta != null && ` ${Math.abs(theme.trendDelta).toFixed(0)}%`}
+              </span>
+            )}
+            {theme.autoMergeCandidate && (
+              <span
+                title="This theme may be a duplicate — review auto-merge suggestions"
+                style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '999px', background: '#fff3cd', color: '#b8860b', cursor: 'help' }}
+              >
+                ⚠️ Merge candidate
+              </span>
+            )}
+            {theme.shortLabel && theme.shortLabel !== theme.title && (
+              <span style={{ fontSize: '0.65rem', color: '#6C757D', fontStyle: 'italic' }}>
+                “{theme.shortLabel}”
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Impact sentence */}
+        {theme.impactSentence && (
+          <p style={{ fontSize: '0.78rem', color: '#20A4A4', margin: '0 0 0.5rem', fontStyle: 'italic', borderLeft: '2px solid #20A4A4', paddingLeft: '0.5rem' }}>
+            {theme.impactSentence}
+          </p>
+        )}
+
         {/* AI Summary (preferred) or manual description */}
         {(theme.aiSummary || theme.description) && (
           <p

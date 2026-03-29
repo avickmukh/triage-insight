@@ -356,6 +356,27 @@ const apiClient = {
     /** POST /workspaces/:id/themes/:themeId/aggregate — aggregate a single theme */
     aggregateTheme: (workspaceId: string, themeId: string): Promise<UnifiedTopIssue> =>
       api.post(`/workspaces/${workspaceId}/themes/${themeId}/aggregate`).then(handleResponse),
+    /** GET /workspaces/:id/themes/top-priority — top 1–3 priority themes for dashboard spotlight */
+    getTopPriorityThemes: (workspaceId: string, limit = 3): Promise<import('./api-types').TopPriorityTheme[]> =>
+      api.get(`/workspaces/${workspaceId}/themes/top-priority`, { params: { limit } }).then(handleResponse),
+    /** GET /workspaces/:id/themes/auto-merge/suggestions — themes flagged as auto-merge candidates */
+    getAutoMergeSuggestions: (workspaceId: string): Promise<import('./api-types').AutoMergeSuggestion[]> =>
+      api.get(`/workspaces/${workspaceId}/themes/auto-merge/suggestions`).then(handleResponse),
+    /** POST /workspaces/:id/themes/auto-merge/run — detect and merge duplicate themes */
+    runAutoMerge: (workspaceId: string): Promise<{ merged: number; skipped: number }> =>
+      api.post(`/workspaces/${workspaceId}/themes/auto-merge/run`).then(handleResponse),
+    /** POST /workspaces/:id/themes/:themeId/auto-merge/dismiss — dismiss a merge suggestion */
+    dismissAutoMerge: (workspaceId: string, themeId: string): Promise<{ ok: boolean }> =>
+      api.post(`/workspaces/${workspaceId}/themes/${themeId}/auto-merge/dismiss`).then(handleResponse),
+    /** POST /workspaces/:id/themes/:themeId/generate-label — generate AI short label for a theme */
+    generateLabel: (workspaceId: string, themeId: string): Promise<{ label: string }> =>
+      api.post(`/workspaces/${workspaceId}/themes/${themeId}/generate-label`).then(handleResponse),
+    /** POST /workspaces/:id/themes/generate-labels — batch generate labels for stale themes */
+    generateLabels: (workspaceId: string): Promise<{ processed: number }> =>
+      api.post(`/workspaces/${workspaceId}/themes/generate-labels`).then(handleResponse),
+    /** POST /workspaces/:id/themes/:themeId/generate-insight — generate AI impact sentence */
+    generateInsight: (workspaceId: string, themeId: string): Promise<{ sentence: string | null }> =>
+      api.post(`/workspaces/${workspaceId}/themes/${themeId}/generate-insight`).then(handleResponse),
   },
 
   roadmap: {

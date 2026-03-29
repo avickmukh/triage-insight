@@ -15,6 +15,10 @@ import {
 import { ThemeService } from './services/theme.service';
 import { DealService } from '../deal/deal.service';
 import { UnifiedAggregationService } from './services/unified-aggregation.service';
+import { AutoMergeService } from '../ai/services/auto-merge.service';
+import { ThemeLabelService } from '../ai/services/theme-label.service';
+import { ExplainableInsightsService } from '../ai/services/explainable-insights.service';
+import { TrendComputationService } from '../ai/services/trend-computation.service';
 import { CreateThemeDto } from './dto/create-theme.dto';
 import { UpdateThemeDto } from './dto/update-theme.dto';
 import { QueryThemeDto } from './dto/query-theme.dto';
@@ -48,6 +52,10 @@ export class ThemeController {
     private readonly themeService: ThemeService,
     private readonly dealService: DealService,
     private readonly unifiedAggregationService: UnifiedAggregationService,
+    private readonly autoMergeService: AutoMergeService,
+    private readonly themeLabelService: ThemeLabelService,
+    private readonly explainableInsightsService: ExplainableInsightsService,
+    private readonly trendComputationService: TrendComputationService,
   ) {}
 
   @Post()
@@ -247,5 +255,141 @@ export class ThemeController {
     @Param('customerId') customerId: string,
   ) {
     return this.themeService.unlinkCustomer(workspaceId, id, customerId);
+  }
+
+  /**
+   * POST /workspaces/:workspaceId/themes/:id/generate-label
+   * Generate or refresh the AI short label for a theme.
+   */
+  @Post(':id/generate-label')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  generateLabel(
+    @Param('workspaceId') workspaceId: string,
+    @Param('id') themeId: string,
+  ) {
+    return this.themeLabelService.generateLabel(themeId).then((label) => ({ label }));
+  }
+
+  /**
+   * POST /workspaces/:workspaceId/themes/generate-labels
+   * Batch generate labels for all stale AI_GENERATED themes in the workspace.
+   */
+  @Post('generate-labels')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  generateLabels(@Param('workspaceId') workspaceId: string) {
+    return this.themeLabelService.generateLabelsForWorkspace(workspaceId);
+  }
+
+  /**
+   * GET /workspaces/:workspaceId/themes/top-priority
+   * Returns the top 1–3 highest-priority themes for the dashboard spotlight panel.
+   * Query param: limit (default 3)
+   */
+  @Get('top-priority')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
+  getTopPriority(
+    @Param('workspaceId') workspaceId: string,
+    @Query('limit', new DefaultValuePipe(3), ParseIntPipe) limit: number,
+  ) {
+    return this.unifiedAggregationService.getTopPriorityThemes(workspaceId, limit);
+  }
+
+  /**
+   * GET /workspaces/:workspaceId/themes/auto-merge/suggestions
+   * Returns all themes flagged as auto-merge candidates with their suggested target.
+   */
+  @Get('auto-merge/suggestions')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  getAutoMergeSuggestions(@Param('workspaceId') workspaceId: string) {
+    return this.autoMergeService.getSuggestions(workspaceId);
+  }
+
+  /**
+   * POST /workspaces/:workspaceId/themes/auto-merge/scan
+   * Scan workspace for duplicate themes and flag candidates (or auto-execute).
+   * Body: { autoExecute?: boolean }
+   */
+  @Post('auto-merge/scan')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  scanAutoMerge(
+    @Param('workspaceId') workspaceId: string,
+    @Req() req: AuthenticatedRequest,
+    @Body() body: { autoExecute?: boolean },
+  ) {
+    return this.autoMergeService.detectAndMerge(workspaceId, {
+      autoExecute: body.autoExecute ?? false,
+      userId: req.user.sub,
+    });
+  }
+
+  /**
+   * POST /workspaces/:workspaceId/themes/:id/auto-merge/execute
+   * Execute a specific auto-merge: merge sourceThemeId into :id.
+   * Body: { sourceThemeId: string }
+   */
+  @Post(':id/auto-merge/execute')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  executeAutoMerge(
+    @Param('workspaceId') workspaceId: string,
+    @Req() req: AuthenticatedRequest,
+    @Param('id') targetThemeId: string,
+    @Body() body: { sourceThemeId: string },
+  ) {
+    return this.autoMergeService.executeMerge(
+      workspaceId,
+      targetThemeId,
+      body.sourceThemeId,
+      req.user.sub,
+    );
+  }
+
+  /**
+   * DELETE /workspaces/:workspaceId/themes/:id/auto-merge/dismiss
+   * Dismiss an auto-merge suggestion for a theme (clear the candidate flag).
+   */
+  @Delete(':id/auto-merge/dismiss')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  dismissAutoMerge(
+    @Param('workspaceId') workspaceId: string,
+    @Param('id') themeId: string,
+  ) {
+    return this.themeService.dismissAutoMerge(workspaceId, themeId);
+  }
+
+  /**
+   * POST /workspaces/:workspaceId/themes/:id/generate-insight
+   * Generate (or regenerate) the AI impact sentence for a single theme.
+   */
+  @Post(':id/generate-insight')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  generateInsight(
+    @Param('id') themeId: string,
+  ) {
+    return this.explainableInsightsService.generateImpactSentence(themeId)
+      .then((sentence) => ({ sentence }));
+  }
+
+  /**
+   * POST /workspaces/:workspaceId/themes/generate-insights
+   * Batch generate impact sentences for all themes in the workspace that lack one.
+   */
+  @Post('generate-insights')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  generateInsights(
+    @Param('workspaceId') workspaceId: string,
+  ) {
+    return this.explainableInsightsService.generateInsightsForWorkspace(workspaceId);
+  }
+
+  /**
+   * POST /workspaces/:workspaceId/themes/run-trends
+   * Compute trendDirection + trendDelta for all themes in the workspace.
+   */
+  @Post('run-trends')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  runTrends(
+    @Param('workspaceId') workspaceId: string,
+  ) {
+    return this.trendComputationService.computeTrendsForWorkspace(workspaceId);
   }
 }
