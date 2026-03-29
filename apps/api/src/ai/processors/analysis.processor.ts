@@ -25,6 +25,7 @@ import { AiJobType } from '@prisma/client';
 import { JobLogger } from '../../common/queue/job-logger';
 import { JobIdempotencyService } from '../../common/queue/job-idempotency.service';
 import { handleDlq } from '../../common/queue/dlq-handler';
+import { RetryPolicy } from '../../common/queue/retry-policy';
 
 export const AI_ANALYSIS_QUEUE = 'ai-analysis';
 
@@ -168,14 +169,54 @@ export class AiAnalysisProcessor {
     this.logger.complete({ ...ctx, durationMs });
 
     // ── 7. Increment ImportBatch progress ────────────────────────────────────
-    // Non-critical: if the feedback belongs to a batch, increment completedRows.
-    // This keeps ImportBatch.completedRows in sync so the status endpoint can
-    // report accurate progress without re-counting AiJobLog every poll.
+    // Non-critical: if the feedback belongs to a batch, increment completedRows
+    // and — if all rows are now processed — flip stage to COMPLETED.
+    // This is the authoritative completion signal used by getBatchStatus().
     if (feedback.importBatchId) {
-      this.prisma.importBatch.update({
-        where: { id: feedback.importBatchId },
-        data: { completedRows: { increment: 1 } },
-      }).catch(() => { /* non-critical */ });
+      this.updateBatchProgress(feedback.importBatchId, 'completed').catch(() => { /* non-critical */ });
+    }
+  }
+
+  /**
+   * Atomically increment completedRows (or failedRows) on an ImportBatch and
+   * transition stage → COMPLETED when all rows have been processed.
+   *
+   * Uses a raw SQL UPDATE + RETURNING so we can read the post-increment values
+   * in a single round-trip without a separate SELECT.
+   */
+  private async updateBatchProgress(
+    batchId: string,
+    outcome: 'completed' | 'failed',
+  ): Promise<void> {
+    // Step 1: atomically increment the correct counter
+    if (outcome === 'completed') {
+      await this.prisma.$executeRaw`
+        UPDATE "ImportBatch"
+        SET "completedRows" = "completedRows" + 1, "updatedAt" = NOW()
+        WHERE id = ${batchId}
+      `;
+    } else {
+      await this.prisma.$executeRaw`
+        UPDATE "ImportBatch"
+        SET "failedRows" = "failedRows" + 1, "updatedAt" = NOW()
+        WHERE id = ${batchId}
+      `;
+    }
+
+    // Step 2: read the updated row to check if all rows are processed
+    const batch = await this.prisma.importBatch.findUnique({
+      where: { id: batchId },
+      select: { totalRows: true, completedRows: true, failedRows: true, stage: true },
+    });
+    if (!batch) return;
+
+    const processed = batch.completedRows + batch.failedRows;
+    if (batch.totalRows > 0 && processed >= batch.totalRows && batch.stage !== 'COMPLETED') {
+      // All rows done — flip stage to COMPLETED
+      await this.prisma.importBatch.update({
+        where: { id: batchId },
+        data: { stage: 'COMPLETED', status: 'COMPLETED' },
+      });
     }
   }
 
@@ -188,5 +229,21 @@ export class AiAnalysisProcessor {
       jobId: job.id,
     };
     await handleDlq(job, error, ctx, this.logger, this.idempotencyService);
+
+    // If the job has exhausted all retries, count it as a failed row so the
+    // batch can still reach COMPLETED (all rows accounted for).
+    const maxAttempts = RetryPolicy.maxAttempts();
+    if (job.attemptsMade >= maxAttempts) {
+      const feedbackId = job.data.feedbackId;
+      if (feedbackId) {
+        const fb = await this.prisma.feedback.findUnique({
+          where: { id: feedbackId },
+          select: { importBatchId: true },
+        }).catch(() => null);
+        if (fb?.importBatchId) {
+          this.updateBatchProgress(fb.importBatchId, 'failed').catch(() => { /* non-critical */ });
+        }
+      }
+    }
   }
 }
