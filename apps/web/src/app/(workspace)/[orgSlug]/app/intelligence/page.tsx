@@ -437,7 +437,7 @@ export default function IntelligencePage() {
             <TopPrioritySpotlight themes={topPriority} routes={routes} />
           )}
 
-          {/* ── 1. Source Breakdown Summary ── */
+          {/* ── 1. Source Breakdown Summary ── */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
             {/* Total Signals */}
             <div style={{ ...CARD, borderLeft: '4px solid #0a2540' }}>
