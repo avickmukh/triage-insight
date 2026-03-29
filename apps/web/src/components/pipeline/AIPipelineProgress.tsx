@@ -5,14 +5,14 @@
  *
  * Polls GET /workspaces/:id/feedback/pipeline-status every 3 seconds.
  * While the pipeline is running it renders a full-page blocking overlay
- * with a progress bar and estimated time remaining.
+ * with a progress bar, stage label, and estimated time remaining.
  *
  * Persistence across tab close / re-login:
- *   - On mount, checks localStorage for a "pipelineRunning_<workspaceId>" key.
- *   - If found, immediately shows the overlay and starts polling.
- *   - When the pipeline finishes (isRunning = false), clears the key.
- *   - When a new import triggers the pipeline, callers should call
- *     `markPipelineStarted(workspaceId)` (exported helper) to set the key.
+ *   - On mount, checks Workspace.pipelineStatus (server-side) via the first poll.
+ *   - Also checks localStorage as a fast-path before the first poll resolves.
+ *   - When the pipeline finishes (stage = COMPLETED | FAILED), clears both.
+ *   - Callers should call `markPipelineStarted(workspaceId)` immediately after
+ *     triggering an import to show the overlay without waiting for the first poll.
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -20,6 +20,7 @@ import apiClient from '@/lib/api-client';
 
 export interface PipelineStatus {
   isRunning: boolean;
+  stage: string;
   total: number;
   completed: number;
   failed: number;
@@ -30,6 +31,16 @@ export interface PipelineStatus {
 
 const LS_KEY = (workspaceId: string) => `pipelineRunning_${workspaceId}`;
 const POLL_INTERVAL_MS = 3000;
+
+/** Human-readable label for each pipeline stage. */
+const STAGE_LABELS: Record<string, string> = {
+  IDLE:       'Idle',
+  QUEUED:     'Queued — waiting to start…',
+  ANALYZING:  'Analysing feedback — generating embeddings & summaries…',
+  CLUSTERING: 'Clustering — grouping similar feedback into themes…',
+  COMPLETED:  'Analysis complete',
+  FAILED:     'Some items failed — retrying automatically…',
+};
 
 /** Call this immediately after triggering a CSV import or reprocess. */
 export function markPipelineStarted(workspaceId: string) {
@@ -71,21 +82,23 @@ export function AIPipelineProgress({ workspaceId, onComplete }: Props) {
 
   const poll = useCallback(async () => {
     try {
-      const s = await apiClient.feedback.getPipelineStatus(workspaceId);
+      const s = await apiClient.feedback.getPipelineStatus(workspaceId) as PipelineStatus;
       setStatus(s);
 
-      if (s.isRunning) {
+      const active = s.isRunning || s.stage === 'QUEUED';
+
+      if (active) {
         setVisible(true);
         markPipelineStarted(workspaceId); // refresh the LS timestamp
       } else {
-        // Pipeline finished
+        // Pipeline finished (COMPLETED or FAILED)
         if (visible) {
           // Brief delay so user sees 100%
           setTimeout(() => {
             setVisible(false);
             clearPipelineFlag(workspaceId);
             onCompleteRef.current?.();
-          }, 1200);
+          }, 1800);
         } else {
           clearPipelineFlag(workspaceId);
         }
@@ -101,9 +114,9 @@ export function AIPipelineProgress({ workspaceId, onComplete }: Props) {
   }, [workspaceId, visible]);
 
   useEffect(() => {
-    // On mount: check if a pipeline was running before the tab was closed
-    const shouldShow = hasPipelineFlag(workspaceId);
-    if (shouldShow) {
+    // On mount: show overlay immediately if localStorage flag is set
+    // (fast-path before first poll resolves)
+    if (hasPipelineFlag(workspaceId)) {
       setVisible(true);
     }
 
@@ -120,6 +133,8 @@ export function AIPipelineProgress({ workspaceId, onComplete }: Props) {
   if (!visible || !status) return null;
 
   const pct = status.pct;
+  const stage = status.stage ?? 'QUEUED';
+  const stageLabel = STAGE_LABELS[stage] ?? stage;
   const eta = status.estimatedSecondsLeft;
   const etaLabel =
     eta === null
@@ -128,6 +143,10 @@ export function AIPipelineProgress({ workspaceId, onComplete }: Props) {
       ? `~${eta}s remaining`
       : `~${Math.ceil(eta / 60)}m remaining`;
 
+  // Stage step indicator
+  const STAGES = ['QUEUED', 'ANALYZING', 'CLUSTERING', 'COMPLETED'];
+  const stageIndex = STAGES.indexOf(stage);
+
   return (
     /* Full-page blocking overlay */
     <div
@@ -135,7 +154,7 @@ export function AIPipelineProgress({ workspaceId, onComplete }: Props) {
         position: 'fixed',
         inset: 0,
         zIndex: 9999,
-        background: 'rgba(10, 37, 64, 0.72)',
+        background: 'rgba(10, 37, 64, 0.75)',
         backdropFilter: 'blur(4px)',
         display: 'flex',
         alignItems: 'center',
@@ -149,7 +168,7 @@ export function AIPipelineProgress({ workspaceId, onComplete }: Props) {
           background: '#fff',
           borderRadius: '1rem',
           padding: '2.5rem 3rem',
-          maxWidth: '480px',
+          maxWidth: '520px',
           width: '90%',
           boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
           textAlign: 'center',
@@ -164,14 +183,7 @@ export function AIPipelineProgress({ workspaceId, onComplete }: Props) {
             style={{ animation: 'spin 1.2s linear infinite', display: 'inline-block' }}
           >
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-            <circle
-              cx="24"
-              cy="24"
-              r="20"
-              fill="none"
-              stroke="#e9ecef"
-              strokeWidth="4"
-            />
+            <circle cx="24" cy="24" r="20" fill="none" stroke="#e9ecef" strokeWidth="4" />
             <path
               d="M24 4 a20 20 0 0 1 20 20"
               fill="none"
@@ -182,15 +194,37 @@ export function AIPipelineProgress({ workspaceId, onComplete }: Props) {
           </svg>
         </div>
 
-        <h2 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0a2540', margin: '0 0 0.4rem' }}>
+        <h2 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0a2540', margin: '0 0 0.35rem' }}>
           AI Pipeline Running
         </h2>
-        <p style={{ fontSize: '0.875rem', color: '#6C757D', margin: '0 0 1.5rem' }}>
-          Analysing feedback — generating embeddings, detecting themes, and computing CIQ scores.
-          {status.total > 0 && (
-            <> Processing <strong>{status.completed}</strong> of <strong>{status.total}</strong> items.</>
-          )}
+
+        {/* Current stage label */}
+        <p style={{ fontSize: '0.875rem', color: '#1a73e8', fontWeight: 600, margin: '0 0 0.5rem' }}>
+          {stageLabel}
         </p>
+
+        <p style={{ fontSize: '0.85rem', color: '#6C757D', margin: '0 0 1.5rem' }}>
+          {status.total > 0
+            ? <>Processing <strong>{status.completed}</strong> of <strong>{status.total}</strong> items.</>
+            : 'Preparing to process your feedback…'}
+        </p>
+
+        {/* Stage step dots */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginBottom: '1.25rem' }}>
+          {STAGES.slice(0, 3).map((s, i) => (
+            <div
+              key={s}
+              title={s}
+              style={{
+                width: '10px',
+                height: '10px',
+                borderRadius: '50%',
+                background: i <= stageIndex ? '#20A4A4' : '#e9ecef',
+                transition: 'background 0.4s ease',
+              }}
+            />
+          ))}
+        </div>
 
         {/* Progress bar */}
         <div
@@ -227,7 +261,7 @@ export function AIPipelineProgress({ workspaceId, onComplete }: Props) {
 
         {status.failed > 0 && (
           <p style={{ fontSize: '0.75rem', color: '#c62828', marginTop: '0.75rem' }}>
-            {status.failed} item{status.failed > 1 ? 's' : ''} failed — they will be retried automatically.
+            {status.failed} item{status.failed > 1 ? 's' : ''} failed — retrying automatically.
           </p>
         )}
 

@@ -316,6 +316,7 @@ const apiClient = {
       workspaceId: string
     ): Promise<{
       isRunning: boolean;
+      stage: string;
       total: number;
       completed: number;
       failed: number;

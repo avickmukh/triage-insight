@@ -562,10 +562,14 @@ export class FeedbackService {
   /**
    * Returns a snapshot of the current AI pipeline state for the workspace.
    * The frontend polls this every 3 seconds to show a blocking progress bar.
-   * Because the state is persisted in AiJobLog, it survives tab close/re-login.
+   * Stage is derived from running AiJobLog job types and persisted to Workspace.pipelineStatus
+   * so it survives tab close / re-login.
+   *
+   * Stages: IDLE → QUEUED → ANALYZING → CLUSTERING → COMPLETED | FAILED
    */
   async getPipelineStatus(workspaceId: string): Promise<{
     isRunning: boolean;
+    stage: string;
     total: number;
     completed: number;
     failed: number;
@@ -576,7 +580,7 @@ export class FeedbackService {
     // Scope to jobs created in the last 24 hours to capture the current batch
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    const [total, completed, failed, pending] = await Promise.all([
+    const [total, completed, failed, pending, runningJobs, workspace] = await Promise.all([
       this.prisma.aiJobLog.count({
         where: { workspaceId, createdAt: { gte: since } },
       }),
@@ -589,10 +593,42 @@ export class FeedbackService {
       this.prisma.aiJobLog.count({
         where: { workspaceId, status: { in: ['QUEUED', 'RUNNING'] }, createdAt: { gte: since } },
       }),
+      this.prisma.aiJobLog.findMany({
+        where: { workspaceId, status: 'RUNNING', createdAt: { gte: since } },
+        select: { jobType: true },
+        take: 5,
+      }),
+      this.prisma.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { pipelineStatus: true },
+      }),
     ]);
 
     const isRunning = pending > 0;
     const pct = total === 0 ? 100 : Math.round(((completed + failed) / total) * 100);
+
+    // Derive human-readable stage from running job types
+    let stage = workspace?.pipelineStatus ?? 'IDLE';
+    if (isRunning) {
+      const runningTypes = runningJobs.map((j) => String(j.jobType));
+      if (runningTypes.includes('THEME_CLUSTERING')) {
+        stage = 'CLUSTERING';
+      } else if (runningTypes.includes('FEEDBACK_SUMMARY')) {
+        stage = 'ANALYZING';
+      } else {
+        stage = 'QUEUED';
+      }
+    } else if (total > 0 && pending === 0) {
+      stage = failed > 0 && completed === 0 ? 'FAILED' : 'COMPLETED';
+    }
+
+    // Persist stage back to workspace so it survives tab close / re-login
+    if (stage !== (workspace?.pipelineStatus ?? 'IDLE')) {
+      this.prisma.workspace.update({
+        where: { id: workspaceId },
+        data: { pipelineStatus: stage, pipelineUpdatedAt: new Date() },
+      }).catch(() => { /* non-critical */ });
+    }
 
     // Estimate seconds remaining based on average completed job duration
     let estimatedSecondsLeft: number | null = null;
@@ -610,6 +646,17 @@ export class FeedbackService {
       estimatedSecondsLeft = Math.ceil((pending * avgMs) / 1000);
     }
 
-    return { isRunning, total, completed, failed, pending, pct, estimatedSecondsLeft };
+    return { isRunning, stage, total, completed, failed, pending, pct, estimatedSecondsLeft };
+  }
+
+  /**
+   * Mark the workspace pipeline as QUEUED immediately after a CSV import or reprocess trigger.
+   * This ensures the frontend shows the loader without waiting for the first poll cycle.
+   */
+  async markPipelineStarted(workspaceId: string): Promise<void> {
+    await this.prisma.workspace.update({
+      where: { id: workspaceId },
+      data: { pipelineStatus: 'QUEUED', pipelineUpdatedAt: new Date() },
+    }).catch(() => { /* non-critical */ });
   }
 }

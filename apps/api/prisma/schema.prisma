@@ -376,6 +376,10 @@ model Workspace {
   /// Timestamp of the last verification attempt
   domainLastCheckedAt      DateTime?
 
+  /// AI pipeline processing status for this workspace (updated by the analysis processor)
+  pipelineStatus        String?                @default("IDLE")
+  pipelineUpdatedAt     DateTime?
+
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
 
