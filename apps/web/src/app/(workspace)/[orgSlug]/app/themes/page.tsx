@@ -249,6 +249,33 @@ function ThemeCard({ theme, href }: { theme: Theme; href: string }) {
           <ConfidenceBadge confidence={theme.aiConfidence} />
         </div>
 
+        {/* Cluster confidence + outlier row */}
+        {(theme.clusterConfidence != null || (theme.outlierCount != null && theme.outlierCount > 0)) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+            {theme.clusterConfidence != null && (
+              <span
+                title={`Cluster confidence: ${Math.round(theme.clusterConfidence)}% — based on semantic similarity, size, and variance`}
+                style={{
+                  fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.04em',
+                  padding: '0.15rem 0.5rem', borderRadius: '999px', cursor: 'help',
+                  background: theme.clusterConfidence >= 70 ? '#e8f5e9' : theme.clusterConfidence >= 40 ? '#fff8e1' : '#fdecea',
+                  color: theme.clusterConfidence >= 70 ? '#2e7d32' : theme.clusterConfidence >= 40 ? '#b8860b' : '#c62828',
+                }}
+              >
+                {theme.status === 'AI_GENERATED' ? 'AI Generated • ' : ''}Confidence: {Math.round(theme.clusterConfidence)}%
+              </span>
+            )}
+            {theme.outlierCount != null && theme.outlierCount > 0 && (
+              <span
+                title={`${theme.outlierCount} item${theme.outlierCount !== 1 ? 's' : ''} may not belong here — similarity below threshold`}
+                style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '999px', background: '#fff7ed', color: '#9a3412', cursor: 'help' }}
+              >
+                ⚠ {theme.outlierCount} outlier{theme.outlierCount !== 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+        )}
+
         {/* AI Summary (preferred) or manual description */}
         {(theme.aiSummary || theme.description) && (
           <p

@@ -669,6 +669,86 @@ export default function ThemeDetailPage() {
         </div>
       )}
 
+      {/* ── Cluster Confidence + “Why This Theme Exists” Panel ── */}
+      <div style={{ ...CARD, background: 'linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)', border: '1px solid #bbf7d0' }}>
+        {/* Header row */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ fontSize: '1rem' }}>🔍</span>
+            <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#15803d', margin: 0 }}>Why This Theme Exists</h2>
+          </div>
+          {/* Cluster confidence badge */}
+          {theme.clusterConfidence != null && (
+            <span
+              title={`Cluster confidence: ${Math.round(theme.clusterConfidence)}% — based on semantic similarity, cluster size, and variance`}
+              style={{
+                fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.04em',
+                padding: '0.2rem 0.6rem', borderRadius: '999px', cursor: 'help',
+                background: theme.clusterConfidence >= 70 ? '#e8f5e9' : theme.clusterConfidence >= 40 ? '#fff8e1' : '#fdecea',
+                color: theme.clusterConfidence >= 70 ? '#2e7d32' : theme.clusterConfidence >= 40 ? '#b8860b' : '#c62828',
+              }}
+            >
+              {theme.status === 'AI_GENERATED' ? 'AI Generated • ' : ''}
+              Confidence: {Math.round(theme.clusterConfidence)}%
+            </span>
+          )}
+        </div>
+
+        {/* Low confidence warning */}
+        {theme.clusterConfidence != null && theme.clusterConfidence < 40 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.75rem', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '0.5rem', marginBottom: '0.875rem' }}>
+            <span style={{ fontSize: '0.9rem' }}>⚠️</span>
+            <span style={{ fontSize: '0.8rem', color: '#92400e', fontWeight: 600 }}>Mixed signals detected — this cluster has low semantic coherence. Consider reviewing or splitting the theme.</span>
+          </div>
+        )}
+
+        {/* Outlier warning */}
+        {theme.outlierCount != null && theme.outlierCount > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.75rem', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '0.5rem', marginBottom: '0.875rem' }}>
+            <span style={{ fontSize: '0.9rem' }}>📍</span>
+            <span style={{ fontSize: '0.8rem', color: '#9a3412', fontWeight: 600 }}>{theme.outlierCount} item{theme.outlierCount !== 1 ? 's' : ''} may not belong here — similarity below threshold.</span>
+          </div>
+        )}
+
+        {/* Dominant signal */}
+        {theme.dominantSignal && (
+          <div style={{ marginBottom: '0.875rem' }}>
+            <p style={{ fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.08em', color: '#15803d', textTransform: 'uppercase', margin: '0 0 0.3rem' }}>Dominant signal</p>
+            <p style={{ fontSize: '0.875rem', color: '#1e293b', margin: 0, fontStyle: 'italic' }}>“{theme.dominantSignal}”</p>
+          </div>
+        )}
+
+        {/* Top keywords */}
+        {theme.topKeywords && theme.topKeywords.length > 0 && (
+          <div style={{ marginBottom: '0.875rem' }}>
+            <p style={{ fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.08em', color: '#15803d', textTransform: 'uppercase', margin: '0 0 0.4rem' }}>Key phrases</p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+              {theme.topKeywords.map((kw) => (
+                <span key={kw} style={{ padding: '0.15rem 0.5rem', background: '#dcfce7', color: '#166534', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 600 }}>{kw}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Confidence factors breakdown */}
+        {theme.confidenceFactors && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', marginTop: '0.5rem' }}>
+            <div style={{ background: '#fff', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', border: '1px solid #bbf7d0', textAlign: 'center' }}>
+              <div style={{ fontSize: '0.65rem', color: '#6C757D', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.2rem' }}>Avg Similarity</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#15803d' }}>{Math.round(theme.confidenceFactors.avgSimilarity * 100)}%</div>
+            </div>
+            <div style={{ background: '#fff', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', border: '1px solid #bbf7d0', textAlign: 'center' }}>
+              <div style={{ fontSize: '0.65rem', color: '#6C757D', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.2rem' }}>Cluster Size</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#15803d' }}>{theme.confidenceFactors.size}</div>
+            </div>
+            <div style={{ background: '#fff', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', border: '1px solid #bbf7d0', textAlign: 'center' }}>
+              <div style={{ fontSize: '0.65rem', color: '#6C757D', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.2rem' }}>Variance</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 700, color: theme.confidenceFactors.variance < 0.05 ? '#15803d' : theme.confidenceFactors.variance < 0.12 ? '#b8860b' : '#c62828' }}>{theme.confidenceFactors.variance.toFixed(3)}</div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* ── AI Intelligence Panel ── */}
       <div
         style={{

@@ -822,6 +822,17 @@ model Theme {
   lastAggregatedAt  DateTime?
   /// AI-generated cross-source insight sentence (e.g. "rising across support and voice +32%")
   crossSourceInsight String?
+  // ─── Cluster confidence + explainability fields ──────────────────────────
+  /// Cluster confidence score 0–100: derived from avgSimilarity, cluster size, and variance
+  clusterConfidence  Float?   @default(0)
+  /// JSON factors used to compute clusterConfidence: { avgSimilarity, size, variance }
+  confidenceFactors  Json?
+  /// Count of feedback items with similarity < 0.75 (potential outliers)
+  outlierCount       Int?     @default(0)
+  /// Top keywords extracted from cluster feedback titles (JSON array of strings)
+  topKeywords        Json?
+  /// Dominant signal phrase: the most common complaint/request pattern in the cluster
+  dominantSignal     String?
 
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt

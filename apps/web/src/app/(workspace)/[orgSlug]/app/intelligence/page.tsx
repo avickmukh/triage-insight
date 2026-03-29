@@ -239,6 +239,32 @@ function UnifiedIssueRow({
             </div>
           )}
 
+          {/* Cluster confidence + outlier */}
+          {(issue.clusterConfidence != null || (issue.outlierCount != null && issue.outlierCount > 0)) && (
+            <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginBottom: '0.3rem', alignItems: 'center' }}>
+              {issue.clusterConfidence != null && (
+                <span
+                  title={`Cluster confidence: ${Math.round(issue.clusterConfidence)}% — based on semantic similarity, size, and variance`}
+                  style={{
+                    fontSize: '0.68rem', fontWeight: 700, padding: '0.1rem 0.4rem', borderRadius: '0.3rem', cursor: 'help',
+                    background: issue.clusterConfidence >= 70 ? '#e8f5e9' : issue.clusterConfidence >= 40 ? '#fff8e1' : '#fdecea',
+                    color: issue.clusterConfidence >= 70 ? '#2e7d32' : issue.clusterConfidence >= 40 ? '#b8860b' : '#c62828',
+                  }}
+                >
+                  🔍 Confidence: {Math.round(issue.clusterConfidence)}%
+                </span>
+              )}
+              {issue.outlierCount != null && issue.outlierCount > 0 && (
+                <span
+                  title={`${issue.outlierCount} item${issue.outlierCount !== 1 ? 's' : ''} may not belong here`}
+                  style={{ fontSize: '0.68rem', fontWeight: 700, padding: '0.1rem 0.4rem', borderRadius: '0.3rem', background: '#fff7ed', color: '#9a3412', cursor: 'help' }}
+                >
+                  ⚠ {issue.outlierCount} outlier{issue.outlierCount !== 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+          )}
+
           {/* CIQ score bar */}
           {ciq > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

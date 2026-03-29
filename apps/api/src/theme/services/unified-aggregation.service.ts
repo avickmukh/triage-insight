@@ -181,6 +181,8 @@ export class UnifiedAggregationService {
       voiceCount: number;
       supportCount: number;
       surveyCount: number;
+      clusterConfidence: number | null;
+      outlierCount: number | null;
       sentimentDistribution: { positive: number; neutral: number; negative: number } | null;
       crossSourceInsight: string | null;
       aiRecommendation: string | null;
@@ -199,6 +201,8 @@ export class UnifiedAggregationService {
         voiceCount: number | null;
         supportCount: number | null;
         surveyCount: number | null;
+        clusterConfidence: number | null;
+        outlierCount: number | null;
         sentimentDistribution: string | null;
         crossSourceInsight: string | null;
         aiRecommendation: string | null;
@@ -216,6 +220,8 @@ export class UnifiedAggregationService {
         "voiceCount",
         "supportCount",
         "surveyCount",
+        "clusterConfidence",
+        "outlierCount",
         "sentimentDistribution",
         "crossSourceInsight",
         "aiRecommendation",
@@ -239,6 +245,8 @@ export class UnifiedAggregationService {
       voiceCount: Number(r.voiceCount ?? 0),
       supportCount: Number(r.supportCount ?? 0),
       surveyCount: Number(r.surveyCount ?? 0),
+      clusterConfidence: r.clusterConfidence != null ? Number(r.clusterConfidence) : null,
+      outlierCount: r.outlierCount != null ? Number(r.outlierCount) : 0,
       sentimentDistribution: r.sentimentDistribution
         ? (typeof r.sentimentDistribution === 'string'
             ? JSON.parse(r.sentimentDistribution)

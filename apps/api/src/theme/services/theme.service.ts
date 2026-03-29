@@ -124,12 +124,18 @@ export class ThemeService {
       priorityScore: theme.priorityScore,
       revenueInfluence: theme.revenueInfluence,
       signalBreakdown: theme.signalBreakdown,
-      // ── Stage-2 AI Narration ───────────────────────────────────────────
+      // ── Stage-2 AI Narration ───────────────────────────────────────────────────────────────────────
       aiSummary: theme.aiSummary,
       aiExplanation: theme.aiExplanation,
       aiRecommendation: theme.aiRecommendation,
       aiConfidence: theme.aiConfidence,
       aiNarratedAt: theme.aiNarratedAt,
+      // ── Cluster confidence + explainability ───────────────────────────────────────────────────────
+      clusterConfidence: theme.clusterConfidence,
+      confidenceFactors: theme.confidenceFactors,
+      outlierCount: theme.outlierCount,
+      topKeywords: theme.topKeywords,
+      dominantSignal: theme.dominantSignal,
       createdAt: theme.createdAt,
       updatedAt: theme.updatedAt,
       feedbackCount: theme._count.feedbacks,

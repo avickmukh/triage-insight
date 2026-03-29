@@ -271,6 +271,17 @@ export interface Theme {
   aiConfidence?: number | null;
   /** Timestamp of the last successful AI narration run */
   aiNarratedAt?: string | null;
+  // ─── Cluster confidence + explainability fields ───────────────────────────
+  /** Cluster confidence score 0–100: derived from avgSimilarity, size, and variance */
+  clusterConfidence?: number | null;
+  /** JSON: { avgSimilarity, size, variance } — factors used to compute clusterConfidence */
+  confidenceFactors?: { avgSimilarity: number; size: number; variance: number } | null;
+  /** Count of feedback items with similarity < 0.75 (potential outliers) */
+  outlierCount?: number | null;
+  /** Top keywords extracted from cluster feedback titles */
+  topKeywords?: string[] | null;
+  /** Dominant signal phrase: the most common complaint/request pattern in the cluster */
+  dominantSignal?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -2188,6 +2199,10 @@ export interface UnifiedTopIssue {
   supportCount: number;
   voiceCount: number;
   surveyCount: number;
+  /** Cluster confidence score 0–100 */
+  clusterConfidence?: number | null;
+  /** Count of potential outlier feedback items (similarity < 0.75) */
+  outlierCount?: number | null;
   sentimentDistribution: SentimentDistribution;
   /** CIQ priority score 0–100 */
   priorityScore?: number | null;

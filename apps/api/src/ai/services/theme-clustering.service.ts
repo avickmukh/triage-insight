@@ -19,6 +19,16 @@ import { CIQ_SCORING_QUEUE } from '../processors/ciq-scoring.processor';
  *
  * Tenant isolation is enforced by scoping all queries to `workspaceId`.
  * Clustering is async via BullMQ (see ThemeClusteringProcessor).
+ *
+ * Confidence scoring (PRD Part 1):
+ *   After each assignment, the theme's clusterConfidence (0–100) is recomputed
+ *   from three factors:
+ *     - avgSimilarity: mean cosine similarity of all AI-assigned feedback
+ *     - size:          number of feedback items (more data → higher confidence)
+ *     - variance:      std-dev of similarity scores (low variance → higher confidence)
+ *
+ *   outlierCount is also updated: feedback with similarity < OUTLIER_THRESHOLD
+ *   is counted but kept in the cluster (removal is a manual editorial decision).
  */
 @Injectable()
 export class ThemeClusteringService {
@@ -26,6 +36,9 @@ export class ThemeClusteringService {
 
   /** Cosine similarity threshold (0–1) required to link to an existing theme. */
   private readonly SIMILARITY_THRESHOLD = 0.8;
+
+  /** Similarity below this value marks a feedback item as a potential outlier. */
+  private readonly OUTLIER_THRESHOLD = 0.75;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -124,6 +137,10 @@ export class ThemeClusteringService {
       this.logger.log(
         `Assigned feedback ${feedbackId} to theme ${themeId} (similarity=${similarThemes[0].similarity.toFixed(3)})`,
       );
+
+      // Recompute cluster confidence after adding new feedback
+      await this.recomputeClusterConfidence(themeId, feedback.title);
+
       // Re-score the existing theme so the new feedback signal is reflected immediately
       try {
         await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId });
@@ -208,6 +225,12 @@ export class ThemeClusteringService {
         // AI_GENERATED is the default — no manual activation required.
         // The theme participates in CIQ, dashboard, and rankings immediately.
         status: 'AI_GENERATED',
+        // Seed confidence: single-item cluster has low confidence by definition
+        clusterConfidence: 10,
+        confidenceFactors: { avgSimilarity: 1.0, size: 1, variance: 0 },
+        outlierCount: 0,
+        topKeywords: extractKeywords(feedbackTitle),
+        dominantSignal: feedbackTitle.length > 120 ? `${feedbackTitle.slice(0, 117)}…` : feedbackTitle,
         feedbacks: {
           create: { feedbackId, assignedBy: 'ai', confidence: 1.0 },
         },
@@ -238,4 +261,117 @@ export class ThemeClusteringService {
 
     return theme.id;
   }
+
+  /**
+   * Recompute and persist the cluster confidence for a theme.
+   *
+   * Confidence formula (0–100):
+   *   - avgSimilarityScore: mean cosine similarity of AI-assigned feedback (weight 0.5)
+   *   - sizeScore:          log-normalised cluster size, capped at 50 items (weight 0.3)
+   *   - varianceScore:      inverted std-dev of similarities (weight 0.2)
+   *
+   * Also updates outlierCount (feedback with similarity < OUTLIER_THRESHOLD).
+   * Also extracts topKeywords and dominantSignal from feedback titles.
+   *
+   * Safe to call fire-and-forget — errors are caught and logged.
+   */
+  private async recomputeClusterConfidence(themeId: string, newFeedbackTitle?: string): Promise<void> {
+    try {
+      // Load all AI-assigned feedback with their similarity scores
+      const links = await this.prisma.themeFeedback.findMany({
+        where: { themeId, assignedBy: 'ai', confidence: { not: null } },
+        select: { confidence: true },
+      });
+
+      const similarities = links.map((l) => l.confidence as number);
+      const size = similarities.length;
+
+      if (size === 0) return;
+
+      const avgSimilarity = similarities.reduce((s, v) => s + v, 0) / size;
+
+      // Variance (std-dev)
+      const variance =
+        size > 1
+          ? Math.sqrt(
+              similarities.reduce((s, v) => s + (v - avgSimilarity) ** 2, 0) / size,
+            )
+          : 0;
+
+      // Outlier count
+      const outlierCount = similarities.filter((s) => s < this.OUTLIER_THRESHOLD).length;
+
+      // Compute confidence score (0–100)
+      const avgSimilarityScore = Math.min(100, avgSimilarity * 100);
+      const sizeScore = Math.min(100, (Math.log10(Math.max(1, size)) / Math.log10(50)) * 100);
+      const varianceScore = Math.max(0, 100 - variance * 500); // variance 0 → 100, variance 0.2 → 0
+
+      const clusterConfidence = parseFloat(
+        (avgSimilarityScore * 0.5 + sizeScore * 0.3 + varianceScore * 0.2).toFixed(1),
+      );
+
+      // Extract keywords and dominant signal from all feedback titles in the cluster
+      const allLinks = await this.prisma.themeFeedback.findMany({
+        where: { themeId },
+        select: { feedback: { select: { title: true } } },
+        take: 100,
+      });
+      const titles = allLinks.map((l) => l.feedback.title);
+      const topKeywords = extractKeywords(titles.join(' '));
+      const dominantSignal = titles[0]
+        ? titles[0].length > 120 ? `${titles[0].slice(0, 117)}…` : titles[0]
+        : null;
+
+      await this.prisma.theme.update({
+        where: { id: themeId },
+        data: {
+          clusterConfidence,
+          confidenceFactors: { avgSimilarity: parseFloat(avgSimilarity.toFixed(3)), size, variance: parseFloat(variance.toFixed(3)) },
+          outlierCount,
+          topKeywords,
+          dominantSignal,
+        },
+      });
+
+      this.logger.debug(
+        `[Confidence] Theme ${themeId}: score=${clusterConfidence}, size=${size}, avgSim=${avgSimilarity.toFixed(3)}, variance=${variance.toFixed(3)}, outliers=${outlierCount}`,
+      );
+    } catch (err) {
+      this.logger.warn(`[Confidence] Failed to recompute for theme ${themeId}: ${(err as Error).message}`);
+    }
+  }
+}
+
+// ─── Utility: extract top keywords from text ─────────────────────────────────
+
+const STOP_WORDS = new Set([
+  'a','an','the','and','or','but','in','on','at','to','for','of','with','by',
+  'from','is','are','was','were','be','been','being','have','has','had','do',
+  'does','did','will','would','could','should','may','might','can','this','that',
+  'these','those','i','we','you','he','she','it','they','my','our','your','his',
+  'her','its','their','not','no','so','if','as','up','out','about','into','than',
+  'then','when','where','who','which','what','how','all','any','each','every',
+  'some','such','more','most','other','also','just','only','very','too','now',
+]);
+
+/**
+ * Extract the top 8 keywords from a text string.
+ * Returns a JSON-serialisable string array.
+ */
+function extractKeywords(text: string): string[] {
+  const words = text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length > 3 && !STOP_WORDS.has(w));
+
+  const freq: Record<string, number> = {};
+  for (const w of words) {
+    freq[w] = (freq[w] ?? 0) + 1;
+  }
+
+  return Object.entries(freq)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([w]) => w);
 }
