@@ -1,82 +1,202 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# docker-compose.production.yml
+# docker-compose.production.yml  —  Single-box production stack
 #
-# Used on the AWS Lightsail instance (or any Docker host) to run:
-#   • api     — NestJS REST API (runs DB migrations on startup)
-#   • worker  — BullMQ background job processor
-#   • web     — Next.js SSR frontend
+# All services run on ONE Lightsail instance (4 GB / 2 vCPU recommended).
+# Target budget: ~$20–25/month total (instance + ECR + CloudFront).
 #
-# PostgreSQL and Redis are NOT included here — use:
-#   • Lightsail Managed Database (PostgreSQL 16 + pgvector)
-#   • Lightsail Managed Redis Cache
-#
-# All secrets are injected via the .env.production file (never committed).
-# See infra/lightsail/env.production.template for the required variables.
+# Services:
+#   nginx    — reverse proxy, routes web/* and /api/* traffic
+#   web      — Next.js SSR frontend  (port 3001, internal only)
+#   api      — NestJS REST API       (port 3000, internal only)
+#   worker   — BullMQ job processor  (no exposed port)
+#   postgres — PostgreSQL 16 with pgvector (port 5432, internal only)
+#   redis    — Redis 7               (port 6379, internal only)
+#   migrate  — one-shot Prisma migration runner (exits after success)
 #
 # Usage:
-#   docker-compose -f docker-compose.production.yml up -d
+#   REGISTRY=<ecr-uri> IMAGE_TAG=<sha> docker-compose -f docker-compose.production.yml up -d
+#
+# Secrets:
+#   All env vars come from .env.production (never committed to git).
+#   See infra/lightsail/env.production.template for the full list.
 # ─────────────────────────────────────────────────────────────────────────────
 version: "3.8"
 
 services:
-  # ── Database migration (one-shot, exits after success) ────────────────────
+
+  # ── PostgreSQL 16 + pgvector ──────────────────────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: triage-postgres
+    environment:
+      POSTGRES_USER:     ${POSTGRES_USER:-triage}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB:       ${POSTGRES_DB:-triageinsight}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # Bind only to the internal Docker network — never expose to host
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-triage} -d ${POSTGRES_DB:-triageinsight}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Redis 7 ───────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: triage-redis
+    command: >
+      redis-server
+      --save 60 1
+      --loglevel warning
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  # ── DB Migration (one-shot) ───────────────────────────────────────────────
   migrate:
     image: ${REGISTRY}/triage-insight-api:${IMAGE_TAG:-latest}
+    container_name: triage-migrate
     command: >
       sh -c "node node_modules/.bin/prisma migrate deploy
              --schema=apps/api/prisma/schema.prisma"
     env_file: .env.production
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-triage}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-triageinsight}?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: "no"
 
   # ── NestJS API ────────────────────────────────────────────────────────────
   api:
     image: ${REGISTRY}/triage-insight-api:${IMAGE_TAG:-latest}
-    # Override CMD to skip the migration step (migrate service handles it)
+    container_name: triage-api
     command: node apps/api/dist/main.js
     env_file: .env.production
     environment:
-      NODE_ENV: production
-      PORT: 3000
-    ports:
-      - "3000:3000"
+      NODE_ENV:     production
+      PORT:         3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-triage}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-triageinsight}?schema=public
+      REDIS_HOST:   redis
+      REDIS_PORT:   6379
+    expose:
+      - "3000"
     depends_on:
       migrate:
         condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 20s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
 
   # ── BullMQ Worker ─────────────────────────────────────────────────────────
   worker:
     image: ${REGISTRY}/triage-insight-worker:${IMAGE_TAG:-latest}
+    container_name: triage-worker
     env_file: .env.production
     environment:
-      NODE_ENV: production
+      NODE_ENV:     production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-triage}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-triageinsight}?schema=public
+      REDIS_HOST:   redis
+      REDIS_PORT:   6379
     depends_on:
       migrate:
         condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
 
   # ── Next.js Web ───────────────────────────────────────────────────────────
   web:
     image: ${REGISTRY}/triage-insight-web:${IMAGE_TAG:-latest}
+    container_name: triage-web
     env_file: .env.production
     environment:
       NODE_ENV: production
-      PORT: 3001
+      PORT:     3001
       HOSTNAME: "0.0.0.0"
-    ports:
-      - "3001:3001"
+    expose:
+      - "3001"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3001/"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 30s
+      retries: 5
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Nginx reverse proxy ───────────────────────────────────────────────────
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: triage-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./infra/lightsail/nginx-docker.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api
+      - web
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ── Named volumes (persisted on the host) ─────────────────────────────────────
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local

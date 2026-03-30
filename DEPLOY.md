@@ -1,20 +1,12 @@
-# Deploying Triage-Insight to AWS
+# Deploying Triage-Insight to AWS on a Budget ($25/month)
 
-This guide provides a complete walkthrough for deploying the Triage-Insight monorepo to a scalable, production-ready AWS environment. The architecture is designed for a balance of cost-effectiveness and performance, leveraging AWS Lightsail for the backend and CloudFront for global content delivery.
+This guide provides a complete walkthrough for deploying the Triage-Insight monorepo to a cost-effective, single-box AWS environment. The architecture is designed to fit within a strict **$25/month budget**, making it ideal for pilots, demos, or small-scale production use.
 
-## Architecture Overview
+## Architecture: The All-in-One Lightsail Box
 
-The deployment architecture consists of two main parts:
+To meet the budget, all services run on a **single AWS Lightsail instance** orchestrated with Docker Compose. This includes the application services (web, API, worker) and the stateful services (PostgreSQL, Redis), which are self-hosted in containers.
 
-1.  **Web Frontend:** The Next.js web application is served by a Node.js container running on **AWS Lightsail**. This is necessary because the app uses Next.js middleware for authentication, which prevents a pure static export to S3.
-
-2.  **Backend Services:** The backend runs on a single **AWS Lightsail** instance, orchestrated with Docker Compose. This includes:
-    *   **NestJS API:** The main REST API.
-    *   **BullMQ Worker:** A dedicated container for processing background jobs.
-    *   **PostgreSQL:** A **Lightsail Managed Database** with the `pgvector` extension.
-    *   **Redis:** A **Lightsail Managed Redis Cache** for the BullMQ queues.
-
-**AWS CloudFront** sits in front of everything, acting as the single entry point. It routes traffic to the web and API containers and provides SSL termination, caching for static assets, and a global content delivery network (CDN).
+**AWS CloudFront** sits in front, providing a global CDN, SSL termination, and caching for static assets. **AWS ECR** is used for storing the Docker images built by the CI/CD pipeline.
 
 ```mermaid
 graph TD
@@ -26,175 +18,152 @@ graph TD
         CDN[CloudFront Distribution]
     end
 
-    subgraph "AWS Lightsail"
-        subgraph "Lightsail Instance (Docker Host)"
-            Nginx[Nginx Reverse Proxy]
-            subgraph Docker
+    subgraph "AWS Lightsail ($20/mo Instance)"
+        subgraph "Docker Host (Ubuntu 22.04)"
+            subgraph "Docker Compose"
+                Nginx[Nginx Container]
                 Web[Web Container: Next.js]
                 API[API Container: NestJS]
                 Worker[Worker Container: BullMQ]
+                Postgres[Postgres Container]
+                Redis[Redis Container]
             end
         end
-        Postgres[Lightsail Managed PostgreSQL]
-        Redis[Lightsail Managed Redis]
     end
 
     User -- HTTPS --> CDN
-    CDN -- /api/* --> Nginx
-    CDN -- /* --> Nginx
-    Nginx -- :3000 --> API
-    Nginx -- :3001 --> Web
-    API --- Redis
+    CDN -- HTTP --> Nginx
+
+    Nginx -- /api/* --> API
+    Nginx -- /* --> Web
+
     API --- Postgres
-    Worker --- Redis
+    API --- Redis
     Worker --- Postgres
+    Worker --- Redis
 ```
 
----
+### Cost Breakdown
 
-## Prerequisites
+This architecture is designed to be highly cost-effective.
 
-Before you begin, ensure you have the following:
+| Service | Plan | Estimated Monthly Cost |
+| :--- | :--- | :--- |
+| **AWS Lightsail Instance** | 4 GB RAM, 2 vCPU, 80 GB SSD | **$20.00** |
+| **AWS ECR** | 1 GB/month storage | ~$0.10 |
+| **AWS CloudFront** | 1 TB/month data transfer | ~$1.00 |
+| **Data Transfer** | Outbound to internet | ~$2.00 |
+| **Total Estimated Cost** | | **~$23.10 / month** |
 
-*   An **AWS account** with billing enabled.
-*   A **GitHub account** with the `triage-insight` repository forked or cloned.
-*   A **registered domain name**.
-*   **AWS CLI** installed and configured on your local machine.
-*   **Docker** and **Docker Compose** installed on your local machine.
+> **Note on the 2 GB Plan ($10/mo):** While technically possible, the 2 GB RAM instance is **not recommended**. With all services running, memory pressure will be high, leading to poor performance and potential crashes. Use it only for brief testing or demos.
 
----
+### Risks of Self-Hosting
 
-## Step 1: AWS IAM Setup
+Running PostgreSQL and Redis on the same instance as the application carries inherent risks compared to using managed services:
 
-First, create an IAM user that GitHub Actions will use to deploy resources to your AWS account.
-
-1.  **Create the IAM Policy:**
-    *   Navigate to the IAM console in AWS.
-    *   Go to **Policies** and click **Create policy**.
-    *   Switch to the **JSON** tab and paste the contents of `infra/lightsail/iam-deploy-policy.json`. Remember to replace `ACCOUNT_ID` and `REGION` with your own.
-    *   Name the policy `GitHubActions-TriageInsight-Deploy` and create it.
-
-2.  **Create the IAM User:**
-    *   Go to **Users** and click **Create user**.
-    *   Name the user `github-actions-deploy`.
-    *   Select **Attach policies directly** and choose the policy you just created.
-    *   After creating the user, go to the **Security credentials** tab and create an access key. **Save the Access Key ID and Secret Access Key immediately**; you will not be able to see the secret again.
-
-3.  **Add Credentials to GitHub Secrets:**
-    *   In your GitHub repository, go to **Settings** > **Secrets and variables** > **Actions**.
-    *   Create the following repository secrets:
-        *   `AWS_ACCESS_KEY_ID`: The Access Key ID you just saved.
-        *   `AWS_SECRET_ACCESS_KEY`: The Secret Access Key you just saved.
-        *   `AWS_REGION`: The AWS region you will be deploying to (e.g., `us-east-1`).
+*   **Single Point of Failure:** If the Lightsail instance goes down, your entire application, including the database, is offline.
+*   **Data Durability:** Data is persisted to a Docker volume on the instance's local SSD. If the instance is terminated or the volume is corrupted, data loss will occur. **Regular backups are critical.**
+*   **Resource Contention:** The database, cache, and application services all share the same CPU and RAM. A spike in API traffic could starve the database of resources, and vice-versa.
+*   **Maintenance Overhead:** You are responsible for monitoring, backups, and any necessary updates for PostgreSQL and Redis.
 
 ---
 
-## Step 2: AWS ECR Setup
+## Step 1: IAM & ECR Setup
 
-Next, create the Amazon ECR (Elastic Container Registry) repositories where your Docker images will be stored.
+First, set up the AWS permissions and container registry.
 
-1.  **Run the Creation Script:**
-    *   From your local terminal, run the following script. Make sure your AWS CLI is configured with credentials that have ECR permissions.
+1.  **Create IAM Policy & User:**
+    *   In the AWS IAM console, create a new policy using the JSON from `infra/lightsail/iam-deploy-policy.json`. Name it `TriageInsight-Deploy-Policy`.
+    *   Create an IAM user named `github-actions-deploy` and attach this policy.
+    *   Generate an access key for the user and save the credentials.
 
-    ```bash
-    bash infra/lightsail/create-ecr-repos.sh
-    ```
+2.  **Create ECR Repositories:**
+    *   From your local machine (with AWS CLI configured), run the setup script:
+        ```bash
+        bash infra/lightsail/create-ecr-repos.sh
+        ```
 
-2.  **Add ECR Registry URI to GitHub Secrets:**
-    *   The script will output your ECR registry URI. It will look like `123456789012.dkr.ecr.us-east-1.amazonaws.com`.
-    *   Add this value as a new GitHub secret named `ECR_REGISTRY`.
+3.  **Add GitHub Secrets:**
+    *   In your GitHub repo settings, add the following secrets:
+        *   `AWS_ACCESS_KEY_ID`: The IAM user's access key.
+        *   `AWS_SECRET_ACCESS_KEY`: The IAM user's secret key.
+        *   `AWS_REGION`: Your AWS region (e.g., `us-east-1`).
+        *   `ECR_REGISTRY`: The registry URI from the script output (e.g., `123456789012.dkr.ecr.us-east-1.amazonaws.com`).
 
 ---
 
-## Step 3: Lightsail Setup
+## Step 2: Lightsail Instance Setup
 
-Now, set up the core infrastructure on AWS Lightsail.
+Next, provision and configure the single Lightsail server.
 
-1.  **Create Managed PostgreSQL Database:**
-    *   Go to the Lightsail console and create a new **Database**.
-    *   Choose **PostgreSQL 16** and select a plan (the smallest is fine to start).
-    *   Set the username to `triage` and let Lightsail generate a secure password. **Save this password**.
-    *   Ensure the database is in the same region as your other resources.
-
-2.  **Create Managed Redis Cache:**
-    *   In Lightsail, create a new **Database**.
-    *   Choose **Redis** and select a plan.
-
-3.  **Create Lightsail Instance:**
-    *   Create a new **Instance**.
+1.  **Create Lightsail Instance:**
+    *   In the Lightsail console, create a new instance.
     *   Select **Linux/Unix** and **OS Only** > **Ubuntu 22.04 LTS**.
-    *   Choose an instance plan (e.g., the $20/month plan with 4 GB RAM is a good starting point).
-    *   **Important:** Under **Networking**, enable **IPv6**. CloudFront works best with a dual-stack origin.
+    *   Choose the **$20/month (4 GB RAM)** plan.
+    *   Enable **IPv6 networking**.
 
-4.  **Bootstrap the Instance:**
-    *   Once the instance is running, SSH into it.
-    *   Run the bootstrap script to install Docker, Nginx, and other dependencies:
+2.  **Bootstrap the Instance:**
+    *   SSH into the new instance as the `ubuntu` user.
+    *   Run the bootstrap script to install Docker, AWS CLI, and configure the firewall:
+        ```bash
+        curl -fsSL https://raw.githubusercontent.com/avickmukh/triage-insight/main/infra/lightsail/bootstrap.sh | bash
+        ```
+    *   **Log out and log back in** for the Docker group changes to take effect.
 
-    ```bash
-    curl -fsSL https://raw.githubusercontent.com/avickmukh/triage-insight/main/infra/lightsail/bootstrap.sh | bash
-    ```
-
-5.  **Configure Nginx:**
-    *   Copy the provided Nginx config to the instance:
-
-    ```bash
-    sudo cp infra/lightsail/nginx.conf /etc/nginx/sites-available/triage-insight
-    ```
-
-    *   Edit the file and replace `YOUR_DOMAIN` with your actual domain.
-    *   Enable the site and reload Nginx:
-
-    ```bash
-    sudo ln -s /etc/nginx/sites-available/triage-insight /etc/nginx/sites-enabled/
-    sudo nginx -t && sudo systemctl reload nginx
-    ```
-
-6.  **Add Production Environment Variables:**
-    *   Create a file at `/home/ubuntu/triage-insight/.env.production` on your Lightsail instance.
-    *   Use `infra/lightsail/env.production.template` as a guide. Fill in all the `CHANGE_ME` values, especially the `DATABASE_URL` and `REDIS_HOST` from your Lightsail managed services.
+3.  **Create Production Environment File:**
+    *   On the Lightsail instance, create the environment file:
+        ```bash
+        nano /home/ubuntu/triage-insight/.env.production
+        ```
+    *   Copy the contents of `infra/lightsail/env.production.template` into this file.
+    *   **Crucially, change all `CHANGE_ME` values**, especially `POSTGRES_PASSWORD` and `JWT_SECRET`.
 
 ---
 
-## Step 4: CloudFront Setup
+## Step 3: CloudFront & DNS Setup
+
+Set up CloudFront to serve traffic and manage SSL.
 
 1.  **Create ACM Certificate:**
-    *   In the AWS console, go to **AWS Certificate Manager (ACM)**.
-    *   **Important:** Make sure you are in the **us-east-1 (N. Virginia)** region, as this is required for CloudFront.
-    *   Request a public certificate for your domain (e.g., `app.yourdomain.com` and `api.yourdomain.com`).
-    *   Complete the DNS validation steps.
+    *   In the AWS Certificate Manager (ACM) console, in region **us-east-1 (N. Virginia)**, request a public certificate for your domain (e.g., `app.yourdomain.com`).
 
 2.  **Create CloudFront Distribution:**
-    *   Go to the CloudFront console and create a new distribution.
-    *   Use the `infra/cloudfront/distribution-config.json` file as a reference for all settings.
-    *   **Origin:** Set the origin domain to the public IP address of your Lightsail instance.
-    *   **Behaviors:** Create the behaviors for `/api/*`, `/_next/static/*`, and `/static/*`.
-    *   **Certificate:** Select the ACM certificate you created.
+    *   In the CloudFront console, create a new distribution.
+    *   Set the **Origin Domain** to the public IP address of your Lightsail instance.
+    *   Set **Viewer Protocol Policy** to **Redirect HTTP to HTTPS**.
+    *   Under **Cache key and origin requests**, select **Cache policy and origin request policy (recommended)**.
+        *   **Cache Policy:** `CachingDisabled`
+        *   **Origin Request Policy:** `AllViewer`
+    *   Select the ACM certificate you created.
 
-3.  **Update DNS:**
-    *   In your domain registrar's DNS settings, create a CNAME record pointing your subdomain (e.g., `app.yourdomain.com`) to the CloudFront distribution domain name (e.g., `d12345.cloudfront.net`).
-
----
-
-## Step 5: GitHub Actions Setup
-
-Add the remaining secrets to your GitHub repository:
-
-*   `LIGHTSAIL_HOST`: The public IP of your Lightsail instance.
-*   `LIGHTSAIL_SSH_KEY`: The private SSH key for your Lightsail instance, base64-encoded. You can get this from the Lightsail console and encode it with `cat key.pem | base64`.
-*   `CLOUDFRONT_DISTRIBUTION_ID`: The ID of your CloudFront distribution.
-*   `NEXT_PUBLIC_API_BASE_URL`: The full public URL to your API (e.g., `https://app.yourdomain.com/api/v1`).
+3.  **Configure DNS:**
+    *   In your DNS provider, create a `CNAME` record for your app's hostname (e.g., `app.yourdomain.com`) pointing to the CloudFront distribution domain (e.g., `d123abc.cloudfront.net`).
 
 ---
 
-## Step 6: First Deployment
+## Step 4: Final Secrets & First Deployment
 
-With all the infrastructure and secrets in place, you are ready to deploy.
+1.  **Add Final GitHub Secrets:**
+    *   `LIGHTSAIL_HOST`: The public IP of your Lightsail instance.
+    *   `LIGHTSAIL_SSH_KEY`: The private SSH key for your Lightsail instance, **base64-encoded**. (Run `cat key.pem | base64 | tr -d '\n'` to encode it).
+    *   `CLOUDFRONT_DISTRIBUTION_ID`: The ID of your CloudFront distribution.
+    *   `NEXT_PUBLIC_API_BASE_URL`: The full public URL to your API (e.g., `https://app.yourdomain.com/api/v1`).
 
-1.  **Trigger the Workflow:**
+2.  **Deploy!**
     *   Push a commit to the `main` branch.
-    *   Alternatively, go to the **Actions** tab in GitHub, select the **Deploy to AWS** workflow, and run it manually.
+    *   The GitHub Actions workflow will build and push the images, then SSH into your Lightsail instance to run the `deploy.sh` script, which starts all services via Docker Compose.
 
-2.  **Monitor the Deployment:**
-    *   The GitHub Actions workflow will build the Docker images, push them to ECR, SSH into your Lightsail instance, and run the `deploy.sh` script. This script pulls the new images and restarts the services using Docker Compose.
+---
 
-Your Triage-Insight application is now live!
+## Backups & Maintenance
+
+With a self-hosted database, backups are your responsibility.
+
+*   **Automated Backups:** A backup script is provided at `infra/lightsail/backup-postgres.sh`. It creates a compressed `pg_dump` of the database and can upload it to S3.
+*   **Scheduling:** Set up a cron job on the Lightsail instance to run this script daily:
+    ```bash
+    # Run: crontab -e
+    # Add this line to run the backup at 2 AM every day:
+    0 2 * * * /home/ubuntu/triage-insight/infra/lightsail/backup-postgres.sh >> /var/log/triage-backup.log 2>&1
+    ```
+*   **Restoring:** To restore from a backup, you would copy the backup file to the instance, `gunzip` it, and pipe the `.sql` file into the `postgres` container using `docker exec -i triage-postgres psql -U triage -d triageinsight < backup.sql`.
