@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/shared/ui/tooltip";
-import { Home, Settings, Package, Package2, Users2, LineChart, Headphones, User, Building2, Brain, Sparkles, BarChart2 } from "lucide-react";
+import { Home, Settings, Package, Package2, Users2, LineChart, Headphones, User, Building2, Brain, Sparkles, BarChart2, MessageSquare } from "lucide-react";
 import { appRoutes, orgAdminRoutes } from "@/lib/routes";
 
 export function Sidebar({ orgSlug: orgSlugProp }: { orgSlug?: string }) {
@@ -14,8 +14,9 @@ export function Sidebar({ orgSlug: orgSlugProp }: { orgSlug?: string }) {
   const adminR = orgAdminRoutes(slug);
 
   const navItems = [
-    { href: r.dashboard,       icon: Home,       label: "Dashboard" },
-    { href: r.inbox,           icon: Package,    label: "Inbox" },
+    { href: r.dashboard,       icon: Home,           label: "Dashboard" },
+    { href: r.feedbackSource,  icon: MessageSquare,  label: "Feedback" },
+    { href: r.inbox,           icon: Package,        label: "Inbox" },
     { href: r.themes,          icon: Users2,     label: "Themes" },
     { href: r.roadmap,         icon: LineChart,  label: "Roadmap" },
     { href: r.support.overview, icon: Headphones, label: "Support" },

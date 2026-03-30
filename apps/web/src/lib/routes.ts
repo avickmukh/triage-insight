@@ -27,6 +27,7 @@ export const globalAuthRoutes = {
 /** Workspace staff app routes (admin + editor + viewer) */
 export const appRoutes = (slug: string) => ({
   dashboard:  `/${slug}/app`,
+  feedbackSource: `/${slug}/app/feedback`,
   inbox:      `/${slug}/app/inbox`,
   inboxItem:  (id: string) => `/${slug}/app/inbox/${id}`,
   inboxNew:   `/${slug}/app/inbox/new`,
