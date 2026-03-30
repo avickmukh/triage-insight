@@ -1672,6 +1672,21 @@ export interface RevenueWeightedIntelligence {
   smbValidation: number;
 }
 
+/** Per-question structured evidence breakdown for NPS / Rating / Choice questions. */
+export interface SurveyQuestionBreakdown {
+  questionId: string;
+  label: string;
+  type: SurveyQuestionType;
+  responseCount: number;
+  /** Average numeric value for NPS / Rating questions; null for choice questions */
+  avg: number | null;
+  /** Distribution map: label → count.
+   *  NPS: { 'Promoters (9-10)': n, 'Passives (7-8)': n, 'Detractors (0-6)': n }
+   *  Rating: { '1': n, '2': n, ... }
+   *  Choice: { 'Option A': n, 'Option B': n, ... } */
+  distribution: Record<string, number>;
+}
+
 export interface SurveyIntelligence {
   surveyId: string;
   totalResponses: number;
@@ -1681,6 +1696,9 @@ export interface SurveyIntelligence {
   avgRating: number | null;
   npsScore: number | null;
   linkedThemeIds: string[];
+  /** Linked global themes with titles — derived from survey text responses that were
+   *  converted to Feedback and subsequently clustered by the AI engine. */
+  linkedThemes?: Array<{ id: string; title: string }>;
   keyTopics: string[];
   npsResponseCount: number;
   ratingResponseCount: number;
@@ -1689,6 +1707,9 @@ export interface SurveyIntelligence {
   sentimentDistribution: { positive: number; neutral: number; negative: number } | null;
   topFeatureRequests: string[];
   topPainPoints: string[];
+  /** Per-question structured analytics for NPS / Rating / Choice questions.
+   *  These are evidence breakdowns, NOT text-derived themes. */
+  questionBreakdowns?: SurveyQuestionBreakdown[];
   revenueWeighted: RevenueWeightedIntelligence | null;
   surveyType: SurveyType;
   validationScore: number | null;

@@ -978,6 +978,55 @@ export default function ThemeDetailPage() {
         )}
       </div>
 
+      {/* ── Source Contribution Panel ── */}
+      {((theme.feedbackCount ?? 0) + (theme.voiceCount ?? 0) + (theme.supportCount ?? 0) + (theme.surveyCount ?? 0)) > 0 && (
+        <div style={{ ...CARD, border: '1px solid #e0e7ff', background: 'linear-gradient(135deg, #f8f9ff 0%, #f0f4ff 100%)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <div>
+              <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#0a2540', margin: '0 0 0.125rem' }}>Source Contribution</h3>
+              <p style={{ fontSize: '0.78rem', color: '#6C757D', margin: 0 }}>How each source strengthens this theme in the unified intelligence system</p>
+            </div>
+            {(theme.totalSignalCount ?? 0) > 0 && (
+              <span style={{ background: '#e0e7ff', color: '#3730a3', borderRadius: '2rem', padding: '0.25rem 0.75rem', fontSize: '0.8rem', fontWeight: 600 }}>
+                {theme.totalSignalCount} total signals
+              </span>
+            )}
+          </div>
+          {(() => {
+            const total = (theme.feedbackCount ?? 0) + (theme.voiceCount ?? 0) + (theme.supportCount ?? 0) + (theme.surveyCount ?? 0);
+            const sources = [
+              { label: 'Feedback', count: theme.feedbackCount ?? 0, color: '#20A4A4', icon: '💬', desc: 'Manual, CSV, portal, email, Slack, API' },
+              { label: 'Voice',    count: theme.voiceCount   ?? 0, color: '#1565c0', icon: '🎤', desc: 'Audio transcripts, public portal voice' },
+              { label: 'Support',  count: theme.supportCount ?? 0, color: '#6a1b9a', icon: '🎧', desc: 'Zendesk, Intercom, support ticket clusters' },
+              { label: 'Survey',   count: theme.surveyCount  ?? 0, color: '#b45309', icon: '📋', desc: 'NPS, CSAT, open-text survey responses' },
+            ].filter((s) => s.count > 0);
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+                {sources.map((src) => {
+                  const pct = total > 0 ? Math.round((src.count / total) * 100) : 0;
+                  return (
+                    <div key={src.label}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                        <span style={{ fontSize: '0.85rem' }}>{src.icon}</span>
+                        <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0a2540', flex: 1 }}>{src.label}</span>
+                        <span style={{ fontSize: '0.72rem', color: '#6C757D' }}>{src.desc}</span>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: src.color, width: '4rem', textAlign: 'right' }}>{src.count} ({pct}%)</span>
+                      </div>
+                      <div style={{ height: '6px', background: '#e9ecef', borderRadius: '3px' }}>
+                        <div style={{ width: `${pct}%`, height: '100%', background: src.color, borderRadius: '3px', transition: 'width 0.4s' }} />
+                      </div>
+                    </div>
+                  );
+                })}
+                <p style={{ fontSize: '0.75rem', color: '#6C757D', margin: '0.5rem 0 0', borderTop: '1px solid #e0e7ff', paddingTop: '0.625rem' }}>
+                  All sources feed the same CIQ priority score and roadmap. There is no separate survey or support score.
+                </p>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
       {/* ── Revenue Intelligence Panel ── */}
       <div style={{ ...CARD, background: 'linear-gradient(135deg, #f0fff4 0%, #e8f8f0 100%)', border: '1px solid #a7f3d0' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>

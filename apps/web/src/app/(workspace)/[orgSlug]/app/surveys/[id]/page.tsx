@@ -561,30 +561,82 @@ export default function SurveyDetailPage() {
                 </div>
               )}
 
-              {/* Linked Themes — with Link button */}
+              {/* Linked Global Themes — titled links to the shared theme system */}
               <div style={{ ...CARD }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.875rem' }}>
-                  <h3 style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0a2540', margin: 0 }}>Linked Themes</h3>
-
+                  <h3 style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0a2540', margin: 0 }}>Linked Global Themes</h3>
+                  <span style={{ fontSize: '0.72rem', color: '#6C757D', background: '#f0f4f8', padding: '0.15rem 0.5rem', borderRadius: '999px' }}>from unified AI engine</span>
                 </div>
-                {(intelligence.linkedThemeIds?.length ?? 0) === 0 ? (
+                {(intelligence.linkedThemes?.length ?? intelligence.linkedThemeIds?.length ?? 0) === 0 ? (
                   <p style={{ fontSize: '0.875rem', color: '#6C757D', margin: 0 }}>
-                    No themes are linked to this survey yet. Themes are linked automatically when survey responses are processed by the AI engine.
+                    No global themes linked yet. Themes are linked automatically when survey text responses are converted to feedback signals and clustered by the AI engine.
                   </p>
                 ) : (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                    {intelligence.linkedThemeIds.map((themeId: string) => (
-                      <a
-                        key={themeId}
-                        href={`/${orgSlug}/app/themes/${themeId}`}
-                        style={{ background: '#ede9fe', color: '#7c3aed', padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.8125rem', fontWeight: 500, textDecoration: 'none' }}
-                      >
-                        Theme ↗
-                      </a>
-                    ))}
+                    {(intelligence.linkedThemes ?? intelligence.linkedThemeIds.map((id: string) => ({ id, title: null }))).map(
+                      (theme: { id: string; title: string | null }) => (
+                        <a
+                          key={theme.id}
+                          href={`/${orgSlug}/app/themes/${theme.id}`}
+                          style={{ background: '#ede9fe', color: '#7c3aed', padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.8125rem', fontWeight: 500, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
+                        >
+                          {theme.title ?? 'Theme'} ↗
+                        </a>
+                      )
+                    )}
                   </div>
                 )}
               </div>
+
+              {/* Question Breakdowns — structured evidence analytics (NPS / Rating / Choice) */}
+              {(intelligence.questionBreakdowns?.length ?? 0) > 0 && (
+                <div style={{ ...CARD }}>
+                  <h3 style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0a2540', marginBottom: '0.25rem' }}>Structured Question Analytics</h3>
+                  <p style={{ fontSize: '0.78rem', color: '#6C757D', margin: '0 0 1rem' }}>Aggregated responses for rating, NPS, and choice questions. These are stored as structured evidence — not text themes.</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    {intelligence.questionBreakdowns!.map((qb) => {
+                      const total = qb.responseCount;
+                      const entries = Object.entries(qb.distribution);
+                      const maxCount = Math.max(...entries.map(([, v]) => v), 1);
+                      const isNps = qb.type === SurveyQuestionType.NPS;
+                      const isRating = qb.type === SurveyQuestionType.RATING;
+                      return (
+                        <div key={qb.questionId}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                            <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0a2540', flex: 1 }}>{qb.label}</span>
+                            <span style={{ fontSize: '0.7rem', background: '#f0f4f8', color: '#6C757D', padding: '0.1rem 0.4rem', borderRadius: '999px' }}>
+                              {isNps ? 'NPS' : isRating ? 'Rating' : 'Choice'}
+                            </span>
+                            {qb.avg != null && (
+                              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#20A4A4' }}>avg {qb.avg.toFixed(1)}</span>
+                            )}
+                            <span style={{ fontSize: '0.7rem', color: '#adb5bd' }}>{total} responses</span>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                            {entries.map(([label, count]) => {
+                              const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                              const barColor = isNps
+                                ? label.startsWith('Promoter') ? '#2e7d32'
+                                  : label.startsWith('Detractor') ? '#c62828' : '#b8860b'
+                                : '#20A4A4';
+                              return (
+                                <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                  <span style={{ fontSize: '0.75rem', color: '#495057', width: '9rem', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+                                  <div style={{ flex: 1, background: '#f0f4f8', borderRadius: '999px', height: '0.5rem', overflow: 'hidden' }}>
+                                    <div style={{ width: `${(count / maxCount) * 100}%`, background: barColor, height: '100%', borderRadius: '999px', transition: 'width 0.3s' }} />
+                                  </div>
+                                  <span style={{ fontSize: '0.72rem', color: '#6C757D', width: '2.5rem', textAlign: 'right', flexShrink: 0 }}>{pct}%</span>
+                                  <span style={{ fontSize: '0.7rem', color: '#adb5bd', width: '1.5rem', textAlign: 'right', flexShrink: 0 }}>{count}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Revenue-Weighted Intelligence Card — all fields safely guarded */}
               {intelligence.revenueWeighted && (
@@ -680,10 +732,27 @@ export default function SurveyDetailPage() {
                 </div>
               )}
 
-              {/* How it works */}
-              <div style={{ background: '#f0f4f8', border: '1px solid #dee2e6', borderRadius: '0.75rem', padding: '1rem 1.25rem' }}>
-                <p style={{ fontSize: '0.8125rem', color: '#495057', margin: 0 }}>
-                  <strong>How intelligence works:</strong> After each response is submitted, TriageInsight automatically extracts sentiment, key topics, pain points, and feature requests from text answers using GPT-4.1-mini. Rating and NPS answers are converted to normalised signals and stored as Customer Signals for CIQ scoring. Revenue-weighted scores are computed by weighting each respondent&apos;s signal by their ARR contribution. Text responses are linked to the most relevant theme via semantic clustering.
+              {/* How survey data feeds the unified system */}
+              <div style={{ background: 'linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)', border: '1px solid #a7f3d0', borderRadius: '0.75rem', padding: '1rem 1.25rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.625rem' }}>
+                  <span style={{ fontSize: '1rem' }}>🔗</span>
+                  <strong style={{ fontSize: '0.8125rem', color: '#065f46' }}>How this survey feeds the unified intelligence system</strong>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.625rem', marginBottom: '0.75rem' }}>
+                  {[
+                    { icon: '📝', label: 'Text responses', desc: 'Converted to Feedback signals, processed by AI, and clustered into global themes' },
+                    { icon: '📊', label: 'Rating & NPS answers', desc: 'Stored as structured evidence and contribute to CIQ scoring via surveySignal component' },
+                    { icon: '🎯', label: 'Linked themes', desc: 'Survey evidence strengthens the same global themes used by feedback, support, and voice' },
+                    { icon: '🗺️', label: 'Roadmap impact', desc: 'Themes with survey evidence appear in the priority ranking and roadmap with survey contribution visible' },
+                  ].map((item) => (
+                    <div key={item.label} style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid #a7f3d0', borderRadius: '0.5rem', padding: '0.625rem 0.75rem' }}>
+                      <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#065f46', marginBottom: '0.2rem' }}>{item.icon} {item.label}</div>
+                      <div style={{ fontSize: '0.75rem', color: '#047857', lineHeight: 1.4 }}>{item.desc}</div>
+                    </div>
+                  ))}
+                </div>
+                <p style={{ fontSize: '0.78rem', color: '#065f46', margin: 0 }}>
+                  There is a single roadmap and a single priority model. Survey signals do not create a separate score — they strengthen the same global themes as feedback, support, and voice.
                 </p>
               </div>
             </div>

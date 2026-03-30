@@ -354,6 +354,27 @@ function SurveyCard({ survey, orgSlug }: { survey: Survey; orgSlug: string }) {
           )}
         </div>
 
+        {/* AI insight summary line — shown when the survey has responses and any intelligence signal */}
+        {responseCount > 0 && (insightScore !== null || revenueScore != null || validationScore != null) && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem', borderTop: '1px solid #f0f4f8', paddingTop: '0.625rem' }}>
+            {insightScore !== null && (
+              <span style={{ fontSize: '0.72rem', background: '#e0f7fa', color: '#00838f', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 500 }}>
+                🧠 Insight {Math.round(insightScore)}
+              </span>
+            )}
+            {(survey.linkedThemeIds?.length ?? 0) > 0 && (
+              <span style={{ fontSize: '0.72rem', background: '#ede9fe', color: '#7c3aed', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 500 }}>
+                {survey.linkedThemeIds.length} theme{survey.linkedThemeIds.length !== 1 ? 's' : ''} linked
+              </span>
+            )}
+            {survey.convertToFeedback && (
+              <span style={{ fontSize: '0.72rem', background: '#ede9fe', color: '#7c3aed', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 500 }}>
+                → feeds global themes
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Footer */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: '0.75rem', color: '#adb5bd' }}>

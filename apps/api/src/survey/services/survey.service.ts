@@ -763,9 +763,10 @@ export class SurveyService {
       npsScore = Math.round(((promoters - detractors) / npsValues.length) * 100);
     }
 
-    // Linked themes from feedback
+    // Linked themes from feedback — fetch titles so the UI can display them
     const feedbackIds = responses.map((r) => r.feedbackId).filter(Boolean) as string[];
     const linkedThemeIds: string[] = [];
+    const linkedThemes: Array<{ id: string; title: string }> = [];
     if (feedbackIds.length > 0) {
       const themeFeedbacks = await this.prisma.themeFeedback.findMany({
         where: { feedbackId: { in: feedbackIds } },
@@ -773,6 +774,13 @@ export class SurveyService {
       });
       const uniqueThemeIds = [...new Set(themeFeedbacks.map((tf) => tf.themeId))];
       linkedThemeIds.push(...uniqueThemeIds);
+      if (uniqueThemeIds.length > 0) {
+        const themeRows = await this.prisma.theme.findMany({
+          where: { id: { in: uniqueThemeIds } },
+          select: { id: true, title: true },
+        });
+        linkedThemes.push(...themeRows);
+      }
     }
 
     // Top key topics
@@ -821,6 +829,56 @@ export class SurveyService {
         )
       : null;
 
+    // Per-question structured breakdowns (NPS, RATING, SINGLE_CHOICE, MULTIPLE_CHOICE)
+    // These are shown as analytics evidence — NOT as fake text themes
+    const questions = await this.prisma.surveyQuestion.findMany({
+      where: { surveyId },
+      orderBy: { order: 'asc' },
+      select: { id: true, type: true, label: true, options: true, ratingMin: true, ratingMax: true },
+    });
+    const allAnswers = await this.prisma.surveyAnswer.findMany({
+      where: { response: { surveyId } },
+      select: { questionId: true, numericValue: true, textValue: true, choiceValues: true },
+    });
+    const answersByQuestion = new Map<string, typeof allAnswers>();
+    for (const a of allAnswers) {
+      if (!answersByQuestion.has(a.questionId)) answersByQuestion.set(a.questionId, []);
+      answersByQuestion.get(a.questionId)!.push(a);
+    }
+    const questionBreakdowns = questions
+      .filter((q) => EVIDENCE_QUESTION_TYPES.has(q.type as SurveyQuestionType))
+      .map((q) => {
+        const answers = answersByQuestion.get(q.id) ?? [];
+        const responseCount = answers.length;
+        if (q.type === SurveyQuestionType.NPS || q.type === SurveyQuestionType.RATING) {
+          const nums = answers.map((a) => a.numericValue).filter((v): v is number => v != null);
+          const avg = nums.length > 0 ? nums.reduce((s, v) => s + v, 0) / nums.length : null;
+          // NPS breakdown: promoters (9-10), passives (7-8), detractors (0-6)
+          const distribution: Record<string, number> = {};
+          if (q.type === SurveyQuestionType.NPS) {
+            distribution['Promoters (9-10)'] = nums.filter((v) => v >= 9).length;
+            distribution['Passives (7-8)']   = nums.filter((v) => v >= 7 && v <= 8).length;
+            distribution['Detractors (0-6)'] = nums.filter((v) => v <= 6).length;
+          } else {
+            const min = q.ratingMin ?? 1;
+            const max = q.ratingMax ?? 5;
+            for (let i = min; i <= max; i++) {
+              distribution[String(i)] = nums.filter((v) => v === i).length;
+            }
+          }
+          return { questionId: q.id, label: q.label, type: q.type, responseCount, avg, distribution };
+        }
+        // SINGLE_CHOICE / MULTIPLE_CHOICE
+        const choiceCounts: Record<string, number> = {};
+        for (const a of answers) {
+          const choices = (a.choiceValues as string[] | null) ?? (a.textValue ? [a.textValue] : []);
+          for (const c of choices) {
+            choiceCounts[c] = (choiceCounts[c] ?? 0) + 1;
+          }
+        }
+        return { questionId: q.id, label: q.label, type: q.type, responseCount, avg: null, distribution: choiceCounts };
+      });
+
     // Revenue-weighted intelligence (best-effort)
     const survey = await this.resolveSurvey(workspaceId, surveyId);
     let revenueWeighted: RevenueWeightedInsight | null = null;
@@ -840,6 +898,9 @@ export class SurveyService {
       avgRating: avgRating !== null ? parseFloat(avgRating.toFixed(2)) : null,
       npsScore,
       linkedThemeIds,
+      /** Linked global themes with titles — derived from survey text responses that were
+       *  converted to Feedback and subsequently clustered by the AI engine. */
+      linkedThemes,
       keyTopics,
       npsResponseCount: npsValues.length,
       ratingResponseCount: ratingValues.length,
@@ -848,6 +909,9 @@ export class SurveyService {
       sentimentDistribution,
       topFeatureRequests,
       topPainPoints,
+      /** Per-question structured analytics for NPS / Rating / Choice questions.
+       *  These are evidence breakdowns, NOT text-derived themes. */
+      questionBreakdowns,
       revenueWeighted,
       surveyType: survey.surveyType,
       validationScore: revenueWeighted?.validationScore ?? survey.validationScore ?? null,
