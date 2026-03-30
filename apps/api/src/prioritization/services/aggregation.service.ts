@@ -108,6 +108,11 @@ export interface ThemePriorityItem {
   hasManualOverride:       boolean;
   lastScoredAt:            Date | null;
   breakdown:               PrioritizationScoreBreakdown;
+  // ── Unified cross-source signal counts (written by CIQ, surfaced for ranking UI) ──
+  voiceCount:              number;
+  supportCount:            number;
+  surveyCount:             number;
+  totalSignalCount:        number;
 }
 export interface RoadmapRecommendationItem {
   roadmapItemId:              string;
@@ -304,6 +309,8 @@ export class AggregationService {
           id: true, title: true, status: true, priorityScore: true, ciqScore: true,
           revenueScore: true, urgencyScore: true, revenueInfluence: true, lastScoredAt: true,
           signalBreakdown: true, strategicTag: true, manualOverrideScore: true, overrideReason: true,
+          // ── Unified cross-source signal counts ──
+          feedbackCount: true, voiceCount: true, supportCount: true, surveyCount: true, totalSignalCount: true,
           feedbacks: {
             select: {
               feedback: {
@@ -364,6 +371,11 @@ export class AggregationService {
           revenueInfluence: theme.revenueInfluence ?? 0, dealInfluenceValue: 0,
           strategicTag: theme.strategicTag, manualOverrideScore: theme.manualOverrideScore,
           hasManualOverride: true, lastScoredAt: theme.lastScoredAt, breakdown: placeholder,
+          // Unified cross-source signal counts (from CIQ-persisted Theme fields)
+          voiceCount:       (theme as any).voiceCount       ?? 0,
+          supportCount:     (theme as any).supportCount     ?? 0,
+          surveyCount:      (theme as any).surveyCount      ?? 0,
+          totalSignalCount: (theme as any).totalSignalCount ?? 0,
         };
       }
 
@@ -430,6 +442,11 @@ export class AggregationService {
         revenueInfluence: theme.revenueInfluence ?? 0, dealInfluenceValue,
         strategicTag: theme.strategicTag, manualOverrideScore: theme.manualOverrideScore,
         hasManualOverride: false, lastScoredAt: theme.lastScoredAt, breakdown,
+        // Unified cross-source signal counts (from CIQ-persisted Theme fields)
+        voiceCount:       (theme as any).voiceCount       ?? 0,
+        supportCount:     (theme as any).supportCount     ?? 0,
+        surveyCount:      (theme as any).surveyCount      ?? 0,
+        totalSignalCount: (theme as any).totalSignalCount ?? 0,
       };
     });
 

@@ -65,6 +65,12 @@ export class ThemeRepository {
           aiNarratedAt: true,
           createdAt: true,
           updatedAt: true,
+          // ── Unified cross-source signal counts (surfaced on list cards) ──────────────────────────────────
+          feedbackCount:    true,
+          voiceCount:       true,
+          supportCount:     true,
+          surveyCount:      true,
+          totalSignalCount: true,
           _count: { select: { feedbacks: true } },
         },
       }),

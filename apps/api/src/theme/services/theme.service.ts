@@ -124,7 +124,16 @@ export class ThemeService {
       priorityScore: theme.priorityScore,
       revenueInfluence: theme.revenueInfluence,
       signalBreakdown: theme.signalBreakdown,
-      // ── Stage-2 AI Narration ───────────────────────────────────────────────────────────────────────
+      // ── Unified cross-source signal counts ─────────────────────────────────────────────────────────────────────────────────────────────────
+      // These are written by CIQ.persistThemeScore after every recomputation.
+      // feedbackCount prefers the CIQ-persisted value (which excludes MERGED rows)
+      // and falls back to the raw _count for themes not yet scored.
+      feedbackCount:    theme.feedbackCount    ?? theme._count.feedbacks,
+      voiceCount:       theme.voiceCount       ?? 0,
+      supportCount:     theme.supportCount     ?? 0,
+      surveyCount:      theme.surveyCount      ?? 0,
+      totalSignalCount: theme.totalSignalCount ?? 0,
+      // ── Stage-2 AI Narration ─────────────────────────────────────────────────────────────────────────────────────────────────
       aiSummary: theme.aiSummary,
       aiExplanation: theme.aiExplanation,
       aiRecommendation: theme.aiRecommendation,
@@ -138,7 +147,6 @@ export class ThemeService {
       dominantSignal: theme.dominantSignal,
       createdAt: theme.createdAt,
       updatedAt: theme.updatedAt,
-      feedbackCount: theme._count.feedbacks,
       aggregatedPriorityScore,
       linkedFeedback,
     };

@@ -8,9 +8,10 @@
  * Unified CIQ Formula (PRD Phase 2):
  *
  *   CIQ = normalise(
- *     feedbackCount   × feedbackWeight  +
- *     supportCount    × supportWeight   +   ← direct SupportIssueCluster.ticketCount
- *     voiceCount      × voiceWeight     +   ← ThemeFeedback where sourceType IN (VOICE, PUBLIC_PORTAL)
+ *     feedbackCount   × feedbackWeight  +   ← ThemeFeedback where primarySource = FEEDBACK (or legacy sourceType)
+ *     supportCount    × supportWeight   +   ← SupportIssueCluster.ticketCount + primarySource=SUPPORT Feedback rows
+ *     voiceCount      × voiceWeight     +   ← primarySource=VOICE (or legacy VOICE/PUBLIC_PORTAL sourceType)
+ *     surveyCount     × feedbackWeight  +   ← primarySource=SURVEY Feedback rows (open-text, AI-analysed)
  *     sentimentScore  × sentimentWeight +
  *     recencyScore    × recencyWeight   +
  *     arrValue        × arrValueWeight  +
@@ -21,16 +22,18 @@
  *     voteCount       × voteWeight
  *   )
  *
+ * Source classification uses primarySource (unified attribution) with sourceType as legacy fallback.
  * Weights: supportWeight > feedbackWeight (default 1.5×), voiceWeight >= feedbackWeight (default 1.2×).
+ * Survey signals use feedbackWeight (1.0×) — high-intent respondents, no discount.
  * All weights are normalised so the sum always stays within 0–100.
  *
- * Source counts are persisted back to Theme.feedbackCount / voiceCount / supportCount
- * so the UI can show "Based on feedback, support, and voice" with real numbers.
+ * Source counts are persisted back to Theme.feedbackCount / voiceCount / supportCount / surveyCount
+ * so the UI can show "Based on feedback, support, voice, and survey" with real numbers.
  */
 
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { AccountPriority, DealStage, DealStatus, FeedbackSourceType } from '@prisma/client';
+import { AccountPriority, DealStage, DealStatus, FeedbackPrimarySource, FeedbackSourceType } from '@prisma/client';
 
 // ─── Output types ─────────────────────────────────────────────────────────────
 
@@ -122,6 +125,34 @@ const SURVEY_SOURCE_TYPES: FeedbackSourceType[] = [
   FeedbackSourceType.SURVEY,
 ];
 
+/**
+ * Determine the effective source category for a feedback row.
+ *
+ * Uses `primarySource` (the new unified attribution field) as the authoritative
+ * classifier when present.  Falls back to the legacy `sourceType` enum for rows
+ * that pre-date the unified attribution migration so backward-compatibility is
+ * preserved without a data backfill.
+ *
+ * Categories:
+ *   'voice'    — extracted from voice / audio transcripts
+ *   'survey'   — collected via structured surveys (NPS, CSAT, custom)
+ *   'support'  — created from customer support tickets
+ *   'feedback' — everything else (direct, CSV, portal, email, Slack, API)
+ */
+function effectiveSourceCategory(
+  row: { primarySource: FeedbackPrimarySource | null; sourceType: string },
+): 'voice' | 'survey' | 'support' | 'feedback' {
+  // Authoritative path: use primarySource when it has been set
+  if (row.primarySource === FeedbackPrimarySource.VOICE)    return 'voice';
+  if (row.primarySource === FeedbackPrimarySource.SURVEY)   return 'survey';
+  if (row.primarySource === FeedbackPrimarySource.SUPPORT)  return 'support';
+  if (row.primarySource === FeedbackPrimarySource.FEEDBACK) return 'feedback';
+  // Legacy fallback: classify by sourceType for pre-migration rows
+  if (VOICE_SOURCE_TYPES.includes(row.sourceType as FeedbackSourceType))  return 'voice';
+  if (SURVEY_SOURCE_TYPES.includes(row.sourceType as FeedbackSourceType)) return 'survey';
+  return 'feedback';
+}
+
 /** Normalise a raw value to 0–100 using a log10 scale (handles wide ARR ranges) */
 function logNorm(value: number, scale = 6): number {
   if (value <= 0) return 0;
@@ -174,7 +205,7 @@ export class CiqService {
       await Promise.all([
         this.getSettings(workspaceId),
 
-        // ── All feedback linked to this theme (includes VOICE, PUBLIC_PORTAL) ──
+        // ── All feedback linked to this theme (all sources: FEEDBACK / VOICE / SURVEY / SUPPORT) ──
         this.prisma.themeFeedback.findMany({
           where: { themeId },
           select: {
@@ -185,6 +216,10 @@ export class CiqService {
                 impactScore: true,
                 status: true,
                 sourceType: true,
+                // primarySource is the authoritative source classifier introduced by the
+                // unified attribution model.  Nullable for legacy rows — effectiveSourceCategory()
+                // falls back to sourceType so no data backfill is required.
+                primarySource: true,
                 createdAt: true,
                 customer: {
                   select: {
@@ -252,23 +287,40 @@ export class CiqService {
     const activeFeedback = feedbackRows.filter((tf) => tf.feedback.status !== 'MERGED');
 
     // ── Source breakdown counts ─────────────────────────────────────────────
+    // effectiveSourceCategory() uses primarySource as the authoritative classifier
+    // and falls back to sourceType for legacy rows.  This means:
+    //   - Survey open-text Feedback rows (primarySource=SURVEY) → surveyCount
+    //   - Support-ticket Feedback rows (primarySource=SUPPORT)  → supportFeedbackCount
+    //   - Voice Feedback rows (primarySource=VOICE)             → voiceCount
+    //   - Everything else                                        → textFeedbackCount
     const feedbackCount = activeFeedback.length;
-    const voiceCount    = activeFeedback.filter((tf) =>
-      VOICE_SOURCE_TYPES.includes(tf.feedback.sourceType as FeedbackSourceType),
+    const voiceCount    = activeFeedback.filter(
+      (tf) => effectiveSourceCategory(tf.feedback) === 'voice',
     ).length;
-    const surveyCount   = activeFeedback.filter((tf) =>
-      SURVEY_SOURCE_TYPES.includes(tf.feedback.sourceType as FeedbackSourceType),
+    const surveyFeedbackCount  = activeFeedback.filter(
+      (tf) => effectiveSourceCategory(tf.feedback) === 'survey',
     ).length;
-    // Pure text/manual feedback (everything that is NOT voice or survey)
-    const textFeedbackCount = feedbackCount - voiceCount - surveyCount;
+    const supportFeedbackCount = activeFeedback.filter(
+      (tf) => effectiveSourceCategory(tf.feedback) === 'support',
+    ).length;
+    // Pure text/manual feedback (everything that is NOT voice, survey, or support-sourced)
+    const textFeedbackCount = feedbackCount - voiceCount - surveyFeedbackCount - supportFeedbackCount;
 
-    // Support count: sum of ticketCount across all linked clusters
-    const supportCount = supportClusters.reduce(
+    // Support count: sum of ticketCount across all linked SupportIssueCluster rows
+    // (the authoritative support signal — independent of Feedback rows created from tickets)
+    const supportClusterCount = supportClusters.reduce(
       (sum, c) => sum + (c.ticketCount ?? 0), 0,
     );
+    // Combined support signal: cluster tickets + any Feedback rows with primarySource=SUPPORT
+    const supportCount = supportClusterCount + supportFeedbackCount;
     const hasSupportSpike = supportClusters.some((c) => c.hasActiveSpike);
 
-    const totalSignalCount = feedbackCount + supportCount + surveyCount;
+    // surveyCount = survey-sourced Feedback rows (open-text answers processed by AI pipeline)
+    const surveyCount = surveyFeedbackCount;
+
+    // totalSignalCount uses cluster count for support (not the combined supportCount)
+    // to avoid double-counting tickets that also created Feedback rows.
+    const totalSignalCount = feedbackCount + supportClusterCount + surveyCount;
 
     // ── Customer aggregates ─────────────────────────────────────────────────
     const customerIds = new Set(
@@ -366,7 +418,11 @@ export class CiqService {
     // We apply them as separate breakdown entries so the UI can show the full picture.
     const effectiveSupportWeight = settings.requestFrequencyWeight * settings.supportWeight;
     const effectiveVoiceWeight   = settings.requestFrequencyWeight * settings.voiceWeight;
-
+    // Survey signals use the same base weight as regular feedback (1.0×).
+    // Survey respondents are high-intent (they opted in) so their signals are
+    // at least as valuable as direct feedback.  No separate surveyWeight setting
+    // is needed — the count is already separated into normSurvey.
+    const normSurvey = countNorm(surveyCount, 20);
     const explanation: Record<string, CiqScoreComponent> = {
       feedbackFrequency: {
         value:        normTextFeedback,
@@ -433,6 +489,17 @@ export class CiqService {
         weight:       settings.voteWeight,
         contribution: normVotes * settings.voteWeight,
         label:        'Portal vote signal',
+      },
+      // Survey signal: open-text survey responses that entered the AI pipeline.
+      // Weight = requestFrequencyWeight (same as direct text feedback) because survey
+      // responses are high-intent and should not be discounted relative to inbox items.
+      // This component is visible in the scoreExplanation breakdown so the UI can
+      // show "X survey responses contributed to this theme's priority".
+      surveySignal: {
+        value:        normSurvey,
+        weight:       settings.requestFrequencyWeight,
+        contribution: normSurvey * settings.requestFrequencyWeight,
+        label:        'Survey response signal',
       },
     };
 

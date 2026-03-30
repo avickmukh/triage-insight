@@ -293,6 +293,15 @@ export interface Theme {
   feedbackCount?: number;
   /** Present on list endpoint (findMany) — Prisma _count include */
   _count?: { feedbacks: number };
+  // ── Unified cross-source signal counts (written by CIQ after every recomputation) ──
+  /** Count of voice/public-portal feedback signals linked to this theme */
+  voiceCount?: number;
+  /** Count of support ticket signals correlated to this theme */
+  supportCount?: number;
+  /** Count of survey-derived signals (text + structured evidence) linked to this theme */
+  surveyCount?: number;
+  /** Total cross-source signal count: feedbackCount + voiceCount + supportCount + surveyCount */
+  totalSignalCount?: number;
   // ─── CIQ Priority Intelligence fields ───────────────────────────────────────
   /** CIQ priority score (0–100), null if never scored */
   priorityScore?: number | null;
@@ -1866,6 +1875,11 @@ export interface ThemePriorityItem {
   revenueOpportunityScore: number;
   feedbackCount:           number;
   uniqueCustomerCount:     number;
+  // ── Unified cross-source signal counts ──
+  voiceCount:              number;
+  supportCount:            number;
+  surveyCount:             number;
+  totalSignalCount:        number;
   revenueInfluence:        number;
   dealInfluenceValue:      number;
   strategicTag:            string | null;
