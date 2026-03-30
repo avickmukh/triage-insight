@@ -1,5 +1,10 @@
 import { IsString, IsNotEmpty, IsOptional, IsEnum, MaxLength } from 'class-validator';
-import { FeedbackStatus, FeedbackSourceType } from '@prisma/client';
+import {
+  FeedbackStatus,
+  FeedbackSourceType,
+  FeedbackPrimarySource,
+  FeedbackSecondarySource,
+} from '@prisma/client';
 
 export class CreateFeedbackDto {
   @IsString()
@@ -18,6 +23,24 @@ export class CreateFeedbackDto {
 
   @IsEnum(FeedbackSourceType)
   sourceType: FeedbackSourceType;
+
+  /**
+   * Unified primary source — product-facing category.
+   * Set by all ingestion paths; defaults to FEEDBACK if omitted.
+   * Drives top-level inbox filtering and source identity.
+   */
+  @IsOptional()
+  @IsEnum(FeedbackPrimarySource)
+  primarySource?: FeedbackPrimarySource;
+
+  /**
+   * Unified secondary source — operational ingestion channel.
+   * Set by all ingestion paths; defaults to OTHER if omitted.
+   * Drives source badges in the inbox and evidence labels in theme/CIQ views.
+   */
+  @IsOptional()
+  @IsEnum(FeedbackSecondarySource)
+  secondarySource?: FeedbackSecondarySource;
 
   @IsOptional()
   @IsString()

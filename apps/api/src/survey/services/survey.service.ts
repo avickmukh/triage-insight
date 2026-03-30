@@ -7,7 +7,7 @@ import {
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
 import { PrismaService } from '../../prisma/prisma.service';
-import { SurveyStatus, SurveyType, FeedbackSourceType, FeedbackStatus } from '@prisma/client';
+import { SurveyStatus, SurveyType, FeedbackSourceType, FeedbackPrimarySource, FeedbackSecondarySource, FeedbackStatus } from '@prisma/client';
 import { SURVEY_INTELLIGENCE_QUEUE } from '../processors/survey-intelligence.processor';
 import {
   CreateSurveyDto,
@@ -464,7 +464,9 @@ export class SurveyService {
           const feedback = await tx.feedback.create({
             data: {
               workspaceId: workspace.id,
-              sourceType: FeedbackSourceType.SURVEY,
+              sourceType:      FeedbackSourceType.SURVEY,
+              primarySource:   FeedbackPrimarySource.SURVEY,
+              secondarySource: FeedbackSecondarySource.PORTAL,
               sourceRef: `survey:${surveyId}`,
               title,
               description,

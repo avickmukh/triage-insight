@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
-import { WorkspaceStatus } from '@prisma/client';
+import { WorkspaceStatus, FeedbackPrimarySource, FeedbackSecondarySource, FeedbackSourceType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PlanLimitService } from '../billing/plan-limit.service';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
@@ -66,6 +66,35 @@ export class FeedbackService {
     const rawTitle = (createFeedbackDto.title ?? '').trim() || 'Untitled';
     const rawDescription = (createFeedbackDto.description ?? '').trim();
 
+    // ── Derive safe defaults for unified source fields if caller did not set them ──
+    // This ensures all Feedback rows written through this service have both fields set,
+    // even when called from legacy paths that pre-date the unified source model.
+    const primarySource: FeedbackPrimarySource =
+      createFeedbackDto.primarySource ??
+      (createFeedbackDto.sourceType === FeedbackSourceType.VOICE
+        ? FeedbackPrimarySource.VOICE
+        : createFeedbackDto.sourceType === FeedbackSourceType.SURVEY
+        ? FeedbackPrimarySource.SURVEY
+        : FeedbackPrimarySource.FEEDBACK);
+
+    const secondarySource: FeedbackSecondarySource =
+      createFeedbackDto.secondarySource ??
+      (createFeedbackDto.sourceType === FeedbackSourceType.VOICE
+        ? FeedbackSecondarySource.TRANSCRIPT
+        : createFeedbackDto.sourceType === FeedbackSourceType.SURVEY
+        ? FeedbackSecondarySource.PORTAL
+        : createFeedbackDto.sourceType === FeedbackSourceType.EMAIL
+        ? FeedbackSecondarySource.EMAIL
+        : createFeedbackDto.sourceType === FeedbackSourceType.SLACK
+        ? FeedbackSecondarySource.SLACK
+        : createFeedbackDto.sourceType === FeedbackSourceType.PUBLIC_PORTAL
+        ? FeedbackSecondarySource.PORTAL
+        : createFeedbackDto.sourceType === FeedbackSourceType.API
+        ? FeedbackSecondarySource.API
+        : createFeedbackDto.sourceType === FeedbackSourceType.CSV_IMPORT
+        ? FeedbackSecondarySource.CSV_UPLOAD
+        : FeedbackSecondarySource.MANUAL);
+
     const newFeedback = await this.prisma.feedback.create({
       data: {
         ...createFeedbackDto,
@@ -76,6 +105,9 @@ export class FeedbackService {
         normalizedText: rawDescription.toLowerCase(),
         status: createFeedbackDto.status ?? 'NEW',
         workspaceId,
+        // Always set unified source fields — override DTO values with resolved defaults
+        primarySource,
+        secondarySource,
       },
     });
 
@@ -101,11 +133,15 @@ export class FeedbackService {
   }
 
   async findAll(workspaceId: string, query: QueryFeedbackDto) {
-    const { page = 1, limit = 10, search, status, sourceType, customerId } = query;
+    const { page = 1, limit = 10, search, status, sourceType, primarySource, secondarySource, customerId } = query;
     const where: Prisma.FeedbackWhereInput = {
       workspaceId,
       status,
-      sourceType,
+      // Legacy sourceType filter — kept for backward compat; prefer primarySource going forward
+      ...(sourceType && { sourceType }),
+      // Unified source filters — take precedence over legacy sourceType when both are set
+      ...(primarySource && { primarySource }),
+      ...(secondarySource && { secondarySource }),
       customerId,
       ...(search && {
         OR: [

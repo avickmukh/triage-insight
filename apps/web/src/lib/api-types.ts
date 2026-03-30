@@ -70,7 +70,43 @@ export enum FeedbackSourceType {
   SLACK = 'SLACK',
   CSV_IMPORT = 'CSV_IMPORT',
   VOICE = 'VOICE',
+  SURVEY = 'SURVEY',
   API = 'API',
+}
+
+/**
+ * Top-level product category for a piece of feedback.
+ * Drives primary inbox filtering and source identity across the product.
+ */
+export enum FeedbackPrimarySource {
+  /** Direct product feedback (manual, CSV, portal, email, Slack, API) */
+  FEEDBACK = 'FEEDBACK',
+  /** Extracted from customer support tickets */
+  SUPPORT = 'SUPPORT',
+  /** Extracted from voice/audio transcripts */
+  VOICE = 'VOICE',
+  /** Collected via structured surveys (NPS, CSAT, custom) */
+  SURVEY = 'SURVEY',
+}
+
+/**
+ * Operational ingestion channel within a primary source.
+ * Explains HOW the feedback arrived, not WHAT it is.
+ * Drives source badges in the inbox and evidence labels in theme/CIQ views.
+ */
+export enum FeedbackSecondarySource {
+  MANUAL = 'MANUAL',
+  CSV_UPLOAD = 'CSV_UPLOAD',
+  PORTAL = 'PORTAL',
+  EMAIL = 'EMAIL',
+  SLACK = 'SLACK',
+  ZENDESK = 'ZENDESK',
+  INTERCOM = 'INTERCOM',
+  API = 'API',
+  WEBHOOK = 'WEBHOOK',
+  TRANSCRIPT = 'TRANSCRIPT',
+  IMPORT = 'IMPORT',
+  OTHER = 'OTHER',
 }
 
 export enum ThemeStatus {
@@ -171,6 +207,10 @@ export interface Feedback {
   customerId?: string | null;
   portalUserId?: string | null;
   sourceType: FeedbackSourceType;
+  /** Unified primary source — product-facing category. Null for legacy records. */
+  primarySource?: FeedbackPrimarySource | null;
+  /** Unified secondary source — operational ingestion channel. Null for legacy records. */
+  secondarySource?: FeedbackSecondarySource | null;
   sourceRef?: string | null;
   title: string;
   description: string;
@@ -204,6 +244,8 @@ export interface ThemeFeedback {
   description?: string | null;
   status?: string;
   sourceType?: string;
+  primarySource?: FeedbackPrimarySource | null;
+  secondarySource?: FeedbackSecondarySource | null;
   workspaceId?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -2177,6 +2219,10 @@ export interface SemanticSearchResult {
   description: string | null;
   status: string;
   sourceType: string;
+  /** Unified primary source — null for legacy records */
+  primarySource?: FeedbackPrimarySource | null;
+  /** Unified secondary source — null for legacy records */
+  secondarySource?: FeedbackSecondarySource | null;
   sentiment: number | null;
   createdAt: string;
   /** Cosine similarity score in [0, 1] — higher is more relevant. */

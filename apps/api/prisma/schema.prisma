@@ -98,6 +98,49 @@ enum FeedbackSourceType {
   API
 }
 
+/// Top-level product category for a piece of feedback.
+/// Drives primary inbox filtering and source identity across the product.
+/// FEEDBACK = any direct user feedback (manual, CSV, portal, email, Slack, API)
+/// SUPPORT  = extracted from customer support tickets
+/// VOICE    = extracted from voice/audio transcripts
+/// SURVEY   = collected via structured surveys (NPS, CSAT, custom)
+enum FeedbackPrimarySource {
+  FEEDBACK
+  SUPPORT
+  VOICE
+  SURVEY
+}
+
+/// Operational ingestion channel within a primary source.
+/// Explains HOW the feedback arrived, not WHAT it is.
+/// Drives source badges in the inbox and evidence labels in theme/CIQ views.
+enum FeedbackSecondarySource {
+  /// Typed directly by a team member in the app
+  MANUAL
+  /// Bulk-imported from a CSV file
+  CSV_UPLOAD
+  /// Submitted through the public customer portal
+  PORTAL
+  /// Ingested from email (forwarded or parsed)
+  EMAIL
+  /// Ingested from a Slack channel or DM
+  SLACK
+  /// Ingested from Zendesk tickets
+  ZENDESK
+  /// Ingested from Intercom conversations
+  INTERCOM
+  /// Submitted via the REST API
+  API
+  /// Received via webhook from an external system
+  WEBHOOK
+  /// Extracted from a voice/audio transcript
+  TRANSCRIPT
+  /// Generic bulk import (non-CSV, e.g. JSON upload)
+  IMPORT
+  /// Catch-all for unclassified ingestion channels
+  OTHER
+}
+
 enum DuplicateSuggestionStatus {
   PENDING
   ACCEPTED
@@ -651,6 +694,12 @@ model Feedback {
   /// PortalUser who submitted this feedback (null for internal/CSV/Slack/API sources)
   portalUserId    String?
   sourceType      FeedbackSourceType
+  /// Unified primary source — product-facing category (FEEDBACK / SUPPORT / VOICE / SURVEY).
+  /// Nullable for backward-compatibility; backfilled from sourceType by migration.
+  primarySource   FeedbackPrimarySource?
+  /// Unified secondary source — operational ingestion channel (MANUAL / CSV_UPLOAD / PORTAL / etc.).
+  /// Nullable for backward-compatibility; backfilled from sourceType by migration.
+  secondarySource FeedbackSecondarySource?
   sourceRef       String?
   title           String
   description     String
@@ -698,6 +747,8 @@ model Feedback {
   @@index([portalUserId])
   @@index([status])
   @@index([sourceType])
+  @@index([primarySource])
+  @@index([secondarySource])
   @@index([createdAt])
   @@index([submittedAt])
   @@index([importBatchId])

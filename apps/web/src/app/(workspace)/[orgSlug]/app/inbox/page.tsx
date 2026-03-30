@@ -3,7 +3,7 @@
 import { useRef, useState, useCallback } from 'react';
 import { useFeedback } from '@/hooks/use-feedback';
 import { useWorkspace, useCurrentMemberRole } from '@/hooks/use-workspace';
-import { Feedback, FeedbackSourceType, FeedbackStatus, SemanticSearchResult, ThemeFeedback, WorkspaceRole } from '@/lib/api-types';
+import { Feedback, FeedbackPrimarySource, FeedbackSecondarySource, FeedbackSourceType, FeedbackStatus, SemanticSearchResult, ThemeFeedback, WorkspaceRole } from '@/lib/api-types';
 import apiClient from '@/lib/api-client';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -28,6 +28,7 @@ const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
 };
 
 const SOURCE_LABELS: Record<string, string> = {
+  // Legacy sourceType labels (kept for backward compat)
   [FeedbackSourceType.MANUAL]: 'Manual',
   [FeedbackSourceType.PUBLIC_PORTAL]: 'Portal',
   [FeedbackSourceType.EMAIL]: 'Email',
@@ -36,6 +37,31 @@ const SOURCE_LABELS: Record<string, string> = {
   [FeedbackSourceType.VOICE]: 'Voice',
   [FeedbackSourceType.API]: 'API',
 };
+
+/** Human-readable labels for the unified secondary source badges */
+const SECONDARY_SOURCE_LABELS: Record<string, string> = {
+  [FeedbackSecondarySource.MANUAL]: 'Manual',
+  [FeedbackSecondarySource.CSV_UPLOAD]: 'CSV',
+  [FeedbackSecondarySource.PORTAL]: 'Portal',
+  [FeedbackSecondarySource.EMAIL]: 'Email',
+  [FeedbackSecondarySource.SLACK]: 'Slack',
+  [FeedbackSecondarySource.ZENDESK]: 'Zendesk',
+  [FeedbackSecondarySource.INTERCOM]: 'Intercom',
+  [FeedbackSecondarySource.API]: 'API',
+  [FeedbackSecondarySource.WEBHOOK]: 'Webhook',
+  [FeedbackSecondarySource.TRANSCRIPT]: 'Transcript',
+  [FeedbackSecondarySource.IMPORT]: 'Import',
+  [FeedbackSecondarySource.OTHER]: 'Other',
+};
+
+/** Primary source filter tabs for the inbox top-level source selector */
+const PRIMARY_SOURCE_TABS: { label: string; value: FeedbackPrimarySource | undefined }[] = [
+  { label: 'All Sources', value: undefined },
+  { label: 'Feedback', value: FeedbackPrimarySource.FEEDBACK },
+  { label: 'Voice', value: FeedbackPrimarySource.VOICE },
+  { label: 'Survey', value: FeedbackPrimarySource.SURVEY },
+  { label: 'Support', value: FeedbackPrimarySource.SUPPORT },
+];
 
 const TABS: { label: string; value: FeedbackStatus | undefined }[] = [
   { label: 'All', value: undefined },
@@ -379,6 +405,7 @@ export default function InboxPage() {
   const slug = (Array.isArray(params.orgSlug) ? params.orgSlug[0] : params.orgSlug) ?? '';
   const r = appRoutes(slug);
   const [activeStatus, setActiveStatus] = useState<FeedbackStatus | undefined>(undefined);
+  const [activePrimarySource, setActivePrimarySource] = useState<FeedbackPrimarySource | undefined>(undefined);
   const [search, setSearch] = useState('');
   const [showCsvModal, setShowCsvModal] = useState(false);
   const [currentBatchId, setCurrentBatchId] = useState<string | undefined>(undefined);
@@ -428,6 +455,7 @@ export default function InboxPage() {
   const { data, isLoading, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useFeedbackList({
       status: activeStatus,
+      primarySource: activePrimarySource,
       search: search.trim() || undefined,
     });
 
@@ -690,6 +718,32 @@ export default function InboxPage() {
           </div>
         )}
 
+        {/* Primary source filter tabs — always visible in keyword mode */}
+        {!aiMode && (
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', borderBottom: '1px solid #f0f4f8', paddingBottom: '0.5rem' }}>
+            {PRIMARY_SOURCE_TABS.map((t) => (
+              <button
+                key={t.label}
+                onClick={() => setActivePrimarySource(t.value)}
+                style={{
+                  padding: '0.35rem 0.9rem',
+                  borderRadius: '999px',
+                  border: '1px solid',
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  borderColor: activePrimarySource === t.value ? '#0A2540' : '#dee2e6',
+                  background: activePrimarySource === t.value ? '#0A2540' : '#fff',
+                  color: activePrimarySource === t.value ? '#fff' : '#6C757D',
+                  transition: 'all 0.15s',
+                }}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Status filter tabs (keyword mode only) */}
         {!aiMode && (
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
@@ -752,7 +806,10 @@ export default function InboxPage() {
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {aiResults.map((fb, i) => {
                 const sc = STATUS_COLORS[fb.status] ?? { bg: '#f0f4f8', color: '#6C757D' };
-                const sourceLabel = SOURCE_LABELS[fb.sourceType] ?? fb.sourceType;
+                // Prefer unified secondarySource label; fall back to legacy sourceType label
+                const sourceLabel = (fb.secondarySource && SECONDARY_SOURCE_LABELS[fb.secondarySource])
+                  ?? SOURCE_LABELS[fb.sourceType]
+                  ?? fb.sourceType;
                 const pct = Math.round(Number(fb.similarity) * 100);
                 return (
                   <Link
@@ -875,7 +932,10 @@ export default function InboxPage() {
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {allItems.map((fb, i) => {
               const sc = STATUS_COLORS[fb.status] ?? { bg: '#f0f4f8', color: '#6C757D' };
-              const sourceLabel = SOURCE_LABELS[fb.sourceType] ?? fb.sourceType;
+              // Prefer unified secondarySource label; fall back to legacy sourceType label
+              const sourceLabel = (fb.secondarySource && SECONDARY_SOURCE_LABELS[fb.secondarySource])
+                ?? SOURCE_LABELS[fb.sourceType]
+                ?? fb.sourceType;
               return (
                 <Link
                   key={fb.id}

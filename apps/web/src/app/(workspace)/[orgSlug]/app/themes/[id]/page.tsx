@@ -54,6 +54,7 @@ const SOURCE_LABELS: Record<FeedbackSourceType, string> = {
   [FeedbackSourceType.SLACK]:         'Slack',
   [FeedbackSourceType.CSV_IMPORT]:    'CSV',
   [FeedbackSourceType.VOICE]:         'Voice',
+  [FeedbackSourceType.SURVEY]:        'Survey',
   [FeedbackSourceType.API]:           'API',
 };
 

@@ -221,7 +221,12 @@ const apiClient = {
         limit?: number;
         search?: string;
         status?: string;
+        /** Legacy filter — kept for backward compat */
         sourceType?: string;
+        /** Unified primary source filter (FEEDBACK | SUPPORT | VOICE | SURVEY) */
+        primarySource?: string;
+        /** Unified secondary source filter (MANUAL | CSV_UPLOAD | PORTAL | EMAIL | …) */
+        secondarySource?: string;
         customerId?: string;
       }
     ): Promise<FeedbackListResponse> =>
