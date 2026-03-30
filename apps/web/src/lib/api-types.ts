@@ -114,6 +114,10 @@ export enum ThemeStatus {
   AI_GENERATED = 'AI_GENERATED',
   /** Human-reviewed and confirmed — trust signal only, does NOT gate CIQ. */
   VERIFIED = 'VERIFIED',
+  /** Theme received fresh signals after its linked RoadmapItem was SHIPPED. Fully participates in CIQ. */
+  RESURFACED = 'RESURFACED',
+  /** Theme was manually reopened after being closed/shipped. Fully participates in CIQ. */
+  REOPENED = 'REOPENED',
   /** Soft-deleted — excluded from all intelligence queries. */
   ARCHIVED = 'ARCHIVED',
 }

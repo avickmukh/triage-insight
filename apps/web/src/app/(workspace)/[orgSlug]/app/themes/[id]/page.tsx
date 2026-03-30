@@ -36,6 +36,8 @@ const CARD: React.CSSProperties = {
 const STATUS_COLORS: Record<ThemeStatus, { bg: string; color: string }> = {
   [ThemeStatus.AI_GENERATED]: { bg: '#e8f7f7', color: '#20A4A4' },
   [ThemeStatus.VERIFIED]:     { bg: '#e8f5e9', color: '#2e7d32' },
+  [ThemeStatus.RESURFACED]:   { bg: '#fff3e0', color: '#e65100' },
+  [ThemeStatus.REOPENED]:     { bg: '#f3e8ff', color: '#6d28d9' },
   [ThemeStatus.ARCHIVED]:     { bg: '#f0f4f8', color: '#6C757D' },
 };
 
@@ -559,6 +561,33 @@ export default function ThemeDetailPage() {
               {theme.status === 'VERIFIED' && (
                 <span style={{ fontSize: '0.75rem', background: '#e8f5e9', color: '#2e7d32', borderRadius: '0.375rem', padding: '0.2rem 0.6rem', fontWeight: 500 }}>
                   Verified by your team
+                </span>
+              )}
+              {/* Resurfacing badge */}
+              {(theme as any).resurfaceCount > 0 && (
+                <span
+                  title={`This theme was shipped but received fresh signals ${(theme as any).resurfaceCount} time${(theme as any).resurfaceCount !== 1 ? 's' : ''}. The problem may not be fully resolved.`}
+                  style={{ fontSize: '0.75rem', background: '#fff3e0', color: '#e65100', borderRadius: '0.375rem', padding: '0.2rem 0.6rem', fontWeight: 600, border: '1px solid #ffcc80', cursor: 'help' }}
+                >
+                  🔄 Resurfacing ×{(theme as any).resurfaceCount} — shipped but still receiving signals
+                </span>
+              )}
+              {/* Recent Spike badge */}
+              {(theme as any).trendDelta != null && (theme as any).trendDelta >= 30 && (
+                <span
+                  title={`Signal velocity: +${Number((theme as any).trendDelta).toFixed(0)}% week-over-week — rapid signal growth detected`}
+                  style={{ fontSize: '0.75rem', background: '#e8f5e9', color: '#1b5e20', borderRadius: '0.375rem', padding: '0.2rem 0.6rem', fontWeight: 600, border: '1px solid #a5d6a7', cursor: 'help' }}
+                >
+                  ⚡ Recent Spike +{Number((theme as any).trendDelta).toFixed(0)}% WoW
+                </span>
+              )}
+              {/* Last Activity */}
+              {(theme as any).lastEvidenceAt && (
+                <span
+                  title={`Most recent signal attached: ${new Date((theme as any).lastEvidenceAt).toLocaleString()}`}
+                  style={{ fontSize: '0.75rem', background: '#f0f4f8', color: '#495057', borderRadius: '0.375rem', padding: '0.2rem 0.6rem', fontWeight: 500, cursor: 'help' }}
+                >
+                  📅 Last activity: {new Date((theme as any).lastEvidenceAt).toLocaleDateString()}
                 </span>
               )}
             </div>

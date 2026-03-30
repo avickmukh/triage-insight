@@ -22,12 +22,16 @@ const CARD: React.CSSProperties = {
 const STATUS_COLORS: Record<ThemeStatus, { bg: string; color: string }> = {
   [ThemeStatus.AI_GENERATED]: { bg: '#e8f7f7', color: '#20A4A4' },
   [ThemeStatus.VERIFIED]:     { bg: '#e8f5e9', color: '#2e7d32' },
+  [ThemeStatus.RESURFACED]:   { bg: '#fff3e0', color: '#e65100' },
+  [ThemeStatus.REOPENED]:     { bg: '#f3e8ff', color: '#6d28d9' },
   [ThemeStatus.ARCHIVED]:     { bg: '#f0f4f8', color: '#6C757D' },
 };
 
 const STATUS_LABELS: Record<ThemeStatus, string> = {
   [ThemeStatus.AI_GENERATED]: 'AI Generated',
   [ThemeStatus.VERIFIED]:     'Verified',
+  [ThemeStatus.RESURFACED]:   'Resurfaced',
+  [ThemeStatus.REOPENED]:     'Reopened',
   [ThemeStatus.ARCHIVED]:     'Archived',
 };
 
@@ -35,6 +39,8 @@ const TABS: { label: string; value: string | undefined }[] = [
   { label: 'All',          value: undefined },
   { label: 'AI Generated', value: ThemeStatus.AI_GENERATED },
   { label: 'Verified',     value: ThemeStatus.VERIFIED },
+  { label: 'Resurfaced',   value: ThemeStatus.RESURFACED },
+  { label: 'Reopened',     value: ThemeStatus.REOPENED },
   { label: 'Archived',     value: ThemeStatus.ARCHIVED },
 ];
 
@@ -276,6 +282,27 @@ function ThemeCard({ theme, href }: { theme: Theme; href: string }) {
           </div>
         )}
 
+        {/* Continuous Intelligence badges: Resurfacing + Recent Spike */}
+        {((theme as any).resurfaceCount > 0 || ((theme as any).trendDelta != null && (theme as any).trendDelta >= 30)) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.4rem' }}>
+            {(theme as any).resurfaceCount > 0 && (
+              <span
+                title={`This theme was shipped but received fresh signals ${(theme as any).resurfaceCount} time${(theme as any).resurfaceCount !== 1 ? 's' : ''}. The problem may not be fully resolved.`}
+                style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '999px', background: '#fff3e0', color: '#e65100', cursor: 'help', border: '1px solid #ffcc80' }}
+              >
+                🔄 Resurfacing ×{(theme as any).resurfaceCount}
+              </span>
+            )}
+            {(theme as any).trendDelta != null && (theme as any).trendDelta >= 30 && (
+              <span
+                title={`Signal velocity: +${Number((theme as any).trendDelta).toFixed(0)}% week-over-week — rapid signal growth detected`}
+                style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '999px', background: '#e8f5e9', color: '#1b5e20', cursor: 'help', border: '1px solid #a5d6a7' }}
+              >
+                ⚡ Recent Spike +{Number((theme as any).trendDelta).toFixed(0)}%
+              </span>
+            )}
+          </div>
+        )}
         {/* Trend + auto-merge row */}
         {(theme.trendDirection || theme.autoMergeCandidate || theme.shortLabel) && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
@@ -364,12 +391,22 @@ function ThemeCard({ theme, href }: { theme: Theme; href: string }) {
               </span>
             </div>
           )}
-          <div>
-            <span style={{ fontSize: '0.75rem', color: '#adb5bd', display: 'block' }}>Updated</span>
-            <span style={{ fontSize: '0.8rem', color: '#495057' }}>
-              {new Date(theme.updatedAt).toLocaleDateString()}
-            </span>
-          </div>
+          {(theme as any).lastEvidenceAt && (
+            <div>
+              <span style={{ fontSize: '0.75rem', color: '#adb5bd', display: 'block' }}>Last Activity</span>
+              <span style={{ fontSize: '0.8rem', color: '#495057' }} title={`Most recent signal: ${new Date((theme as any).lastEvidenceAt).toLocaleString()}`}>
+                {new Date((theme as any).lastEvidenceAt).toLocaleDateString()}
+              </span>
+            </div>
+          )}
+          {!(theme as any).lastEvidenceAt && (
+            <div>
+              <span style={{ fontSize: '0.75rem', color: '#adb5bd', display: 'block' }}>Updated</span>
+              <span style={{ fontSize: '0.8rem', color: '#495057' }}>
+                {new Date(theme.updatedAt).toLocaleDateString()}
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </Link>

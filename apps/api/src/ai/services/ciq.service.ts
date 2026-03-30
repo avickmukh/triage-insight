@@ -398,15 +398,41 @@ export class CiqService {
         ? positiveSentiments.reduce((a, b) => a + b, 0) / positiveSentiments.length
         : 0;
     const normSentiment = avgPositiveSentiment * 100;
+    // ── Time-based signal weighting (3-tier recency decay) ────────────────────────
+    // Signals are weighted by age:
+    //   ≤ 30 days  → 1.0× (full weight — fresh signal)
+    //   31–90 days → 0.6× (medium weight — still relevant)
+    //   > 90 days  → 0.2× (reduced weight — stale signal)
+    // This replaces the previous binary 30d recency flag and ensures that
+    // themes with recent activity score higher than themes with only old signals.
+    const now30  = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const now90  = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    let weightedSignalCount = 0;
+    let recentFeedbackCount = 0; // kept for backward-compat with normRecency
+    for (const tf of activeFeedback) {
+      const createdAt = tf.feedback.createdAt ? new Date(tf.feedback.createdAt) : null;
+      if (!createdAt) {
+        weightedSignalCount += 0.2; // treat missing date as stale
+        continue;
+      }
+      if (createdAt > now30) {
+        weightedSignalCount += 1.0;
+        recentFeedbackCount++;
+      } else if (createdAt > now90) {
+        weightedSignalCount += 0.6;
+      } else {
+        weightedSignalCount += 0.2;
+      }
+    }
+    // weightedSignalCount is used as the primary frequency input so that
+    // themes with recent signals rank higher than themes with only old signals
+    // of equal raw count.
+    const effectiveSignalCount = weightedSignalCount;
 
-    // ── Recency ─────────────────────────────────────────────────────────────
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const recentFeedbackCount = activeFeedback.filter(
-      (tf) => tf.feedback.createdAt != null && new Date(tf.feedback.createdAt) > thirtyDaysAgo,
-    ).length;
-
-    // ── Normalise each input to 0–100 ───────────────────────────────────────
-    const normTextFeedback    = countNorm(textFeedbackCount, 50);
+    // ── Normalise each input to 0–100 ───────────────────────────────────────────
+    // Use effectiveSignalCount (time-weighted) for frequency normalisation
+    // instead of raw textFeedbackCount so recency is baked into the base score.
+    const normTextFeedback    = countNorm(effectiveSignalCount, 50);
     const normVoice           = countNorm(voiceCount, 20);
     const normSupport         = countNorm(supportCount, 30);
     const normCustomerCount   = countNorm(uniqueCustomerCount, 20);

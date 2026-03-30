@@ -280,10 +280,28 @@ export class ThemeClusteringService {
       const now = new Date();
       const themeUpdate: Record<string, unknown> = { lastEvidenceAt: now };
 
+      // ── Recompute recentSignalCount (signals in last 30 days) ─────────────
+      // Count all ThemeFeedback rows for this theme whose linked Feedback was
+      // created within the last 30 days.  This is a cheap COUNT query that runs
+      // on every assignment so the value is always fresh.
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const recentCount = await prisma.themeFeedback.count({
+        where: {
+          themeId: bestThemeId,
+          feedback: { createdAt: { gte: thirtyDaysAgo } },
+        },
+      });
+      // +1 to include the feedback being assigned right now (not yet committed)
+      themeUpdate.recentSignalCount = recentCount + 1;
+
       // ── Resurfacing detection ─────────────────────────────────────────────
       // If any RoadmapItem linked to this theme is SHIPPED, fresh evidence means
       // the problem was not fully resolved. Increment resurfaceCount and set
       // resurfacedAt so the roadmap and CIQ views can surface this signal.
+      // When recentSignalCount crosses the RESURFACING_THRESHOLD (5 signals in
+      // 30 days), also promote the theme status to RESURFACED so it re-enters
+      // the full intelligence pipeline.
+      const RESURFACING_THRESHOLD = 5;
       const shippedRoadmapItem = await prisma.roadmapItem.findFirst({
         where: { themeId: bestThemeId, status: 'SHIPPED' },
         select: { id: true },
@@ -291,11 +309,21 @@ export class ThemeClusteringService {
       if (shippedRoadmapItem) {
         themeUpdate.resurfacedAt   = now;
         themeUpdate.resurfaceCount = { increment: 1 };
-        this.logger.warn(
-          `[CLUSTER] ⚠ RESURFACED: theme "${bestThemeTitle}" (${bestThemeId}) ` +
-          `has a SHIPPED roadmap item but received fresh evidence from feedback ${feedbackId}. ` +
-          `resurfaceCount incremented.`,
-        );
+        // Auto-promote to RESURFACED when signal volume crosses the threshold
+        if ((recentCount + 1) >= RESURFACING_THRESHOLD) {
+          themeUpdate.status = 'RESURFACED';
+          this.logger.warn(
+            `[CLUSTER] ⚠ AUTO-PROMOTED to RESURFACED: theme "${bestThemeTitle}" (${bestThemeId}) ` +
+            `crossed ${RESURFACING_THRESHOLD} recent signals (${recentCount + 1}) after SHIPPED roadmap item. ` +
+            `Status set to RESURFACED.`,
+          );
+        } else {
+          this.logger.warn(
+            `[CLUSTER] ⚠ RESURFACED: theme "${bestThemeTitle}" (${bestThemeId}) ` +
+            `has a SHIPPED roadmap item but received fresh evidence from feedback ${feedbackId}. ` +
+            `resurfaceCount incremented (recentSignals=${recentCount + 1}/${RESURFACING_THRESHOLD}).`,
+          );
+        }
       }
 
       await prisma.theme.update({

@@ -153,6 +153,12 @@ enum ThemeStatus {
   AI_GENERATED
   /// Human-reviewed and confirmed — trust signal only, does NOT affect CIQ.
   VERIFIED
+  /// Theme received fresh signals above the resurfacing threshold after its linked
+  /// RoadmapItem was SHIPPED. Fully participates in CIQ and rankings.
+  RESURFACED
+  /// Theme was manually reopened after being closed/shipped.
+  /// Fully participates in CIQ and rankings.
+  REOPENED
   /// Soft-deleted — excluded from all intelligence queries.
   ARCHIVED
 }
@@ -937,6 +943,9 @@ model Theme {
   /// Count of times fresh evidence has arrived after the linked RoadmapItem was SHIPPED.
   /// Incremented each time a new signal is attached while any roadmap item is SHIPPED.
   resurfaceCount     Int?      @default(0)
+  /// Count of signals received in the last 30 days (updated on every ThemeFeedback upsert).
+  /// Used for time-based weighting in CIQ scoring and resurfacing threshold checks.
+  recentSignalCount  Int?      @default(0)
   /// Timestamp of the most recent evidence attachment (any source).
   /// Updated on every ThemeFeedback upsert so the theme list can be sorted by activity.
   lastEvidenceAt     DateTime?
