@@ -1,0 +1,98 @@
+{
+  "_comment": "CloudFront distribution config reference. Use this as a guide when creating the distribution in the AWS Console or via CLI. Replace all PLACEHOLDER values.",
+
+  "Origins": [
+    {
+      "Id": "web-origin",
+      "_comment": "Next.js web app running on Lightsail (port 3001 via Nginx on port 80)",
+      "DomainName": "LIGHTSAIL_INSTANCE_IP_OR_HOSTNAME",
+      "CustomOriginConfig": {
+        "HTTPPort": 80,
+        "HTTPSPort": 443,
+        "OriginProtocolPolicy": "http-only",
+        "OriginSSLProtocols": ["TLSv1.2"]
+      }
+    },
+    {
+      "Id": "api-origin",
+      "_comment": "NestJS API running on Lightsail (port 3000 via Nginx on port 80, path /api/*)",
+      "DomainName": "LIGHTSAIL_INSTANCE_IP_OR_HOSTNAME",
+      "CustomOriginConfig": {
+        "HTTPPort": 80,
+        "HTTPSPort": 443,
+        "OriginProtocolPolicy": "http-only"
+      }
+    }
+  ],
+
+  "DefaultCacheBehavior": {
+    "TargetOriginId": "web-origin",
+    "ViewerProtocolPolicy": "redirect-to-https",
+    "AllowedMethods": ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"],
+    "CachedMethods": ["GET", "HEAD"],
+    "CachePolicyId": "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+    "_comment_cache_policy": "CachingDisabled — use this for SSR pages so Next.js controls caching",
+    "OriginRequestPolicyId": "b689b0a8-53d0-40ab-baf2-68738e2966ac",
+    "_comment_origin_policy": "AllViewerExceptHostHeader — forwards cookies, query strings, headers",
+    "Compress": true
+  },
+
+  "CacheBehaviors": [
+    {
+      "_comment": "API calls — never cache, forward all headers and cookies",
+      "PathPattern": "/api/*",
+      "TargetOriginId": "api-origin",
+      "ViewerProtocolPolicy": "redirect-to-https",
+      "AllowedMethods": ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"],
+      "CachePolicyId": "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+      "OriginRequestPolicyId": "b689b0a8-53d0-40ab-baf2-68738e2966ac",
+      "Compress": true
+    },
+    {
+      "_comment": "Next.js static assets — long cache (1 year), immutable",
+      "PathPattern": "/_next/static/*",
+      "TargetOriginId": "web-origin",
+      "ViewerProtocolPolicy": "redirect-to-https",
+      "AllowedMethods": ["GET", "HEAD"],
+      "CachePolicyId": "658327ea-f89d-4fab-a63d-7e88639e58f6",
+      "_comment_cache_policy": "CachingOptimized — 1 year TTL for immutable static assets",
+      "Compress": true
+    },
+    {
+      "_comment": "Public folder assets (images, fonts, etc.)",
+      "PathPattern": "/static/*",
+      "TargetOriginId": "web-origin",
+      "ViewerProtocolPolicy": "redirect-to-https",
+      "AllowedMethods": ["GET", "HEAD"],
+      "CachePolicyId": "658327ea-f89d-4fab-a63d-7e88639e58f6",
+      "Compress": true
+    }
+  ],
+
+  "PriceClass": "PriceClass_100",
+  "_comment_price_class": "US, Canada, Europe only — cheapest. Use PriceClass_All for global.",
+
+  "HttpVersion": "http2and3",
+  "IsIPV6Enabled": true,
+
+  "ViewerCertificate": {
+    "_comment": "Use ACM certificate in us-east-1 (required for CloudFront)",
+    "ACMCertificateArn": "arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/CERT_ID",
+    "SSLSupportMethod": "sni-only",
+    "MinimumProtocolVersion": "TLSv1.2_2021"
+  },
+
+  "Aliases": [
+    "app.yourdomain.com"
+  ],
+
+  "CustomErrorResponses": [
+    {
+      "_comment": "Return index for client-side routing (Next.js handles 404s itself)",
+      "ErrorCode": 404,
+      "ResponsePagePath": "/404",
+      "ResponseCode": "404",
+      "ErrorCachingMinTTL": 0
+    }
+  ]
+}

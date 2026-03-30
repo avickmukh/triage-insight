@@ -3,6 +3,11 @@ const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ["@triage-insight/ui"],
 
+  // Produce a self-contained server bundle for Docker / Lightsail deployment.
+  // The standalone output copies only the required node_modules into .next/standalone
+  // so the production image is lean (no full node_modules copy needed).
+  output: 'standalone',
+
   /**
    * Rewrites map the clean public-portal URLs to the internal (workspace) route group.
    *

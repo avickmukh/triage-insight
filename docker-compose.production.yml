@@ -1,0 +1,82 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# docker-compose.production.yml
+#
+# Used on the AWS Lightsail instance (or any Docker host) to run:
+#   • api     — NestJS REST API (runs DB migrations on startup)
+#   • worker  — BullMQ background job processor
+#   • web     — Next.js SSR frontend
+#
+# PostgreSQL and Redis are NOT included here — use:
+#   • Lightsail Managed Database (PostgreSQL 16 + pgvector)
+#   • Lightsail Managed Redis Cache
+#
+# All secrets are injected via the .env.production file (never committed).
+# See infra/lightsail/env.production.template for the required variables.
+#
+# Usage:
+#   docker-compose -f docker-compose.production.yml up -d
+# ─────────────────────────────────────────────────────────────────────────────
+version: "3.8"
+
+services:
+  # ── Database migration (one-shot, exits after success) ────────────────────
+  migrate:
+    image: ${REGISTRY}/triage-insight-api:${IMAGE_TAG:-latest}
+    command: >
+      sh -c "node node_modules/.bin/prisma migrate deploy
+             --schema=apps/api/prisma/schema.prisma"
+    env_file: .env.production
+    restart: "no"
+
+  # ── NestJS API ────────────────────────────────────────────────────────────
+  api:
+    image: ${REGISTRY}/triage-insight-api:${IMAGE_TAG:-latest}
+    # Override CMD to skip the migration step (migrate service handles it)
+    command: node apps/api/dist/main.js
+    env_file: .env.production
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ── BullMQ Worker ─────────────────────────────────────────────────────────
+  worker:
+    image: ${REGISTRY}/triage-insight-worker:${IMAGE_TAG:-latest}
+    env_file: .env.production
+    environment:
+      NODE_ENV: production
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # ── Next.js Web ───────────────────────────────────────────────────────────
+  web:
+    image: ${REGISTRY}/triage-insight-web:${IMAGE_TAG:-latest}
+    env_file: .env.production
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      HOSTNAME: "0.0.0.0"
+    ports:
+      - "3001:3001"
+    depends_on:
+      - api
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
