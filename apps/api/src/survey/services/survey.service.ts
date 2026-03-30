@@ -7,8 +7,53 @@ import {
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
 import { PrismaService } from '../../prisma/prisma.service';
-import { SurveyStatus, SurveyType, FeedbackSourceType, FeedbackPrimarySource, FeedbackSecondarySource, FeedbackStatus } from '@prisma/client';
+import {
+  SurveyStatus,
+  SurveyType,
+  SurveyQuestionType,
+  FeedbackSourceType,
+  FeedbackPrimarySource,
+  FeedbackSecondarySource,
+  FeedbackStatus,
+} from '@prisma/client';
+import { AI_ANALYSIS_QUEUE } from '../../ai/processors/analysis.processor';
 import { SURVEY_INTELLIGENCE_QUEUE } from '../processors/survey-intelligence.processor';
+
+/** Minimum character length for an open-text answer to become a Feedback signal. */
+const MIN_TEXT_LENGTH = 10;
+
+/** Question types whose answers become Feedback signals in the AI pipeline. */
+const TEXT_QUESTION_TYPES = new Set<SurveyQuestionType>([
+  SurveyQuestionType.SHORT_TEXT,
+  SurveyQuestionType.LONG_TEXT,
+]);
+
+/** Question types whose answers are stored as SurveyEvidence (structured, no text clustering). */
+const EVIDENCE_QUESTION_TYPES = new Set<SurveyQuestionType>([
+  SurveyQuestionType.SINGLE_CHOICE,
+  SurveyQuestionType.MULTIPLE_CHOICE,
+  SurveyQuestionType.RATING,
+  SurveyQuestionType.NPS,
+]);
+
+/**
+ * Normalise a numeric answer to [0, 1].
+ * RATING: assumes ratingMin/ratingMax from the question definition.
+ * NPS: 0-10 scale → 0 = detractor (0), 10 = promoter (1).
+ */
+function normaliseNumeric(
+  value: number,
+  type: SurveyQuestionType,
+  ratingMin = 1,
+  ratingMax = 5,
+): number {
+  if (type === SurveyQuestionType.NPS) {
+    return Math.min(Math.max(value, 0), 10) / 10;
+  }
+  const range = ratingMax - ratingMin;
+  if (range <= 0) return 0.5;
+  return Math.min(Math.max((value - ratingMin) / range, 0), 1);
+}
 import {
   CreateSurveyDto,
   UpdateSurveyDto,
@@ -24,6 +69,7 @@ export class SurveyService {
   constructor(
     private readonly prisma: PrismaService,
     @InjectQueue(SURVEY_INTELLIGENCE_QUEUE) private readonly intelligenceQueue: Queue,
+    @InjectQueue(AI_ANALYSIS_QUEUE) private readonly analysisQueue: Queue,
     private readonly surveyIntelligenceService: SurveyIntelligenceService,
   ) {}
 
@@ -422,8 +468,67 @@ export class SurveyService {
       if (pu) portalUserId = pu.id;
     }
 
-    // Create the response + answers in a transaction
-    const response = await this.prisma.$transaction(async (tx) => {
+    // Build a lookup map: questionId → full question definition
+    const questionMap = new Map(survey.questions.map((q) => [q.id, q]));
+
+    // ── Classify each answer by question type ──────────────────────────────────
+    type TextCandidate = { questionId: string; questionText: string; text: string };
+    type EvidenceCandidate = {
+      questionId: string;
+      questionText: string;
+      questionType: SurveyQuestionType;
+      choiceValues: unknown[] | null;
+      numericValue: number | null;
+      normalisedScore: number | null;
+      ratingMin: number;
+      ratingMax: number;
+    };
+
+    const textCandidates: TextCandidate[] = [];
+    const evidenceCandidates: EvidenceCandidate[] = [];
+
+    for (const answer of dto.answers) {
+      const question = questionMap.get(answer.questionId);
+      if (!question) continue;
+
+      if (TEXT_QUESTION_TYPES.has(question.type)) {
+        // Open-text: only keep answers that are substantive
+        const text = (answer.textValue ?? '').trim();
+        if (text.length >= MIN_TEXT_LENGTH) {
+          textCandidates.push({
+            questionId: question.id,
+            questionText: question.label,
+            text,
+          });
+        }
+      } else if (EVIDENCE_QUESTION_TYPES.has(question.type)) {
+        // Structured: always store as evidence
+        const numericValue = answer.numericValue ?? null;
+        const normalisedScore =
+          numericValue !== null
+            ? normaliseNumeric(
+                numericValue,
+                question.type,
+                question.ratingMin ?? 1,
+                question.ratingMax ?? 5,
+              )
+            : null;
+        evidenceCandidates.push({
+          questionId: question.id,
+          questionText: question.label,
+          questionType: question.type,
+          choiceValues: Array.isArray(answer.choiceValues) ? (answer.choiceValues as unknown[]) : null,
+          numericValue,
+          normalisedScore,
+          ratingMin: question.ratingMin ?? 1,
+          ratingMax: question.ratingMax ?? 5,
+        });
+      }
+    }
+
+    // ── Persist response + raw answers + SurveyEvidence in one transaction ─────
+    const { responseId, feedbackIds } = await this.prisma.$transaction(async (tx) => {
+      // 1. Create the SurveyResponse with all raw answers
       const resp = await tx.surveyResponse.create({
         data: {
           surveyId,
@@ -443,73 +548,101 @@ export class SurveyService {
             })),
           },
         },
-        include: {
-          answers: true,
-        },
       });
 
-      // ── Intelligence readiness: convert text answers to Feedback ──────────
-      if (survey.convertToFeedback) {
-        const textAnswers = dto.answers.filter((a) => a.textValue && a.textValue.trim().length > 10);
-        if (textAnswers.length > 0) {
-          // Combine all text answers into a single feedback description
-          const questionMap = new Map(survey.questions.map((q) => [q.id, q.label]));
-          const parts = textAnswers.map((a) => {
-            const qLabel = questionMap.get(a.questionId) ?? 'Response';
-            return `**${qLabel}**: ${a.textValue!.trim()}`;
-          });
-          const description = parts.join('\n\n');
-          const title = `Survey response: ${survey.title}`;
-
-          const feedback = await tx.feedback.create({
+      // 2. Create one Feedback per substantive open-text answer
+      const createdFeedbackIds: string[] = [];
+      if (survey.convertToFeedback && textCandidates.length > 0) {
+        for (const candidate of textCandidates) {
+          const fb = await tx.feedback.create({
             data: {
               workspaceId: workspace.id,
               sourceType:      FeedbackSourceType.SURVEY,
               primarySource:   FeedbackPrimarySource.SURVEY,
               secondarySource: FeedbackSecondarySource.PORTAL,
-              sourceRef: `survey:${surveyId}`,
-              title,
-              description,
-              rawText: description,
+              // sourceRef encodes the full provenance chain
+              sourceRef: `survey:${surveyId}:question:${candidate.questionId}`,
+              // Title = the question label — NOT the survey title
+              title: candidate.questionText,
+              description: candidate.text,
+              rawText: candidate.text,
+              normalizedText: candidate.text.toLowerCase(),
               status: FeedbackStatus.NEW,
               portalUserId,
               metadata: {
                 surveyId,
                 surveyTitle: survey.title,
                 responseId: resp.id,
+                questionId: candidate.questionId,
+                questionText: candidate.questionText,
+                questionType: 'TEXT',
                 respondentEmail: dto.respondentEmail ?? null,
+                respondentName: dto.respondentName ?? null,
               },
             },
           });
+          createdFeedbackIds.push(fb.id);
+        }
 
-          // Update response to link to the created feedback
+        // Link the first feedback to the response for backward compat
+        if (createdFeedbackIds.length > 0) {
           await tx.surveyResponse.update({
             where: { id: resp.id },
-            data: { feedbackId: feedback.id },
+            data: { feedbackId: createdFeedbackIds[0] },
           });
-
-          return { ...resp, feedbackId: feedback.id };
         }
       }
 
-      return resp;
+      // 3. Create SurveyEvidence rows for all structured answers
+      if (evidenceCandidates.length > 0) {
+        await tx.surveyEvidence.createMany({
+          data: evidenceCandidates.map((ev) => ({
+            workspaceId: workspace.id,
+            surveyId,
+            responseId: resp.id,
+            questionId: ev.questionId,
+            questionText: ev.questionText,
+            questionType: ev.questionType,
+            choiceValues: ev.choiceValues ? (ev.choiceValues as string[]) : undefined,
+            numericValue: ev.numericValue,
+            normalisedScore: ev.normalisedScore,
+            respondentEmail: dto.respondentEmail ?? null,
+            customerId: dto.customerId ?? null,
+            metadata: {
+              surveyTitle: survey.title,
+              ratingMin: ev.ratingMin,
+              ratingMax: ev.ratingMax,
+            },
+          })),
+        });
+      }
+
+      return { responseId: resp.id, feedbackIds: createdFeedbackIds };
     });
 
-    // ── Enqueue async intelligence extraction (fire-and-forget) ──────────────
-    const feedbackId = (response as any).feedbackId ?? null;
+    // ── Enqueue AI analysis for each open-text Feedback (fire-and-forget) ────────
+    for (const feedbackId of feedbackIds) {
+      this.analysisQueue
+        .add({ feedbackId, workspaceId: workspace.id })
+        .catch(() => { /* non-critical */ });
+    }
+
+    // ── Enqueue survey intelligence for CIQ/revenue signals (fire-and-forget) ───
     this.intelligenceQueue
       .add({
         workspaceId: workspace.id,
         surveyId,
-        responseId: response.id,
-        feedbackId,
+        responseId,
+        feedbackId: feedbackIds[0] ?? null,
       })
-      .catch(() => { /* non-critical — intelligence enrichment is best-effort */ });
+      .catch(() => { /* non-critical */ });
 
     return {
       success: true,
-      responseId: response.id,
-      feedbackId,
+      responseId,
+      feedbackIds,
+      // Backward compat: single feedbackId for callers that expect it
+      feedbackId: feedbackIds[0] ?? null,
       thankYouMessage: survey.thankYouMessage ?? 'Thank you for your response!',
       redirectUrl: survey.redirectUrl ?? null,
     };

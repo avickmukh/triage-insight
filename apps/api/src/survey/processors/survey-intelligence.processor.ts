@@ -1,11 +1,25 @@
+/**
+ * SurveyIntelligenceProcessor
+ *
+ * Responsibility (post-refactor):
+ *   Compute CIQ weight, revenue weight, sentiment score, and CustomerSignal
+ *   records for a survey response.
+ *
+ * What this processor does NOT do any more:
+ *   • Theme clustering — open-text Feedback records now enter AI_ANALYSIS_QUEUE
+ *     directly from submitResponse(), which runs the standard embedding +
+ *     theme-clustering pipeline. No bespoke clustering here.
+ *   • Text extraction / LLM re-analysis of the combined blob — each open-text
+ *     answer is already a properly titled Feedback record with its own AI job.
+ *
+ * The processor still reads SurveyEvidence rows (for numeric signals) and
+ * updates SurveyResponse with aggregate CIQ/revenue metadata.
+ */
 import { Process, Processor } from '@nestjs/bull';
-import { InjectQueue } from '@nestjs/bull';
 import { Logger } from '@nestjs/common';
-import type { Job, Queue } from 'bull';
+import type { Job } from 'bull';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SurveyIntelligenceService } from '../services/survey-intelligence.service';
-import { ThemeClusteringService } from '../../ai/services/theme-clustering.service';
-import { CIQ_SCORING_QUEUE, type CiqJobPayload } from '../../ai/processors/ciq-scoring.processor';
 
 export const SURVEY_INTELLIGENCE_QUEUE = 'survey-intelligence';
 
@@ -13,6 +27,7 @@ export interface SurveyIntelligenceJobData {
   workspaceId: string;
   surveyId: string;
   responseId: string;
+  /** First open-text Feedback id created for this response, if any. */
   feedbackId?: string | null;
 }
 
@@ -23,17 +38,15 @@ export class SurveyIntelligenceProcessor {
   constructor(
     private readonly prisma: PrismaService,
     private readonly intelligenceService: SurveyIntelligenceService,
-    private readonly themeClusteringService: ThemeClusteringService,
-    @InjectQueue(CIQ_SCORING_QUEUE) private readonly ciqQueue: Queue,
   ) {}
 
   @Process()
   async handle(job: Job<SurveyIntelligenceJobData>): Promise<void> {
-    const { workspaceId, surveyId, responseId, feedbackId } = job.data;
-    this.logger.log(`Processing survey intelligence for response ${responseId}`);
+    const { workspaceId, surveyId, responseId } = job.data;
+    this.logger.log(`Survey intelligence: processing response ${responseId}`);
 
     try {
-      // ── 1. Load response with answers and question metadata ──────────────────
+      // ── 1. Load response with raw answers and question metadata ─────────────
       const response = await this.prisma.surveyResponse.findUnique({
         where: { id: responseId },
         include: {
@@ -42,7 +55,7 @@ export class SurveyIntelligenceProcessor {
               question: { select: { label: true, type: true } },
             },
           },
-          survey: { select: { title: true, convertToFeedback: true } },
+          survey: { select: { title: true, surveyType: true } },
         },
       });
 
@@ -51,7 +64,9 @@ export class SurveyIntelligenceProcessor {
         return;
       }
 
-      // ── 2. Build answer input for intelligence service ───────────────────────
+      // ── 2. Build answer input for the intelligence service ───────────────────
+      //    Only numeric and choice answers are needed here; text analysis is
+      //    handled by the main AI pipeline for each Feedback record.
       const answerInputs = response.answers.map((a) => ({
         questionLabel: a.question.label,
         questionType: a.question.type as string,
@@ -60,16 +75,58 @@ export class SurveyIntelligenceProcessor {
         choiceValues: a.choiceValues,
       }));
 
-      // ── 3. Extract intelligence ──────────────────────────────────────────────
+      // ── 3. Extract intelligence (sentiment + numeric signals) ────────────────
       const intelligence = await this.intelligenceService.extractFromAnswers(
         answerInputs,
         response.survey.title,
       );
 
-      // ── 4. Persist intelligence back to the response metadata ────────────────
+      // ── 4. Compute CIQ weight and revenue weight ─────────────────────────────
+      const customerData = response.customerId
+        ? await this.prisma.customer.findUnique({
+            where: { id: response.customerId },
+            select: { arrValue: true },
+          })
+        : null;
+
+      const maxArrResult = await this.prisma.customer.aggregate({
+        where: { workspaceId },
+        _max: { arrValue: true },
+      });
+      const arrValue = customerData?.arrValue ?? 0;
+      const maxArr = maxArrResult._max.arrValue ?? 1;
+
+      const ciqWeight = this.intelligenceService.computeCiqWeight({
+        arrValue,
+        maxArrInWorkspace: maxArr,
+        sentimentScore: intelligence.aggregateSentiment,
+        surveyType: response.survey.surveyType as string,
+      });
+
+      const allResponses = await this.prisma.surveyResponse.findMany({
+        where: { surveyId },
+        select: { customerId: true },
+      });
+      const customerIds = allResponses.map((r) => r.customerId).filter(Boolean) as string[];
+      const totalArrResult = customerIds.length > 0
+        ? await this.prisma.customer.aggregate({
+            where: { id: { in: customerIds } },
+            _sum: { arrValue: true },
+          })
+        : { _sum: { arrValue: 0 } };
+      const totalSurveyArr = totalArrResult._sum.arrValue ?? 0;
+
+      const clusterLabel = intelligence.aggregateSentiment > 0.3 ? 'Promoter'
+        : intelligence.aggregateSentiment < -0.3 ? 'Detractor' : 'Neutral';
+
+      // ── 5. Persist CIQ/revenue metadata back to the response ────────────────
       await this.prisma.surveyResponse.update({
         where: { id: responseId },
         data: {
+          ciqWeight,
+          sentimentScore: intelligence.aggregateSentiment,
+          revenueWeight: totalSurveyArr > 0 ? arrValue / totalSurveyArr : 0,
+          clusterLabel,
           metadata: {
             ...(typeof response.metadata === 'object' && response.metadata !== null
               ? (response.metadata as Record<string, unknown>)
@@ -78,7 +135,6 @@ export class SurveyIntelligenceProcessor {
               aggregateSentiment: intelligence.aggregateSentiment,
               aggregateConfidence: intelligence.aggregateConfidence,
               keyTopics: intelligence.keyTopics,
-              textInsightsCount: intelligence.textInsights.length,
               numericSignalsCount: intelligence.numericSignals.length,
               processedAt: new Date().toISOString(),
             },
@@ -86,147 +142,47 @@ export class SurveyIntelligenceProcessor {
         },
       });
 
-      // ── 4b. Compute and persist CIQ weight and revenue weight for this response ──
+      // ── 6. Detect churn signal for negative NPS / sentiment ─────────────────
       try {
-        const surveyWithType = await this.prisma.survey.findUnique({
-          where: { id: surveyId },
-          select: { surveyType: true },
-        });
-        if (surveyWithType) {
-          // Get respondent ARR
-          const customerData = response.customerId
-            ? await this.prisma.customer.findUnique({
-                where: { id: response.customerId },
-                select: { arrValue: true },
-              })
-            : null;
-          const maxArrResult = await this.prisma.customer.aggregate({
-            where: { workspaceId },
-            _max: { arrValue: true },
-          });
-          const arrValue = customerData?.arrValue ?? 0;
-          const maxArr = maxArrResult._max.arrValue ?? 1;
-          const ciqWeight = this.intelligenceService.computeCiqWeight({
-            arrValue,
-            maxArrInWorkspace: maxArr,
-            sentimentScore: intelligence.aggregateSentiment,
-            surveyType: surveyWithType.surveyType as string,
-          });
-          // Revenue weight = respondent ARR / total survey ARR
-          const allResponses = await this.prisma.surveyResponse.findMany({
-            where: { surveyId },
-            select: { customerId: true },
-          });
-          const customerIds = allResponses.map((r) => r.customerId).filter(Boolean) as string[];
-          const totalArrResult = customerIds.length > 0
-            ? await this.prisma.customer.aggregate({
-                where: { id: { in: customerIds } },
-                _sum: { arrValue: true },
-              })
-            : { _sum: { arrValue: 0 } };
-          const totalSurveyArr = totalArrResult._sum.arrValue ?? 0;
-          const clusterLabel = intelligence.aggregateSentiment > 0.3 ? 'Promoter'
-            : intelligence.aggregateSentiment < -0.3 ? 'Detractor' : 'Neutral';
-          await this.prisma.surveyResponse.update({
-            where: { id: responseId },
-            data: {
-              ciqWeight,
-              sentimentScore: intelligence.aggregateSentiment,
-              revenueWeight: totalSurveyArr > 0 ? arrValue / totalSurveyArr : 0,
-              clusterLabel,
-            },
-          });
-          // ── 4c. Detect churn signal for CHURN_SIGNAL surveys or negative NPS ──
-          const customerId = response.customerId
-            ?? (response.portalUserId
-              ? (await this.prisma.portalUser.findUnique({
-                  where: { id: response.portalUserId },
-                  select: { customerId: true },
-                }))?.customerId
-              : null);
-          if (customerId && intelligence.aggregateSentiment < -0.3) {
-            const npsAnswer = response.answers.find((a) => a.question.type === 'NPS');
-            const npsVal = npsAnswer?.numericValue ?? null;
-            const isChurnRisk = npsVal != null ? npsVal <= 6 : true;
-            if (isChurnRisk) {
-              await this.prisma.customerSignal.create({
-                data: {
-                  workspaceId,
-                  customerId,
-                  signalType: 'CHURN_RISK',
-                  sourceId: responseId,
-                  strength: Math.abs(intelligence.aggregateSentiment),
-                  metadata: {
-                    label: `Survey churn signal: sentiment ${intelligence.aggregateSentiment.toFixed(2)}`,
-                    surveyId,
-                    responseId,
-                    npsVal,
-                    surveyType: surveyWithType.surveyType,
-                  },
-                } as any,
-              }).catch((err: Error) => {
-                this.logger.warn(`Failed to create churn CustomerSignal: ${err.message}`);
-              });
-            }
+        const customerId = response.customerId
+          ?? (response.portalUserId
+            ? (await this.prisma.portalUser.findUnique({
+                where: { id: response.portalUserId },
+                select: { customerId: true },
+              }))?.customerId
+            : null);
+
+        if (customerId && intelligence.aggregateSentiment < -0.3) {
+          const npsAnswer = response.answers.find((a) => a.question.type === 'NPS');
+          const npsVal = npsAnswer?.numericValue ?? null;
+          const isChurnRisk = npsVal != null ? npsVal <= 6 : true;
+          if (isChurnRisk) {
+            await this.prisma.customerSignal.create({
+              data: {
+                workspaceId,
+                customerId,
+                signalType: 'CHURN_RISK',
+                sourceId: responseId,
+                strength: Math.abs(intelligence.aggregateSentiment),
+                metadata: {
+                  label: `Survey churn signal: sentiment ${intelligence.aggregateSentiment.toFixed(2)}`,
+                  surveyId,
+                  responseId,
+                  npsVal,
+                  surveyType: response.survey.surveyType,
+                },
+              } as any,
+            }).catch((err: Error) => {
+              this.logger.warn(`Failed to create churn CustomerSignal: ${err.message}`);
+            });
           }
         }
       } catch (err) {
-        this.logger.warn(`CIQ weight computation failed for response ${responseId}: ${(err as Error).message}`);
-      }
-
-      // ── 5. Enrich the linked Feedback record if present ──────────────────────
-      if (feedbackId) {
-        const firstTextInsight = intelligence.textInsights[0];
-        if (firstTextInsight) {
-          await this.prisma.feedback.update({
-            where: { id: feedbackId },
-            data: {
-              sentiment: intelligence.aggregateSentiment,
-              summary: firstTextInsight.summary || null,
-              metadata: {
-                surveyId,
-                surveyTitle: response.survey.title,
-                responseId,
-                intelligence: {
-                  keyTopics: intelligence.keyTopics,
-                  painPoints: intelligence.textInsights.flatMap((t) => t.painPoints),
-                  featureRequests: intelligence.textInsights.flatMap((t) => t.featureRequests),
-                  aggregateSentiment: intelligence.aggregateSentiment,
-                  aggregateConfidence: intelligence.aggregateConfidence,
-                },
-              },
-            },
-          }).catch((err: Error) => {
-            this.logger.warn(`Failed to enrich feedback ${feedbackId}: ${err.message}`);
-          });
-        }
-
-        // ── 6. Trigger theme clustering for the feedback ───────────────────────
-        let clusteredThemeId: string | null = null;
-        try {
-          const clusterResult = await this.themeClusteringService.assignFeedbackToTheme(workspaceId, feedbackId);
-          clusteredThemeId = (clusterResult as any)?.themeId ?? null;
-        } catch (err) {
-          this.logger.warn(`Theme clustering failed for feedback ${feedbackId}: ${(err as Error).message}`);
-        }
-
-        // ── 6b. Enqueue CIQ re-scoring for the clustered theme ────────────────
-        if (clusteredThemeId) {
-          this.ciqQueue
-            .add({ type: 'THEME_SCORED', workspaceId, themeId: clusteredThemeId } as CiqJobPayload, {
-              attempts: 3,
-              backoff: { type: 'exponential', delay: 2000 },
-              removeOnComplete: true,
-            })
-            .catch((err: Error) => {
-              this.logger.warn(`Failed to enqueue CIQ re-scoring for theme ${clusteredThemeId}: ${err.message}`);
-            });
-        }
+        this.logger.warn(`Churn signal detection failed for response ${responseId}: ${(err as Error).message}`);
       }
 
       // ── 7. Create CustomerSignal records for numeric answers ─────────────────
       if (response.portalUserId) {
-        // Resolve the customer linked to this portal user
         const portalUser = await this.prisma.portalUser.findUnique({
           where: { id: response.portalUserId },
           select: { customerId: true },
@@ -235,7 +191,6 @@ export class SurveyIntelligenceProcessor {
         if (portalUser?.customerId) {
           const customerId = portalUser.customerId;
 
-          // Create one signal per numeric answer
           for (const signal of intelligence.numericSignals) {
             await this.prisma.customerSignal.create({
               data: {
@@ -251,31 +206,9 @@ export class SurveyIntelligenceProcessor {
                   surveyId,
                   responseId,
                 },
-              } as any, // metadata field may not be in Prisma type yet
-            }).catch((err: Error) => {
-              this.logger.warn(`Failed to create CustomerSignal: ${err.message}`);
-            });
-          }
-
-          // Create one aggregate sentiment signal for text responses
-          if (intelligence.textInsights.length > 0) {
-            await this.prisma.customerSignal.create({
-              data: {
-                workspaceId,
-                customerId,
-                signalType: 'SURVEY_SENTIMENT',
-                sourceId: responseId,
-                strength: (intelligence.aggregateSentiment + 1) / 2, // normalise to [0,1]
-                metadata: {
-                  label: `Survey sentiment: ${intelligence.aggregateSentiment.toFixed(2)}`,
-                  aggregateSentiment: intelligence.aggregateSentiment,
-                  keyTopics: intelligence.keyTopics,
-                  surveyId,
-                  responseId,
-                },
               } as any,
             }).catch((err: Error) => {
-              this.logger.warn(`Failed to create sentiment CustomerSignal: ${err.message}`);
+              this.logger.warn(`Failed to create CustomerSignal: ${err.message}`);
             });
           }
         }
@@ -287,7 +220,7 @@ export class SurveyIntelligenceProcessor {
         `Survey intelligence processor failed for response ${responseId}: ${(err as Error).message}`,
         (err as Error).stack,
       );
-      // Do not rethrow — a failed intelligence job should not block the user's submission
+      // Do not rethrow — a failed intelligence job must not block the user's submission
     }
   }
 }

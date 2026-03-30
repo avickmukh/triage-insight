@@ -1444,6 +1444,7 @@ model Survey {
   workspace  Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   questions  SurveyQuestion[]
   responses  SurveyResponse[]
+  evidence   SurveyEvidence[]
 
   @@index([workspaceId])
   @@index([status])
@@ -1495,7 +1496,7 @@ model SurveyResponse {
   portalUser PortalUser? @relation(fields: [portalUserId], references: [id], onDelete: SetNull)
   customer   Customer?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
   answers    SurveyAnswer[]
-
+  evidence   SurveyEvidence[]
   @@index([surveyId])
   @@index([workspaceId])
   @@index([portalUserId])
@@ -1516,6 +1517,44 @@ model SurveyAnswer {
 
   @@index([responseId])
   @@index([questionId])
+}
+
+/// Structured survey evidence for non-text answers (choice, rating, NPS).
+/// These rows are queryable as evidence for themes and analytics but do NOT
+/// enter the text-clustering pipeline. Open-text answers are stored as
+/// Feedback records instead and enter the main AI_ANALYSIS_QUEUE.
+model SurveyEvidence {
+  id              String             @id @default(uuid())
+  workspaceId     String
+  surveyId        String
+  responseId      String
+  questionId      String
+  /// Human-readable question label, denormalised for query convenience
+  questionText    String
+  /// The SurveyQuestionType at time of submission (denormalised)
+  questionType    SurveyQuestionType
+  /// Selected option(s) for SINGLE_CHOICE / MULTIPLE_CHOICE answers
+  choiceValues    Json?
+  /// Raw numeric value for RATING / NPS answers
+  numericValue    Float?
+  /// Score normalised to [0, 1] — 1 = most positive
+  normalisedScore Float?
+  /// Respondent email if known
+  respondentEmail String?
+  /// Linked Customer if resolved
+  customerId      String?
+  /// Arbitrary metadata (surveyTitle, questionOrder, etc.)
+  metadata        Json?
+  createdAt       DateTime           @default(now())
+
+  survey   Survey         @relation(fields: [surveyId],   references: [id], onDelete: Cascade)
+  response SurveyResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([surveyId])
+  @@index([responseId])
+  @@index([questionId])
+  @@index([workspaceId, questionType])
 }
 
 /// Secure password reset token.
