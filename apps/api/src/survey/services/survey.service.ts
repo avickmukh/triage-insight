@@ -18,6 +18,8 @@ import {
 } from '@prisma/client';
 import { AI_ANALYSIS_QUEUE } from '../../ai/processors/analysis.processor';
 import { SURVEY_INTELLIGENCE_QUEUE } from '../processors/survey-intelligence.processor';
+import { JobLogger } from '../../common/queue/job-logger';
+import { RetryPolicy } from '../../common/queue/retry-policy';
 
 /** Minimum character length for an open-text answer to become a Feedback signal. */
 const MIN_TEXT_LENGTH = 10;
@@ -66,6 +68,8 @@ import { SurveyIntelligenceService, RevenueWeightedInsight } from './survey-inte
 
 @Injectable()
 export class SurveyService {
+  private readonly logger = new JobLogger(SurveyService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     @InjectQueue(SURVEY_INTELLIGENCE_QUEUE) private readonly intelligenceQueue: Queue,
@@ -552,6 +556,15 @@ export class SurveyService {
 
       // 2. Create one Feedback per substantive open-text answer
       const createdFeedbackIds: string[] = [];
+      if (!survey.convertToFeedback && textCandidates.length > 0) {
+        // convertToFeedback is disabled on this survey — open-text answers will
+        // not enter the AI pipeline. Log so operators can diagnose missing signals.
+        this.logger.stepWarn(
+          { jobType: 'SURVEY_SUBMIT', workspaceId: workspace.id, entityId: surveyId },
+          'CONVERT_TO_FEEDBACK_DISABLED',
+          `Survey ${surveyId} has convertToFeedback=false — ${textCandidates.length} open-text answer(s) will not be analysed`,
+        );
+      }
       if (survey.convertToFeedback && textCandidates.length > 0) {
         for (const candidate of textCandidates) {
           const fb = await tx.feedback.create({
@@ -620,22 +633,51 @@ export class SurveyService {
       return { responseId: resp.id, feedbackIds: createdFeedbackIds };
     });
 
-    // ── Enqueue AI analysis for each open-text Feedback (fire-and-forget) ────────
+    // ── Enqueue AI analysis for each open-text Feedback (fire-and-forget) ─────
+    // Uses RetryPolicy.standard() so survey signals get the same retry/backoff
+    // guarantees as feedback inbox items. The analysis processor's idempotency
+    // guard (keyed on feedbackId) prevents duplicate processing on re-submit.
+    const retryOpts = RetryPolicy.standard();
     for (const feedbackId of feedbackIds) {
-      this.analysisQueue
-        .add({ feedbackId, workspaceId: workspace.id })
-        .catch(() => { /* non-critical */ });
+      try {
+        await this.analysisQueue.add(
+          { feedbackId, workspaceId: workspace.id },
+          retryOpts,
+        );
+        this.logger.debug(
+          { jobType: 'SURVEY_SUBMIT', workspaceId: workspace.id, entityId: surveyId },
+          `Enqueued AI analysis for survey open-text Feedback ${feedbackId}`,
+          { feedbackId },
+        );
+      } catch (err) {
+        // Queue unavailability must not fail the HTTP response — the survey
+        // response is already persisted. Log for operator visibility.
+        this.logger.stepWarn(
+          { jobType: 'SURVEY_SUBMIT', workspaceId: workspace.id, entityId: surveyId },
+          'AI_ANALYSIS_ENQUEUE_FAILED',
+          `Failed to enqueue AI analysis for Feedback ${feedbackId}: ${(err as Error).message}`,
+        );
+      }
     }
 
     // ── Enqueue survey intelligence for CIQ/revenue signals (fire-and-forget) ───
-    this.intelligenceQueue
-      .add({
-        workspaceId: workspace.id,
-        surveyId,
-        responseId,
-        feedbackId: feedbackIds[0] ?? null,
-      })
-      .catch(() => { /* non-critical */ });
+    try {
+      await this.intelligenceQueue.add(
+        {
+          workspaceId: workspace.id,
+          surveyId,
+          responseId,
+          feedbackId: feedbackIds[0] ?? null,
+        },
+        RetryPolicy.light(),
+      );
+    } catch (err) {
+      this.logger.stepWarn(
+        { jobType: 'SURVEY_SUBMIT', workspaceId: workspace.id, entityId: surveyId },
+        'INTELLIGENCE_ENQUEUE_FAILED',
+        `Failed to enqueue survey intelligence job: ${(err as Error).message}`,
+      );
+    }
 
     return {
       success: true,
