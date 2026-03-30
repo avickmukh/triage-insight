@@ -1,0 +1,177 @@
+name: Deploy to AWS
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Triggers:
+#   • Push to main  → full build + deploy
+#   • Manual trigger (workflow_dispatch) → deploy a specific tag
+#
+# Architecture:
+#   ┌──────────────────────────────────────────────────────────────────────┐
+#   │  GitHub Actions                                                       │
+#   │  1. Build API image  ──► push to ECR                                 │
+#   │  2. Build Worker image ► push to ECR                                 │
+#   │  3. Build Web image  ──► push to ECR                                 │
+#   │  4. SSH into Lightsail → pull images → run migrations → restart      │
+#   │  5. Invalidate CloudFront cache                                       │
+#   └──────────────────────────────────────────────────────────────────────┘
+#
+# Required GitHub Secrets:
+#   AWS_ACCESS_KEY_ID         — IAM user with ECR push + CloudFront invalidation
+#   AWS_SECRET_ACCESS_KEY     — IAM user secret
+#   AWS_REGION                — e.g. us-east-1
+#   ECR_REGISTRY              — e.g. 123456789012.dkr.ecr.us-east-1.amazonaws.com
+#   LIGHTSAIL_HOST            — Public IP or hostname of the Lightsail instance
+#   LIGHTSAIL_SSH_KEY         — Private SSH key (PEM format, base64-encoded)
+#   CLOUDFRONT_DISTRIBUTION_ID — e.g. E1ABCDEF123456
+#   NEXT_PUBLIC_API_BASE_URL  — e.g. https://api.yourdomain.com/api/v1
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (defaults to commit SHA)"
+        required: false
+        default: ""
+
+env:
+  AWS_REGION:    ${{ secrets.AWS_REGION }}
+  ECR_REGISTRY:  ${{ secrets.ECR_REGISTRY }}
+  IMAGE_TAG:     ${{ github.event.inputs.image_tag || github.sha }}
+
+jobs:
+  # ── 1. Build & push Docker images ─────────────────────────────────────────
+  build:
+    name: Build & Push Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ── API image ──────────────────────────────────────────────────────────
+      - name: Build & push API image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/triage-insight-api:${{ env.IMAGE_TAG }}
+            ${{ env.ECR_REGISTRY }}/triage-insight-api:latest
+          cache-from: type=gha,scope=api
+          cache-to:   type=gha,scope=api,mode=max
+
+      # ── Worker image ───────────────────────────────────────────────────────
+      - name: Build & push Worker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/worker/Dockerfile
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/triage-insight-worker:${{ env.IMAGE_TAG }}
+            ${{ env.ECR_REGISTRY }}/triage-insight-worker:latest
+          cache-from: type=gha,scope=worker
+          cache-to:   type=gha,scope=worker,mode=max
+
+      # ── Web image ──────────────────────────────────────────────────────────
+      - name: Build & push Web image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          build-args: |
+            NEXT_PUBLIC_API_BASE_URL=${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
+          tags: |
+            ${{ env.ECR_REGISTRY }}/triage-insight-web:${{ env.IMAGE_TAG }}
+            ${{ env.ECR_REGISTRY }}/triage-insight-web:latest
+          cache-from: type=gha,scope=web
+          cache-to:   type=gha,scope=web,mode=max
+
+  # ── 2. Deploy to Lightsail ─────────────────────────────────────────────────
+  deploy:
+    name: Deploy to Lightsail
+    runs-on: ubuntu-latest
+    needs: build
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      # Decode the SSH key and deploy via SSH
+      - name: Deploy via SSH
+        env:
+          LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          SSH_KEY:        ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          REGISTRY:       ${{ env.ECR_REGISTRY }}
+          IMAGE_TAG:      ${{ env.IMAGE_TAG }}
+          AWS_REGION:     ${{ env.AWS_REGION }}
+        run: |
+          # Write SSH key
+          echo "$SSH_KEY" | base64 -d > /tmp/lightsail_key
+          chmod 600 /tmp/lightsail_key
+
+          # Copy the deploy script and compose file to the instance
+          scp -i /tmp/lightsail_key \
+              -o StrictHostKeyChecking=no \
+              docker-compose.production.yml \
+              ubuntu@${LIGHTSAIL_HOST}:/home/ubuntu/triage-insight/
+
+          # Execute the deploy script remotely
+          ssh -i /tmp/lightsail_key \
+              -o StrictHostKeyChecking=no \
+              ubuntu@${LIGHTSAIL_HOST} \
+              "REGISTRY=${REGISTRY} IMAGE_TAG=${IMAGE_TAG} AWS_REGION=${AWS_REGION} \
+               bash /home/ubuntu/triage-insight/infra/lightsail/deploy.sh"
+
+          rm -f /tmp/lightsail_key
+
+  # ── 3. Invalidate CloudFront cache ────────────────────────────────────────
+  invalidate-cdn:
+    name: Invalidate CloudFront
+    runs-on: ubuntu-latest
+    needs: deploy
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      - name: Invalidate CloudFront distribution
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/*"
+          echo "CloudFront cache invalidated for distribution ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}"
