@@ -110,6 +110,7 @@ import {
   InvoiceRecord,
   PromoteThemePreview,
   PromoteThemeDto,
+  AiRoadmapSuggestionsResponse,
 } from "@/lib/api-types";
 
 const getApiBaseUrl = () => {
@@ -469,6 +470,9 @@ const apiClient = {
       api
         .post(`/workspaces/${workspaceId}/roadmap/from-theme/${themeId}`, override ?? {})
         .then(handleResponse),
+    /** GET /workspaces/:id/roadmap/ai-suggestions — AI-generated roadmap suggestions per theme */
+    getAiSuggestions: (workspaceId: string, limit?: number): Promise<AiRoadmapSuggestionsResponse> =>
+      api.get(`/workspaces/${workspaceId}/roadmap/ai-suggestions`, { params: { limit } }).then(handleResponse),
   },
 
   prioritization: {

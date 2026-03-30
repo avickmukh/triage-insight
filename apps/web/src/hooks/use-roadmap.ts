@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import apiClient from "@/lib/api-client";
 import {
+  AiRoadmapSuggestionsResponse,
   CiqScoreOutput,
   CreateRoadmapItemDto,
   RoadmapBoardResponse,
@@ -200,7 +201,23 @@ export const useUpdateRoadmapRank = () => {
   });
 };
 
-// ─── Legacy composite hook (backward compat) ──────────────────────────────────
+// ─── AI Roadmap Suggestions ────────────────────────────────────────────────────────────────
+
+/***
+ * Fetch AI-generated roadmap suggestions for all active themes.
+ * Returns ADD_TO_ROADMAP | INCREASE_PRIORITY | DECREASE_PRIORITY | MONITOR | NO_ACTION
+ * with reason, confidence, signal summary, and RPS breakdown per theme.
+ */
+export const useAiRoadmapSuggestions = (workspaceId: string, limit?: number) => {
+  return useQuery<AiRoadmapSuggestionsResponse, Error>({
+    queryKey: [ROADMAP_KEY, workspaceId, 'ai-suggestions', limit],
+    queryFn: () => apiClient.roadmap.getAiSuggestions(workspaceId, limit),
+    staleTime: 5 * 60 * 1000,
+    enabled: !!workspaceId,
+  });
+};
+
+// ─── Legacy composite hook (backward compat) ──────────────────────────────────────────────
 
 export const useRoadmap = () => {
   const board = useRoadmapBoard();

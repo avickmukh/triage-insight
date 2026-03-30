@@ -514,6 +514,32 @@ export default function RoadmapPage() {
           )}
         </div>
 
+        {/* ── AI Suggestions banner ── */}
+        <div style={{
+          ...CARD, padding: '0.875rem 1.25rem',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          flexWrap: 'wrap', gap: '0.5rem', background: '#fff3cd',
+          border: '1px solid #f0e6b0',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+            <span style={{ fontSize: '1rem' }}>🔥</span>
+            <div>
+              <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#b8860b' }}>AI Roadmap Suggestions</span>
+              <span style={{ fontSize: '0.78rem', color: '#6C757D', marginLeft: '0.5rem' }}>
+                AI-assisted prioritisation based on CIQ scoring, velocity, and cross-source signals.
+              </span>
+            </div>
+          </div>
+          {orgSlug && (
+            <Link
+              href={appRoutes(orgSlug).roadmapAiSuggestions}
+              style={{ fontSize: '0.82rem', fontWeight: 600, color: '#b8860b', textDecoration: 'none' }}
+            >
+              View AI Suggestions →
+            </Link>
+          )}
+        </div>
+
         {/* ── Public portal banner ── */}
         <div style={{
           ...CARD, padding: '0.875rem 1.25rem',

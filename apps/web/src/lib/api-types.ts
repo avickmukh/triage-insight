@@ -2445,3 +2445,69 @@ export interface DigestHistoryItem {
   sentAt: string;
   summary: DigestSummary | null;
 }
+
+// ─── AI Roadmap Suggestions ───────────────────────────────────────────────────
+
+/**
+ * Suggestion type returned by GET /workspaces/:id/roadmap/ai-suggestions
+ * AI assists decision-making — it does NOT auto-create roadmap items.
+ */
+export type AiSuggestionType =
+  | 'ADD_TO_ROADMAP'
+  | 'INCREASE_PRIORITY'
+  | 'DECREASE_PRIORITY'
+  | 'MONITOR'
+  | 'NO_ACTION';
+
+export type AiConfidenceLevel = 'HIGH' | 'MEDIUM' | 'LOW';
+
+export interface AiSuggestionSignalSummary {
+  totalSignals:   number;
+  feedbackCount:  number;
+  voiceCount:     number;
+  supportCount:   number;
+  surveyCount:    number;
+  activeSources:  number;
+  velocityDelta:  number | null;
+  sentimentScore: number | null;
+}
+
+export interface AiSuggestionBreakdown {
+  ciqScore:             number;
+  velocityScore:        number;
+  sentimentScore:       number;
+  sourceScore:          number;
+  recencyScore:         number;
+  resurfacingBonus:     number;
+  roadmapPriorityScore: number;
+}
+
+export interface AiRoadmapSuggestion {
+  themeId:               string;
+  themeTitle:            string;
+  ciqScore:              number;
+  roadmapPriorityScore:  number;
+  suggestionType:        AiSuggestionType;
+  confidence:            AiConfidenceLevel;
+  reason:                string;
+  signalSummary:         AiSuggestionSignalSummary;
+  breakdown:             AiSuggestionBreakdown;
+  roadmapItemId:         string | null;
+  roadmapStatus:         string | null;
+  dominantDriver:        string | null;
+  priorityReason:        string | null;
+  confidenceExplanation: string | null;
+}
+
+export interface AiRoadmapSuggestionsResponse {
+  data:       AiRoadmapSuggestion[];
+  total:      number;
+  computedAt: string;
+  summary: {
+    addToRoadmap:     number;
+    increasePriority: number;
+    decreasePriority: number;
+    monitor:          number;
+    noAction:         number;
+  };
+}
