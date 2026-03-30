@@ -846,11 +846,13 @@ export default function ThemeDetailPage() {
             </p>
             {ciqScore && (
               <p style={{ fontSize: '0.78rem', color: ciqScore.priorityScore >= 70 ? '#c62828' : ciqScore.priorityScore >= 40 ? '#b8860b' : '#2e7d32', fontWeight: 600, margin: 0 }}>
-                {ciqScore.priorityScore >= 70
-                  ? `Score ${Math.round(ciqScore.priorityScore)}/100 — High urgency. This theme is affecting significant revenue and customer volume.`
-                  : ciqScore.priorityScore >= 40
-                  ? `Score ${Math.round(ciqScore.priorityScore)}/100 — Moderate priority. Worth tracking; consider adding to the roadmap.`
-                  : `Score ${Math.round(ciqScore.priorityScore)}/100 — Low urgency. Monitor for signal growth before escalating.`}
+                {ciqScore.priorityReason ?? (
+                  ciqScore.priorityScore >= 70
+                    ? `Score ${Math.round(ciqScore.priorityScore)}/100 — High urgency. This theme is affecting significant revenue and customer volume.`
+                    : ciqScore.priorityScore >= 40
+                    ? `Score ${Math.round(ciqScore.priorityScore)}/100 — Moderate priority. Worth tracking; consider adding to the roadmap.`
+                    : `Score ${Math.round(ciqScore.priorityScore)}/100 — Low urgency. Monitor for signal growth before escalating.`
+                )}
               </p>
             )}
           </div>
@@ -898,6 +900,11 @@ export default function ThemeDetailPage() {
                 <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0a2540' }}>
                   {Math.round(ciqScore.confidenceScore * 100)}%
                 </div>
+                {ciqScore.confidenceExplanation && (
+                  <div style={{ fontSize: '0.65rem', color: '#6C757D', marginTop: '0.25rem', lineHeight: 1.3 }}>
+                    {ciqScore.confidenceExplanation}
+                  </div>
+                )}
               </div>
               <div style={{ background: '#fff', borderRadius: '0.625rem', padding: '0.75rem', border: '1px solid #e3edf7', textAlign: 'center' }}>
                 <div style={{ fontSize: '0.7rem', color: '#adb5bd', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Revenue Impact</div>
@@ -923,6 +930,26 @@ export default function ThemeDetailPage() {
                 <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#1a6fc4', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>Top Driver</span>
                 <span style={{ fontSize: '0.8rem', color: '#1e3a5f' }}>
                   {ciqScore.scoreExplanation[ciqScore.dominantDriver].label} &mdash; contributing {ciqScore.scoreExplanation[ciqScore.dominantDriver].contribution.toFixed(1)} pts to the priority score
+                </span>
+              </div>
+            )}
+            {/* Velocity trend badge */}
+            {ciqScore.velocityDelta != null && ciqScore.velocityDelta !== 0 && (
+              <div style={{ marginBottom: '0.75rem', padding: '0.5rem 0.75rem', background: ciqScore.velocityDelta > 0 ? '#f0fdf4' : '#fff7ed', border: `1px solid ${ciqScore.velocityDelta > 0 ? '#bbf7d0' : '#fed7aa'}`, borderRadius: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ fontSize: '0.85rem' }}>{ciqScore.velocityDelta > 0 ? '📈' : '📉'}</span>
+                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: ciqScore.velocityDelta > 0 ? '#15803d' : '#c2410c', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>Signal Velocity</span>
+                <span style={{ fontSize: '0.8rem', color: '#1e3a5f' }}>
+                  {ciqScore.velocityDelta > 0 ? '+' : ''}{ciqScore.velocityDelta.toFixed(0)}% week-over-week &mdash; {ciqScore.velocityDelta > 20 ? 'rapidly growing signal' : ciqScore.velocityDelta > 0 ? 'growing signal' : 'declining signal'}
+                </span>
+              </div>
+            )}
+            {/* Source diversity badge */}
+            {(ciqScore.sourceDiversityCount ?? 0) > 1 && (
+              <div style={{ marginBottom: '0.75rem', padding: '0.5rem 0.75rem', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ fontSize: '0.85rem' }}>🔗</span>
+                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>Cross-Source</span>
+                <span style={{ fontSize: '0.8rem', color: '#1e3a5f' }}>
+                  Corroborated by {ciqScore.sourceDiversityCount} independent source{(ciqScore.sourceDiversityCount ?? 0) !== 1 ? 's' : ''} &mdash; higher confidence in this theme
                 </span>
               </div>
             )}

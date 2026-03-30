@@ -79,6 +79,21 @@ export interface CiqScoreOutput {
   dominantDriver?: string | null;
   /** Aggregated sentiment score across all linked feedback (-1 to +1) */
   sentimentScore?: number | null;
+  /**
+   * Human-readable sentence explaining WHY this theme has its current priority score.
+   * Generated deterministically from the dominant driver and top factors.
+   * Example: "High priority driven by support ticket pressure (28 tickets) and ARR exposure ($1.2M)."
+   */
+  priorityReason?: string | null;
+  /**
+   * Human-readable sentence explaining the confidence level.
+   * Example: "Medium confidence — 4 feedback items and 1 voice signal; add more signals to increase confidence."
+   */
+  confidenceExplanation?: string | null;
+  /** Number of distinct source types that contributed at least 1 signal */
+  sourceDiversityCount?: number;
+  /** Signal velocity: percentage change in signal count vs. previous week (from TrendComputationService) */
+  velocityDelta?: number | null;
 }
 
 /** Lightweight feedback-level score (no theme aggregation needed) */
@@ -279,7 +294,15 @@ export class CiqService {
         // linked to a SHIPPED roadmap item — a strong urgency signal.
         this.prisma.theme.findUnique({
           where: { id: themeId },
-          select: { resurfaceCount: true, resurfacedAt: true },
+          select: {
+            resurfaceCount:     true,
+            resurfacedAt:       true,
+            // Velocity: pre-computed by TrendComputationService; used to add a
+            // velocitySignal component without re-querying all feedback timestamps.
+            trendDelta:         true,
+            currentWeekSignals: true,
+            prevWeekSignals:    true,
+          },
         }),
       ]);
 
@@ -412,6 +435,27 @@ export class CiqService {
     const resurfaceBonus  = resurfaceCount > 0
       ? Math.min(15, resurfaceCount * 5) * resurfaceDecay
       : 0;
+    // ── Signal velocity ─────────────────────────────────────────────────────
+    // trendDelta is the % change in signal count vs. the previous 7-day window,
+    // pre-computed by TrendComputationService.  We convert it into a 0–100 score
+    // capped at ±50% change (beyond that, the signal is already very strong).
+    // Negative velocity (shrinking signal) is treated as 0 — we do not penalise
+    // themes for declining interest; recency and resurfacing already handle that.
+    const velocityDelta    = themeRow?.trendDelta ?? null;
+    const rawVelocity      = velocityDelta != null ? Math.max(0, velocityDelta) : 0;
+    const normVelocity     = Math.min(100, (rawVelocity / 50) * 100);
+    // ── Source diversity ────────────────────────────────────────────────────
+    // Count how many of the 4 primary sources have at least 1 signal.
+    // A theme corroborated by multiple independent sources is more reliable
+    // than one with many signals from a single channel.
+    const activeSources = [
+      textFeedbackCount > 0,
+      voiceCount        > 0,
+      supportCount      > 0,
+      surveyCount       > 0,
+    ].filter(Boolean).length;
+    // Normalise: 1 source = 25, 2 = 50, 3 = 75, 4 = 100
+    const normSourceDiversity = (activeSources / 4) * 100;
 
     // ── Build explanation with unified weights ──────────────────────────────
     // supportWeight and voiceWeight are multipliers on top of requestFrequencyWeight.
@@ -501,6 +545,27 @@ export class CiqService {
         contribution: normSurvey * settings.requestFrequencyWeight,
         label:        'Survey response signal',
       },
+      // Signal velocity: growing themes get an urgency boost proportional to their
+      // week-over-week growth rate.  Weight is low (0.05) so a single fast-growing
+      // theme doesn't dominate the ranking, but consistent growth is rewarded.
+      velocitySignal: {
+        value:        normVelocity,
+        weight:       0.05,
+        contribution: normVelocity * 0.05,
+        label:        velocityDelta != null
+          ? `Signal velocity (+${velocityDelta.toFixed(0)}% WoW)`
+          : 'Signal velocity (no trend data yet)',
+      },
+      // Source diversity: themes corroborated by multiple independent sources are
+      // more reliable.  Weight is low (0.04) — this is a confidence amplifier, not
+      // a primary driver.  A theme with 4 active sources gets a small but visible
+      // boost that reflects cross-source validation.
+      sourceDiversitySignal: {
+        value:        normSourceDiversity,
+        weight:       0.04,
+        contribution: normSourceDiversity * 0.04,
+        label:        `Source diversity (${activeSources}/4 sources active)`,
+      },
     };
 
     // ── Normalise weights so the sum always stays within 0–100 ─────────────
@@ -541,6 +606,71 @@ export class CiqService {
       };
     }
 
+    // ── Dominant driver ─────────────────────────────────────────────────────
+    // Find the explanation key with the highest weighted contribution.
+    // Excludes metadata-only keys (resurfacingSignal is a bonus, not a base factor).
+    const BASE_FACTOR_KEYS = new Set([
+      'feedbackFrequency', 'voiceSignal', 'supportSignal', 'customerCount',
+      'arrValue', 'accountPriority', 'dealInfluence', 'signalStrength',
+      'sentimentSignal', 'recencySignal', 'voteSignal', 'surveySignal',
+      'velocitySignal', 'sourceDiversitySignal',
+    ]);
+    const dominantDriver = Object.entries(explanation)
+      .filter(([k]) => BASE_FACTOR_KEYS.has(k))
+      .sort((a, b) => b[1].contribution - a[1].contribution)[0]?.[0] ?? null;
+
+    // ── Priority reason sentence ────────────────────────────────────────────
+    // Generate a deterministic one-sentence explanation of why this theme has
+    // its current priority score.  Uses the dominant driver and top-2 factors.
+    const topFactors = Object.entries(explanation)
+      .filter(([k]) => BASE_FACTOR_KEYS.has(k))
+      .sort((a, b) => b[1].contribution - a[1].contribution)
+      .slice(0, 2);
+    const DRIVER_PHRASES: Record<string, (v: number) => string> = {
+      feedbackFrequency:    (v) => `${Math.round(v)} direct feedback signal${Math.round(v) !== 1 ? 's' : ''}`,
+      voiceSignal:          (v) => `${Math.round(v)} voice signal${Math.round(v) !== 1 ? 's' : ''}`,
+      supportSignal:        (v) => `${Math.round(v)} support ticket${Math.round(v) !== 1 ? 's' : ''}`,
+      surveySignal:         (v) => `${Math.round(v)} survey response${Math.round(v) !== 1 ? 's' : ''}`,
+      arrValue:             (v) => `$${(v / 100 * 10).toFixed(1)}M ARR exposure`,
+      customerCount:        (v) => `${Math.round(v)} unique customer${Math.round(v) !== 1 ? 's' : ''}`,
+      accountPriority:      (_) => 'high-priority account signals',
+      dealInfluence:        (_) => 'active deal pipeline exposure',
+      signalStrength:       (_) => 'strong customer signal strength',
+      sentimentSignal:      (_) => 'positive sentiment signal',
+      recencySignal:        (v) => `${Math.round(v)} recent signal${Math.round(v) !== 1 ? 's' : ''} (30d)`,
+      voteSignal:           (v) => `${Math.round(v)} portal vote${Math.round(v) !== 1 ? 's' : ''}`,
+      velocitySignal:       (_) => `growing ${velocityDelta != null ? velocityDelta.toFixed(0) + '% WoW' : 'rapidly'}`,
+      sourceDiversitySignal: (_) => `${activeSources} independent source${activeSources !== 1 ? 's' : ''} corroborating`,
+    };
+    const band = priorityScore >= 70 ? 'High' : priorityScore >= 40 ? 'Moderate' : 'Low';
+    const driverPhrase = dominantDriver && DRIVER_PHRASES[dominantDriver]
+      ? DRIVER_PHRASES[dominantDriver](topFactors[0]?.[1].value ?? 0)
+      : 'multiple signals';
+    const secondPhrase = topFactors[1] && DRIVER_PHRASES[topFactors[1][0]]
+      ? ` and ${DRIVER_PHRASES[topFactors[1][0]](topFactors[1][1].value)}`
+      : '';
+    const priorityReason =
+      `${band} priority driven by ${driverPhrase}${secondPhrase}. ` +
+      `Score: ${Math.round(priorityScore)}/100.`;
+
+    // ── Confidence explanation sentence ────────────────────────────────────
+    const confBand = confidenceScore >= 0.75 ? 'High' : confidenceScore >= 0.45 ? 'Medium' : 'Low';
+    const signalSummaryParts: string[] = [];
+    if (feedbackCount > 0)  signalSummaryParts.push(`${feedbackCount} feedback item${feedbackCount !== 1 ? 's' : ''}`);
+    if (voiceCount > 0)     signalSummaryParts.push(`${voiceCount} voice signal${voiceCount !== 1 ? 's' : ''}`);
+    if (supportCount > 0)   signalSummaryParts.push(`${supportCount} support ticket${supportCount !== 1 ? 's' : ''}`);
+    if (surveyCount > 0)    signalSummaryParts.push(`${surveyCount} survey response${surveyCount !== 1 ? 's' : ''}`);
+    const signalSummary = signalSummaryParts.length > 0
+      ? signalSummaryParts.join(', ')
+      : 'no signals yet';
+    const confAdvice = confidenceScore < 0.45
+      ? ' Add more signals from multiple sources to increase confidence.'
+      : confidenceScore < 0.75
+      ? ' More cross-source signals will raise confidence further.'
+      : '';
+    const confidenceExplanation =
+      `${confBand} confidence — based on ${signalSummary}.${confAdvice}`;
+
     return {
       priorityScore,
       confidenceScore,
@@ -555,6 +685,14 @@ export class CiqService {
       signalCount,
       uniqueCustomerCount,
       scoreExplanation: explanation,
+      dominantDriver,
+      sentimentScore: allSentiments.length > 0
+        ? parseFloat((allSentiments.reduce((a, b) => a + b, 0) / allSentiments.length).toFixed(3))
+        : null,
+      priorityReason,
+      confidenceExplanation,
+      sourceDiversityCount: activeSources,
+      velocityDelta,
     };
   }
 

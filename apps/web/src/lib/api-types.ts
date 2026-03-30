@@ -1087,11 +1087,33 @@ export interface CiqScoreOutput {
    * The scoring dimension that contributed most to the final score.
    * Useful for surfacing a one-line explanation in the UI.
    */
-  dominantDriver?: string;
+  dominantDriver?: string | null;
   /** True when the score was derived from a linked theme (vs. stored values only) */
   themeScored?: boolean;
   /** Average sentiment score across linked feedback (-1 to +1). Null until sentiment scoring has run. */
   sentimentScore?: number | null;
+  /**
+   * Human-readable sentence explaining WHY this theme has its current priority score.
+   * Example: "High priority driven by 28 support tickets and $1.2M ARR exposure. Score: 74/100."
+   */
+  priorityReason?: string | null;
+  /**
+   * Human-readable sentence explaining the confidence level and what signals are present.
+   * Example: "Medium confidence — based on 4 feedback items, 1 voice signal. More cross-source signals will raise confidence further."
+   */
+  confidenceExplanation?: string | null;
+  /** Number of distinct source types (Feedback / Voice / Support / Survey) that contributed at least 1 signal */
+  sourceDiversityCount?: number;
+  /** Signal velocity: % change in signal count vs. previous 7-day window */
+  velocityDelta?: number | null;
+  /** Count of voice/portal feedback signals */
+  voiceCount?: number;
+  /** Count of support ticket signals */
+  supportCount?: number;
+  /** Count of survey-derived signals */
+  surveyCount?: number;
+  /** Total cross-source signal count */
+  totalSignalCount?: number;
 }
 
 /**
