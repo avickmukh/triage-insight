@@ -441,7 +441,38 @@ export class SurveyService {
         questions: { orderBy: { order: 'asc' } },
       },
     });
-    if (!survey) throw new NotFoundException('Survey not found or not published');
+     if (!survey) throw new NotFoundException('Survey not found or not published');
+
+    // ── Duplicate submission guard ────────────────────────────────────────────
+    // Prevent the same respondent from submitting the same survey twice.
+    // Keyed on (surveyId + respondentEmail) when email is provided, or
+    // (surveyId + anonymousId) when an anonymous session token is provided.
+    // If neither is present the check is skipped (anonymous, no session).
+    if (dto.respondentEmail || dto.anonymousId) {
+      const existingResponse = await this.prisma.surveyResponse.findFirst({
+        where: {
+          surveyId,
+          workspaceId: workspace.id,
+          ...(dto.respondentEmail
+            ? { respondentEmail: dto.respondentEmail }
+            : { anonymousId: dto.anonymousId }),
+        },
+        select: { id: true },
+      });
+      if (existingResponse) {
+        // Return success-like response so the UI can show the thank-you screen
+        // without revealing whether the respondent has already submitted.
+        return {
+          success: true,
+          responseId: existingResponse.id,
+          feedbackIds: [],
+          feedbackId: null,
+          thankYouMessage: survey.thankYouMessage ?? 'Thank you for your response!',
+          redirectUrl: survey.redirectUrl ?? null,
+          duplicate: true,
+        };
+      }
+    }
 
     // Validate required questions are answered
     const requiredQuestions = survey.questions.filter((q) => q.required);

@@ -17,6 +17,7 @@ import { Roles } from '../workspace/decorators/roles.decorator';
 import { WorkspaceRole } from '@prisma/client';
 import { SurveyService } from './services/survey.service';
 import { SurveyEvidenceService } from './services/survey-evidence.service';
+import { SurveyBackfillService } from './scripts/survey-backfill.service';
 import {
   CreateSurveyDto,
   UpdateSurveyDto,
@@ -34,6 +35,7 @@ export class SurveyController {
   constructor(
     private readonly surveyService: SurveyService,
     private readonly surveyEvidenceService: SurveyEvidenceService,
+    private readonly surveyBackfillService: SurveyBackfillService,
   ) {}
 
   @Post()
@@ -242,5 +244,34 @@ export class PublicSurveyController {
     @Body() dto: SubmitSurveyResponseDto,
   ) {
     return this.surveyService.submitResponse(orgSlug, surveyId, dto);
+  }
+}
+
+// ─── Workspace-scoped admin backfill endpoint ─────────────────────────────────
+// POST /workspaces/:workspaceId/surveys/admin/backfill
+// Requires ADMIN role.  Safe to call multiple times — fully idempotent.
+@Controller('workspaces/:workspaceId/surveys')
+@UseGuards(JwtAuthGuard, RolesGuard)
+export class SurveyAdminController {
+  constructor(
+    private readonly surveyBackfillService: SurveyBackfillService,
+  ) {}
+
+  /**
+   * Trigger the idempotent survey backfill for a specific workspace.
+   *
+   * What it does:
+   *   1. Creates Feedback rows for historical survey text answers that were
+   *      never converted (pre-refactor responses).
+   *   2. Sets primarySource on legacy Feedback rows that have primarySource=null.
+   *   3. Enqueues CIQ re-score jobs for themes with stale source counts.
+   *
+   * Safe to call multiple times — already-processed items are skipped.
+   */
+  @Post('admin/backfill')
+  @Roles(WorkspaceRole.ADMIN)
+  @HttpCode(HttpStatus.OK)
+  runBackfill(@Param('workspaceId') workspaceId: string) {
+    return this.surveyBackfillService.run(workspaceId);
   }
 }
