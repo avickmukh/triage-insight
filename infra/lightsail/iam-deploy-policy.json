@@ -1,5 +1,5 @@
 {
-  "_comment": "Attach this policy to the IAM user used by GitHub Actions (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY). Replace ACCOUNT_ID and REGION.",
+  "_comment": "Attach this policy to the IAM user used by GitHub Actions (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY). Replace ACCOUNT_ID and REGION. The same credentials are also used on the Lightsail instance for ECR login, S3 backups, and SES email.",
 
   "Version": "2012-10-17",
   "Statement": [
@@ -40,7 +40,7 @@
       "Resource": "*"
     },
     {
-      "Sid": "S3Uploads",
+      "Sid": "S3AppUploadsAndBackups",
       "Effect": "Allow",
       "Action": [
         "s3:PutObject",
