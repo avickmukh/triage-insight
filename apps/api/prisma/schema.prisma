@@ -930,6 +930,16 @@ model Theme {
   impactSentence     String?
   /// Timestamp of last centroid embedding update
   centroidUpdatedAt  DateTime?
+  /// Timestamp when fresh evidence last arrived for a theme whose linked RoadmapItem
+  /// is SHIPPED. Null if the theme has never been resurfaced. Used to surface
+  /// "shipped but still complained about" signals in the roadmap and CIQ views.
+  resurfacedAt       DateTime?
+  /// Count of times fresh evidence has arrived after the linked RoadmapItem was SHIPPED.
+  /// Incremented each time a new signal is attached while any roadmap item is SHIPPED.
+  resurfaceCount     Int?      @default(0)
+  /// Timestamp of the most recent evidence attachment (any source).
+  /// Updated on every ThemeFeedback upsert so the theme list can be sorted by activity.
+  lastEvidenceAt     DateTime?
 
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
@@ -955,6 +965,10 @@ model ThemeFeedback {
   assignedBy       String   @default("manual")
   /// AI similarity confidence score (0–1); null for manual assignments
   confidence       Float?
+  /// Decomposed match factors for explainability UI:
+  /// { embeddingScore, keywordScore, hybridScore, threshold, clusterSize, matchedKeywords }
+  /// Null for manual assignments or legacy rows.
+  matchReason      Json?
 
   theme            Theme    @relation(fields: [themeId], references: [id], onDelete: Cascade)
   feedback         Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)

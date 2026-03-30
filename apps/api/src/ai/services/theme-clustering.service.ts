@@ -153,7 +153,7 @@ export class ThemeClusteringService {
         `[CLUSTER] Embedding failed for feedback ${feedbackId}: ${(err as Error).message}. Creating new theme.`,
       );
       // FIX: pass prisma (tx client) so the embedding write is inside the transaction
-      return this.createCandidateTheme(prisma, workspaceId, feedbackId, feedback.title);
+      return this.createCandidateTheme(prisma, workspaceId, feedbackId, feedback.title, undefined, feedback.description ?? undefined);
     }
 
     const vectorStr = `[${feedbackEmbedding.join(',')}]`;
@@ -238,6 +238,28 @@ export class ThemeClusteringService {
     const threshold = this.getDynamicThreshold(bestClusterSize);
 
     if (bestThemeId && bestHybridScore >= threshold) {
+      // Build the matchReason payload for explainability UI.
+      // Captures all scoring factors so the UI can show "why" a signal was assigned.
+      const feedbackKeywordsForReason = feedbackKeywords;
+      let themeKeywordsForReason: string[] = [];
+      const bestCandidate = candidates.find((c) => c.id === bestThemeId);
+      if (bestCandidate?.topKeywords) {
+        try {
+          themeKeywordsForReason = typeof bestCandidate.topKeywords === 'string'
+            ? JSON.parse(bestCandidate.topKeywords)
+            : (bestCandidate.topKeywords as string[]);
+        } catch { themeKeywordsForReason = []; }
+      }
+      const matchedKeywords = feedbackKeywordsForReason.filter((k) => themeKeywordsForReason.includes(k));
+      const matchReason = {
+        embeddingScore: parseFloat(bestEmbeddingScore.toFixed(4)),
+        keywordScore:   parseFloat(bestKeywordScore.toFixed(4)),
+        hybridScore:    parseFloat(bestHybridScore.toFixed(4)),
+        threshold:      parseFloat(threshold.toFixed(4)),
+        clusterSize:    bestClusterSize,
+        matchedKeywords,
+      };
+
       await prisma.themeFeedback.upsert({
         where: { themeId_feedbackId: { themeId: bestThemeId, feedbackId } },
         create: {
@@ -245,18 +267,47 @@ export class ThemeClusteringService {
           feedbackId,
           assignedBy: 'ai',
           confidence: bestHybridScore,
+          matchReason,
         },
         update: {
           assignedBy: 'ai',
           confidence: bestHybridScore,
+          matchReason,
         },
+      });
+
+      // ── Update lastEvidenceAt on the theme so it can be sorted by activity ──
+      const now = new Date();
+      const themeUpdate: Record<string, unknown> = { lastEvidenceAt: now };
+
+      // ── Resurfacing detection ─────────────────────────────────────────────
+      // If any RoadmapItem linked to this theme is SHIPPED, fresh evidence means
+      // the problem was not fully resolved. Increment resurfaceCount and set
+      // resurfacedAt so the roadmap and CIQ views can surface this signal.
+      const shippedRoadmapItem = await prisma.roadmapItem.findFirst({
+        where: { themeId: bestThemeId, status: 'SHIPPED' },
+        select: { id: true },
+      });
+      if (shippedRoadmapItem) {
+        themeUpdate.resurfacedAt   = now;
+        themeUpdate.resurfaceCount = { increment: 1 };
+        this.logger.warn(
+          `[CLUSTER] ⚠ RESURFACED: theme "${bestThemeTitle}" (${bestThemeId}) ` +
+          `has a SHIPPED roadmap item but received fresh evidence from feedback ${feedbackId}. ` +
+          `resurfaceCount incremented.`,
+        );
+      }
+
+      await prisma.theme.update({
+        where: { id: bestThemeId },
+        data: themeUpdate as Parameters<typeof prisma.theme.update>[0]['data'],
       });
 
       this.logger.log(
         `[CLUSTER] ✓ ASSIGNED feedback "${feedback.title}" → theme "${bestThemeTitle}" ` +
         `(hybrid=${bestHybridScore.toFixed(3)} ≥ threshold=${threshold}, ` +
         `embedding=${bestEmbeddingScore.toFixed(3)}, keyword=${bestKeywordScore.toFixed(3)}, ` +
-        `clusterSize=${bestClusterSize})`,
+        `clusterSize=${bestClusterSize}, matchedKeywords=[${matchedKeywords.join(',')}])`,
       );
 
       // Recompute cluster confidence and update centroid
@@ -264,6 +315,8 @@ export class ThemeClusteringService {
       await this.updateThemeCentroid(prisma, bestThemeId);
 
       try {
+        // Always re-score CIQ — this covers both normal assignment and resurfacing.
+        // The CIQ processor reads resurfaceCount and resurfacedAt to boost urgency.
         await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId: bestThemeId });
       } catch (queueErr) {
         this.logger.warn(`[CIQ] Redis unavailable — re-score skipped: ${(queueErr as Error).message}`);
@@ -278,7 +331,7 @@ export class ThemeClusteringService {
       `bestCandidate="${bestThemeTitle}") — creating new theme`,
     );
     // FIX: pass prisma (tx client) so the embedding write is inside the transaction
-    return this.createCandidateTheme(prisma, workspaceId, feedbackId, feedback.title, feedbackEmbedding);
+    return this.createCandidateTheme(prisma, workspaceId, feedbackId, feedback.title, feedbackEmbedding, feedback.description ?? undefined);
   }
 
   /**
@@ -483,8 +536,26 @@ export class ThemeClusteringService {
     feedbackId: string,
     feedbackTitle: string,
     feedbackEmbedding?: number[],
+    feedbackDescription?: string,
   ): Promise<string> {
-    const candidateTitle = normalizeThemeTitle(feedbackTitle);
+    // normalizeThemeTitle returns null when the title is a question label,
+    // survey title, or other source-specific metadata.
+    // In that case, use the first 80 chars of the answer text (description)
+    // as the theme title so the theme is named after the content, not the question.
+    const normalised = normalizeThemeTitle(feedbackTitle);
+    let candidateTitle: string;
+    if (normalised === null) {
+      // Question label detected — use the answer text as the theme title.
+      const fallback = feedbackDescription ?? feedbackTitle;
+      const truncated = fallback.length > 80 ? `${fallback.slice(0, 77)}…` : fallback;
+      candidateTitle = truncated.replace(/[.!?]+$/, '').trim();
+      this.logger.debug(
+        `[CLUSTER] Question-label detected for feedback ${feedbackId}: ` +
+        `"${feedbackTitle}" — using answer text as theme title: "${candidateTitle}"`,
+      );
+    } else {
+      candidateTitle = normalised;
+    }
 
     const theme = await prisma.theme.create({
       data: {
@@ -494,8 +565,11 @@ export class ThemeClusteringService {
         clusterConfidence: 10,
         confidenceFactors: { avgSimilarity: 1.0, size: 1, variance: 0 },
         outlierCount: 0,
-        topKeywords: extractKeywords(feedbackTitle),
-        dominantSignal: feedbackTitle.length > 120 ? `${feedbackTitle.slice(0, 117)}…` : feedbackTitle,
+        topKeywords: extractKeywords(feedbackDescription ?? feedbackTitle),
+        dominantSignal: (feedbackDescription ?? feedbackTitle).length > 120
+          ? `${(feedbackDescription ?? feedbackTitle).slice(0, 117)}…`
+          : (feedbackDescription ?? feedbackTitle),
+        lastEvidenceAt: new Date(),
         feedbacks: {
           create: { feedbackId, assignedBy: 'ai', confidence: 1.0 },
         },
@@ -618,12 +692,42 @@ export class ThemeClusteringService {
 // ─── Utility: normalize theme title ──────────────────────────────────────────
 
 /**
+ * Patterns that indicate the text is a question label, survey title, or
+ * other source-specific metadata rather than a meaningful theme title.
+ *
+ * If a candidate title matches any of these patterns, it is considered
+ * a "label explosion" risk and should NOT become a standalone theme title.
+ * The clustering service will fall back to creating a theme with a generic
+ * placeholder title derived from the source type.
+ */
+const QUESTION_LABEL_PATTERNS = [
+  /^(what|how|why|when|where|who|which|do you|did you|have you|would you|could you|please|tell us|describe|explain|rate|rank|select|choose|pick|list)/i,
+  /\?$/,                          // ends with a question mark
+  /^survey response:/i,           // legacy survey blob title
+  /^(feedback|support|voice|survey)\s+(response|submission|ticket|call|transcript):/i,
+];
+
+/**
+ * Returns true if the candidate title is a question label, survey title,
+ * or other source-specific metadata that should NOT become a theme title.
+ */
+export function isSourceLabel(title: string): boolean {
+  const trimmed = title.trim();
+  return QUESTION_LABEL_PATTERNS.some((re) => re.test(trimmed));
+}
+
+/**
  * Normalize a theme title to avoid sentence-like or duplicate names.
+ * - Rejects question-form labels (survey question text, form labels)
  * - Truncates to 80 chars
  * - Strips trailing punctuation (. ! ?)
  * - Title-cases the result
+ *
+ * If the raw title is a question label, returns null so the caller can
+ * skip theme creation or use a fallback title derived from the answer text.
  */
-function normalizeThemeTitle(raw: string): string {
+function normalizeThemeTitle(raw: string): string | null {
+  if (isSourceLabel(raw)) return null;
   const truncated = raw.length > 80 ? `${raw.slice(0, 77)}…` : raw;
   const stripped = truncated.replace(/[.!?]+$/, '').trim();
   // Title-case: capitalise first letter of each word, lowercase the rest

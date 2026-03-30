@@ -170,7 +170,7 @@ export class CiqService {
    * Uses workspace PrioritizationSettings for weights (falls back to defaults).
    */
   async scoreTheme(workspaceId: string, themeId: string): Promise<CiqScoreOutput> {
-    const [settings, feedbackRows, signalRows, dealLinks, supportClusters, voteRows] =
+    const [settings, feedbackRows, signalRows, dealLinks, supportClusters, voteRows, themeRow] =
       await Promise.all([
         this.getSettings(workspaceId),
 
@@ -237,6 +237,14 @@ export class CiqService {
             },
           },
           select: { id: true },
+        }),
+
+        // ── Resurfacing metadata ────────────────────────────────────────────
+        // resurfaceCount > 0 means fresh evidence arrived after this theme was
+        // linked to a SHIPPED roadmap item — a strong urgency signal.
+        this.prisma.theme.findUnique({
+          where: { id: themeId },
+          select: { resurfaceCount: true, resurfacedAt: true },
         }),
       ]);
 
@@ -337,6 +345,22 @@ export class CiqService {
     // ── Spike bonus: active support spike adds urgency ──────────────────────
     const spikeBonus = hasSupportSpike ? 10 : 0;
 
+    // ── Resurfacing boost: shipped theme receiving fresh evidence ───────────
+    // Each resurfacing event adds up to 15 points (capped), decaying over 90 days.
+    // This ensures a shipped item that keeps getting complaints rises back up.
+    const resurfaceCount = themeRow?.resurfaceCount ?? 0;
+    const resurfacedAt   = themeRow?.resurfacedAt ? new Date(themeRow.resurfacedAt) : null;
+    const daysSinceResurface = resurfacedAt
+      ? (Date.now() - resurfacedAt.getTime()) / (1000 * 60 * 60 * 24)
+      : 999;
+    // Decay: full boost within 7 days, linear decay to 0 at 90 days
+    const resurfaceDecay  = daysSinceResurface < 90
+      ? Math.max(0, 1 - daysSinceResurface / 90)
+      : 0;
+    const resurfaceBonus  = resurfaceCount > 0
+      ? Math.min(15, resurfaceCount * 5) * resurfaceDecay
+      : 0;
+
     // ── Build explanation with unified weights ──────────────────────────────
     // supportWeight and voiceWeight are multipliers on top of requestFrequencyWeight.
     // We apply them as separate breakdown entries so the UI can show the full picture.
@@ -427,8 +451,8 @@ export class CiqService {
 
     // ── Compute final score ─────────────────────────────────────────────────
     const rawScore      = Object.values(explanation).reduce((sum, c) => sum + c.contribution, 0);
-    // Sentiment penalty reduces total score slightly; spike bonus adds urgency
-    const adjustedScore = rawScore * (1 - sentimentPenalty * 0.1) + spikeBonus;
+    // Sentiment penalty reduces total score slightly; spike + resurfacing bonuses add urgency
+    const adjustedScore = rawScore * (1 - sentimentPenalty * 0.1) + spikeBonus + resurfaceBonus;
     const priorityScore = parseFloat(Math.min(100, adjustedScore).toFixed(2));
 
     const revenueImpactValue = arrValue;
@@ -439,6 +463,16 @@ export class CiqService {
     const confidenceScore = deriveConfidence(
       feedbackCount, voiceCount, supportCount, signalCount, uniqueCustomerCount,
     );
+
+    // ── Add resurfacing to score explanation if active ─────────────────────
+    if (resurfaceBonus > 0) {
+      explanation['resurfacingSignal'] = {
+        value:        resurfaceBonus,
+        weight:       1,
+        contribution: resurfaceBonus,
+        label:        `Resurfaced after shipped (×${resurfaceCount})`,
+      };
+    }
 
     return {
       priorityScore,
