@@ -119,7 +119,29 @@ export class FeedbackController {
 
   // --- Ingestion ---
   /**
+   * POST /workspaces/:workspaceId/feedback/import/csv/headers
+   * Parses a CSV file and returns detected column headers + 3 preview rows.
+   * Used by the frontend column-mapping step BEFORE the actual import.
+   * MUST be declared before `:id` routes to avoid NestJS routing conflicts.
+   */
+  @Post('import/csv/headers')
+  @UseInterceptors(FileInterceptor('file'))
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  parseCsvHeaders(
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 })],
+      }),
+    )
+    file: Express.Multer.File,
+  ) {
+    return this.csvImportService.parseHeaders(file.buffer);
+  }
+
+  /**
    * POST /workspaces/:workspaceId/feedback/import/csv
+   * Accepts an optional JSON `mapping` field alongside the file.
+   * mapping = { feedbackText: 'col', title?: 'col', customerEmail?: 'col', source?: 'col' }
    * MUST be declared before `:id` routes to avoid NestJS routing conflicts.
    */
   @Post('import/csv')
@@ -133,8 +155,10 @@ export class FeedbackController {
       }),
     )
     file: Express.Multer.File,
+    @Body('mapping') rawMapping?: string,
   ) {
-    return this.csvImportService.import(workspaceId, file.buffer);
+    const mapping = rawMapping ? (JSON.parse(rawMapping) as import('./ingestion/csv-import.service').CsvColumnMapping) : undefined;
+    return this.csvImportService.import(workspaceId, file.buffer, mapping);
   }
 
   // --- Pipeline status ---

@@ -241,9 +241,14 @@ function SlackModal({ onClose }: { onClose: () => void }) {
     <div style={OVERLAY} onClick={onClose}>
       <div style={MODAL} onClick={(e) => e.stopPropagation()}>
         <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0A2540', marginBottom: '0.25rem' }}>Connect Slack</h2>
-        <p style={{ fontSize: '0.85rem', color: '#6C757D', marginBottom: '1.25rem' }}>
+        <p style={{ fontSize: '0.85rem', color: '#6C757D', marginBottom: '0.6rem' }}>
           Paste your Slack bot token (xoxb-…). In production this is obtained via the Slack OAuth flow.
         </p>
+        <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '0.5rem', padding: '0.6rem 0.85rem', fontSize: '0.8rem', color: '#0369a1', marginBottom: '1rem', lineHeight: 1.6 }}>
+          <strong>How to get your Slack bot token:</strong>{' '}
+          <a href="https://api.slack.com/apps" target="_blank" rel="noopener noreferrer" style={{ color: '#0369a1', fontWeight: 700 }}>Open Slack API Console →</a>
+          {' '}Create an app → OAuth &amp; Permissions → Install to workspace → copy the <code style={{ background: '#e0f2fe', padding: '0.1rem 0.3rem', borderRadius: '0.2rem' }}>Bot User OAuth Token</code>.
+        </div>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div>
             <label style={LABEL}>Bot Token *</label>
@@ -285,9 +290,14 @@ function ZendeskModal({ onClose }: { onClose: () => void }) {
     <div style={OVERLAY} onClick={onClose}>
       <div style={MODAL} onClick={(e) => e.stopPropagation()}>
         <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0A2540', marginBottom: '0.25rem' }}>Connect Zendesk</h2>
-        <p style={{ fontSize: '0.85rem', color: '#6C757D', marginBottom: '1.25rem' }}>
+        <p style={{ fontSize: '0.85rem', color: '#6C757D', marginBottom: '0.6rem' }}>
           Enter your Zendesk subdomain and an API token with read access to tickets.
         </p>
+        <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '0.5rem', padding: '0.6rem 0.85rem', fontSize: '0.8rem', color: '#0369a1', marginBottom: '1rem', lineHeight: 1.6 }}>
+          <strong>How to get your Zendesk API token:</strong>{' '}
+          <a href="https://support.zendesk.com/hc/en-us/articles/4408889192858" target="_blank" rel="noopener noreferrer" style={{ color: '#0369a1', fontWeight: 700 }}>Zendesk API Token Guide →</a>
+          {' '}Admin Center → Apps &amp; Integrations → APIs → Zendesk API → Add API token.
+        </div>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div>
             <label style={LABEL}>Subdomain *</label>
@@ -324,9 +334,14 @@ function IntercomModal({ onClose }: { onClose: () => void }) {
     <div style={OVERLAY} onClick={onClose}>
       <div style={MODAL} onClick={(e) => e.stopPropagation()}>
         <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0A2540', marginBottom: '0.25rem' }}>Connect Intercom</h2>
-        <p style={{ fontSize: '0.85rem', color: '#6C757D', marginBottom: '1.25rem' }}>
+        <p style={{ fontSize: '0.85rem', color: '#6C757D', marginBottom: '0.6rem' }}>
           Paste your Intercom access token. You can generate one in your Intercom Developer Hub.
         </p>
+        <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '0.5rem', padding: '0.6rem 0.85rem', fontSize: '0.8rem', color: '#0369a1', marginBottom: '1rem', lineHeight: 1.6 }}>
+          <strong>How to get your Intercom access token:</strong>{' '}
+          <a href="https://developers.intercom.com/docs/build-an-integration/learn-more/authentication/" target="_blank" rel="noopener noreferrer" style={{ color: '#0369a1', fontWeight: 700 }}>Intercom Auth Guide →</a>
+          {' '}Developer Hub → Your App → Authentication → copy the <code style={{ background: '#e0f2fe', padding: '0.1rem 0.3rem', borderRadius: '0.2rem' }}>Access Token</code>.
+        </div>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div>
             <label style={LABEL}>Access Token *</label>

@@ -28,7 +28,6 @@ const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
 };
 
 const SOURCE_LABELS: Record<string, string> = {
-  // Legacy sourceType labels (kept for backward compat)
   [FeedbackSourceType.MANUAL]: 'Manual',
   [FeedbackSourceType.PUBLIC_PORTAL]: 'Portal',
   [FeedbackSourceType.EMAIL]: 'Email',
@@ -38,7 +37,6 @@ const SOURCE_LABELS: Record<string, string> = {
   [FeedbackSourceType.API]: 'API',
 };
 
-/** Human-readable labels for the unified secondary source badges */
 const SECONDARY_SOURCE_LABELS: Record<string, string> = {
   [FeedbackSecondarySource.MANUAL]: 'Manual',
   [FeedbackSecondarySource.CSV_UPLOAD]: 'CSV',
@@ -54,7 +52,6 @@ const SECONDARY_SOURCE_LABELS: Record<string, string> = {
   [FeedbackSecondarySource.OTHER]: 'Other',
 };
 
-/** Primary source filter tabs for the inbox top-level source selector */
 const PRIMARY_SOURCE_TABS: { label: string; value: FeedbackPrimarySource | undefined; icon: string }[] = [
   { label: 'All Sources', value: undefined,                          icon: '◈' },
   { label: 'Feedback',    value: FeedbackPrimarySource.FEEDBACK,    icon: '💬' },
@@ -63,10 +60,6 @@ const PRIMARY_SOURCE_TABS: { label: string; value: FeedbackPrimarySource | undef
   { label: 'Support',     value: FeedbackPrimarySource.SUPPORT,     icon: '🎧' },
 ];
 
-/**
- * Primary source badge colours — shown on rows when "All Sources" is active
- * so users can visually distinguish source type at a glance.
- */
 const PRIMARY_SOURCE_COLORS: Record<string, { bg: string; color: string; border: string }> = {
   [FeedbackPrimarySource.FEEDBACK]: { bg: '#e8f7f7', color: '#20A4A4', border: '#b2dfdb' },
   [FeedbackPrimarySource.VOICE]:    { bg: '#e8f0fe', color: '#1a73e8', border: '#c5d8fb' },
@@ -74,12 +67,6 @@ const PRIMARY_SOURCE_COLORS: Record<string, { bg: string; color: string; border:
   [FeedbackPrimarySource.SUPPORT]:  { bg: '#fce8ff', color: '#7c3aed', border: '#e9d5ff' },
 };
 
-/**
- * Secondary source options scoped to each primary source.
- * When a primary source tab is active, only the relevant secondary sources
- * are shown in the sub-filter dropdown — keeping the options meaningful.
- * `undefined` key = "All Sources" tab (show all secondary options).
- */
 const SECONDARY_SOURCE_BY_PRIMARY: Record<string, FeedbackSecondarySource[]> = {
   [FeedbackPrimarySource.FEEDBACK]: [
     FeedbackSecondarySource.MANUAL,
@@ -112,7 +99,7 @@ const SECONDARY_SOURCE_BY_PRIMARY: Record<string, FeedbackSecondarySource[]> = {
     FeedbackSecondarySource.OTHER,
   ],
 };
-/** All secondary sources — used when no primary source filter is active */
+
 const ALL_SECONDARY_SOURCES: FeedbackSecondarySource[] = Object.values(FeedbackSecondarySource);
 
 const TABS: { label: string; value: FeedbackStatus | undefined }[] = [
@@ -123,15 +110,29 @@ const TABS: { label: string; value: FeedbackStatus | undefined }[] = [
   { label: 'Archived', value: FeedbackStatus.ARCHIVED },
 ];
 
-// ─── CSV Import Modal ─────────────────────────────────────────────────────────
+// ─── CSV Import Modal (3-step wizard) ────────────────────────────────────────
 
-type ImportState = 'idle' | 'loading' | 'success' | 'error';
+type ImportState = 'idle' | 'parsing' | 'mapping' | 'loading' | 'success' | 'error';
 
 interface CsvImportResult {
   importedCount: number;
   total: number;
   batchId: string;
 }
+
+interface CsvColumnMapping {
+  feedbackText: string;
+  title?: string;
+  customerEmail?: string;
+  source?: string;
+}
+
+const FIELD_LABELS: { key: keyof CsvColumnMapping; label: string; required: boolean; hint: string }[] = [
+  { key: 'feedbackText', label: 'Feedback Text',   required: true,  hint: 'The main feedback content (required)' },
+  { key: 'title',        label: 'Title / Subject', required: false, hint: 'Short title or subject line (optional)' },
+  { key: 'customerEmail',label: 'Customer Email',  required: false, hint: 'Customer email for linking (optional)' },
+  { key: 'source',       label: 'Source Channel',  required: false, hint: 'e.g. email, slack, portal (optional)' },
+];
 
 function CsvImportModal({
   workspaceId,
@@ -148,25 +149,61 @@ function CsvImportModal({
   const [result, setResult] = useState<CsvImportResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>('');
 
+  // Column mapping state
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+  const [csvPreview, setCsvPreview] = useState<Record<string, string>[]>([]);
+  const [csvTotalRows, setCsvTotalRows] = useState<number>(0);
+  const [mapping, setMapping] = useState<CsvColumnMapping>({ feedbackText: '' });
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null;
     setSelectedFile(file);
     setImportState('idle');
     setResult(null);
     setErrorMessage('');
+    setCsvHeaders([]);
+    setCsvPreview([]);
+    setMapping({ feedbackText: '' });
   };
 
+  // Step 1 → Step 2: parse headers
+  const handleParseHeaders = async () => {
+    if (!selectedFile) return;
+    setImportState('parsing');
+    setErrorMessage('');
+    try {
+      const res = await apiClient.feedback.parseCsvHeaders(workspaceId, selectedFile);
+      setCsvHeaders(res.headers);
+      setCsvPreview(res.preview);
+      setCsvTotalRows(res.totalRows);
+      // Auto-detect best column for feedbackText
+      const autoText = res.headers.find((h) =>
+        ['feedback', 'text', 'description', 'body', 'content', 'message', 'comment', 'title', 'subject', 'summary'].includes(h.toLowerCase())
+      ) ?? res.headers[0] ?? '';
+      setMapping({ feedbackText: autoText });
+      setImportState('mapping');
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        (err instanceof Error ? err.message : 'Failed to read CSV headers.');
+      setErrorMessage(msg);
+      setImportState('error');
+    }
+  };
+
+  // Step 2 → Step 3: run import with mapping
   const handleSubmit = async () => {
     if (!selectedFile) return;
+    if (!mapping.feedbackText) {
+      setErrorMessage('Please select the column that contains the feedback text.');
+      return;
+    }
     setImportState('loading');
     setErrorMessage('');
     try {
-      const res = await apiClient.feedback.importCsv(workspaceId, selectedFile);
+      const res = await apiClient.feedback.importCsv(workspaceId, selectedFile, mapping);
       setResult(res);
       setImportState('success');
-      // Mark pipeline as started so the progress overlay appears immediately
-      // and persists if the user closes the tab.
-      // Pass batchId so polling uses the batch-scoped endpoint (total = 50, not 2307).
       markPipelineStarted(workspaceId, res.batchId);
       onImported(res.batchId);
     } catch (err: unknown) {
@@ -183,11 +220,15 @@ function CsvImportModal({
     setImportState('idle');
     setResult(null);
     setErrorMessage('');
+    setCsvHeaders([]);
+    setCsvPreview([]);
+    setMapping({ feedbackText: '' });
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const stepIndex = importState === 'mapping' || importState === 'loading' ? 1 : importState === 'success' ? 2 : 0;
+
   return (
-    /* Backdrop */
     <div
       onClick={onClose}
       style={{
@@ -201,7 +242,6 @@ function CsvImportModal({
         padding: '1rem',
       }}
     >
-      {/* Modal panel — stop propagation so clicks inside don't close */}
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
@@ -209,11 +249,12 @@ function CsvImportModal({
           borderRadius: '0.875rem',
           boxShadow: '0 8px 32px rgba(10,37,64,0.16)',
           width: '100%',
-          maxWidth: '28rem',
+          maxWidth: importState === 'mapping' ? '36rem' : '28rem',
           padding: '1.75rem',
           display: 'flex',
           flexDirection: 'column',
           gap: '1.25rem',
+          transition: 'max-width 0.2s ease',
         }}
       >
         {/* Header */}
@@ -223,228 +264,265 @@ function CsvImportModal({
               Import CSV
             </h2>
             <p style={{ fontSize: '0.82rem', color: '#6C757D' }}>
-              Bulk-import feedback rows from a CSV file.
+              {stepIndex === 0 && 'Step 1 of 2 — Select your CSV file'}
+              {stepIndex === 1 && `Step 2 of 2 — Map columns (${csvTotalRows} rows detected)`}
+              {stepIndex === 2 && 'Import complete'}
             </p>
           </div>
           <button
             onClick={onClose}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              color: '#6C757D',
-              fontSize: '1.25rem',
-              lineHeight: 1,
-              padding: '0.1rem 0.3rem',
-            }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6C757D', fontSize: '1.25rem', lineHeight: 1, padding: '0.1rem 0.3rem' }}
             aria-label="Close"
           >
             ×
           </button>
         </div>
 
-        {/* Format hint */}
-        <div
-          style={{
-            background: '#f0f4f8',
-            borderRadius: '0.5rem',
-            padding: '0.75rem 1rem',
-            fontSize: '0.8rem',
-            color: '#495057',
-            lineHeight: 1.6,
-          }}
-        >
-          <strong>Flexible column names accepted:</strong>{' '}
-          <code style={{ fontSize: '0.78rem', background: '#e9ecef', padding: '0.1rem 0.3rem', borderRadius: '0.25rem' }}>
-            title / feedback / text / subject
-          </code>
-          {', '}
-          <code style={{ fontSize: '0.78rem', background: '#e9ecef', padding: '0.1rem 0.3rem', borderRadius: '0.25rem' }}>
-            description / body / content
-          </code>
-          {', '}
-          <code style={{ fontSize: '0.78rem', background: '#e9ecef', padding: '0.1rem 0.3rem', borderRadius: '0.25rem' }}>
-            source / sourceType
-          </code>{' '}
-          (optional){'. '}
-          Max file size: <strong>10 MB</strong>.
-        </div>
-
-        {/* File picker */}
+        {/* Step indicator */}
         {importState !== 'success' && (
-          <div>
-            <label
-              htmlFor="csv-file-input"
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            {['Select File', 'Map Columns', 'Done'].map((label, i) => (
+              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <div
+                  style={{
+                    width: '1.4rem',
+                    height: '1.4rem',
+                    borderRadius: '50%',
+                    background: i <= stepIndex ? '#20A4A4' : '#e9ecef',
+                    color: i <= stepIndex ? '#fff' : '#adb5bd',
+                    fontSize: '0.7rem',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  {i + 1}
+                </div>
+                <span style={{ fontSize: '0.75rem', color: i <= stepIndex ? '#0A2540' : '#adb5bd', fontWeight: i === stepIndex ? 700 : 400 }}>
+                  {label}
+                </span>
+                {i < 2 && <span style={{ color: '#dee2e6', fontSize: '0.75rem' }}>›</span>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── STEP 1: File picker ── */}
+        {(importState === 'idle' || importState === 'parsing' || importState === 'error') && (
+          <>
+            <div
               style={{
-                display: 'block',
-                fontSize: '0.82rem',
-                fontWeight: 600,
-                color: '#0A2540',
-                marginBottom: '0.4rem',
+                background: '#f0f4f8',
+                borderRadius: '0.5rem',
+                padding: '0.75rem 1rem',
+                fontSize: '0.8rem',
+                color: '#495057',
+                lineHeight: 1.6,
               }}
             >
-              Select file
-            </label>
-            <input
-              id="csv-file-input"
-              ref={fileInputRef}
-              type="file"
-              accept=".csv,text/csv"
-              onChange={handleFileChange}
-              disabled={importState === 'loading'}
-              style={{
-                display: 'block',
-                width: '100%',
-                fontSize: '0.85rem',
-                color: '#0A2540',
-                padding: '0.45rem 0.6rem',
-                border: '1px solid #dee2e6',
-                borderRadius: '0.5rem',
-                background: '#fff',
-                cursor: 'pointer',
-              }}
-            />
-            {selectedFile && (
-              <p style={{ fontSize: '0.78rem', color: '#6C757D', marginTop: '0.3rem' }}>
-                {selectedFile.name} &mdash; {(selectedFile.size / 1024).toFixed(1)} KB
-              </p>
-            )}
-          </div>
-        )}
+              Upload any CSV file — you will map columns in the next step. Max file size: <strong>10 MB</strong>.
+            </div>
 
-        {/* Loading state */}
-        {importState === 'loading' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#20A4A4', fontSize: '0.88rem', fontWeight: 600 }}>
-            <span
-              style={{
-                display: 'inline-block',
-                width: '1rem',
-                height: '1rem',
-                border: '2px solid #20A4A4',
-                borderTopColor: 'transparent',
-                borderRadius: '50%',
-                animation: 'spin 0.7s linear infinite',
-              }}
-            />
-            Uploading and processing…
-          </div>
-        )}
-
-        {/* Success state */}
-        {importState === 'success' && result && (
-          <div
-            style={{
-              background: '#e8f5e9',
-              border: '1px solid #c8e6c9',
-              borderRadius: '0.5rem',
-              padding: '1rem',
-              fontSize: '0.88rem',
-              color: '#2e7d32',
-            }}
-          >
-            <p style={{ fontWeight: 700, marginBottom: '0.35rem' }}>✓ Import complete</p>
-            <p>
-              <strong>{result.importedCount}</strong> rows imported
-              {result.total > result.importedCount && (
-                <>, <strong>{result.total - result.importedCount}</strong> skipped</>
-              )}.
-            </p>
-          </div>
-        )}
-
-        {/* Error state */}
-        {importState === 'error' && (
-          <div
-            style={{
-              background: '#fef2f2',
-              border: '1px solid #fecaca',
-              borderRadius: '0.5rem',
-              padding: '0.75rem 1rem',
-              fontSize: '0.85rem',
-              color: '#c0392b',
-              fontWeight: 600,
-            }}
-          >
-            {errorMessage || 'Upload failed. Please check the file and try again.'}
-          </div>
-        )}
-
-        {/* Actions */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.6rem' }}>
-          {importState === 'success' ? (
-            <>
-              <button
-                onClick={handleReset}
+            <div>
+              <label
+                htmlFor="csv-file-input"
+                style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#0A2540', marginBottom: '0.4rem' }}
+              >
+                Select file
+              </label>
+              <input
+                id="csv-file-input"
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                onChange={handleFileChange}
+                disabled={importState === 'parsing'}
                 style={{
-                  padding: '0.5rem 1rem',
-                  borderRadius: '0.5rem',
-                  border: '1px solid #dee2e6',
-                  background: '#fff',
-                  color: '#0A2540',
-                  fontWeight: 600,
+                  display: 'block',
+                  width: '100%',
                   fontSize: '0.85rem',
+                  color: '#0A2540',
+                  padding: '0.45rem 0.6rem',
+                  border: '1px solid #dee2e6',
+                  borderRadius: '0.5rem',
+                  background: '#fff',
                   cursor: 'pointer',
                 }}
+              />
+              {selectedFile && (
+                <p style={{ fontSize: '0.78rem', color: '#6C757D', marginTop: '0.3rem' }}>
+                  {selectedFile.name} &mdash; {(selectedFile.size / 1024).toFixed(1)} KB
+                </p>
+              )}
+            </div>
+
+            {importState === 'parsing' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#20A4A4', fontSize: '0.88rem', fontWeight: 600 }}>
+                <span style={{ display: 'inline-block', width: '1rem', height: '1rem', border: '2px solid #20A4A4', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                Reading column headers…
+              </div>
+            )}
+
+            {importState === 'error' && (
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '0.5rem', padding: '0.75rem 1rem', fontSize: '0.85rem', color: '#c0392b', fontWeight: 600 }}>
+                {errorMessage || 'Failed to read the file. Please check the format and try again.'}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.6rem' }}>
+              <button
+                onClick={onClose}
+                disabled={importState === 'parsing'}
+                style={{ padding: '0.5rem 1rem', borderRadius: '0.5rem', border: '1px solid #dee2e6', background: '#fff', color: '#0A2540', fontWeight: 600, fontSize: '0.85rem', cursor: importState === 'parsing' ? 'not-allowed' : 'pointer', opacity: importState === 'parsing' ? 0.6 : 1 }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleParseHeaders}
+                disabled={!selectedFile || importState === 'parsing'}
+                style={{ padding: '0.5rem 1.1rem', borderRadius: '0.5rem', border: 'none', background: !selectedFile || importState === 'parsing' ? '#a0d4d4' : '#20A4A4', color: '#fff', fontWeight: 700, fontSize: '0.85rem', cursor: !selectedFile || importState === 'parsing' ? 'not-allowed' : 'pointer' }}
+              >
+                {importState === 'parsing' ? 'Reading…' : 'Next →'}
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ── STEP 2: Column Mapping ── */}
+        {(importState === 'mapping' || importState === 'loading') && (
+          <>
+            {/* Preview table */}
+            {csvPreview.length > 0 && (
+              <div style={{ overflowX: 'auto', borderRadius: '0.5rem', border: '1px solid #e9ecef' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                  <thead>
+                    <tr style={{ background: '#f8f9fa' }}>
+                      {csvHeaders.map((h) => (
+                        <th key={h} style={{ padding: '0.4rem 0.6rem', textAlign: 'left', color: '#495057', fontWeight: 700, borderBottom: '1px solid #e9ecef', whiteSpace: 'nowrap' }}>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {csvPreview.map((row, i) => (
+                      <tr key={i} style={{ borderBottom: '1px solid #f0f4f8' }}>
+                        {csvHeaders.map((h) => (
+                          <td key={h} style={{ padding: '0.35rem 0.6rem', color: '#6C757D', maxWidth: '10rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {row[h] ?? ''}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Mapping selectors */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <p style={{ fontSize: '0.82rem', color: '#495057', margin: 0 }}>
+                Map your CSV columns to TriageInsight fields:
+              </p>
+              {FIELD_LABELS.map(({ key, label, required, hint }) => (
+                <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <div style={{ flex: '0 0 9rem' }}>
+                    <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0A2540' }}>
+                      {label}
+                      {required && <span style={{ color: '#e53e3e', marginLeft: '0.2rem' }}>*</span>}
+                    </span>
+                    <p style={{ fontSize: '0.72rem', color: '#adb5bd', margin: '0.1rem 0 0' }}>{hint}</p>
+                  </div>
+                  <select
+                    value={mapping[key] ?? ''}
+                    onChange={(e) => setMapping((prev) => ({ ...prev, [key]: e.target.value || undefined }))}
+                    disabled={importState === 'loading'}
+                    style={{
+                      flex: 1,
+                      padding: '0.4rem 0.6rem',
+                      border: `1px solid ${required && !mapping[key] ? '#fca5a5' : '#dee2e6'}`,
+                      borderRadius: '0.4rem',
+                      fontSize: '0.82rem',
+                      color: '#0A2540',
+                      background: '#fff',
+                      cursor: importState === 'loading' ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {!required && <option value="">— not mapped —</option>}
+                    {csvHeaders.map((h) => (
+                      <option key={h} value={h}>{h}</option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+
+            {importState === 'loading' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#20A4A4', fontSize: '0.88rem', fontWeight: 600 }}>
+                <span style={{ display: 'inline-block', width: '1rem', height: '1rem', border: '2px solid #20A4A4', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                Uploading and processing…
+              </div>
+            )}
+
+            {errorMessage && importState !== 'loading' && (
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '0.5rem', padding: '0.75rem 1rem', fontSize: '0.85rem', color: '#c0392b', fontWeight: 600 }}>
+                {errorMessage}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.6rem' }}>
+              <button
+                onClick={() => { setImportState('idle'); setErrorMessage(''); }}
+                disabled={importState === 'loading'}
+                style={{ padding: '0.5rem 1rem', borderRadius: '0.5rem', border: '1px solid #dee2e6', background: '#fff', color: '#0A2540', fontWeight: 600, fontSize: '0.85rem', cursor: importState === 'loading' ? 'not-allowed' : 'pointer', opacity: importState === 'loading' ? 0.6 : 1 }}
+              >
+                ← Back
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={!mapping.feedbackText || importState === 'loading'}
+                style={{ padding: '0.5rem 1.1rem', borderRadius: '0.5rem', border: 'none', background: !mapping.feedbackText || importState === 'loading' ? '#a0d4d4' : '#20A4A4', color: '#fff', fontWeight: 700, fontSize: '0.85rem', cursor: !mapping.feedbackText || importState === 'loading' ? 'not-allowed' : 'pointer' }}
+              >
+                {importState === 'loading' ? 'Importing…' : `Import ${csvTotalRows} rows`}
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ── STEP 3: Success ── */}
+        {importState === 'success' && result && (
+          <>
+            <div style={{ background: '#e8f5e9', border: '1px solid #c8e6c9', borderRadius: '0.5rem', padding: '1rem', fontSize: '0.88rem', color: '#2e7d32' }}>
+              <p style={{ fontWeight: 700, marginBottom: '0.35rem' }}>✓ Import complete</p>
+              <p>
+                <strong>{result.importedCount}</strong> rows imported
+                {result.total > result.importedCount && (
+                  <>, <strong>{result.total - result.importedCount}</strong> skipped</>
+                )}.
+              </p>
+              <p style={{ marginTop: '0.35rem', fontSize: '0.8rem', color: '#388e3c' }}>
+                The AI pipeline is now running in the background. Themes will appear shortly.
+              </p>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.6rem' }}>
+              <button
+                onClick={handleReset}
+                style={{ padding: '0.5rem 1rem', borderRadius: '0.5rem', border: '1px solid #dee2e6', background: '#fff', color: '#0A2540', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}
               >
                 Import another
               </button>
               <button
                 onClick={onClose}
-                style={{
-                  padding: '0.5rem 1.1rem',
-                  borderRadius: '0.5rem',
-                  border: 'none',
-                  background: '#20A4A4',
-                  color: '#fff',
-                  fontWeight: 700,
-                  fontSize: '0.85rem',
-                  cursor: 'pointer',
-                }}
+                style={{ padding: '0.5rem 1.1rem', borderRadius: '0.5rem', border: 'none', background: '#20A4A4', color: '#fff', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}
               >
                 Done
               </button>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={onClose}
-                disabled={importState === 'loading'}
-                style={{
-                  padding: '0.5rem 1rem',
-                  borderRadius: '0.5rem',
-                  border: '1px solid #dee2e6',
-                  background: '#fff',
-                  color: '#0A2540',
-                  fontWeight: 600,
-                  fontSize: '0.85rem',
-                  cursor: importState === 'loading' ? 'not-allowed' : 'pointer',
-                  opacity: importState === 'loading' ? 0.6 : 1,
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSubmit}
-                disabled={!selectedFile || importState === 'loading'}
-                style={{
-                  padding: '0.5rem 1.1rem',
-                  borderRadius: '0.5rem',
-                  border: 'none',
-                  background: !selectedFile || importState === 'loading' ? '#a0d4d4' : '#20A4A4',
-                  color: '#fff',
-                  fontWeight: 700,
-                  fontSize: '0.85rem',
-                  cursor: !selectedFile || importState === 'loading' ? 'not-allowed' : 'pointer',
-                }}
-              >
-                {importState === 'loading' ? 'Uploading…' : 'Import'}
-              </button>
-            </>
-          )}
-        </div>
+            </div>
+          </>
+        )}
       </div>
 
-      {/* Spinner keyframe — injected as a style tag */}
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
@@ -474,978 +552,412 @@ export default function InboxPage() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
 
-  const { workspace } = useWorkspace();
-  const { role } = useCurrentMemberRole();
-  const queryClient = useQueryClient();
-
-  // ── Bulk selection state (Step 3 Gap Fix) ───────────────────────────────────────
+  // ── Bulk selection state (Step 3 Gap Fix) ─────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [bulkActionState, setBulkActionState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
-  const [bulkActionMsg, setBulkActionMsg] = useState<string>('');
+  const [bulkActionState, setBulkActionState] = useState<'idle' | 'loading'>('idle');
+  const [bulkAssignThemeId, setBulkAssignThemeId] = useState<string>('');
 
-  const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-  const toggleSelectAll = (items: import('@/lib/api-types').Feedback[]) => {
-    if (items.every((f) => selectedIds.has(f.id))) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(items.map((f) => f.id)));
-    }
-  };
-  const clearSelection = () => setSelectedIds(new Set());
-
-  const handleBulkDismiss = async () => {
-    if (!workspace?.id || selectedIds.size === 0) return;
-    setBulkActionState('loading');
-    try {
-      const res = await apiClient.feedback.bulkDismiss(workspace.id, [...selectedIds]);
-      setBulkActionMsg(`${res.updated ?? selectedIds.size} item(s) dismissed.`);
-      setBulkActionState('done');
-      clearSelection();
-      queryClient.invalidateQueries({ queryKey: ['feedback'] });
-    } catch {
-      setBulkActionMsg('Bulk dismiss failed. Please try again.');
-      setBulkActionState('error');
-    }
-  };
-
-  const runAiSearch = useCallback(async (q: string) => {
-    if (!workspace?.id || !q.trim()) return;
-    setAiLoading(true);
-    setAiError(null);
-    try {
-      const res = await apiClient.feedback.semanticSearch(workspace.id, q.trim());
-      setAiResults(res.data);
-    } catch (err: unknown) {
-      // NestJS can return message as a string OR an array of validation strings.
-      // Always coerce to a plain string so React never receives an object/array child.
-      const rawMsg =
-        (err as { response?: { data?: { message?: unknown } } })?.response?.data?.message;
-      const msg = Array.isArray(rawMsg)
-        ? rawMsg.join('; ')
-        : typeof rawMsg === 'string' && rawMsg
-        ? rawMsg
-        : err instanceof Error
-        ? err.message
-        : 'AI search failed. Please try again.';
-      setAiError(msg);
-      setAiResults(null);
-    } finally {
-      setAiLoading(false);
-    }
-  }, [workspace?.id]);
+  const queryClient = useQueryClient();
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id ?? '';
+  const { role: memberRole } = useCurrentMemberRole();
+  const canEdit = memberRole === WorkspaceRole.ADMIN || memberRole === WorkspaceRole.EDITOR;
 
   const { useFeedbackList } = useFeedback();
-  const { data, isLoading, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage } =
-    useFeedbackList({
-      status: activeStatus,
-      primarySource: activePrimarySource,
-      secondarySource: activeSecondarySource,
-      search: search.trim() || undefined,
-    });
+  const { data, isLoading, isError } = useFeedbackList({
+    status: activeStatus,
+    primarySource: activePrimarySource,
+    secondarySource: activeSecondarySource,
+    search: search || undefined,
+    limit: 50,
+  });
 
-  /**
-   * When the user switches primary source tabs, reset the secondary source
-   * filter if the currently selected secondary source is not valid for the
-   * new primary source (keeps the combination meaningful).
-   */
-  const handlePrimarySourceChange = (value: FeedbackPrimarySource | undefined) => {
-    setActivePrimarySource(value);
-    if (activeSecondarySource) {
-      const validForNew = value
-        ? SECONDARY_SOURCE_BY_PRIMARY[value] ?? []
-        : ALL_SECONDARY_SOURCES;
-      if (!validForNew.includes(activeSecondarySource)) {
-        setActiveSecondarySource(undefined);
-      }
-    }
-  };
+  const feedbackItems: Feedback[] = data?.pages[0]?.data ?? [];
+  const total = data?.pages[0]?.total ?? 0;
 
-  const allItems: Feedback[] = data?.pages?.flatMap((p) => p.data) ?? [];
-
-  // Only ADMIN and EDITOR may import CSV (mirrors backend @Roles guard)
-  const canImport =
-    role === WorkspaceRole.ADMIN || role === WorkspaceRole.EDITOR;
-
-  const handleImported = (batchId: string) => {
-    // Store batchId so AIPipelineProgress polls the batch-scoped endpoint
-    setCurrentBatchId(batchId);
-    // Invalidate the feedback list so the new rows appear immediately
-    queryClient.invalidateQueries({ queryKey: ['feedback'] });
-  };
-
-  const handleReprocessPipeline = useCallback(async () => {
-    if (!workspace?.id) return;
-    setPipelineState('loading');
-    setPipelineResult(null);
+  const handleBulkDismiss = async () => {
+    if (selectedIds.size === 0) return;
+    setBulkActionState('loading');
     try {
-      const res = await apiClient.feedback.reprocessPipeline(workspace.id);
-      setPipelineResult(res);
-      setPipelineState('done');
-      // Mark pipeline as started so the progress overlay appears
-      markPipelineStarted(workspace.id);
-      // Refresh list after a short delay so newly-processed items appear
-      setTimeout(() => queryClient.invalidateQueries({ queryKey: ['feedback'] }), 3000);
-    } catch {
-      setPipelineState('error');
+      await apiClient.feedback.bulkDismiss(workspaceId, Array.from(selectedIds));
+      setSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['feedback', workspaceId] });
+    } finally {
+      setBulkActionState('idle');
     }
-  }, [workspace?.id, queryClient]);
+  };
+
+  const handleBulkAssign = async () => {
+    if (selectedIds.size === 0 || !bulkAssignThemeId) return;
+    setBulkActionState('loading');
+    try {
+      await apiClient.feedback.bulkAssign(workspaceId, Array.from(selectedIds), bulkAssignThemeId);
+      setSelectedIds(new Set());
+      setBulkAssignThemeId('');
+      queryClient.invalidateQueries({ queryKey: ['feedback', workspaceId] });
+    } finally {
+      setBulkActionState('idle');
+    }
+  };
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === feedbackItems.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(feedbackItems.map((f) => f.id)));
+    }
+  };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+    <div style={{ maxWidth: '900px', margin: '0 auto', padding: '2rem 1rem' }}>
       {/* CSV Import Modal */}
-      {showCsvModal && workspace?.id && (
+      {showCsvModal && (
         <CsvImportModal
-          workspaceId={workspace.id}
+          workspaceId={workspaceId}
           onClose={() => setShowCsvModal(false)}
-          onImported={handleImported}
+          onImported={(batchId) => {
+            setCurrentBatchId(batchId);
+            setShowCsvModal(false);
+            queryClient.invalidateQueries({ queryKey: ['feedback', workspaceId] });
+          }}
         />
       )}
 
-      {/* AI Pipeline progress banner — scoped to the current batch */}
-      {workspace?.id && (
+      {/* AI Pipeline Progress overlay */}
+      {currentBatchId && (
         <AIPipelineProgress
-          workspaceId={workspace.id}
+          workspaceId={workspaceId}
           batchId={currentBatchId}
-          onComplete={() => queryClient.invalidateQueries({ queryKey: ['feedback'] })}
+          onComplete={() => {
+            setCurrentBatchId(undefined);
+            queryClient.invalidateQueries({ queryKey: ['feedback', workspaceId] });
+          }}
         />
       )}
 
-      {/* Header row */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          flexWrap: 'wrap',
-          gap: '0.75rem',
-        }}
-      >
+      {/* Page header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.75rem' }}>
         <div>
-          <h1
-            style={{
-              fontSize: '1.5rem',
-              fontWeight: 800,
-              color: '#0A2540',
-              marginBottom: '0.25rem',
-            }}
-          >
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0A2540', marginBottom: '0.25rem' }}>
             Feedback Inbox
           </h1>
-          <p style={{ fontSize: '0.9rem', color: '#6C757D' }}>
-            Triage and manage all incoming feedback.
+          <p style={{ fontSize: '0.88rem', color: '#6C757D' }}>
+            {total > 0 ? `${total} items` : 'No feedback yet'}
           </p>
         </div>
-
-        {/* Action buttons */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-          {/* Run AI Pipeline — only shown to ADMIN / EDITOR */}
-          {canImport && (
-            <button
-              onClick={handleReprocessPipeline}
-              disabled={pipelineState === 'loading'}
-              title={pipelineResult ? `Last run: ${pipelineResult.enqueued}/${pipelineResult.total} jobs enqueued` : 'Re-run AI pipeline (embedding → sentiment → theme clustering) on all unprocessed feedback'}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-                padding: '0.5rem 1.1rem',
-                borderRadius: '0.5rem',
-                background: pipelineState === 'done' ? '#d4edda' : pipelineState === 'error' ? '#f8d7da' : '#fff',
-                color: pipelineState === 'done' ? '#155724' : pipelineState === 'error' ? '#721c24' : '#0A2540',
-                fontWeight: 700,
-                fontSize: '0.85rem',
-                border: `1px solid ${pipelineState === 'done' ? '#c3e6cb' : pipelineState === 'error' ? '#f5c6cb' : '#dee2e6'}`,
-                cursor: pipelineState === 'loading' ? 'not-allowed' : 'pointer',
-                boxShadow: '0 1px 4px rgba(10,37,64,0.06)',
-                opacity: pipelineState === 'loading' ? 0.7 : 1,
-              }}
-            >
-              {pipelineState === 'loading'
-                ? '⏳ Processing…'
-                : pipelineState === 'done'
-                ? `✓ ${pipelineResult?.enqueued ?? 0} jobs queued`
-                : pipelineState === 'error'
-                ? '✗ Pipeline failed'
-                : '⚡ Run AI Pipeline'}
-            </button>
-          )}
-
-          {/* Import CSV — only shown to ADMIN / EDITOR */}
-          {canImport && (
+        {canEdit && (
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
             <button
               onClick={() => setShowCsvModal(true)}
               style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-                padding: '0.5rem 1.1rem',
+                padding: '0.5rem 1rem',
                 borderRadius: '0.5rem',
+                border: '1px solid #20A4A4',
                 background: '#fff',
-                color: '#0A2540',
+                color: '#20A4A4',
                 fontWeight: 700,
                 fontSize: '0.85rem',
-                border: '1px solid #dee2e6',
                 cursor: 'pointer',
-                boxShadow: '0 1px 4px rgba(10,37,64,0.06)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
               }}
             >
               ↑ Import CSV
             </button>
-          )}
-
-          {/* New Feedback */}
-          <Link
-            href={r.inboxNew}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.4rem',
-              padding: '0.5rem 1.1rem',
-              borderRadius: '0.5rem',
-              background: '#20A4A4',
-              color: '#fff',
-              fontWeight: 700,
-              fontSize: '0.85rem',
-              textDecoration: 'none',
-              boxShadow: '0 1px 4px rgba(10,37,64,0.10)',
-            }}
-          >
-            + New Feedback
-          </Link>
-        </div>
+            <button
+              onClick={async () => {
+                setPipelineState('loading');
+                try {
+                  const res = await apiClient.feedback.reprocessPipeline(workspaceId);
+                  setPipelineResult(res);
+                  setPipelineState('done');
+                  markPipelineStarted(workspaceId);
+                } catch {
+                  setPipelineState('error');
+                }
+              }}
+              disabled={pipelineState === 'loading'}
+              style={{
+                padding: '0.5rem 1rem',
+                borderRadius: '0.5rem',
+                border: '1px solid #dee2e6',
+                background: '#fff',
+                color: '#0A2540',
+                fontWeight: 600,
+                fontSize: '0.85rem',
+                cursor: pipelineState === 'loading' ? 'not-allowed' : 'pointer',
+                opacity: pipelineState === 'loading' ? 0.6 : 1,
+              }}
+            >
+              {pipelineState === 'loading' ? '⟳ Running…' : '⟳ Re-run AI'}
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Search + status filter */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+      {/* Pipeline result toast */}
+      {pipelineState === 'done' && pipelineResult && (
+        <div style={{ background: '#e8f5e9', border: '1px solid #c8e6c9', borderRadius: '0.5rem', padding: '0.75rem 1rem', fontSize: '0.85rem', color: '#2e7d32', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>✓ AI pipeline triggered — {pipelineResult.enqueued} items enqueued.</span>
+          <button onClick={() => setPipelineState('idle')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2e7d32', fontSize: '1rem' }}>×</button>
+        </div>
+      )}
 
-        {/* Search mode toggle */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+      {/* Primary source tabs */}
+      <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+        {PRIMARY_SOURCE_TABS.map((tab) => (
           <button
-            onClick={() => { setAiMode(false); setAiResults(null); setAiError(null); }}
+            key={tab.label}
+            onClick={() => { setActivePrimarySource(tab.value); setActiveSecondarySource(undefined); }}
             style={{
-              padding: '0.3rem 0.85rem',
-              borderRadius: '999px',
+              padding: '0.4rem 0.85rem',
+              borderRadius: '2rem',
               border: '1px solid',
-              fontSize: '0.78rem',
-              fontWeight: 600,
+              borderColor: activePrimarySource === tab.value ? '#20A4A4' : '#dee2e6',
+              background: activePrimarySource === tab.value ? '#e8f7f7' : '#fff',
+              color: activePrimarySource === tab.value ? '#20A4A4' : '#6C757D',
+              fontWeight: activePrimarySource === tab.value ? 700 : 400,
+              fontSize: '0.82rem',
               cursor: 'pointer',
-              borderColor: !aiMode ? '#0A2540' : '#dee2e6',
-              background: !aiMode ? '#0A2540' : '#fff',
-              color: !aiMode ? '#fff' : '#6C757D',
-              transition: 'all 0.15s',
-            }}
-          >
-            Keyword
-          </button>
-          <button
-            onClick={() => setAiMode(true)}
-            style={{
-              padding: '0.3rem 0.85rem',
-              borderRadius: '999px',
-              border: '1px solid',
-              fontSize: '0.78rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-              borderColor: aiMode ? '#20A4A4' : '#dee2e6',
-              background: aiMode ? '#e8f7f7' : '#fff',
-              color: aiMode ? '#20A4A4' : '#6C757D',
-              transition: 'all 0.15s',
-              display: 'inline-flex',
+              display: 'flex',
               alignItems: 'center',
               gap: '0.3rem',
             }}
           >
-            <span style={{ fontSize: '0.7rem' }}>&#10024;</span> AI Search
+            <span>{tab.icon}</span> {tab.label}
           </button>
-        </div>
-
-        {/* Keyword search input */}
-        {!aiMode && (
-          <input
-            type="text"
-            placeholder="Search feedback…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{
-              padding: '0.5rem 0.875rem',
-              borderRadius: '0.5rem',
-              border: '1px solid #dee2e6',
-              fontSize: '0.875rem',
-              color: '#0A2540',
-              outline: 'none',
-              width: '100%',
-              maxWidth: '28rem',
-              background: '#fff',
-            }}
-          />
-        )}
-
-        {/* AI semantic search input */}
-        {aiMode && (
-          <div style={{ display: 'flex', gap: '0.5rem', maxWidth: '36rem' }}>
-            <input
-              type="text"
-              placeholder="Describe what you’re looking for… e.g. “slowness during checkout”"
-              value={aiQuery}
-              onChange={(e) => setAiQuery(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') runAiSearch(aiQuery); }}
-              style={{
-                flex: 1,
-                padding: '0.5rem 0.875rem',
-                borderRadius: '0.5rem',
-                border: '1px solid #20A4A4',
-                fontSize: '0.875rem',
-                color: '#0A2540',
-                outline: 'none',
-                background: '#fff',
-              }}
-            />
-            <button
-              onClick={() => runAiSearch(aiQuery)}
-              disabled={aiLoading || !aiQuery.trim()}
-              style={{
-                padding: '0.5rem 1.1rem',
-                borderRadius: '0.5rem',
-                border: 'none',
-                background: aiLoading || !aiQuery.trim() ? '#a0d4d4' : '#20A4A4',
-                color: '#fff',
-                fontWeight: 700,
-                fontSize: '0.85rem',
-                cursor: aiLoading || !aiQuery.trim() ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {aiLoading ? 'Searching…' : 'Search'}
-            </button>
-          </div>
-        )}
-
-        {/* ── Primary source filter tabs ─────────────────────────────────── */}
-        {!aiMode && (
-          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', borderBottom: '1px solid #f0f4f8', paddingBottom: '0.5rem' }}>
-            {PRIMARY_SOURCE_TABS.map((t) => {
-              const isActive = activePrimarySource === t.value;
-              const pc = t.value ? PRIMARY_SOURCE_COLORS[t.value] : null;
-              return (
-                <button
-                  key={t.label}
-                  onClick={() => handlePrimarySourceChange(t.value)}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.3rem',
-                    padding: '0.35rem 0.85rem',
-                    borderRadius: '999px',
-                    border: '1px solid',
-                    fontSize: '0.78rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    borderColor: isActive ? (pc?.border ?? '#0A2540') : '#dee2e6',
-                    background:  isActive ? (pc?.bg    ?? '#0A2540') : '#fff',
-                    color:       isActive ? (pc?.color ?? '#fff')    : '#6C757D',
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  <span style={{ fontSize: '0.7rem' }}>{t.icon}</span>
-                  {t.label}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* ── Secondary source sub-filter + status tabs row ─────────────── */}
-        {!aiMode && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-            {/* Secondary source dropdown */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <span style={{ fontSize: '0.75rem', color: '#6C757D', fontWeight: 600, whiteSpace: 'nowrap' }}>Channel:</span>
-              <select
-                value={activeSecondarySource ?? ''}
-                onChange={(e) => setActiveSecondarySource((e.target.value as FeedbackSecondarySource) || undefined)}
-                style={{
-                  padding: '0.3rem 0.65rem',
-                  borderRadius: '0.4rem',
-                  border: '1px solid',
-                  borderColor: activeSecondarySource ? '#0A2540' : '#dee2e6',
-                  background: activeSecondarySource ? '#0A2540' : '#fff',
-                  color: activeSecondarySource ? '#fff' : '#6C757D',
-                  fontSize: '0.78rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  outline: 'none',
-                  appearance: 'none',
-                  WebkitAppearance: 'none',
-                  paddingRight: '1.5rem',
-                  backgroundImage: activeSecondarySource
-                    ? `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23fff' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")`
-                    : `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236C757D' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")`,
-                  backgroundRepeat: 'no-repeat',
-                  backgroundPosition: 'right 0.4rem center',
-                }}
-              >
-                <option value=''>All channels</option>
-                {(activePrimarySource
-                  ? (SECONDARY_SOURCE_BY_PRIMARY[activePrimarySource] ?? ALL_SECONDARY_SOURCES)
-                  : ALL_SECONDARY_SOURCES
-                ).map((s) => (
-                  <option key={s} value={s}>{SECONDARY_SOURCE_LABELS[s] ?? s}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Separator */}
-            <span style={{ color: '#dee2e6', fontSize: '0.75rem' }}>|</span>
-
-            {/* Status filter tabs */}
-            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', flex: 1 }}>
-              {TABS.map((t) => (
-                <button
-                  key={t.label}
-                  onClick={() => setActiveStatus(t.value)}
-                  style={{
-                    padding: '0.3rem 0.85rem',
-                    borderRadius: '999px',
-                    border: '1px solid',
-                    fontSize: '0.78rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    borderColor: activeStatus === t.value ? '#20A4A4' : '#dee2e6',
-                    background: activeStatus === t.value ? '#e8f7f7' : '#fff',
-                    color: activeStatus === t.value ? '#20A4A4' : '#6C757D',
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Active filter summary + clear-all */}
-            {(activePrimarySource || activeSecondarySource || activeStatus) && (
-              <button
-                onClick={() => {
-                  setActivePrimarySource(undefined);
-                  setActiveSecondarySource(undefined);
-                  setActiveStatus(undefined);
-                }}
-                title="Clear all source and status filters"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.25rem',
-                  padding: '0.3rem 0.7rem',
-                  borderRadius: '999px',
-                  border: '1px solid #f5c6cb',
-                  background: '#fef2f2',
-                  color: '#c0392b',
-                  fontSize: '0.72rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0,
-                }}
-              >
-                × Clear filters
-              </button>
-            )}
-          </div>
-        )}
+        ))}
       </div>
 
-      {/* AI Search Results */}
-      {aiMode && (
-        <div style={CARD}>
-          {/* AI mode header */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '1px solid #f0f4f8' }}>
-            <span style={{ fontSize: '0.8rem', color: '#20A4A4', fontWeight: 700 }}>&#10024; AI Semantic Search</span>
-            {aiResults !== null && (
-              <span style={{ fontSize: '0.75rem', color: '#6C757D' }}>
-                {aiResults.length} result{aiResults.length !== 1 ? 's' : ''} for &ldquo;{aiQuery}&rdquo;
-              </span>
-            )}
-          </div>
-
-          {aiLoading ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#20A4A4', fontSize: '0.88rem', fontWeight: 600, padding: '1rem 0' }}>
-              <span style={{ display: 'inline-block', width: '1rem', height: '1rem', border: '2px solid #20A4A4', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
-              Searching with AI…
-            </div>
-          ) : aiError ? (
-            <div style={{ padding: '1rem', background: '#fef2f2', borderRadius: '0.5rem', color: '#c0392b', fontSize: '0.85rem', fontWeight: 600 }}>
-              {aiError}
-            </div>
-          ) : aiResults === null ? (
-            <div style={{ padding: '2rem 1rem', textAlign: 'center', color: '#6C757D', fontSize: '0.875rem' }}>
-              Enter a natural-language query above and press <strong>Search</strong> or <strong>Enter</strong>.
-            </div>
-          ) : aiResults.length === 0 ? (
-            <div style={{ padding: '2rem 1rem', textAlign: 'center' }}>
-              <p style={{ color: '#0A2540', fontWeight: 700, fontSize: '1rem', marginBottom: '0.35rem' }}>No similar feedback found</p>
-              <p style={{ color: '#6C757D', fontSize: '0.875rem' }}>Try rephrasing your query, or lower the similarity threshold.</p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {aiResults.map((fb, i) => {
-                const sc = STATUS_COLORS[fb.status] ?? { bg: '#f0f4f8', color: '#6C757D' };
-                // Prefer unified secondarySource label; fall back to legacy sourceType label
-                const sourceLabel = (fb.secondarySource && SECONDARY_SOURCE_LABELS[fb.secondarySource])
-                  ?? SOURCE_LABELS[fb.sourceType]
-                  ?? fb.sourceType;
-                const pct = Math.round(Number(fb.similarity) * 100);
-                const aiPrimaryLabel = fb.primarySource
-                  ? PRIMARY_SOURCE_TABS.find((t) => t.value === fb.primarySource)?.label ?? fb.primarySource
-                  : null;
-                const aiPc = fb.primarySource ? PRIMARY_SOURCE_COLORS[fb.primarySource] : null;
-                return (
-                  <Link
-                    key={fb.id}
-                    href={r.inboxItem(fb.id)}
-                    style={{
-                      textDecoration: 'none',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '0.875rem 0',
-                      borderBottom: i < aiResults.length - 1 ? '1px solid #f0f4f8' : 'none',
-                    }}
-                  >
-                    {/* Title + description */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontSize: '0.9rem', fontWeight: 600, color: '#0A2540', marginBottom: '0.15rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {fb.title}
-                      </p>
-                      {fb.description && (
-                        <p style={{ fontSize: '0.8rem', color: '#6C757D', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {fb.description}
-                        </p>
-                      )}
-                    </div>
-                    {/* Badges */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginLeft: '1rem', flexShrink: 0 }}>
-                      {/* Primary source badge — always shown in AI search since no source tab is active */}
-                      {aiPrimaryLabel && aiPc && (
-                        <span
-                          title={`Primary source: ${aiPrimaryLabel}`}
-                          style={{
-                            fontSize: '0.68rem',
-                            fontWeight: 700,
-                            padding: '0.12rem 0.45rem',
-                            borderRadius: '999px',
-                            background: aiPc.bg,
-                            color: aiPc.color,
-                            border: `1px solid ${aiPc.border}`,
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {aiPrimaryLabel}
-                        </span>
-                      )}
-                      {/* Similarity score badge */}
-                      <span
-                        title={`Cosine similarity: ${fb.similarity}`}
-                        style={{
-                          fontSize: '0.7rem',
-                          fontWeight: 700,
-                          padding: '0.15rem 0.5rem',
-                          borderRadius: '999px',
-                          background: pct >= 80 ? '#e8f5e9' : pct >= 60 ? '#e8f7f7' : '#f0f4f8',
-                          color: pct >= 80 ? '#2e7d32' : pct >= 60 ? '#20A4A4' : '#6C757D',
-                          border: '1px solid',
-                          borderColor: pct >= 80 ? '#c8e6c9' : pct >= 60 ? '#b2dfdb' : '#e9ecef',
-                        }}
-                      >
-                        {pct}% match
-                      </span>
-                      <span style={{ fontSize: '0.7rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: '999px', background: '#f0f4f8', color: '#6C757D', border: '1px solid #e9ecef' }}>
-                        {sourceLabel}
-                      </span>
-                      <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.2rem 0.6rem', borderRadius: '999px', background: sc.bg, color: sc.color }}>
-                        {fb.status.replace('_', '\u00a0')}
-                      </span>
-                      <span style={{ fontSize: '0.78rem', color: '#adb5bd' }}>
-                        {new Date(fb.createdAt).toLocaleDateString()}
-                      </span>
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        </div>
-      )}
-
-      {/* List card (keyword mode) */}
-      {!aiMode && <div style={CARD}>
-        {isLoading ? (
-          /* Skeleton shimmer */
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {[1, 2, 3, 4, 5].map((n) => (
-              <div
-                key={n}
-                style={{
-                  height: '3.5rem',
-                  borderRadius: '0.5rem',
-                  background: 'linear-gradient(90deg, #f0f4f8 25%, #e9ecef 50%, #f0f4f8 75%)',
-                  backgroundSize: '200% 100%',
-                }}
-              />
-            ))}
-          </div>
-        ) : isError ? (
-          /* Error state */
-          <div style={{ padding: '1.5rem', textAlign: 'center' }}>
-            <p
-              style={{
-                color: '#c0392b',
-                fontWeight: 600,
-                marginBottom: '0.25rem',
-                fontSize: '0.95rem',
-              }}
-            >
-              Failed to load feedback
-            </p>
-            <p style={{ color: '#6C757D', fontSize: '0.85rem' }}>
-              {typeof (error as Error)?.message === 'string'
-                ? (error as Error).message
-                : 'An unexpected error occurred. Please try again.'}
-            </p>
-          </div>
-        ) : allItems.length === 0 ? (
-          /* Empty state */
-          <div style={{ padding: '2.5rem 1rem', textAlign: 'center' }}>
-            <p
-              style={{
-                color: '#0A2540',
-                fontWeight: 700,
-                fontSize: '1rem',
-                marginBottom: '0.35rem',
-              }}
-            >
-              No feedback found
-            </p>
-            <p style={{ color: '#6C757D', fontSize: '0.875rem' }}>
-              {search
-                ? 'Try a different search term or clear the filter.'
-                : 'Submit feedback via the portal or add it manually using the button above.'}
-            </p>
-          </div>
-        ) : (
-          /* Feedback rows */
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {/* ── Select-all header row (Step 3 Gap Fix) ── */}
-            {allItems.length > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0.75rem', background: '#f8f9fa', borderRadius: '0.5rem', marginBottom: '0.375rem', border: '1px solid #e9ecef' }}>
-                <input
-                  type="checkbox"
-                  checked={allItems.length > 0 && allItems.every((f) => selectedIds.has(f.id))}
-                  onChange={() => toggleSelectAll(allItems)}
-                  style={{ cursor: 'pointer', width: '1rem', height: '1rem', accentColor: '#20A4A4' }}
-                  title="Select all visible"
-                />
-                <span style={{ fontSize: '0.75rem', color: '#6C757D', fontWeight: 500 }}>
-                  {selectedIds.size > 0 ? `${selectedIds.size} selected` : `Select all (${allItems.length})`}
-                </span>
-                {selectedIds.size > 0 && (
-                  <button
-                    onClick={clearSelection}
-                    style={{ fontSize: '0.7rem', color: '#adb5bd', background: 'none', border: 'none', cursor: 'pointer', marginLeft: '0.25rem' }}
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
-            )}
-            {allItems.map((fb, i) => {
-              const sc = STATUS_COLORS[fb.status] ?? { bg: '#f0f4f8', color: '#6C757D' };
-              // Prefer unified secondarySource label; fall back to legacy sourceType label
-              const sourceLabel = (fb.secondarySource && SECONDARY_SOURCE_LABELS[fb.secondarySource])
-                ?? SOURCE_LABELS[fb.sourceType]
-                ?? fb.sourceType;
-              // Primary source badge — shown when "All Sources" is active so users can
-              // distinguish source type at a glance without switching tabs
-              const primaryLabel = fb.primarySource
-                ? PRIMARY_SOURCE_TABS.find((t) => t.value === fb.primarySource)?.label ?? fb.primarySource
-                : null;
-              const pc = fb.primarySource ? PRIMARY_SOURCE_COLORS[fb.primarySource] : null;
-              // Visual priority dot based on highest CIQ score of linked themes
-              const maxCiq = fb.themes && fb.themes.length > 0
-                ? Math.max(...(fb.themes as ThemeFeedback[]).map((tf) => tf.theme?.ciqScore ?? tf.theme?.priorityScore ?? 0))
-                : 0;
-              const priorityDot = maxCiq >= 70 ? '🔴' : maxCiq >= 40 ? '🟡' : maxCiq > 0 ? '🟢' : null;
-              // Why this matters — shown when ARR is significant or CIQ is high
-              const arrValue = fb.customer?.arrValue ?? 0;
-              const whyMatters = arrValue > 0 && maxCiq >= 70
-                ? `$${(arrValue / 100).toLocaleString()} ARR at risk · CIQ ${Math.round(maxCiq)}`
-                : arrValue > 0
-                ? `$${(arrValue / 100).toLocaleString()} ARR`
-                : maxCiq >= 70
-                ? `CIQ ${Math.round(maxCiq)} — high urgency`
-                : null;
-              return (
-                <div key={fb.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
-                  {/* Row checkbox */}
-                  <div
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSelect(fb.id); }}
-                    style={{ paddingTop: '1.1rem', paddingLeft: '0.25rem', cursor: 'pointer', flexShrink: 0 }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.has(fb.id)}
-                      onChange={() => toggleSelect(fb.id)}
-                      onClick={(e) => e.stopPropagation()}
-                      style={{ width: '1rem', height: '1rem', accentColor: '#20A4A4', cursor: 'pointer' }}
-                    />
-                  </div>
-                <Link
-                  href={r.inboxItem(fb.id)}
-                  style={{
-                    flex: 1,
-                    textDecoration: 'none',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '0.875rem 0',
-                    borderBottom:
-                      i < allItems.length - 1 ? '1px solid #f0f4f8' : 'none',
-                  }}
-                >
-                  {/* Title + description + theme pills */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p
-                      style={{
-                        fontSize: '0.9rem',
-                        fontWeight: 600,
-                        color: '#0A2540',
-                        marginBottom: '0.15rem',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.35rem',
-                      }}
-                    >
-                      {priorityDot && <span style={{ fontSize: '0.7rem', flexShrink: 0 }}>{priorityDot}</span>}
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fb.title}</span>
-                    </p>
-                    {/* Why this matters — only when ARR or high CIQ */}
-                    {whyMatters && (
-                      <p style={{ fontSize: '0.72rem', color: '#b91c1c', fontWeight: 600, margin: '0 0 0.15rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        <span style={{ fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase', color: '#adb5bd', marginRight: '0.25rem' }}>Why this matters</span>
-                        {whyMatters}
-                      </p>
-                    )}
-                    {fb.description && (
-                      <p
-                        style={{
-                          fontSize: '0.8rem',
-                          color: '#6C757D',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          marginBottom: fb.themes && fb.themes.length > 0 ? '0.35rem' : 0,
-                        }}
-                      >
-                        {fb.description}
-                      </p>
-                    )}
-                    {/* Theme identifier pills */}
-                    {fb.themes && fb.themes.length > 0 && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
-                        {(fb.themes as ThemeFeedback[]).slice(0, 3).map((tf) => (
-                          <span
-                            key={tf.themeId}
-                            title={tf.theme?.title ?? tf.themeId}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '0.2rem',
-                              background: '#ede9fe',
-                              color: '#7c3aed',
-                              padding: '0.1rem 0.5rem',
-                              borderRadius: '999px',
-                              fontSize: '0.68rem',
-                              fontWeight: 600,
-                              maxWidth: '8rem',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            <span style={{ fontSize: '0.6rem' }}>⬡</span>
-                            {tf.theme?.shortLabel ?? tf.theme?.title ?? 'Theme'}
-                            {/* CIQ score inline — decision context at a glance */}
-                            {(tf.theme?.ciqScore ?? tf.theme?.priorityScore) != null && (
-                              <span style={{ fontSize: '0.6rem', fontWeight: 700, opacity: 0.75 }}>
-                                &nbsp;{Math.round((tf.theme!.ciqScore ?? tf.theme!.priorityScore)!)}
-                              </span>
-                            )}
-                          </span>
-                        ))}
-                        {fb.themes.length > 3 && (
-                          <span style={{ background: '#f3f0ff', color: '#7c3aed', padding: '0.1rem 0.45rem', borderRadius: '999px', fontSize: '0.68rem', fontWeight: 600 }}>
-                            +{fb.themes.length - 3}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Badges + date */}
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.4rem',
-                      marginLeft: '1rem',
-                      flexShrink: 0,
-                    }}
-                  >
-                    {/* Primary source badge — only shown when "All Sources" tab is active
-                        so the user can see which source each row belongs to */}
-                    {!activePrimarySource && primaryLabel && pc && (
-                      <span
-                        title={`Primary source: ${primaryLabel}`}
-                        style={{
-                          fontSize: '0.68rem',
-                          fontWeight: 700,
-                          padding: '0.12rem 0.45rem',
-                          borderRadius: '999px',
-                          background: pc.bg,
-                          color: pc.color,
-                          border: `1px solid ${pc.border}`,
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {primaryLabel}
-                      </span>
-                    )}
-                    {/* Secondary source / channel badge — hidden when primary badge already shown */}
-                    {(activePrimarySource || !primaryLabel) && (
-                      <span
-                        style={{
-                          fontSize: '0.7rem',
-                          fontWeight: 600,
-                          padding: '0.15rem 0.5rem',
-                          borderRadius: '999px',
-                          background: '#f0f4f8',
-                          color: '#6C757D',
-                          border: '1px solid #e9ecef',
-                        }}
-                      >
-                        {sourceLabel}
-                      </span>
-                    )}
-                    <span
-                      style={{
-                        fontSize: '0.72rem',
-                        fontWeight: 700,
-                        padding: '0.2rem 0.6rem',
-                        borderRadius: '999px',
-                        background: sc.bg,
-                        color: sc.color,
-                      }}
-                    >
-                      {fb.status.replace('_', '\u00a0')}
-                    </span>
-                    {/* ARR is now surfaced in the "Why this matters" line — no duplicate badge needed */}
-                    {/* Merged-away indicator: this item was merged into another */}
-                    {fb.mergedIntoId && (
-                      <span
-                        title={`Merged into ${fb.mergedIntoId}`}
-                        style={{
-                          fontSize: '0.68rem',
-                          fontWeight: 700,
-                          padding: '0.15rem 0.45rem',
-                          borderRadius: '999px',
-                          background: '#fce8ff',
-                          color: '#7c3aed',
-                          border: '1px solid #e9d5ff',
-                        }}
-                      >
-                        Merged
-                      </span>
-                    )}
-                    <span style={{ fontSize: '0.78rem', color: '#adb5bd' }}>
-                      {new Date(fb.createdAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                </Link>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Load more */}
-        {hasNextPage && (
+      {/* Status tabs + secondary source filter row */}
+      <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        {TABS.map((tab) => (
           <button
-            onClick={() => fetchNextPage()}
-            disabled={isFetchingNextPage}
+            key={tab.label}
+            onClick={() => setActiveStatus(tab.value)}
             style={{
-              marginTop: '1rem',
-              width: '100%',
-              padding: '0.6rem',
-              borderRadius: '0.5rem',
-              border: '1px solid #dee2e6',
-              background: '#fff',
-              color: '#20A4A4',
-              fontWeight: 600,
-              fontSize: '0.85rem',
+              padding: '0.35rem 0.75rem',
+              borderRadius: '0.4rem',
+              border: '1px solid',
+              borderColor: activeStatus === tab.value ? '#0A2540' : '#dee2e6',
+              background: activeStatus === tab.value ? '#0A2540' : '#fff',
+              color: activeStatus === tab.value ? '#fff' : '#6C757D',
+              fontWeight: activeStatus === tab.value ? 700 : 400,
+              fontSize: '0.8rem',
               cursor: 'pointer',
             }}
           >
-            {isFetchingNextPage ? 'Loading…' : 'Load more'}
+            {tab.label}
           </button>
-        )}
-      </div>}
+        ))}
+        <div style={{ marginLeft: 'auto' }}>
+          <select
+            value={activeSecondarySource ?? ''}
+            onChange={(e) => setActiveSecondarySource((e.target.value as FeedbackSecondarySource) || undefined)}
+            style={{ padding: '0.35rem 0.6rem', border: '1px solid #dee2e6', borderRadius: '0.4rem', fontSize: '0.8rem', color: '#0A2540', background: '#fff', cursor: 'pointer' }}
+          >
+            <option value="">All channels</option>
+            {(activePrimarySource ? SECONDARY_SOURCE_BY_PRIMARY[activePrimarySource] : ALL_SECONDARY_SOURCES).map((s) => (
+              <option key={s} value={s}>{SECONDARY_SOURCE_LABELS[s] ?? s}</option>
+            ))}
+          </select>
+        </div>
+      </div>
 
-      {/* ── Floating Bulk Action Bar (Step 3 Gap Fix) ── */}
-      {selectedIds.size > 0 && (
-        <div style={{
-          position: 'fixed', bottom: '1.5rem', left: '50%', transform: 'translateX(-50%)',
-          background: '#0a2540', color: '#fff', borderRadius: '2rem',
-          padding: '0.625rem 1.25rem',
-          display: 'flex', alignItems: 'center', gap: '0.75rem',
-          boxShadow: '0 4px 24px rgba(10,37,64,0.25)',
-          zIndex: 9999, flexWrap: 'wrap',
-        }}>
-          <span style={{ fontSize: '0.82rem', fontWeight: 700 }}>
-            {selectedIds.size} selected
+      {/* Search bar */}
+      <div style={{ marginBottom: '1rem' }}>
+        <input
+          type="text"
+          placeholder="Search feedback…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{
+            width: '100%',
+            padding: '0.55rem 0.85rem',
+            border: '1px solid #dee2e6',
+            borderRadius: '0.5rem',
+            fontSize: '0.88rem',
+            color: '#0A2540',
+            outline: 'none',
+            boxSizing: 'border-box',
+          }}
+        />
+      </div>
+
+      {/* Select-all header */}
+      {canEdit && feedbackItems.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem', padding: '0 0.25rem' }}>
+          <input
+            type="checkbox"
+            checked={selectedIds.size === feedbackItems.length && feedbackItems.length > 0}
+            onChange={toggleSelectAll}
+            style={{ cursor: 'pointer', width: '1rem', height: '1rem' }}
+          />
+          <span style={{ fontSize: '0.8rem', color: '#6C757D' }}>
+            {selectedIds.size > 0 ? `${selectedIds.size} selected` : 'Select all'}
           </span>
+        </div>
+      )}
+
+      {/* Feedback list */}
+      {isLoading ? (
+        <div style={{ textAlign: 'center', padding: '3rem', color: '#6C757D' }}>Loading…</div>
+      ) : isError ? (
+        <div style={{ textAlign: 'center', padding: '3rem', color: '#c0392b' }}>Failed to load feedback.</div>
+      ) : feedbackItems.length === 0 ? (
+        <div style={{ ...CARD, textAlign: 'center', padding: '3rem', color: '#6C757D' }}>
+          <p style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0A2540', marginBottom: '0.5rem' }}>No feedback yet</p>
+          <p style={{ fontSize: '0.88rem' }}>Import a CSV file or connect an integration to get started.</p>
+          {canEdit && (
+            <button
+              onClick={() => setShowCsvModal(true)}
+              style={{ marginTop: '1rem', padding: '0.6rem 1.25rem', borderRadius: '0.5rem', border: 'none', background: '#20A4A4', color: '#fff', fontWeight: 700, fontSize: '0.88rem', cursor: 'pointer' }}
+            >
+              ↑ Import CSV
+            </button>
+          )}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+          {feedbackItems.map((item) => {
+            const statusColor = STATUS_COLORS[item.status] ?? { bg: '#f0f4f8', color: '#6C757D' };
+            const primaryColor = item.primarySource ? PRIMARY_SOURCE_COLORS[item.primarySource] : undefined;
+            const isSelected = selectedIds.has(item.id);
+            return (
+              <div
+                key={item.id}
+                style={{
+                  ...CARD,
+                  padding: '1rem 1.25rem',
+                  display: 'flex',
+                  gap: '0.75rem',
+                  alignItems: 'flex-start',
+                  outline: isSelected ? '2px solid #20A4A4' : 'none',
+                  outlineOffset: '-2px',
+                }}
+              >
+                {canEdit && (
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => toggleSelect(item.id)}
+                    style={{ cursor: 'pointer', marginTop: '0.2rem', width: '1rem', height: '1rem', flexShrink: 0 }}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.35rem' }}>
+                    <Link
+                      href={r.inboxItem(item.id)}
+                      style={{ fontSize: '0.92rem', fontWeight: 700, color: '#0A2540', textDecoration: 'none', flex: 1, minWidth: 0 }}
+                    >
+                      {item.title || 'Untitled'}
+                    </Link>
+                    <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0, flexWrap: 'wrap' }}>
+                      {primaryColor && item.primarySource && (
+                        <span style={{ fontSize: '0.72rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: '1rem', background: primaryColor.bg, color: primaryColor.color, border: `1px solid ${primaryColor.border}` }}>
+                          {item.primarySource}
+                        </span>
+                      )}
+                      {item.secondarySource && (
+                        <span style={{ fontSize: '0.72rem', fontWeight: 500, padding: '0.15rem 0.5rem', borderRadius: '1rem', background: '#f0f4f8', color: '#495057', border: '1px solid #dee2e6' }}>
+                          {SECONDARY_SOURCE_LABELS[item.secondarySource] ?? item.secondarySource}
+                        </span>
+                      )}
+                      <span style={{ fontSize: '0.72rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: '1rem', background: statusColor.bg, color: statusColor.color }}>
+                        {item.status}
+                      </span>
+                    </div>
+                  </div>
+                  {item.description && (
+                    <p style={{ fontSize: '0.83rem', color: '#495057', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                      {item.description}
+                    </p>
+                  )}
+                  <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                    {item.sentiment !== null && item.sentiment !== undefined && (
+                      <span style={{ fontSize: '0.75rem', color: item.sentiment > 0.2 ? '#2e7d32' : item.sentiment < -0.2 ? '#c0392b' : '#6C757D' }}>
+                        Sentiment: {item.sentiment > 0 ? '+' : ''}{item.sentiment.toFixed(2)}
+                      </span>
+                    )}
+                    <span style={{ fontSize: '0.75rem', color: '#adb5bd' }}>
+                      {new Date(item.createdAt).toLocaleDateString()}
+                    </span>
+                    {(item.themes as ThemeFeedback[] | undefined)?.length ? (
+                      <span style={{ fontSize: '0.75rem', color: '#20A4A4', fontWeight: 600 }}>
+                        {(item.themes as ThemeFeedback[]).length} theme{(item.themes as ThemeFeedback[]).length > 1 ? 's' : ''}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Floating bulk action bar */}
+      {selectedIds.size > 0 && canEdit && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '1.5rem',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: '#0A2540',
+            color: '#fff',
+            borderRadius: '2rem',
+            padding: '0.6rem 1.25rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem',
+            boxShadow: '0 4px 20px rgba(10,37,64,0.3)',
+            zIndex: 200,
+            flexWrap: 'wrap',
+            justifyContent: 'center',
+          }}
+        >
+          <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>{selectedIds.size} selected</span>
           <button
             onClick={handleBulkDismiss}
             disabled={bulkActionState === 'loading'}
-            style={{
-              fontSize: '0.78rem', fontWeight: 700, color: '#fff',
-              background: '#e63946', border: 'none', borderRadius: '1rem',
-              padding: '0.3rem 0.875rem', cursor: 'pointer',
-            }}
+            style={{ padding: '0.35rem 0.85rem', borderRadius: '1rem', border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.1)', color: '#fff', fontWeight: 600, fontSize: '0.82rem', cursor: bulkActionState === 'loading' ? 'not-allowed' : 'pointer', opacity: bulkActionState === 'loading' ? 0.6 : 1 }}
           >
-            {bulkActionState === 'loading' ? 'Dismissing…' : '🗑 Dismiss'}
+            Archive
           </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <input
+              type="text"
+              placeholder="Theme ID…"
+              value={bulkAssignThemeId}
+              onChange={(e) => setBulkAssignThemeId(e.target.value)}
+              style={{ padding: '0.3rem 0.6rem', borderRadius: '1rem', border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.8rem', width: '8rem', outline: 'none' }}
+            />
+            <button
+              onClick={handleBulkAssign}
+              disabled={!bulkAssignThemeId || bulkActionState === 'loading'}
+              style={{ padding: '0.35rem 0.85rem', borderRadius: '1rem', border: 'none', background: '#20A4A4', color: '#fff', fontWeight: 600, fontSize: '0.82rem', cursor: !bulkAssignThemeId || bulkActionState === 'loading' ? 'not-allowed' : 'pointer', opacity: !bulkAssignThemeId || bulkActionState === 'loading' ? 0.6 : 1 }}
+            >
+              Assign to Theme
+            </button>
+          </div>
           <button
-            onClick={clearSelection}
-            style={{
-              fontSize: '0.75rem', color: '#adb5bd', background: 'none',
-              border: '1px solid #495057', borderRadius: '1rem',
-              padding: '0.25rem 0.625rem', cursor: 'pointer',
-            }}
+            onClick={() => setSelectedIds(new Set())}
+            style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', fontSize: '1rem', lineHeight: 1, padding: '0.1rem 0.3rem' }}
+            aria-label="Clear selection"
           >
-            Cancel
+            ×
           </button>
-          {bulkActionMsg && (
-            <span style={{ fontSize: '0.75rem', color: bulkActionState === 'error' ? '#f4a261' : '#a7f3d0' }}>
-              {bulkActionMsg}
-            </span>
-          )}
         </div>
       )}
     </div>

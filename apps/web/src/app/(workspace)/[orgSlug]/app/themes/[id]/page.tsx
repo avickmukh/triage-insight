@@ -242,11 +242,13 @@ function FeedbackRow({
   themeId,
   canEdit,
   orgSlug,
+  onRemoved,
 }: {
   item: ThemeLinkedFeedback;
   themeId: string;
   canEdit: boolean;
   orgSlug: string;
+  onRemoved?: (title: string) => void;
 }) {
   const r = appRoutes(orgSlug);
   const { mutate: removeFeedback, isPending } = useRemoveFeedbackFromTheme(themeId);
@@ -345,7 +347,7 @@ function FeedbackRow({
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
               <span style={{ fontSize: '0.75rem', color: '#6C757D' }}>Remove?</span>
               <button
-                onClick={() => removeFeedback(item.id, { onSuccess: () => setConfirmRemove(false) })}
+                onClick={() => removeFeedback(item.id, { onSuccess: () => { setConfirmRemove(false); onRemoved?.(item.title); } })}
                 disabled={isPending}
                 style={{
                   padding: '0.25rem 0.625rem', borderRadius: '0.375rem',
@@ -408,7 +410,13 @@ export default function ThemeDetailPage() {
   const updateTheme = useUpdateTheme(themeId);
   const [rescoreToast, setRescoreToast] = useState<string | null>(null);
   const [actionToast, setActionToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [removeToast, setRemoveToast] = useState<string | null>(null);
   const [promoteModalOpen, setPromoteModalOpen] = useState(false);
+
+  const handleFeedbackRemoved = (title: string) => {
+    setRemoveToast(`“${title}” removed from this theme.`);
+    setTimeout(() => setRemoveToast(null), 4000);
+  };
 
   const handleAddToRoadmap = () => setPromoteModalOpen(true);
 
@@ -528,6 +536,22 @@ export default function ThemeDetailPage() {
       >
         ← Themes
       </Link>
+
+      {/* ── Remove feedback toast ── */}
+      {removeToast && (
+        <div style={{
+          padding: '0.625rem 1rem',
+          background: '#fff8e1',
+          border: '1px solid #ffe082',
+          borderRadius: '0.5rem',
+          fontSize: '0.85rem',
+          color: '#b8860b',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <span>✓ {removeToast}</span>
+          <button onClick={() => setRemoveToast(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#b8860b', fontSize: '1rem', lineHeight: 1, padding: '0.1rem 0.3rem' }}>×</button>
+        </div>
+      )}
 
       {/* ── Action toast ── */}
       {actionToast && (
@@ -1497,6 +1521,7 @@ export default function ThemeDetailPage() {
                 themeId={themeId}
                 canEdit={canEdit}
                 orgSlug={slug}
+                onRemoved={handleFeedbackRemoved}
               />
             ))}
           </div>

@@ -284,17 +284,37 @@ const apiClient = {
         .post(`/workspaces/${workspaceId}/feedback/${feedbackId}/comments`, data)
         .then(handleResponse),
     /**
+     * POST /workspaces/:id/feedback/import/csv/headers
+     * Parses a CSV file and returns detected column headers + 3 preview rows.
+     * Used by the column-mapping UI step before the actual import.
+     */
+    parseCsvHeaders: (
+      workspaceId: string,
+      file: File,
+    ): Promise<{ headers: string[]; preview: Record<string, string>[]; totalRows: number }> => {
+      const form = new FormData();
+      form.append('file', file);
+      return api
+        .post(`/workspaces/${workspaceId}/feedback/import/csv/headers`, form, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })
+        .then(handleResponse);
+    },
+    /**
      * POST /workspaces/:id/feedback/import/csv
      * Uploads a .csv file and bulk-imports feedback rows.
+     * Accepts an optional mapping object to map custom column names.
      * Requires ADMIN or EDITOR role.
-     * Returns { imported, skipped, errors }.
+     * Returns { importedCount, total, batchId }.
      */
     importCsv: (
       workspaceId: string,
-      file: File
+      file: File,
+      mapping?: { feedbackText: string; title?: string; customerEmail?: string; source?: string },
     ): Promise<{ importedCount: number; total: number; batchId: string }> => {
       const form = new FormData();
       form.append('file', file);
+      if (mapping) form.append('mapping', JSON.stringify(mapping));
       return api
         .post(`/workspaces/${workspaceId}/feedback/import/csv`, form, {
           headers: { 'Content-Type': 'multipart/form-data' },

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { parse } from 'csv-parse';
 import { FeedbackService } from '../feedback.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -31,7 +31,24 @@ import {
  *
  * Any column not listed above is silently ignored.
  * Rows with no resolvable title AND no resolvable description are skipped.
+ *
+ * ── Column Mapping (Blocker 1 Fix) ──────────────────────────────────────────
+ * An optional CsvColumnMapping object can be supplied to explicitly map user
+ * CSV headers to TriageInsight fields. When provided, the explicit mapping
+ * takes priority over the auto-detection aliases above.
  */
+
+/** Explicit column mapping provided by the user via the mapping UI. */
+export interface CsvColumnMapping {
+  /** Required: the column that contains the main feedback text. */
+  feedbackText: string;
+  /** Optional: column for a short title / subject. */
+  title?: string;
+  /** Optional: column for the customer email address. */
+  customerEmail?: string;
+  /** Optional: column for the source type (e.g. "email", "slack"). */
+  source?: string;
+}
 
 /** Legacy sourceType string → FeedbackSourceType enum */
 const SOURCE_TYPE_MAP: Record<string, FeedbackSourceType> = {
@@ -87,6 +104,13 @@ function resolveColumn(record: Record<string, string>, candidates: string[]): st
   return undefined;
 }
 
+/** Resolve a single column by exact name (used when an explicit mapping is provided). */
+function resolveExact(record: Record<string, string>, col: string): string | undefined {
+  if (record[col] !== undefined) return record[col];
+  const found = Object.keys(record).find((k) => k.toLowerCase() === col.toLowerCase());
+  return found !== undefined ? record[found] : undefined;
+}
+
 @Injectable()
 export class CsvImportService {
   private readonly logger = new Logger(CsvImportService.name);
@@ -96,11 +120,67 @@ export class CsvImportService {
     private readonly prisma: PrismaService,
   ) {}
 
-  async import(workspaceId: string, fileBuffer: Buffer): Promise<{ importedCount: number; total: number; batchId: string }> {
+  /**
+   * Parse a CSV buffer and return:
+   *  - headers: all detected column names
+   *  - preview: first 3 data rows (as key→value objects)
+   *  - totalRows: total number of data rows in the file
+   *
+   * Used by the frontend column-mapping step before the actual import.
+   */
+  async parseHeaders(fileBuffer: Buffer): Promise<{
+    headers: string[];
+    preview: Record<string, string>[];
+    totalRows: number;
+  }> {
     const records = await this.parseCsv(fileBuffer);
+    const headers = records.length > 0 ? Object.keys(records[0]) : [];
+    return {
+      headers,
+      preview: records.slice(0, 3),
+      totalRows: records.length,
+    };
+  }
+
+  async import(
+    workspaceId: string,
+    fileBuffer: Buffer,
+    mapping?: CsvColumnMapping,
+  ): Promise<{ importedCount: number; total: number; batchId: string }> {
+    const records = await this.parseCsv(fileBuffer);
+
+    // ── Validate mapping if provided ────────────────────────────────────────
+    if (mapping) {
+      if (!mapping.feedbackText || !mapping.feedbackText.trim()) {
+        throw new BadRequestException(
+          'Column mapping is invalid: "feedbackText" must be specified.',
+        );
+      }
+      // Verify the mapped column actually exists in the first row
+      if (records.length > 0) {
+        const firstRow = records[0];
+        const colExists =
+          firstRow[mapping.feedbackText] !== undefined ||
+          Object.keys(firstRow).some(
+            (k) => k.toLowerCase() === mapping.feedbackText.toLowerCase(),
+          );
+        if (!colExists) {
+          throw new BadRequestException(
+            `Column mapping error: column "${mapping.feedbackText}" was not found in the CSV file. ` +
+            `Available columns: ${Object.keys(firstRow).join(', ')}`,
+          );
+        }
+      }
+    }
 
     // Count valid rows first so we can set totalRows on the batch
     const validRecords = records.filter((r) => {
+      if (mapping) {
+        // With explicit mapping: a row is valid if the feedbackText column has a value
+        const text = resolveExact(r, mapping.feedbackText);
+        return !!(text && text.trim());
+      }
+      // Without mapping: fall back to auto-detection aliases
       const rawTitle = resolveColumn(r, ['title', 'text', 'feedback', 'subject', 'summary']);
       const rawDescription = resolveColumn(r, ['description', 'body', 'content', 'detail', 'details', 'message', 'comment']);
       return !!(rawTitle || rawDescription);
@@ -125,15 +205,25 @@ export class CsvImportService {
 
     for (const record of records) {
       try {
-        // ── Resolve title ────────────────────────────────────────────────────
-        const rawTitle = resolveColumn(record, [
-          'title', 'text', 'feedback', 'subject', 'summary',
-        ]);
+        let rawTitle: string | undefined;
+        let rawDescription: string | undefined;
+        let rawSource: string | undefined;
+        let customerId: string | undefined;
 
-        // ── Resolve description ──────────────────────────────────────────────
-        const rawDescription = resolveColumn(record, [
-          'description', 'body', 'content', 'detail', 'details', 'message', 'comment',
-        ]);
+        if (mapping) {
+          // ── Explicit mapping path ──────────────────────────────────────────
+          rawDescription = resolveExact(record, mapping.feedbackText);
+          rawTitle = mapping.title ? resolveExact(record, mapping.title) : undefined;
+          rawSource = mapping.source ? resolveExact(record, mapping.source) : undefined;
+          const emailCol = mapping.customerEmail ? resolveExact(record, mapping.customerEmail) : undefined;
+          customerId = emailCol || undefined;
+        } else {
+          // ── Auto-detection path (legacy) ──────────────────────────────────
+          rawTitle = resolveColumn(record, ['title', 'text', 'feedback', 'subject', 'summary']);
+          rawDescription = resolveColumn(record, ['description', 'body', 'content', 'detail', 'details', 'message', 'comment']);
+          rawSource = resolveColumn(record, ['source', 'sourceType', 'source_type', 'channel', 'type']);
+          customerId = resolveColumn(record, ['customerId', 'customer_id', 'customer', 'account', 'accountId', 'account_id']) || undefined;
+        }
 
         // Skip rows with no usable text at all
         if (!rawTitle && !rawDescription) {
@@ -142,20 +232,12 @@ export class CsvImportService {
         }
 
         // ── Resolve sourceType ───────────────────────────────────────────────
-        const rawSource = resolveColumn(record, [
-          'source', 'sourceType', 'source_type', 'channel', 'type',
-        ]);
         const sourceType: FeedbackSourceType =
           (rawSource && SOURCE_TYPE_MAP[rawSource.toLowerCase()]) ||
           FeedbackSourceType.CSV_IMPORT;
 
         // ── Derive unified primary/secondary source from sourceType ──────────
         const { primarySource, secondarySource } = resolveUnifiedSources(sourceType);
-
-        // ── Resolve customerId ───────────────────────────────────────────────
-        const customerId = resolveColumn(record, [
-          'customerId', 'customer_id', 'customer', 'account', 'accountId', 'account_id',
-        ]) || undefined;
 
         // ── Resolve sentiment ────────────────────────────────────────────────
         const rawSentiment = resolveColumn(record, ['sentiment', 'score']);
