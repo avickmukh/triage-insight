@@ -2626,3 +2626,86 @@ export interface ExecutiveDashboardResponse {
   recommendedActions: ExecDashboardItem[];
   revenueImpact:      ExecDashboardItem[];
 }
+
+// ─── Bulk Inbox Actions (Step 3 Gap Fix) ─────────────────────────────────────
+export interface BulkDismissFeedbackDto {
+  feedbackIds: string[];
+}
+export interface BulkAssignFeedbackDto {
+  feedbackIds: string[];
+  themeId: string;
+}
+export interface BulkActionResult {
+  updated?: number;
+  assigned?: number;
+}
+
+// ─── Support Spike → Theme Linking (Step 4 Gap Fix) ──────────────────────────
+export interface LinkedSpikeEvent {
+  id: string;
+  windowStart: string;
+  windowEnd: string;
+  ticketCount: number;
+  zScore: number;
+}
+export interface LinkedSupportCluster {
+  id: string;
+  title: string;
+  description: string | null;
+  ticketCount: number;
+  arrExposure: number;
+  avgSentiment: number | null;
+  negativeTicketPct: number | null;
+  hasActiveSpike: boolean;
+  spikeEvents: LinkedSpikeEvent[];
+}
+export interface LinkedSpikesResponse {
+  themeId: string;
+  clusters: LinkedSupportCluster[];
+  totalClusters: number;
+  activeSpikeCount: number;
+}
+
+// Support Spike Theme Linking Step 4 Gap Fix
+export interface LinkedSpikeEvent {
+  id: string;
+  windowStart: string;
+  windowEnd: string;
+  ticketCount: number;
+  zScore: number;
+}
+export interface LinkedSupportCluster {
+  id: string;
+  title: string;
+  description: string | null;
+  ticketCount: number;
+  arrExposure: number;
+  avgSentiment: number | null;
+  negativeTicketPct: number | null;
+  hasActiveSpike: boolean;
+  spikeEvents: LinkedSpikeEvent[];
+}
+export interface LinkedSpikesResponse {
+  themeId: string;
+  clusters: LinkedSupportCluster[];
+  totalClusters: number;
+  activeSpikeCount: number;
+}
+
+// Workspace Audit Log Step 5 Gap Fix
+export interface AuditLogEntry {
+  id: string;
+  action: string;
+  details: Record<string, unknown>;
+  createdAt: string;
+  userId: string | null;
+  userEmail: string | null;
+  userName: string | null;
+}
+export interface AuditLogResponse {
+  data: AuditLogEntry[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}

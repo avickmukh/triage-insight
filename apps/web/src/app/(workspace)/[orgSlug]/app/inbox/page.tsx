@@ -478,6 +478,42 @@ export default function InboxPage() {
   const { role } = useCurrentMemberRole();
   const queryClient = useQueryClient();
 
+  // ── Bulk selection state (Step 3 Gap Fix) ───────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkActionState, setBulkActionState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [bulkActionMsg, setBulkActionMsg] = useState<string>('');
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const toggleSelectAll = (items: import('@/lib/api-types').Feedback[]) => {
+    if (items.every((f) => selectedIds.has(f.id))) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(items.map((f) => f.id)));
+    }
+  };
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const handleBulkDismiss = async () => {
+    if (!workspace?.id || selectedIds.size === 0) return;
+    setBulkActionState('loading');
+    try {
+      const res = await apiClient.feedback.bulkDismiss(workspace.id, [...selectedIds]);
+      setBulkActionMsg(`${res.updated ?? selectedIds.size} item(s) dismissed.`);
+      setBulkActionState('done');
+      clearSelection();
+      queryClient.invalidateQueries({ queryKey: ['feedback'] });
+    } catch {
+      setBulkActionMsg('Bulk dismiss failed. Please try again.');
+      setBulkActionState('error');
+    }
+  };
+
   const runAiSearch = useCallback(async (q: string) => {
     if (!workspace?.id || !q.trim()) return;
     setAiLoading(true);
@@ -1103,6 +1139,29 @@ export default function InboxPage() {
         ) : (
           /* Feedback rows */
           <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {/* ── Select-all header row (Step 3 Gap Fix) ── */}
+            {allItems.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0.75rem', background: '#f8f9fa', borderRadius: '0.5rem', marginBottom: '0.375rem', border: '1px solid #e9ecef' }}>
+                <input
+                  type="checkbox"
+                  checked={allItems.length > 0 && allItems.every((f) => selectedIds.has(f.id))}
+                  onChange={() => toggleSelectAll(allItems)}
+                  style={{ cursor: 'pointer', width: '1rem', height: '1rem', accentColor: '#20A4A4' }}
+                  title="Select all visible"
+                />
+                <span style={{ fontSize: '0.75rem', color: '#6C757D', fontWeight: 500 }}>
+                  {selectedIds.size > 0 ? `${selectedIds.size} selected` : `Select all (${allItems.length})`}
+                </span>
+                {selectedIds.size > 0 && (
+                  <button
+                    onClick={clearSelection}
+                    style={{ fontSize: '0.7rem', color: '#adb5bd', background: 'none', border: 'none', cursor: 'pointer', marginLeft: '0.25rem' }}
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            )}
             {allItems.map((fb, i) => {
               const sc = STATUS_COLORS[fb.status] ?? { bg: '#f0f4f8', color: '#6C757D' };
               // Prefer unified secondarySource label; fall back to legacy sourceType label
@@ -1130,10 +1189,24 @@ export default function InboxPage() {
                 ? `CIQ ${Math.round(maxCiq)} — high urgency`
                 : null;
               return (
+                <div key={fb.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+                  {/* Row checkbox */}
+                  <div
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSelect(fb.id); }}
+                    style={{ paddingTop: '1.1rem', paddingLeft: '0.25rem', cursor: 'pointer', flexShrink: 0 }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(fb.id)}
+                      onChange={() => toggleSelect(fb.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ width: '1rem', height: '1rem', accentColor: '#20A4A4', cursor: 'pointer' }}
+                    />
+                  </div>
                 <Link
-                  key={fb.id}
                   href={r.inboxItem(fb.id)}
                   style={{
+                    flex: 1,
                     textDecoration: 'none',
                     display: 'flex',
                     justifyContent: 'space-between',
@@ -1305,6 +1378,7 @@ export default function InboxPage() {
                     </span>
                   </div>
                 </Link>
+                </div>
               );
             })}
           </div>
@@ -1332,6 +1406,48 @@ export default function InboxPage() {
           </button>
         )}
       </div>}
+
+      {/* ── Floating Bulk Action Bar (Step 3 Gap Fix) ── */}
+      {selectedIds.size > 0 && (
+        <div style={{
+          position: 'fixed', bottom: '1.5rem', left: '50%', transform: 'translateX(-50%)',
+          background: '#0a2540', color: '#fff', borderRadius: '2rem',
+          padding: '0.625rem 1.25rem',
+          display: 'flex', alignItems: 'center', gap: '0.75rem',
+          boxShadow: '0 4px 24px rgba(10,37,64,0.25)',
+          zIndex: 9999, flexWrap: 'wrap',
+        }}>
+          <span style={{ fontSize: '0.82rem', fontWeight: 700 }}>
+            {selectedIds.size} selected
+          </span>
+          <button
+            onClick={handleBulkDismiss}
+            disabled={bulkActionState === 'loading'}
+            style={{
+              fontSize: '0.78rem', fontWeight: 700, color: '#fff',
+              background: '#e63946', border: 'none', borderRadius: '1rem',
+              padding: '0.3rem 0.875rem', cursor: 'pointer',
+            }}
+          >
+            {bulkActionState === 'loading' ? 'Dismissing…' : '🗑 Dismiss'}
+          </button>
+          <button
+            onClick={clearSelection}
+            style={{
+              fontSize: '0.75rem', color: '#adb5bd', background: 'none',
+              border: '1px solid #495057', borderRadius: '1rem',
+              padding: '0.25rem 0.625rem', cursor: 'pointer',
+            }}
+          >
+            Cancel
+          </button>
+          {bulkActionMsg && (
+            <span style={{ fontSize: '0.75rem', color: bulkActionState === 'error' ? '#f4a261' : '#a7f3d0' }}>
+              {bulkActionMsg}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

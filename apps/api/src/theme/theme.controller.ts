@@ -392,4 +392,34 @@ export class ThemeController {
   ) {
     return this.trendComputationService.computeWorkspaceTrends(workspaceId);
   }
+
+  // ── Support Spike → Theme Linking (Step 4 Gap Fix) ───────────────────────────
+
+  /**
+   * GET /workspaces/:workspaceId/themes/:id/linked-spikes
+   * Returns all SupportIssueClusters linked to this theme + their recent spike events.
+   */
+  @Get(':id/linked-spikes')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
+  getLinkedSupportSpikes(
+    @Param('workspaceId') workspaceId: string,
+    @Param('id') id: string,
+  ) {
+    return this.themeService.getLinkedSupportSpikes(workspaceId, id);
+  }
+
+  /**
+   * POST /workspaces/:workspaceId/themes/:id/link-support-cluster
+   * Manually links a SupportIssueCluster to this theme and triggers CIQ re-score.
+   */
+  @Post(':id/link-support-cluster')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  linkSupportCluster(
+    @Param('workspaceId') workspaceId: string,
+    @Param('id') id: string,
+    @Req() req: AuthenticatedRequest,
+    @Body() body: { clusterId: string },
+  ) {
+    return this.themeService.linkSupportCluster(workspaceId, req.user.sub, id, body.clusterId);
+  }
 }

@@ -749,4 +749,60 @@ export class FeedbackService {
       data: { pipelineStatus: 'QUEUED', pipelineUpdatedAt: new Date() },
     }).catch(() => { /* non-critical */ });
   }
+
+  // ── Bulk Actions (Step 3 Gap Fix) ──────────────────────────────────────────
+
+  /**
+   * Bulk dismiss: sets status to ARCHIVED for all given feedbackIds
+   * that belong to the workspace.
+   */
+  async bulkDismiss(workspaceId: string, feedbackIds: string[]): Promise<{ updated: number }> {
+    const result = await this.prisma.feedback.updateMany({
+      where: { id: { in: feedbackIds }, workspaceId },
+      data: { status: 'ARCHIVED' as any },
+    });
+    return { updated: result.count };
+  }
+
+  /**
+   * Bulk assign: links all feedbackIds to a theme via ThemeFeedback upsert.
+   * Skips items that do not belong to the workspace.
+   */
+  async bulkAssignToTheme(
+    workspaceId: string,
+    feedbackIds: string[],
+    themeId: string,
+  ): Promise<{ assigned: number }> {
+    // Verify theme belongs to workspace
+    const theme = await this.prisma.theme.findFirst({ where: { id: themeId, workspaceId } });
+    if (!theme) throw new NotFoundException('Theme not found');
+
+    // Verify all feedback items belong to workspace
+    const valid = await this.prisma.feedback.findMany({
+      where: { id: { in: feedbackIds }, workspaceId },
+      select: { id: true },
+    });
+    const validIds = valid.map((f) => f.id);
+    if (validIds.length === 0) return { assigned: 0 };
+
+    // Upsert ThemeFeedback links
+    await this.prisma.$transaction(
+      validIds.map((feedbackId) =>
+        this.prisma.themeFeedback.upsert({
+          where: { themeId_feedbackId: { themeId, feedbackId } },
+          create: { themeId, feedbackId, assignedBy: 'manual' },
+          update: { assignedBy: 'manual', confidence: null },
+        }),
+      ),
+    );
+
+    // Enqueue CIQ re-score for the theme
+    try {
+      await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId });
+    } catch (queueErr) {
+      console.warn('[Queue] Redis unavailable — CIQ re-score skipped:', (queueErr as Error).message);
+    }
+
+    return { assigned: validIds.length };
+  }
 }

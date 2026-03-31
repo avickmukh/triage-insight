@@ -22,8 +22,10 @@ import {
   ThemeStatus,
   UpdateThemeDto,
   WorkspaceRole,
+  LinkedSpikesResponse,
 } from '@/lib/api-types';
 import { appRoutes } from '@/lib/routes';
+import apiClient from '@/lib/api-client';
 
 // ─── Design tokens ─────────────────────────────────────────────────────────────
 const CARD: React.CSSProperties = {
@@ -439,6 +441,28 @@ export default function ThemeDetailPage() {
 
   const [showEdit, setShowEdit] = useState(false);
   const [feedbackSearch, setFeedbackSearch] = useState('');
+
+  // ── Support Spikes state (Step 4 Gap Fix) ──────────────────────────────────
+  const [linkedSpikes, setLinkedSpikes] = useState<LinkedSpikesResponse | null>(null);
+  const [spikesLoading, setSpikesLoading] = useState(false);
+
+  // Fetch linked support spikes when workspaceId + themeId are available
+  const fetchLinkedSpikes = async () => {
+    if (!workspaceId || !themeId) return;
+    setSpikesLoading(true);
+    try {
+      const res = await apiClient.themes.getLinkedSpikes(workspaceId, themeId);
+      setLinkedSpikes(res);
+    } catch {
+      // Non-critical — spikes panel will just be empty
+    } finally {
+      setSpikesLoading(false);
+    }
+  };
+  // Trigger once when theme data is available
+  if (theme && !linkedSpikes && !spikesLoading && workspaceId && themeId) {
+    fetchLinkedSpikes();
+  }
 
   // ── Loading ──
   if (isLoading) {
@@ -1133,41 +1157,88 @@ export default function ThemeDetailPage() {
                 <CiqSignalBreakdown breakdown={null} sentiment={ciqScore.sentimentScore} />
               </div>
             )}
-            {/* Signal breakdown bars */}
-            {Object.keys(ciqScore.scoreExplanation).length > 0 && (
-              <div>
-                <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#0a2540', marginBottom: '0.625rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Signal Breakdown
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {Object.entries(ciqScore.scoreExplanation)
-                    .sort((a, b) => b[1].contribution - a[1].contribution)
-                    .map(([key, factor]) => {
-                      const isDominant = key === ciqScore.dominantDriver;
-                      const pct = Math.min(100, Math.round(factor.contribution));
-                      const barColor = isDominant ? '#1a6fc4' : pct >= 10 ? '#20A4A4' : '#adb5bd';
-                      return (
-                        <div key={key}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.2rem', alignItems: 'center' }}>
-                            <span style={{ fontSize: '0.75rem', color: '#495057', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                              {factor.label}
-                              {isDominant && (
-                                <span style={{ fontSize: '0.6rem', background: '#dbeafe', color: '#1a6fc4', borderRadius: '0.25rem', padding: '0.1rem 0.3rem', fontWeight: 700 }}>TOP</span>
-                              )}
-                            </span>
-                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: barColor }}>
-                              {factor.contribution.toFixed(1)} pts
-                            </span>
-                          </div>
-                          <div style={{ height: '6px', background: '#e9ecef', borderRadius: '3px' }}>
-                            <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: '3px', transition: 'width 0.4s' }} />
-                          </div>
+            {/* ── Why this score? — percentage-based CIQ breakdown (Step 1 Gap Fix) ── */}
+            {Object.keys(ciqScore.scoreExplanation).length > 0 && (() => {
+              // Group raw scoreExplanation factors into 4 canonical buckets
+              const REVENUE_KEYS   = new Set(['arrValue', 'dealInfluence', 'accountPriority']);
+              const FREQ_KEYS      = new Set(['feedbackFrequency', 'voiceSignal', 'supportSignal', 'customerCount', 'signalStrength', 'voteSignal', 'surveySignal']);
+              const SENTIMENT_KEYS = new Set(['sentimentSignal']);
+              const VELOCITY_KEYS  = new Set(['velocitySignal', 'sourceDiversitySignal', 'recencySignal', 'resurfacingSignal']);
+              const bucket = (keys: Set<string>) =>
+                Object.entries(ciqScore.scoreExplanation)
+                  .filter(([k]) => keys.has(k))
+                  .reduce((sum, [, f]) => sum + f.contribution, 0);
+              const rev  = bucket(REVENUE_KEYS);
+              const freq = bucket(FREQ_KEYS);
+              const sent = bucket(SENTIMENT_KEYS);
+              const vel  = bucket(VELOCITY_KEYS);
+              const total = rev + freq + sent + vel || 1;
+              const pct = (v: number) => Math.round((v / total) * 100);
+              const GROUPS = [
+                { label: 'Revenue Impact', value: rev,  pct: pct(rev),  color: '#2e7d32', icon: '💰' },
+                { label: 'Frequency',      value: freq, pct: pct(freq), color: '#1a6fc4', icon: '📊' },
+                { label: 'Sentiment',      value: sent, pct: pct(sent), color: '#c2410c', icon: '💬' },
+                { label: 'Velocity',       value: vel,  pct: pct(vel),  color: '#7c3aed', icon: '⚡' },
+              ].sort((a, b) => b.pct - a.pct);
+              const topGroup = GROUPS[0];
+              return (
+                <div style={{ marginTop: '1rem', padding: '1rem', background: '#fff', border: '1px solid #e3edf7', borderRadius: '0.75rem' }}>
+                  {/* Section heading + dominant driver pill */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.875rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0a2540', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Why this score?
+                    </span>
+                    <span style={{ fontSize: '0.7rem', background: '#eef6ff', color: '#1a6fc4', border: '1px solid #bfdbfe', borderRadius: '1rem', padding: '0.2rem 0.6rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      {topGroup.icon} Dominant: {topGroup.label} ({topGroup.pct}%)
+                    </span>
+                  </div>
+                  {/* Four canonical horizontal bar rows */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    {GROUPS.map((g) => (
+                      <div key={g.label}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
+                          <span style={{ fontSize: '0.78rem', color: '#374151', fontWeight: g.label === topGroup.label ? 700 : 400, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                            {g.icon} {g.label}
+                            {g.label === topGroup.label && (
+                              <span style={{ fontSize: '0.6rem', background: '#dbeafe', color: '#1a6fc4', borderRadius: '0.25rem', padding: '0.1rem 0.35rem', fontWeight: 700 }}>TOP</span>
+                            )}
+                          </span>
+                          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: g.color }}>{g.pct}%</span>
                         </div>
-                      );
-                    })}
+                        <div style={{ height: '8px', background: '#f1f5f9', borderRadius: '4px', overflow: 'hidden' }}>
+                          <div style={{ width: `${g.pct}%`, height: '100%', background: g.color, borderRadius: '4px', transition: 'width 0.5s ease', opacity: g.label === topGroup.label ? 1 : 0.7 }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Expandable fine-grained factor list */}
+                  <details style={{ marginTop: '0.875rem' }}>
+                    <summary style={{ fontSize: '0.72rem', color: '#6C757D', cursor: 'pointer', userSelect: 'none' }}>View all contributing factors</summary>
+                    <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                      {Object.entries(ciqScore.scoreExplanation)
+                        .sort((a, b) => b[1].contribution - a[1].contribution)
+                        .map(([key, factor]) => {
+                          const isDominant = key === ciqScore.dominantDriver;
+                          const totalContrib = Object.values(ciqScore.scoreExplanation).reduce((s, f) => s + f.contribution, 0) || 1;
+                          const factorPct = Math.round((factor.contribution / totalContrib) * 100);
+                          return (
+                            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <span style={{ fontSize: '0.72rem', color: '#495057', flex: 1, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                {factor.label}
+                                {isDominant && <span style={{ fontSize: '0.58rem', background: '#dbeafe', color: '#1a6fc4', borderRadius: '0.2rem', padding: '0.05rem 0.25rem', fontWeight: 700 }}>TOP</span>}
+                              </span>
+                              <div style={{ width: '80px', height: '5px', background: '#e9ecef', borderRadius: '3px', overflow: 'hidden' }}>
+                                <div style={{ width: `${factorPct}%`, height: '100%', background: isDominant ? '#1a6fc4' : '#20A4A4', borderRadius: '3px' }} />
+                              </div>
+                              <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#6C757D', minWidth: '2.5rem', textAlign: 'right' }}>{factorPct}%</span>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </details>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </>
         ) : (
           <p style={{ fontSize: '0.85rem', color: '#6C757D', margin: 0 }}>
@@ -1315,6 +1386,70 @@ export default function ThemeDetailPage() {
           <p style={{ fontSize: '0.85rem', color: '#6C757D', margin: 0 }}>No revenue signals linked to this theme yet. Link deals or customers to see revenue intelligence.</p>
         )}
       </div>
+
+      {/* ── Support Spikes Panel (Step 4 Gap Fix) ── */}
+      {(spikesLoading || (linkedSpikes && linkedSpikes.totalClusters > 0)) && (
+        <div style={CARD}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+            <h2 style={{ fontSize: '1.125rem', fontWeight: 700, color: '#0a2540', margin: 0 }}>
+              🚨 Linked Support Spikes
+            </h2>
+            {linkedSpikes && linkedSpikes.activeSpikeCount > 0 && (
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, background: '#fee2e2', color: '#b91c1c', borderRadius: '999px', padding: '0.2rem 0.6rem', border: '1px solid #fca5a5' }}>
+                {linkedSpikes.activeSpikeCount} active spike{linkedSpikes.activeSpikeCount > 1 ? 's' : ''}
+              </span>
+            )}
+            <span style={{ fontSize: '0.75rem', color: '#6C757D', marginLeft: 'auto' }}>
+              Support clusters linked to this theme
+            </span>
+          </div>
+          {spikesLoading ? (
+            <p style={{ fontSize: '0.85rem', color: '#adb5bd', margin: 0 }}>Loading support spikes…</p>
+          ) : linkedSpikes && linkedSpikes.clusters.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {linkedSpikes.clusters.map((cluster) => (
+                <div key={cluster.id} style={{ border: '1px solid #e9ecef', borderRadius: '0.625rem', padding: '0.875rem 1rem', background: cluster.hasActiveSpike ? '#fff8f0' : '#fafafa' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <div>
+                      <p style={{ fontWeight: 600, fontSize: '0.9rem', color: '#0a2540', margin: '0 0 0.25rem' }}>
+                        {cluster.hasActiveSpike && <span style={{ marginRight: '0.35rem' }}>🔥</span>}
+                        {cluster.title}
+                      </p>
+                      {cluster.description && (
+                        <p style={{ fontSize: '0.78rem', color: '#6C757D', margin: 0 }}>{cluster.description}</p>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', flexShrink: 0 }}>
+                      <span style={{ fontSize: '0.72rem', background: '#f0f4f8', color: '#495057', borderRadius: '999px', padding: '0.15rem 0.5rem', border: '1px solid #dee2e6' }}>
+                        🎫 {cluster.ticketCount} tickets
+                      </span>
+                      {cluster.arrExposure > 0 && (
+                        <span style={{ fontSize: '0.72rem', background: '#e8f5e9', color: '#2e7d32', borderRadius: '999px', padding: '0.15rem 0.5rem', border: '1px solid #a5d6a7' }}>
+                          💰 ${(cluster.arrExposure / 100).toLocaleString()} ARR
+                        </span>
+                      )}
+                      {cluster.negativeTicketPct != null && cluster.negativeTicketPct > 0.3 && (
+                        <span style={{ fontSize: '0.72rem', background: '#fee2e2', color: '#b91c1c', borderRadius: '999px', padding: '0.15rem 0.5rem', border: '1px solid #fca5a5' }}>
+                          😤 {Math.round(cluster.negativeTicketPct * 100)}% negative
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {cluster.spikeEvents.length > 0 && (
+                    <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                      {cluster.spikeEvents.map((ev) => (
+                        <div key={ev.id} style={{ fontSize: '0.75rem', color: '#e65100', background: '#fff3e0', borderRadius: '0.375rem', padding: '0.2rem 0.5rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', width: 'fit-content' }}>
+                          ⚡ Spike: {ev.ticketCount} tickets · z={ev.zScore.toFixed(1)} · {new Date(ev.windowStart).toLocaleDateString()}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      )}
 
       {/* ── Linked Feedback ── */}
       <div style={CARD}>
