@@ -1013,7 +1013,7 @@ export default function HomeDashboardPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem' }}>
             <RoadmapDonutChart  roadmap={data.roadmapHealth}    href={r.roadmap} />
             <TopFeaturesChart   direction={data.productDirection} href={r.intelligenceFeatures} />
-            <SentimentGauge     sentiment={data.voiceSentiment}  href={r.voice} />
+            <SentimentGauge     sentiment={data.voiceSentiment}  href={r.inbox} />
           </div>
 
           {/* 2×2 grid of status cards */}
@@ -1025,7 +1025,7 @@ export default function HomeDashboardPage() {
           </div>
 
           {/* Sentiment — full width */}
-          <SentimentCard data={data.voiceSentiment} href={r.voice} />
+          <SentimentCard data={data.voiceSentiment} href={r.inbox} />
         </div>
       )}
 
