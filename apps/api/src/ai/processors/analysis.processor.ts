@@ -53,16 +53,28 @@ export class AiAnalysisProcessor {
   ) {}
 
   /**
-   * Concurrency is set to 1 so that only one analysis job runs at a time
-   * per worker process. This ensures the Postgres advisory lock inside
-   * ThemeClusteringService.assignFeedbackToTheme() fully serialises
-   * clustering — preventing two workers from racing to create duplicate
-   * themes for the same workspace when a batch of feedback is imported.
+   * Concurrency controls how many analysis jobs this worker processes in
+   * parallel. The value is read from the QUEUE_CONCURRENCY environment
+   * variable (default: 2, max: 20 — see RetryPolicy.concurrency()).
    *
-   * If horizontal scaling is needed, keep QUEUE_CONCURRENCY=1 and run
-   * multiple single-worker replicas instead of raising concurrency.
+   * ── Why concurrency > 1 is safe ─────────────────────────────────────────
+   * Theme-duplication races are prevented by a Postgres advisory lock inside
+   * ThemeClusteringService.assignFeedbackToTheme(). The lock is scoped per
+   * workspace (pg_advisory_xact_lock on a hash of workspaceId), so:
+   *   • Jobs from the SAME workspace are serialised by the DB lock.
+   *   • Jobs from DIFFERENT workspaces run fully in parallel.
+   *
+   * Setting concurrency: 1 was overly conservative — it blocked all jobs
+   * globally, making batch uploads process one item at a time even when
+   * the items belonged to different workspaces (or were the only workspace).
+   * This caused the "pipeline only runs one at a time" regression.
+   *
+   * ── Tuning ──────────────────────────────────────────────────────────────
+   * Raise QUEUE_CONCURRENCY in .env to increase throughput. Keep it ≤ the
+   * Postgres max_connections / number of worker replicas to avoid pool
+   * exhaustion. The default of 2 is a safe starting point for most setups.
    */
-  @Process({ concurrency: 1 })
+  @Process({ concurrency: RetryPolicy.concurrency() })
   async handleAnalysis(job: Job<AnalysisJobPayload>) {
     const { feedbackId, workspaceId } = job.data;
     const ctx = { jobType: 'AI_ANALYSIS', workspaceId, entityId: feedbackId, jobId: job.id };
