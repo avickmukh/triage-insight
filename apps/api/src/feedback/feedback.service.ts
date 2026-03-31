@@ -639,8 +639,15 @@ export class FeedbackService {
   /**
    * Returns a snapshot of the current AI pipeline state for the workspace.
    * The frontend polls this every 3 seconds to show a blocking progress bar.
-   * Stage is derived from running AiJobLog job types and persisted to Workspace.pipelineStatus
-   * so it survives tab close / re-login.
+   *
+   * ── Stale-detection logic (v2) ────────────────────────────────────────────
+   * A RUNNING AiJobLog record is considered orphaned (stale) if its startedAt
+   * is older than STALE_MS (15 minutes). Stale records are auto-healed:
+   *   1. Their status is flipped to FAILED in the DB.
+   *   2. The workspace pipelineStatus is reset to IDLE so the banner disappears.
+   *
+   * This prevents the "ghost pipeline" bug where a crashed job leaves the
+   * banner stuck at 1% forever because pending > 0 never resolves.
    *
    * Stages: IDLE → QUEUED → ANALYZING → CLUSTERING → COMPLETED | FAILED
    */
@@ -654,14 +661,37 @@ export class FeedbackService {
     pct: number;
     estimatedSecondsLeft: number | null;
   }> {
-    // Scope to jobs created in the last 24 hours to capture the current batch
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    // Scope to jobs created in the last 2 hours — enough to capture any active
+    // batch without surfacing yesterday's completed runs as "still running".
+    const since = new Date(Date.now() - 2 * 60 * 60 * 1000);
 
-    // A RUNNING record is considered stale (orphaned) if it has been in that
-    // state for more than 10 minutes — the idempotency TTL window. Stale
-    // records are excluded from the pending count so they don't block
-    // completion detection forever.
-    const staleThreshold = new Date(Date.now() - 10 * 60 * 1000);
+    // A RUNNING record is stale if startedAt is older than 15 minutes.
+    // 15 min > the 10-min idempotency TTL, giving a safe buffer.
+    const STALE_MS = 15 * 60 * 1000;
+    const staleThreshold = new Date(Date.now() - STALE_MS);
+
+    // ── Step 1: Auto-heal stale RUNNING records ──────────────────────────────
+    // Find all RUNNING records for this workspace that are older than STALE_MS.
+    // Flip them to FAILED so they stop blocking completion detection.
+    const staleRecords = await this.prisma.aiJobLog.findMany({
+      where: {
+        workspaceId,
+        status: 'RUNNING',
+        startedAt: { lt: staleThreshold },
+      },
+      select: { id: true },
+    });
+    if (staleRecords.length > 0) {
+      const staleIds = staleRecords.map((r) => r.id);
+      await this.prisma.aiJobLog.updateMany({
+        where: { id: { in: staleIds } },
+        data: {
+          status: 'FAILED',
+          completedAt: new Date(),
+          error: '[AUTO-HEALED] Job was stuck in RUNNING state for >15 minutes — marked as failed.',
+        },
+      }).catch(() => { /* non-critical */ });
+    }
 
     const [total, completed, failed, pending, runningJobs, workspace] = await Promise.all([
       this.prisma.aiJobLog.count({
@@ -673,8 +703,7 @@ export class FeedbackService {
       this.prisma.aiJobLog.count({
         where: { workspaceId, status: { in: ['FAILED', 'DEAD_LETTERED'] }, createdAt: { gte: since } },
       }),
-      // Only count RUNNING records (markStarted never creates QUEUED records).
-      // Exclude stale RUNNING records older than 10 min (orphaned / crashed jobs).
+      // Count only fresh RUNNING records (post-heal, stale ones are now FAILED).
       this.prisma.aiJobLog.count({
         where: {
           workspaceId,
@@ -684,7 +713,12 @@ export class FeedbackService {
         },
       }),
       this.prisma.aiJobLog.findMany({
-        where: { workspaceId, status: 'RUNNING', createdAt: { gte: since } },
+        where: {
+          workspaceId,
+          status: 'RUNNING',
+          createdAt: { gte: since },
+          startedAt: { gte: staleThreshold },
+        },
         select: { jobType: true },
         take: 5,
       }),
@@ -695,11 +729,15 @@ export class FeedbackService {
     ]);
 
     const isRunning = pending > 0;
-    const pct = total === 0 ? 100 : Math.round(((completed + failed) / total) * 100);
+    // If there are no jobs at all in the 2h window, the pipeline is IDLE.
+    const pct = total === 0 ? 0 : Math.round(((completed + failed) / total) * 100);
 
     // Derive human-readable stage from running job types
-    let stage = workspace?.pipelineStatus ?? 'IDLE';
-    if (isRunning) {
+    let stage: string;
+    if (total === 0) {
+      // No jobs in the 2h window — always IDLE regardless of persisted status
+      stage = 'IDLE';
+    } else if (isRunning) {
       const runningTypes = runningJobs.map((j) => String(j.jobType));
       if (runningTypes.includes('THEME_CLUSTERING')) {
         stage = 'CLUSTERING';
@@ -708,12 +746,16 @@ export class FeedbackService {
       } else {
         stage = 'QUEUED';
       }
-    } else if (total > 0 && pending === 0) {
+    } else {
+      // pending === 0 and total > 0 → all jobs are done
       stage = failed > 0 && completed === 0 ? 'FAILED' : 'COMPLETED';
     }
 
-    // Persist stage back to workspace so it survives tab close / re-login
-    if (stage !== (workspace?.pipelineStatus ?? 'IDLE')) {
+    // Persist stage back to workspace so it survives tab close / re-login.
+    // Always write IDLE when there is nothing running so stale persisted
+    // statuses (e.g. ANALYZING from a previous run) are cleared.
+    const currentPersistedStatus = workspace?.pipelineStatus ?? 'IDLE';
+    if (stage !== currentPersistedStatus) {
       this.prisma.workspace.update({
         where: { id: workspaceId },
         data: { pipelineStatus: stage, pipelineUpdatedAt: new Date() },
@@ -737,6 +779,29 @@ export class FeedbackService {
     }
 
     return { isRunning, stage, total, completed, failed, pending, pct, estimatedSecondsLeft };
+  }
+
+  /**
+   * Manually reset the pipeline status for a workspace to IDLE.
+   * Also flips any stuck RUNNING AiJobLog records to FAILED.
+   * Used by the frontend "Dismiss" button on the pipeline banner.
+   */
+  async resetPipelineStatus(workspaceId: string): Promise<{ reset: true; healed: number }> {
+    // Flip all RUNNING records to FAILED
+    const result = await this.prisma.aiJobLog.updateMany({
+      where: { workspaceId, status: 'RUNNING' },
+      data: {
+        status: 'FAILED',
+        completedAt: new Date(),
+        error: '[MANUAL-RESET] Pipeline was manually reset by user.',
+      },
+    });
+    // Reset workspace pipelineStatus to IDLE
+    await this.prisma.workspace.update({
+      where: { id: workspaceId },
+      data: { pipelineStatus: 'IDLE', pipelineUpdatedAt: new Date() },
+    }).catch(() => { /* non-critical */ });
+    return { reset: true, healed: result.count };
   }
 
   /**

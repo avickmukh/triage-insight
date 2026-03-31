@@ -390,6 +390,16 @@ const apiClient = {
         .get(`/workspaces/${workspaceId}/feedback/pipeline-status`)
         .then(handleResponse),
     /**
+     * POST /workspaces/:id/feedback/reset-pipeline
+     * Manually resets the pipeline to IDLE and heals stuck RUNNING records.
+     */
+    resetPipelineStatus: (
+      workspaceId: string
+    ): Promise<{ reset: true; healed: number }> =>
+      api
+        .post(`/workspaces/${workspaceId}/feedback/reset-pipeline`)
+        .then(handleResponse),
+    /**
      * POST /workspaces/:id/feedback/bulk/dismiss
      * Sets status to ARCHIVED for all supplied feedbackIds.
      */

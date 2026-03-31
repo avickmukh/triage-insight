@@ -1,25 +1,24 @@
 'use client';
 
 /**
- * AIPipelineProgress
+ * AIPipelineProgress — v4 (Ghost-Pipeline Fix)
  *
- * Inline dashboard banner — NOT a full-page overlay.
+ * Changes vs v3:
+ * ─────────────────────────────────────────────────────────────────────────────
+ * 1. IDLE guard: when backend returns stage === 'IDLE' or total === 0 and
+ *    isRunning === false, the banner is hidden immediately and localStorage
+ *    flag is cleared. Fixes the ghost "AI Pipeline Running" banner.
  *
- * When a `batchId` is provided (set after a CSV upload), polls:
- *   GET /workspaces/:id/imports/:batchId/status
- * This returns total = rows in THIS upload (e.g. 50), not workspace history.
+ * 2. Stale localStorage TTL (30 min): the pipelineRunning_<workspaceId> key
+ *    is ignored if it is older than 30 minutes. Prevents ghost banners on
+ *    page load hours after the last upload.
  *
- * When no `batchId` is provided, falls back to the workspace-level endpoint:
- *   GET /workspaces/:id/feedback/pipeline-status
+ * 3. Dismiss button: a × button lets users manually dismiss the banner.
+ *    Clicking it calls POST /feedback/reset-pipeline (heals stuck RUNNING
+ *    records in the DB) and clears the localStorage flag.
  *
- * ── Key fix (v3) ─────────────────────────────────────────────────────────────
- * The batchId is captured in a ref at mount time so that clearing localStorage
- * does NOT cause effectiveBatchId to change, which previously re-triggered the
- * useEffect and restarted polling against the workspace endpoint after the
- * batch was already COMPLETED.
- *
- * Polling stops permanently once stage = COMPLETED or FAILED. The banner
- * auto-dismisses 2.5 s after completion.
+ * 4. Batch-status path unchanged: batchId polling still uses the batch-scoped
+ *    endpoint. IDLE guard still applies.
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -37,9 +36,11 @@ export interface PipelineStatus {
   batchId?: string;
 }
 
-const LS_RUNNING_KEY = (workspaceId: string) => `pipelineRunning_${workspaceId}`;
-const LS_BATCH_KEY   = (workspaceId: string) => `pipelineBatchId_${workspaceId}`;
-const POLL_INTERVAL_MS = 3000;
+const LS_RUNNING_KEY   = (workspaceId: string) => `pipelineRunning_${workspaceId}`;
+const LS_BATCH_KEY     = (workspaceId: string) => `pipelineBatchId_${workspaceId}`;
+const POLL_INTERVAL_MS = 3_000;
+/** localStorage flag expires after 30 minutes to prevent ghost banners on page reload */
+const LS_TTL_MS        = 30 * 60 * 1_000;
 
 const STAGE_LABELS: Record<string, string> = {
   IDLE:       'Idle',
@@ -67,9 +68,23 @@ function clearPipelineFlag(workspaceId: string) {
   } catch { /* ignore */ }
 }
 
-function hasPipelineFlag(workspaceId: string): boolean {
-  try { return !!localStorage.getItem(LS_RUNNING_KEY(workspaceId)); }
-  catch { return false; }
+/**
+ * Returns true only if the localStorage flag exists AND is younger than LS_TTL_MS.
+ * Stale flags are removed immediately to prevent ghost banners on page load.
+ */
+function hasFreshPipelineFlag(workspaceId: string): boolean {
+  try {
+    const raw = localStorage.getItem(LS_RUNNING_KEY(workspaceId));
+    if (!raw) return false;
+    const ts = Number(raw);
+    if (isNaN(ts) || Date.now() - ts > LS_TTL_MS) {
+      clearPipelineFlag(workspaceId);
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function getStoredBatchId(workspaceId: string): string | null {
@@ -84,8 +99,9 @@ interface Props {
 }
 
 export function AIPipelineProgress({ workspaceId, batchId: propBatchId, onComplete }: Props) {
-  const [status, setStatus] = useState<PipelineStatus | null>(null);
-  const [visible, setVisible] = useState(false);
+  const [status, setStatus]         = useState<PipelineStatus | null>(null);
+  const [visible, setVisible]       = useState(false);
+  const [dismissing, setDismissing] = useState(false);
 
   const timerRef      = useRef<ReturnType<typeof setInterval> | null>(null);
   const onCompleteRef = useRef(onComplete);
@@ -110,6 +126,13 @@ export function AIPipelineProgress({ workspaceId, batchId: propBatchId, onComple
     }
   }, []);
 
+  const hideBanner = useCallback(() => {
+    stopPolling();
+    clearPipelineFlag(workspaceId);
+    batchIdRef.current = undefined;
+    setVisible(false);
+  }, [workspaceId, stopPolling]);
+
   const poll = useCallback(async () => {
     try {
       let s: PipelineStatus;
@@ -126,26 +149,26 @@ export function AIPipelineProgress({ workspaceId, batchId: propBatchId, onComple
 
       setStatus(s);
 
+      const isIdle = s.stage === 'IDLE' || (s.total === 0 && !s.isRunning);
       const isDone = s.stage === 'COMPLETED' || s.stage === 'FAILED';
-      const active = !isDone && (s.isRunning || s.stage === 'QUEUED' || s.stage === 'UPLOADED');
+      const active = !isIdle && !isDone && (s.isRunning || s.stage === 'QUEUED' || s.stage === 'UPLOADED');
 
-      if (active) {
+      if (isIdle) {
+        // Backend says nothing is running — hide immediately and clear the flag.
+        // PRIMARY FIX for the ghost-pipeline bug.
+        hideBanner();
+      } else if (active) {
         setVisible(true);
-        // Refresh LS timestamp but do NOT call markPipelineStarted here —
-        // that would re-write the batchId key we might be about to clear.
         try { localStorage.setItem(LS_RUNNING_KEY(workspaceId), String(Date.now())); } catch { /* ignore */ }
       } else if (isDone) {
-        // Pipeline finished — stop polling immediately
         stopPolling();
         clearPipelineFlag(workspaceId);
-        batchIdRef.current = undefined; // prevent any future re-use
-
+        batchIdRef.current = undefined;
         if (visible) {
-          // Brief delay so user sees 100% / "complete" state before banner hides
           setTimeout(() => {
             setVisible(false);
             onCompleteRef.current?.();
-          }, 2500);
+          }, 2_500);
         } else {
           onCompleteRef.current?.();
         }
@@ -153,11 +176,21 @@ export function AIPipelineProgress({ workspaceId, batchId: propBatchId, onComple
     } catch {
       // Network error — keep polling silently
     }
-  }, [workspaceId, visible, stopPolling]);
+  }, [workspaceId, visible, stopPolling, hideBanner]);
+
+  /** Dismiss handler: calls backend reset then hides the banner */
+  const handleDismiss = useCallback(async () => {
+    setDismissing(true);
+    try {
+      await apiClient.feedback.resetPipelineStatus(workspaceId);
+    } catch { /* ignore — still hide */ }
+    hideBanner();
+    setDismissing(false);
+  }, [workspaceId, hideBanner]);
 
   useEffect(() => {
-    // Show banner immediately if localStorage flag is set (fast-path)
-    if (hasPipelineFlag(workspaceId)) {
+    // Show banner immediately only if the localStorage flag is fresh (< 30 min)
+    if (hasFreshPipelineFlag(workspaceId)) {
       setVisible(true);
     }
 
@@ -170,29 +203,55 @@ export function AIPipelineProgress({ workspaceId, batchId: propBatchId, onComple
 
   if (!visible || !status) return null;
 
-  const pct       = status.pct;
-  const stage     = status.stage ?? 'QUEUED';
+  const pct        = status.pct ?? 0;
+  const stage      = status.stage ?? 'QUEUED';
   const stageLabel = STAGE_LABELS[stage] ?? stage;
-  const eta       = status.estimatedSecondsLeft ?? null;
-  const etaLabel  = eta === null ? '' : eta < 60 ? `~${eta}s remaining` : `~${Math.ceil(eta / 60)}m remaining`;
+  const eta        = status.estimatedSecondsLeft ?? null;
+  const etaLabel   = eta === null ? '' : eta < 60 ? `~${eta}s remaining` : `~${Math.ceil(eta / 60)}m remaining`;
 
   const isCompleted = stage === 'COMPLETED';
   const isFailed    = stage === 'FAILED';
   const barColor    = isCompleted ? '#2e7d32' : isFailed ? '#c62828' : 'linear-gradient(90deg, #20A4A4, #1a73e8)';
+  const bgColor     = isCompleted ? '#e8f5e9' : isFailed ? '#ffebee' : '#e3f2fd';
+  const borderColor = isCompleted ? '#a5d6a7' : isFailed ? '#ef9a9a' : '#90caf9';
 
   return (
     <div
       style={{
-        background: isCompleted ? '#e8f5e9' : isFailed ? '#ffebee' : '#e3f2fd',
-        border: `1px solid ${isCompleted ? '#a5d6a7' : isFailed ? '#ef9a9a' : '#90caf9'}`,
+        background: bgColor,
+        border: `1px solid ${borderColor}`,
         borderRadius: '0.75rem',
         padding: '1rem 1.25rem',
         marginBottom: '1.5rem',
+        position: 'relative',
       }}
       aria-live="polite"
       aria-label="AI pipeline processing"
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.6rem' }}>
+      {/* Dismiss / close button */}
+      <button
+        onClick={handleDismiss}
+        disabled={dismissing}
+        title="Dismiss pipeline banner"
+        style={{
+          position: 'absolute',
+          top: '0.6rem',
+          right: '0.75rem',
+          background: 'transparent',
+          border: 'none',
+          cursor: dismissing ? 'not-allowed' : 'pointer',
+          fontSize: '1.1rem',
+          color: '#546e7a',
+          lineHeight: 1,
+          padding: '0.1rem 0.3rem',
+          borderRadius: '4px',
+        }}
+        aria-label="Dismiss pipeline banner"
+      >
+        ×
+      </button>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.6rem', paddingRight: '1.5rem' }}>
         {isCompleted ? (
           <span style={{ fontSize: '1.25rem' }}>✅</span>
         ) : isFailed ? (
@@ -209,7 +268,7 @@ export function AIPipelineProgress({ workspaceId, batchId: propBatchId, onComple
 
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#0a2540' }}>
-            {isCompleted ? 'AI Analysis Complete' : 'AI Pipeline Running'}
+            {isCompleted ? 'AI Analysis Complete' : isFailed ? 'AI Pipeline — Some Items Failed' : 'AI Pipeline Running'}
           </div>
           <div style={{ fontSize: '0.78rem', color: '#546e7a', marginTop: '0.1rem' }}>
             {stageLabel}

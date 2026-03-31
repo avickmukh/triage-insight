@@ -166,13 +166,25 @@ export class FeedbackController {
    * GET /workspaces/:workspaceId/feedback/pipeline-status
    *
    * Returns the current AI pipeline progress for the workspace.
-   * Used by the frontend to show a blocking progress indicator.
-   * Survives tab close/re-login because state is persisted in AiJobLog.
+   * Includes auto-healing: stale RUNNING records (>15 min) are flipped to FAILED
+   * so the banner never gets stuck. Scoped to the last 2 hours.
    */
   @Get('pipeline-status')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
   getPipelineStatus(@Param('workspaceId') workspaceId: string) {
     return this.feedbackService.getPipelineStatus(workspaceId);
+  }
+
+  /**
+   * POST /workspaces/:workspaceId/feedback/reset-pipeline
+   *
+   * Manually resets the pipeline status to IDLE and heals any stuck RUNNING
+   * AiJobLog records. Called by the frontend "Dismiss" button on the banner.
+   */
+  @Post('reset-pipeline')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  resetPipelineStatus(@Param('workspaceId') workspaceId: string) {
+    return this.feedbackService.resetPipelineStatus(workspaceId);
   }
 
   // ─── Bulk action routes (Step 3 Gap Fix) ─────────────────────────────────────
