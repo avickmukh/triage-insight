@@ -409,7 +409,11 @@ export interface RoadmapItem {
   status: RoadmapStatus;
   isPublic: boolean;
   themeId?: string | null;
-  theme?: Theme | null;
+  theme?: (Theme & {
+    ciqScore?: number | null;
+    trendDelta?: number | null;
+    resurfaceCount?: number | null;
+  }) | null;
   // Intelligence fields
   priorityScore?: number | null;
   confidenceScore?: number | null;

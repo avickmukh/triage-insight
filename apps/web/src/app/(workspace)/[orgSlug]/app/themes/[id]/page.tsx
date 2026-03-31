@@ -836,6 +836,26 @@ export default function ThemeDetailPage() {
               <span style={{ fontSize: '0.68rem', fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase' as const, color: '#adb5bd' }}>Why this matters&nbsp;</span>
               <span style={{ fontSize: '0.875rem', color: '#1e293b', lineHeight: 1.55 }}>{aiSuggestion.reason}</span>
             </div>
+            {/* ── Dominant driver ── */}
+            {aiSuggestion.dominantDriver && (
+              <div style={{ marginBottom: '0.4rem' }}>
+                <span style={{ fontSize: '0.68rem', fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase' as const, color: '#adb5bd' }}>Dominant driver&nbsp;</span>
+                <span style={{ fontSize: '0.82rem', color: '#475569', fontWeight: 600, lineHeight: 1.5 }}>{aiSuggestion.dominantDriver}</span>
+              </div>
+            )}
+            {/* ── Confidence ── */}
+            {aiSuggestion.confidenceExplanation && (
+              <div style={{ marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.68rem', fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase' as const, color: '#adb5bd' }}>Confidence&nbsp;</span>
+                <span style={{
+                  fontSize: '0.7rem', fontWeight: 700,
+                  padding: '0.1rem 0.45rem', borderRadius: '999px',
+                  background: aiSuggestion.confidence === 'HIGH' ? '#f0fdf4' : aiSuggestion.confidence === 'MEDIUM' ? '#fefce8' : '#f8fafc',
+                  color: aiSuggestion.confidence === 'HIGH' ? '#15803d' : aiSuggestion.confidence === 'MEDIUM' ? '#a16207' : '#6C757D',
+                }}>{aiSuggestion.confidence}</span>
+                <span style={{ fontSize: '0.78rem', color: '#6C757D', lineHeight: 1.5 }}>{aiSuggestion.confidenceExplanation}</span>
+              </div>
+            )}
             {/* ── What changed ── */}
             {((aiSuggestion.signalSummary?.trendDelta != null && Math.abs(aiSuggestion.signalSummary.trendDelta) >= 10) ||
               (aiSuggestion.signalSummary?.resurfaceCount != null && aiSuggestion.signalSummary.resurfaceCount > 0)) && (

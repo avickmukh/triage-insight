@@ -208,10 +208,13 @@ export class RoadmapService {
           select: {
             id: true, title: true, status: true,
             priorityScore: true,
+            ciqScore: true,
             aiSummary: true,
             aiExplanation: true,
             aiRecommendation: true,
             aiConfidence: true,
+            trendDelta: true,
+            resurfaceCount: true,
           },
         },
       },

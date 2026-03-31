@@ -13,6 +13,7 @@ import type {
   TrendAlert,
   AlertType,
   UrgencyLevel,
+  AiRoadmapSuggestion,
 } from '@/lib/api-types';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -97,6 +98,12 @@ export default function ActionPlanPage() {
   const { data: alertData, isLoading: alertsLoading } = useQuery({
     queryKey: ['trend-alerts', orgSlug],
     queryFn: () => apiClient.prioritization.getTrendAlerts(orgSlug),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: roadmapCandidatesData, isLoading: candidatesLoading } = useQuery({
+    queryKey: ['roadmap-ai-suggestions', orgSlug],
+    queryFn: () => apiClient.roadmap.getAiSuggestions(orgSlug, 5),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -195,6 +202,52 @@ export default function ActionPlanPage() {
           <ActionCard key={item.themeId} item={item} rank={idx + 1} r={r} />
         ))}
       </div>
+
+      {/* ── 🗺️ Roadmap Candidates ── */}
+      <section style={{ marginTop: '2.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.875rem' }}>
+          <span style={{ fontSize: '1.15rem' }}>🗺️</span>
+          <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0A2540', margin: 0 }}>
+            Recommended Roadmap Candidates
+          </h2>
+          <span style={{
+            fontSize: '0.68rem', fontWeight: 800,
+            padding: '0.1rem 0.5rem', borderRadius: '999px',
+            background: '#ede9fe', color: '#7c3aed', border: '1px solid #c4b5fd',
+          }}>AI</span>
+        </div>
+        <p style={{ fontSize: '0.82rem', color: '#6C757D', margin: '0 0 1rem' }}>
+          Themes not yet on the roadmap, ranked by Roadmap Priority Score. Click to view the theme and add it.
+        </p>
+
+        {candidatesLoading && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {[1, 2, 3].map((n) => (
+              <div key={n} style={{ ...CARD, height: '5rem', background: '#f8fafc' }} />
+            ))}
+          </div>
+        )}
+
+        {!candidatesLoading && (() => {
+          const candidates = (roadmapCandidatesData?.data ?? []).filter(
+            (s: AiRoadmapSuggestion) => s.suggestionType === 'ADD_TO_ROADMAP'
+          );
+          if (candidates.length === 0) {
+            return (
+              <div style={{ ...CARD, color: '#6C757D', fontSize: '0.875rem', textAlign: 'center', padding: '1.25rem' }}>
+                No unroadmapped themes with sufficient signal right now.
+              </div>
+            );
+          }
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+              {candidates.map((s: AiRoadmapSuggestion, idx: number) => (
+                <RoadmapCandidateCard key={s.themeId} suggestion={s} rank={idx + 1} r={r} />
+              ))}
+            </div>
+          );
+        })()}
+      </section>
     </div>
   );
 }
@@ -393,5 +446,113 @@ function ScoreRow({ label, weight, value }: { label: string; weight: string; val
       <td style={{ padding: '0.22rem 0', textAlign: 'right', color: '#adb5bd' }}>{weight}</td>
       <td style={{ padding: '0.22rem 0', textAlign: 'right', fontWeight: 600, color: '#0A2540' }}>{value}</td>
     </tr>
+  );
+}
+
+// ─── Roadmap Candidate Card ───────────────────────────────────────────────────
+
+function RoadmapCandidateCard({
+  suggestion,
+  rank,
+  r,
+}: {
+  suggestion: AiRoadmapSuggestion;
+  rank: number;
+  r: ReturnType<typeof appRoutes>;
+}) {
+  const confColor =
+    suggestion.confidence === 'HIGH' ? '#15803d'
+    : suggestion.confidence === 'MEDIUM' ? '#a16207'
+    : '#6C757D';
+  const confBg =
+    suggestion.confidence === 'HIGH' ? '#f0fdf4'
+    : suggestion.confidence === 'MEDIUM' ? '#fefce8'
+    : '#f8fafc';
+
+  return (
+    <Link
+      href={r.themeItem(suggestion.themeId)}
+      style={{ textDecoration: 'none', color: 'inherit' }}
+    >
+      <div
+        style={{
+          ...CARD,
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: '1rem',
+          cursor: 'pointer',
+          transition: 'box-shadow 0.15s',
+          borderLeft: '3px solid #7c3aed',
+        }}
+      >
+        {/* Rank */}
+        <div style={{
+          minWidth: '1.75rem', height: '1.75rem',
+          borderRadius: '50%', background: '#ede9fe',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '0.72rem', fontWeight: 800, color: '#7c3aed', flexShrink: 0,
+        }}>
+          #{rank}
+        </div>
+
+        {/* Content */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {/* Theme name + confidence badge */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
+            <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0A2540' }}>
+              {suggestion.themeTitle}
+            </span>
+            <span style={{
+              fontSize: '0.68rem', fontWeight: 700,
+              padding: '0.1rem 0.45rem', borderRadius: '999px',
+              background: confBg, color: confColor,
+            }}>
+              {suggestion.confidence} confidence
+            </span>
+            {suggestion.dominantDriver && (
+              <span style={{
+                fontSize: '0.68rem', fontWeight: 600,
+                padding: '0.1rem 0.45rem', borderRadius: '999px',
+                background: '#f0f4f8', color: '#475569',
+              }}>
+                {suggestion.dominantDriver}
+              </span>
+            )}
+          </div>
+
+          {/* Why this matters */}
+          <div style={{ marginBottom: '0.2rem' }}>
+            <span style={{ fontSize: '0.68rem', fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase' as const, color: '#adb5bd' }}>Why this matters&nbsp;</span>
+            <span style={{ fontSize: '0.82rem', color: '#475569', lineHeight: 1.5 }}>{suggestion.reason}</span>
+          </div>
+
+          {/* Confidence explanation */}
+          {suggestion.confidenceExplanation && (
+            <div>
+              <span style={{ fontSize: '0.68rem', fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase' as const, color: '#adb5bd' }}>Confidence&nbsp;</span>
+              <span style={{ fontSize: '0.78rem', color: '#6C757D', lineHeight: 1.5 }}>{suggestion.confidenceExplanation}</span>
+            </div>
+          )}
+        </div>
+
+        {/* RPS score + CTA */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.4rem', flexShrink: 0 }}>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: '0.62rem', fontWeight: 700, color: '#adb5bd', textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>RPS</div>
+            <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#7c3aed' }}>
+              {Math.round(suggestion.roadmapPriorityScore)}
+            </div>
+          </div>
+          <span style={{
+            fontSize: '0.72rem', fontWeight: 700,
+            padding: '0.3rem 0.75rem', borderRadius: '0.4rem',
+            background: '#7c3aed', color: '#fff',
+            whiteSpace: 'nowrap',
+          }}>
+            + Add to Roadmap →
+          </span>
+        </div>
+      </div>
+    </Link>
   );
 }
