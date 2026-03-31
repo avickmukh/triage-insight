@@ -469,7 +469,7 @@ function PageTitle({ pathname, slug }: { pathname: string; slug: string }) {
   }
 
   const titles: Record<string, string> = {
-    app: 'Home', inbox: 'Feedback Inbox', feedback: 'Feedback Source', themes: 'Themes', roadmap: 'Roadmap',
+    app: 'Home', inbox: 'Inbox', feedback: 'Feedback Source', themes: 'Themes', roadmap: 'Roadmap',
     customers: 'Customers', reports: 'Reports', voice: 'Voice', surveys: 'Surveys',
     support: 'Support',
     intelligence: 'Intelligence Hub', features: 'Feature Ranking', 'customers-iq': 'Customer Ranking',
