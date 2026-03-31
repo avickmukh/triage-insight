@@ -27,6 +27,7 @@ export const globalAuthRoutes = {
 /** Workspace staff app routes (admin + editor + viewer) */
 export const appRoutes = (slug: string) => ({
   dashboard:  `/${slug}/app`,
+  feedbackSource: `/${slug}/app/feedback`,
   inbox:      `/${slug}/app/inbox`,
   inboxItem:  (id: string) => `/${slug}/app/inbox/${id}`,
   inboxNew:   `/${slug}/app/inbox/new`,
@@ -62,6 +63,7 @@ export const appRoutes = (slug: string) => ({
   prioritizationRoadmap:       `/${slug}/app/prioritization/roadmap`,
   prioritizationBoard:         `/${slug}/app/prioritization/board`,
   prioritizationSettings:      `/${slug}/app/prioritization/settings`,
+  roadmapAiSuggestions:        `/${slug}/app/roadmap/ai-suggestions`,
   reports:    `/${slug}/app/reports`,
   profile:    `/${slug}/app/profile`,
   upgrade:    `/${slug}/app/upgrade`,

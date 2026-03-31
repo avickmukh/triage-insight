@@ -70,7 +70,43 @@ export enum FeedbackSourceType {
   SLACK = 'SLACK',
   CSV_IMPORT = 'CSV_IMPORT',
   VOICE = 'VOICE',
+  SURVEY = 'SURVEY',
   API = 'API',
+}
+
+/**
+ * Top-level product category for a piece of feedback.
+ * Drives primary inbox filtering and source identity across the product.
+ */
+export enum FeedbackPrimarySource {
+  /** Direct product feedback (manual, CSV, portal, email, Slack, API) */
+  FEEDBACK = 'FEEDBACK',
+  /** Extracted from customer support tickets */
+  SUPPORT = 'SUPPORT',
+  /** Extracted from voice/audio transcripts */
+  VOICE = 'VOICE',
+  /** Collected via structured surveys (NPS, CSAT, custom) */
+  SURVEY = 'SURVEY',
+}
+
+/**
+ * Operational ingestion channel within a primary source.
+ * Explains HOW the feedback arrived, not WHAT it is.
+ * Drives source badges in the inbox and evidence labels in theme/CIQ views.
+ */
+export enum FeedbackSecondarySource {
+  MANUAL = 'MANUAL',
+  CSV_UPLOAD = 'CSV_UPLOAD',
+  PORTAL = 'PORTAL',
+  EMAIL = 'EMAIL',
+  SLACK = 'SLACK',
+  ZENDESK = 'ZENDESK',
+  INTERCOM = 'INTERCOM',
+  API = 'API',
+  WEBHOOK = 'WEBHOOK',
+  TRANSCRIPT = 'TRANSCRIPT',
+  IMPORT = 'IMPORT',
+  OTHER = 'OTHER',
 }
 
 export enum ThemeStatus {
@@ -78,6 +114,10 @@ export enum ThemeStatus {
   AI_GENERATED = 'AI_GENERATED',
   /** Human-reviewed and confirmed — trust signal only, does NOT gate CIQ. */
   VERIFIED = 'VERIFIED',
+  /** Theme received fresh signals after its linked RoadmapItem was SHIPPED. Fully participates in CIQ. */
+  RESURFACED = 'RESURFACED',
+  /** Theme was manually reopened after being closed/shipped. Fully participates in CIQ. */
+  REOPENED = 'REOPENED',
   /** Soft-deleted — excluded from all intelligence queries. */
   ARCHIVED = 'ARCHIVED',
 }
@@ -171,6 +211,10 @@ export interface Feedback {
   customerId?: string | null;
   portalUserId?: string | null;
   sourceType: FeedbackSourceType;
+  /** Unified primary source — product-facing category. Null for legacy records. */
+  primarySource?: FeedbackPrimarySource | null;
+  /** Unified secondary source — operational ingestion channel. Null for legacy records. */
+  secondarySource?: FeedbackSecondarySource | null;
   sourceRef?: string | null;
   title: string;
   description: string;
@@ -204,6 +248,8 @@ export interface ThemeFeedback {
   description?: string | null;
   status?: string;
   sourceType?: string;
+  primarySource?: FeedbackPrimarySource | null;
+  secondarySource?: FeedbackSecondarySource | null;
   workspaceId?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -251,6 +297,15 @@ export interface Theme {
   feedbackCount?: number;
   /** Present on list endpoint (findMany) — Prisma _count include */
   _count?: { feedbacks: number };
+  // ── Unified cross-source signal counts (written by CIQ after every recomputation) ──
+  /** Count of voice/public-portal feedback signals linked to this theme */
+  voiceCount?: number;
+  /** Count of support ticket signals correlated to this theme */
+  supportCount?: number;
+  /** Count of survey-derived signals (text + structured evidence) linked to this theme */
+  surveyCount?: number;
+  /** Total cross-source signal count: feedbackCount + voiceCount + supportCount + surveyCount */
+  totalSignalCount?: number;
   // ─── CIQ Priority Intelligence fields ───────────────────────────────────────
   /** CIQ priority score (0–100), null if never scored */
   priorityScore?: number | null;
@@ -1036,11 +1091,33 @@ export interface CiqScoreOutput {
    * The scoring dimension that contributed most to the final score.
    * Useful for surfacing a one-line explanation in the UI.
    */
-  dominantDriver?: string;
+  dominantDriver?: string | null;
   /** True when the score was derived from a linked theme (vs. stored values only) */
   themeScored?: boolean;
   /** Average sentiment score across linked feedback (-1 to +1). Null until sentiment scoring has run. */
   sentimentScore?: number | null;
+  /**
+   * Human-readable sentence explaining WHY this theme has its current priority score.
+   * Example: "High priority driven by 28 support tickets and $1.2M ARR exposure. Score: 74/100."
+   */
+  priorityReason?: string | null;
+  /**
+   * Human-readable sentence explaining the confidence level and what signals are present.
+   * Example: "Medium confidence — based on 4 feedback items, 1 voice signal. More cross-source signals will raise confidence further."
+   */
+  confidenceExplanation?: string | null;
+  /** Number of distinct source types (Feedback / Voice / Support / Survey) that contributed at least 1 signal */
+  sourceDiversityCount?: number;
+  /** Signal velocity: % change in signal count vs. previous 7-day window */
+  velocityDelta?: number | null;
+  /** Count of voice/portal feedback signals */
+  voiceCount?: number;
+  /** Count of support ticket signals */
+  supportCount?: number;
+  /** Count of survey-derived signals */
+  surveyCount?: number;
+  /** Total cross-source signal count */
+  totalSignalCount?: number;
 }
 
 /**
@@ -1621,6 +1698,21 @@ export interface RevenueWeightedIntelligence {
   smbValidation: number;
 }
 
+/** Per-question structured evidence breakdown for NPS / Rating / Choice questions. */
+export interface SurveyQuestionBreakdown {
+  questionId: string;
+  label: string;
+  type: SurveyQuestionType;
+  responseCount: number;
+  /** Average numeric value for NPS / Rating questions; null for choice questions */
+  avg: number | null;
+  /** Distribution map: label → count.
+   *  NPS: { 'Promoters (9-10)': n, 'Passives (7-8)': n, 'Detractors (0-6)': n }
+   *  Rating: { '1': n, '2': n, ... }
+   *  Choice: { 'Option A': n, 'Option B': n, ... } */
+  distribution: Record<string, number>;
+}
+
 export interface SurveyIntelligence {
   surveyId: string;
   totalResponses: number;
@@ -1630,6 +1722,9 @@ export interface SurveyIntelligence {
   avgRating: number | null;
   npsScore: number | null;
   linkedThemeIds: string[];
+  /** Linked global themes with titles — derived from survey text responses that were
+   *  converted to Feedback and subsequently clustered by the AI engine. */
+  linkedThemes?: Array<{ id: string; title: string }>;
   keyTopics: string[];
   npsResponseCount: number;
   ratingResponseCount: number;
@@ -1638,6 +1733,9 @@ export interface SurveyIntelligence {
   sentimentDistribution: { positive: number; neutral: number; negative: number } | null;
   topFeatureRequests: string[];
   topPainPoints: string[];
+  /** Per-question structured analytics for NPS / Rating / Choice questions.
+   *  These are evidence breakdowns, NOT text-derived themes. */
+  questionBreakdowns?: SurveyQuestionBreakdown[];
   revenueWeighted: RevenueWeightedIntelligence | null;
   surveyType: SurveyType;
   validationScore: number | null;
@@ -1824,6 +1922,11 @@ export interface ThemePriorityItem {
   revenueOpportunityScore: number;
   feedbackCount:           number;
   uniqueCustomerCount:     number;
+  // ── Unified cross-source signal counts ──
+  voiceCount:              number;
+  supportCount:            number;
+  surveyCount:             number;
+  totalSignalCount:        number;
   revenueInfluence:        number;
   dealInfluenceValue:      number;
   strategicTag:            string | null;
@@ -2177,6 +2280,10 @@ export interface SemanticSearchResult {
   description: string | null;
   status: string;
   sourceType: string;
+  /** Unified primary source — null for legacy records */
+  primarySource?: FeedbackPrimarySource | null;
+  /** Unified secondary source — null for legacy records */
+  secondarySource?: FeedbackSecondarySource | null;
   sentiment: number | null;
   createdAt: string;
   /** Cosine similarity score in [0, 1] — higher is more relevant. */
@@ -2341,4 +2448,70 @@ export interface DigestHistoryItem {
   id: string;
   sentAt: string;
   summary: DigestSummary | null;
+}
+
+// ─── AI Roadmap Suggestions ───────────────────────────────────────────────────
+
+/**
+ * Suggestion type returned by GET /workspaces/:id/roadmap/ai-suggestions
+ * AI assists decision-making — it does NOT auto-create roadmap items.
+ */
+export type AiSuggestionType =
+  | 'ADD_TO_ROADMAP'
+  | 'INCREASE_PRIORITY'
+  | 'DECREASE_PRIORITY'
+  | 'MONITOR'
+  | 'NO_ACTION';
+
+export type AiConfidenceLevel = 'HIGH' | 'MEDIUM' | 'LOW';
+
+export interface AiSuggestionSignalSummary {
+  totalSignals:   number;
+  feedbackCount:  number;
+  voiceCount:     number;
+  supportCount:   number;
+  surveyCount:    number;
+  activeSources:  number;
+  velocityDelta:  number | null;
+  sentimentScore: number | null;
+}
+
+export interface AiSuggestionBreakdown {
+  ciqScore:             number;
+  velocityScore:        number;
+  sentimentScore:       number;
+  sourceScore:          number;
+  recencyScore:         number;
+  resurfacingBonus:     number;
+  roadmapPriorityScore: number;
+}
+
+export interface AiRoadmapSuggestion {
+  themeId:               string;
+  themeTitle:            string;
+  ciqScore:              number;
+  roadmapPriorityScore:  number;
+  suggestionType:        AiSuggestionType;
+  confidence:            AiConfidenceLevel;
+  reason:                string;
+  signalSummary:         AiSuggestionSignalSummary;
+  breakdown:             AiSuggestionBreakdown;
+  roadmapItemId:         string | null;
+  roadmapStatus:         string | null;
+  dominantDriver:        string | null;
+  priorityReason:        string | null;
+  confidenceExplanation: string | null;
+}
+
+export interface AiRoadmapSuggestionsResponse {
+  data:       AiRoadmapSuggestion[];
+  total:      number;
+  computedAt: string;
+  summary: {
+    addToRoadmap:     number;
+    increasePriority: number;
+    decreasePriority: number;
+    monitor:          number;
+    noAction:         number;
+  };
 }

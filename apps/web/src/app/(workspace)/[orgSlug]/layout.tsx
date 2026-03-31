@@ -162,6 +162,7 @@ function AuthenticatedShell({ slug, pathname, children }: { slug: string; pathna
 
             {/* Signals */}
             <NavGroup label="Signals" open={sidebarOpen}>
+              <SideNavItem href={r.feedbackSource}   pathname={pathname} open={sidebarOpen} icon={<IconFeedback/>}>Feedback</SideNavItem>
               <SideNavItem href={r.voice}            pathname={pathname} open={sidebarOpen} icon={<IconVoice/>}>Voice</SideNavItem>
               <SideNavItem href={r.surveys}          pathname={pathname} open={sidebarOpen} icon={<IconSurveys/>}>Surveys</SideNavItem>
               <SideNavItem href={r.support.overview} pathname={pathname} open={sidebarOpen} icon={<IconSupport/>}>Support</SideNavItem>
@@ -230,6 +231,7 @@ function AuthenticatedShell({ slug, pathname, children }: { slug: string; pathna
                 <DrawerNavItem href={r.reports}   pathname={pathname} icon={<IconReports/>}>Reports</DrawerNavItem>
               </NavGroupDrawer>
               <NavGroupDrawer label="Signals">
+                <DrawerNavItem href={r.feedbackSource}   pathname={pathname} icon={<IconFeedback/>}>Feedback</DrawerNavItem>
                 <DrawerNavItem href={r.voice}            pathname={pathname} icon={<IconVoice/>}>Voice</DrawerNavItem>
                 <DrawerNavItem href={r.surveys}          pathname={pathname} icon={<IconSurveys/>}>Surveys</DrawerNavItem>
                 <DrawerNavItem href={r.support.overview} pathname={pathname} icon={<IconSupport/>}>Support</DrawerNavItem>
@@ -465,7 +467,7 @@ function PageTitle({ pathname, slug }: { pathname: string; slug: string }) {
   }
 
   const titles: Record<string, string> = {
-    app: 'Home', inbox: 'Feedback Inbox', themes: 'Themes', roadmap: 'Roadmap',
+    app: 'Home', inbox: 'Feedback Inbox', feedback: 'Feedback Source', themes: 'Themes', roadmap: 'Roadmap',
     customers: 'Customers', reports: 'Reports', voice: 'Voice', surveys: 'Surveys',
     support: 'Support',
     intelligence: 'Intelligence Hub', features: 'Feature Ranking', 'customers-iq': 'Customer Ranking',
@@ -515,6 +517,7 @@ function IconCustomers()    { return <svg {...ip}><path d="M17 21v-2a4 4 0 0 0-4
 function IconReports()      { return <svg {...ip}><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>; }
 
 // Signals
+function IconFeedback()     { return <svg {...ip}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>; }
 function IconVoice()        { return <svg {...ip}><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>; }
 function IconSurveys()      { return <svg {...ip}><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>; }
 function IconSupport()      { return <svg {...ip}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>; }

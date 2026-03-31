@@ -7,8 +7,55 @@ import {
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
 import { PrismaService } from '../../prisma/prisma.service';
-import { SurveyStatus, SurveyType, FeedbackSourceType, FeedbackStatus } from '@prisma/client';
+import {
+  SurveyStatus,
+  SurveyType,
+  SurveyQuestionType,
+  FeedbackSourceType,
+  FeedbackPrimarySource,
+  FeedbackSecondarySource,
+  FeedbackStatus,
+} from '@prisma/client';
+import { AI_ANALYSIS_QUEUE } from '../../ai/processors/analysis.processor';
 import { SURVEY_INTELLIGENCE_QUEUE } from '../processors/survey-intelligence.processor';
+import { JobLogger } from '../../common/queue/job-logger';
+import { RetryPolicy } from '../../common/queue/retry-policy';
+
+/** Minimum character length for an open-text answer to become a Feedback signal. */
+const MIN_TEXT_LENGTH = 10;
+
+/** Question types whose answers become Feedback signals in the AI pipeline. */
+const TEXT_QUESTION_TYPES = new Set<SurveyQuestionType>([
+  SurveyQuestionType.SHORT_TEXT,
+  SurveyQuestionType.LONG_TEXT,
+]);
+
+/** Question types whose answers are stored as SurveyEvidence (structured, no text clustering). */
+const EVIDENCE_QUESTION_TYPES = new Set<SurveyQuestionType>([
+  SurveyQuestionType.SINGLE_CHOICE,
+  SurveyQuestionType.MULTIPLE_CHOICE,
+  SurveyQuestionType.RATING,
+  SurveyQuestionType.NPS,
+]);
+
+/**
+ * Normalise a numeric answer to [0, 1].
+ * RATING: assumes ratingMin/ratingMax from the question definition.
+ * NPS: 0-10 scale → 0 = detractor (0), 10 = promoter (1).
+ */
+function normaliseNumeric(
+  value: number,
+  type: SurveyQuestionType,
+  ratingMin = 1,
+  ratingMax = 5,
+): number {
+  if (type === SurveyQuestionType.NPS) {
+    return Math.min(Math.max(value, 0), 10) / 10;
+  }
+  const range = ratingMax - ratingMin;
+  if (range <= 0) return 0.5;
+  return Math.min(Math.max((value - ratingMin) / range, 0), 1);
+}
 import {
   CreateSurveyDto,
   UpdateSurveyDto,
@@ -21,9 +68,12 @@ import { SurveyIntelligenceService, RevenueWeightedInsight } from './survey-inte
 
 @Injectable()
 export class SurveyService {
+  private readonly logger = new JobLogger(SurveyService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     @InjectQueue(SURVEY_INTELLIGENCE_QUEUE) private readonly intelligenceQueue: Queue,
+    @InjectQueue(AI_ANALYSIS_QUEUE) private readonly analysisQueue: Queue,
     private readonly surveyIntelligenceService: SurveyIntelligenceService,
   ) {}
 
@@ -391,7 +441,38 @@ export class SurveyService {
         questions: { orderBy: { order: 'asc' } },
       },
     });
-    if (!survey) throw new NotFoundException('Survey not found or not published');
+     if (!survey) throw new NotFoundException('Survey not found or not published');
+
+    // ── Duplicate submission guard ────────────────────────────────────────────
+    // Prevent the same respondent from submitting the same survey twice.
+    // Keyed on (surveyId + respondentEmail) when email is provided, or
+    // (surveyId + anonymousId) when an anonymous session token is provided.
+    // If neither is present the check is skipped (anonymous, no session).
+    if (dto.respondentEmail || dto.anonymousId) {
+      const existingResponse = await this.prisma.surveyResponse.findFirst({
+        where: {
+          surveyId,
+          workspaceId: workspace.id,
+          ...(dto.respondentEmail
+            ? { respondentEmail: dto.respondentEmail }
+            : { anonymousId: dto.anonymousId }),
+        },
+        select: { id: true },
+      });
+      if (existingResponse) {
+        // Return success-like response so the UI can show the thank-you screen
+        // without revealing whether the respondent has already submitted.
+        return {
+          success: true,
+          responseId: existingResponse.id,
+          feedbackIds: [],
+          feedbackId: null,
+          thankYouMessage: survey.thankYouMessage ?? 'Thank you for your response!',
+          redirectUrl: survey.redirectUrl ?? null,
+          duplicate: true,
+        };
+      }
+    }
 
     // Validate required questions are answered
     const requiredQuestions = survey.questions.filter((q) => q.required);
@@ -422,8 +503,67 @@ export class SurveyService {
       if (pu) portalUserId = pu.id;
     }
 
-    // Create the response + answers in a transaction
-    const response = await this.prisma.$transaction(async (tx) => {
+    // Build a lookup map: questionId → full question definition
+    const questionMap = new Map(survey.questions.map((q) => [q.id, q]));
+
+    // ── Classify each answer by question type ──────────────────────────────────
+    type TextCandidate = { questionId: string; questionText: string; text: string };
+    type EvidenceCandidate = {
+      questionId: string;
+      questionText: string;
+      questionType: SurveyQuestionType;
+      choiceValues: unknown[] | null;
+      numericValue: number | null;
+      normalisedScore: number | null;
+      ratingMin: number;
+      ratingMax: number;
+    };
+
+    const textCandidates: TextCandidate[] = [];
+    const evidenceCandidates: EvidenceCandidate[] = [];
+
+    for (const answer of dto.answers) {
+      const question = questionMap.get(answer.questionId);
+      if (!question) continue;
+
+      if (TEXT_QUESTION_TYPES.has(question.type)) {
+        // Open-text: only keep answers that are substantive
+        const text = (answer.textValue ?? '').trim();
+        if (text.length >= MIN_TEXT_LENGTH) {
+          textCandidates.push({
+            questionId: question.id,
+            questionText: question.label,
+            text,
+          });
+        }
+      } else if (EVIDENCE_QUESTION_TYPES.has(question.type)) {
+        // Structured: always store as evidence
+        const numericValue = answer.numericValue ?? null;
+        const normalisedScore =
+          numericValue !== null
+            ? normaliseNumeric(
+                numericValue,
+                question.type,
+                question.ratingMin ?? 1,
+                question.ratingMax ?? 5,
+              )
+            : null;
+        evidenceCandidates.push({
+          questionId: question.id,
+          questionText: question.label,
+          questionType: question.type,
+          choiceValues: Array.isArray(answer.choiceValues) ? (answer.choiceValues as unknown[]) : null,
+          numericValue,
+          normalisedScore,
+          ratingMin: question.ratingMin ?? 1,
+          ratingMax: question.ratingMax ?? 5,
+        });
+      }
+    }
+
+    // ── Persist response + raw answers + SurveyEvidence in one transaction ─────
+    const { responseId, feedbackIds } = await this.prisma.$transaction(async (tx) => {
+      // 1. Create the SurveyResponse with all raw answers
       const resp = await tx.surveyResponse.create({
         data: {
           surveyId,
@@ -443,71 +583,139 @@ export class SurveyService {
             })),
           },
         },
-        include: {
-          answers: true,
-        },
       });
 
-      // ── Intelligence readiness: convert text answers to Feedback ──────────
-      if (survey.convertToFeedback) {
-        const textAnswers = dto.answers.filter((a) => a.textValue && a.textValue.trim().length > 10);
-        if (textAnswers.length > 0) {
-          // Combine all text answers into a single feedback description
-          const questionMap = new Map(survey.questions.map((q) => [q.id, q.label]));
-          const parts = textAnswers.map((a) => {
-            const qLabel = questionMap.get(a.questionId) ?? 'Response';
-            return `**${qLabel}**: ${a.textValue!.trim()}`;
-          });
-          const description = parts.join('\n\n');
-          const title = `Survey response: ${survey.title}`;
-
-          const feedback = await tx.feedback.create({
+      // 2. Create one Feedback per substantive open-text answer
+      const createdFeedbackIds: string[] = [];
+      if (!survey.convertToFeedback && textCandidates.length > 0) {
+        // convertToFeedback is disabled on this survey — open-text answers will
+        // not enter the AI pipeline. Log so operators can diagnose missing signals.
+        this.logger.stepWarn(
+          { jobType: 'SURVEY_SUBMIT', workspaceId: workspace.id, entityId: surveyId },
+          'CONVERT_TO_FEEDBACK_DISABLED',
+          `Survey ${surveyId} has convertToFeedback=false — ${textCandidates.length} open-text answer(s) will not be analysed`,
+        );
+      }
+      if (survey.convertToFeedback && textCandidates.length > 0) {
+        for (const candidate of textCandidates) {
+          const fb = await tx.feedback.create({
             data: {
               workspaceId: workspace.id,
-              sourceType: FeedbackSourceType.SURVEY,
-              sourceRef: `survey:${surveyId}`,
-              title,
-              description,
-              rawText: description,
+              sourceType:      FeedbackSourceType.SURVEY,
+              primarySource:   FeedbackPrimarySource.SURVEY,
+              secondarySource: FeedbackSecondarySource.PORTAL,
+              // sourceRef encodes the full provenance chain
+              sourceRef: `survey:${surveyId}:question:${candidate.questionId}`,
+              // Title = the question label — NOT the survey title
+              title: candidate.questionText,
+              description: candidate.text,
+              rawText: candidate.text,
+              normalizedText: candidate.text.toLowerCase(),
               status: FeedbackStatus.NEW,
               portalUserId,
               metadata: {
                 surveyId,
                 surveyTitle: survey.title,
                 responseId: resp.id,
+                questionId: candidate.questionId,
+                questionText: candidate.questionText,
+                questionType: 'TEXT',
                 respondentEmail: dto.respondentEmail ?? null,
+                respondentName: dto.respondentName ?? null,
               },
             },
           });
+          createdFeedbackIds.push(fb.id);
+        }
 
-          // Update response to link to the created feedback
+        // Link the first feedback to the response for backward compat
+        if (createdFeedbackIds.length > 0) {
           await tx.surveyResponse.update({
             where: { id: resp.id },
-            data: { feedbackId: feedback.id },
+            data: { feedbackId: createdFeedbackIds[0] },
           });
-
-          return { ...resp, feedbackId: feedback.id };
         }
       }
 
-      return resp;
+      // 3. Create SurveyEvidence rows for all structured answers
+      if (evidenceCandidates.length > 0) {
+        await tx.surveyEvidence.createMany({
+          data: evidenceCandidates.map((ev) => ({
+            workspaceId: workspace.id,
+            surveyId,
+            responseId: resp.id,
+            questionId: ev.questionId,
+            questionText: ev.questionText,
+            questionType: ev.questionType,
+            choiceValues: ev.choiceValues ? (ev.choiceValues as string[]) : undefined,
+            numericValue: ev.numericValue,
+            normalisedScore: ev.normalisedScore,
+            respondentEmail: dto.respondentEmail ?? null,
+            customerId: dto.customerId ?? null,
+            metadata: {
+              surveyTitle: survey.title,
+              ratingMin: ev.ratingMin,
+              ratingMax: ev.ratingMax,
+            },
+          })),
+        });
+      }
+
+      return { responseId: resp.id, feedbackIds: createdFeedbackIds };
     });
 
-    // ── Enqueue async intelligence extraction (fire-and-forget) ──────────────
-    const feedbackId = (response as any).feedbackId ?? null;
-    this.intelligenceQueue
-      .add({
-        workspaceId: workspace.id,
-        surveyId,
-        responseId: response.id,
-        feedbackId,
-      })
-      .catch(() => { /* non-critical — intelligence enrichment is best-effort */ });
+    // ── Enqueue AI analysis for each open-text Feedback (fire-and-forget) ─────
+    // Uses RetryPolicy.standard() so survey signals get the same retry/backoff
+    // guarantees as feedback inbox items. The analysis processor's idempotency
+    // guard (keyed on feedbackId) prevents duplicate processing on re-submit.
+    const retryOpts = RetryPolicy.standard();
+    for (const feedbackId of feedbackIds) {
+      try {
+        await this.analysisQueue.add(
+          { feedbackId, workspaceId: workspace.id },
+          retryOpts,
+        );
+        this.logger.debug(
+          { jobType: 'SURVEY_SUBMIT', workspaceId: workspace.id, entityId: surveyId },
+          `Enqueued AI analysis for survey open-text Feedback ${feedbackId}`,
+          { feedbackId },
+        );
+      } catch (err) {
+        // Queue unavailability must not fail the HTTP response — the survey
+        // response is already persisted. Log for operator visibility.
+        this.logger.stepWarn(
+          { jobType: 'SURVEY_SUBMIT', workspaceId: workspace.id, entityId: surveyId },
+          'AI_ANALYSIS_ENQUEUE_FAILED',
+          `Failed to enqueue AI analysis for Feedback ${feedbackId}: ${(err as Error).message}`,
+        );
+      }
+    }
+
+    // ── Enqueue survey intelligence for CIQ/revenue signals (fire-and-forget) ───
+    try {
+      await this.intelligenceQueue.add(
+        {
+          workspaceId: workspace.id,
+          surveyId,
+          responseId,
+          feedbackId: feedbackIds[0] ?? null,
+        },
+        RetryPolicy.light(),
+      );
+    } catch (err) {
+      this.logger.stepWarn(
+        { jobType: 'SURVEY_SUBMIT', workspaceId: workspace.id, entityId: surveyId },
+        'INTELLIGENCE_ENQUEUE_FAILED',
+        `Failed to enqueue survey intelligence job: ${(err as Error).message}`,
+      );
+    }
 
     return {
       success: true,
-      responseId: response.id,
-      feedbackId,
+      responseId,
+      feedbackIds,
+      // Backward compat: single feedbackId for callers that expect it
+      feedbackId: feedbackIds[0] ?? null,
       thankYouMessage: survey.thankYouMessage ?? 'Thank you for your response!',
       redirectUrl: survey.redirectUrl ?? null,
     };
@@ -586,9 +794,10 @@ export class SurveyService {
       npsScore = Math.round(((promoters - detractors) / npsValues.length) * 100);
     }
 
-    // Linked themes from feedback
+    // Linked themes from feedback — fetch titles so the UI can display them
     const feedbackIds = responses.map((r) => r.feedbackId).filter(Boolean) as string[];
     const linkedThemeIds: string[] = [];
+    const linkedThemes: Array<{ id: string; title: string }> = [];
     if (feedbackIds.length > 0) {
       const themeFeedbacks = await this.prisma.themeFeedback.findMany({
         where: { feedbackId: { in: feedbackIds } },
@@ -596,6 +805,13 @@ export class SurveyService {
       });
       const uniqueThemeIds = [...new Set(themeFeedbacks.map((tf) => tf.themeId))];
       linkedThemeIds.push(...uniqueThemeIds);
+      if (uniqueThemeIds.length > 0) {
+        const themeRows = await this.prisma.theme.findMany({
+          where: { id: { in: uniqueThemeIds } },
+          select: { id: true, title: true },
+        });
+        linkedThemes.push(...themeRows);
+      }
     }
 
     // Top key topics
@@ -644,6 +860,56 @@ export class SurveyService {
         )
       : null;
 
+    // Per-question structured breakdowns (NPS, RATING, SINGLE_CHOICE, MULTIPLE_CHOICE)
+    // These are shown as analytics evidence — NOT as fake text themes
+    const questions = await this.prisma.surveyQuestion.findMany({
+      where: { surveyId },
+      orderBy: { order: 'asc' },
+      select: { id: true, type: true, label: true, options: true, ratingMin: true, ratingMax: true },
+    });
+    const allAnswers = await this.prisma.surveyAnswer.findMany({
+      where: { response: { surveyId } },
+      select: { questionId: true, numericValue: true, textValue: true, choiceValues: true },
+    });
+    const answersByQuestion = new Map<string, typeof allAnswers>();
+    for (const a of allAnswers) {
+      if (!answersByQuestion.has(a.questionId)) answersByQuestion.set(a.questionId, []);
+      answersByQuestion.get(a.questionId)!.push(a);
+    }
+    const questionBreakdowns = questions
+      .filter((q) => EVIDENCE_QUESTION_TYPES.has(q.type as SurveyQuestionType))
+      .map((q) => {
+        const answers = answersByQuestion.get(q.id) ?? [];
+        const responseCount = answers.length;
+        if (q.type === SurveyQuestionType.NPS || q.type === SurveyQuestionType.RATING) {
+          const nums = answers.map((a) => a.numericValue).filter((v): v is number => v != null);
+          const avg = nums.length > 0 ? nums.reduce((s, v) => s + v, 0) / nums.length : null;
+          // NPS breakdown: promoters (9-10), passives (7-8), detractors (0-6)
+          const distribution: Record<string, number> = {};
+          if (q.type === SurveyQuestionType.NPS) {
+            distribution['Promoters (9-10)'] = nums.filter((v) => v >= 9).length;
+            distribution['Passives (7-8)']   = nums.filter((v) => v >= 7 && v <= 8).length;
+            distribution['Detractors (0-6)'] = nums.filter((v) => v <= 6).length;
+          } else {
+            const min = q.ratingMin ?? 1;
+            const max = q.ratingMax ?? 5;
+            for (let i = min; i <= max; i++) {
+              distribution[String(i)] = nums.filter((v) => v === i).length;
+            }
+          }
+          return { questionId: q.id, label: q.label, type: q.type, responseCount, avg, distribution };
+        }
+        // SINGLE_CHOICE / MULTIPLE_CHOICE
+        const choiceCounts: Record<string, number> = {};
+        for (const a of answers) {
+          const choices = (a.choiceValues as string[] | null) ?? (a.textValue ? [a.textValue] : []);
+          for (const c of choices) {
+            choiceCounts[c] = (choiceCounts[c] ?? 0) + 1;
+          }
+        }
+        return { questionId: q.id, label: q.label, type: q.type, responseCount, avg: null, distribution: choiceCounts };
+      });
+
     // Revenue-weighted intelligence (best-effort)
     const survey = await this.resolveSurvey(workspaceId, surveyId);
     let revenueWeighted: RevenueWeightedInsight | null = null;
@@ -663,6 +929,9 @@ export class SurveyService {
       avgRating: avgRating !== null ? parseFloat(avgRating.toFixed(2)) : null,
       npsScore,
       linkedThemeIds,
+      /** Linked global themes with titles — derived from survey text responses that were
+       *  converted to Feedback and subsequently clustered by the AI engine. */
+      linkedThemes,
       keyTopics,
       npsResponseCount: npsValues.length,
       ratingResponseCount: ratingValues.length,
@@ -671,6 +940,9 @@ export class SurveyService {
       sentimentDistribution,
       topFeatureRequests,
       topPainPoints,
+      /** Per-question structured analytics for NPS / Rating / Choice questions.
+       *  These are evidence breakdowns, NOT text-derived themes. */
+      questionBreakdowns,
       revenueWeighted,
       surveyType: survey.surveyType,
       validationScore: revenueWeighted?.validationScore ?? survey.validationScore ?? null,

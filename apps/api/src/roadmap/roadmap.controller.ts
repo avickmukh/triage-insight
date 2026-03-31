@@ -1,5 +1,6 @@
 import { Controller, Delete, Get, Post, Body, Patch, Param, Query, UseGuards, Req, HttpCode, HttpStatus } from "@nestjs/common";
 import { RoadmapService } from "./services/roadmap.service";
+import { RoadmapIntelligenceService } from "./services/roadmap-intelligence.service";
 import { CiqService } from "../ai/services/ciq.service";
 import { CreateRoadmapItemDto } from "./dto/create-roadmap-item.dto";
 import { UpdateRoadmapItemDto } from "./dto/update-roadmap-item.dto";
@@ -20,6 +21,7 @@ export class RoadmapController {
   constructor(
     private readonly roadmapService: RoadmapService,
     private readonly ciqService: CiqService,
+    private readonly roadmapIntelligenceService: RoadmapIntelligenceService,
   ) {}
 
   @Post()
@@ -108,6 +110,26 @@ export class RoadmapController {
     @Param("id") id: string
   ) {
     return this.ciqService.scoreRoadmapItem(workspaceId, id);
+  }
+
+  /**
+   * GET /workspaces/:workspaceId/roadmap/ai-suggestions
+   * Returns AI-generated roadmap suggestions for all active themes.
+   * Computes a Roadmap Priority Score (RPS) per theme and classifies each as:
+   *   ADD_TO_ROADMAP | INCREASE_PRIORITY | DECREASE_PRIORITY | MONITOR | NO_ACTION
+   * Every suggestion includes reason, confidence, signal summary, and breakdown.
+   * AI assists decision-making — it does NOT auto-create roadmap items.
+   */
+  @Get("ai-suggestions")
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
+  getAiSuggestions(
+    @Param("workspaceId") workspaceId: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.roadmapIntelligenceService.getAiSuggestions(
+      workspaceId,
+      limit ? parseInt(limit, 10) : 50,
+    );
   }
 
   @Delete(":id")

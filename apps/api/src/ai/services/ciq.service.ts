@@ -8,9 +8,10 @@
  * Unified CIQ Formula (PRD Phase 2):
  *
  *   CIQ = normalise(
- *     feedbackCount   × feedbackWeight  +
- *     supportCount    × supportWeight   +   ← direct SupportIssueCluster.ticketCount
- *     voiceCount      × voiceWeight     +   ← ThemeFeedback where sourceType IN (VOICE, PUBLIC_PORTAL)
+ *     feedbackCount   × feedbackWeight  +   ← ThemeFeedback where primarySource = FEEDBACK (or legacy sourceType)
+ *     supportCount    × supportWeight   +   ← SupportIssueCluster.ticketCount + primarySource=SUPPORT Feedback rows
+ *     voiceCount      × voiceWeight     +   ← primarySource=VOICE (or legacy VOICE/PUBLIC_PORTAL sourceType)
+ *     surveyCount     × feedbackWeight  +   ← primarySource=SURVEY Feedback rows (open-text, AI-analysed)
  *     sentimentScore  × sentimentWeight +
  *     recencyScore    × recencyWeight   +
  *     arrValue        × arrValueWeight  +
@@ -21,16 +22,18 @@
  *     voteCount       × voteWeight
  *   )
  *
+ * Source classification uses primarySource (unified attribution) with sourceType as legacy fallback.
  * Weights: supportWeight > feedbackWeight (default 1.5×), voiceWeight >= feedbackWeight (default 1.2×).
+ * Survey signals use feedbackWeight (1.0×) — high-intent respondents, no discount.
  * All weights are normalised so the sum always stays within 0–100.
  *
- * Source counts are persisted back to Theme.feedbackCount / voiceCount / supportCount
- * so the UI can show "Based on feedback, support, and voice" with real numbers.
+ * Source counts are persisted back to Theme.feedbackCount / voiceCount / supportCount / surveyCount
+ * so the UI can show "Based on feedback, support, voice, and survey" with real numbers.
  */
 
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { AccountPriority, DealStage, DealStatus, FeedbackSourceType } from '@prisma/client';
+import { AccountPriority, DealStage, DealStatus, FeedbackPrimarySource, FeedbackSourceType } from '@prisma/client';
 
 // ─── Output types ─────────────────────────────────────────────────────────────
 
@@ -76,6 +79,21 @@ export interface CiqScoreOutput {
   dominantDriver?: string | null;
   /** Aggregated sentiment score across all linked feedback (-1 to +1) */
   sentimentScore?: number | null;
+  /**
+   * Human-readable sentence explaining WHY this theme has its current priority score.
+   * Generated deterministically from the dominant driver and top factors.
+   * Example: "High priority driven by support ticket pressure (28 tickets) and ARR exposure ($1.2M)."
+   */
+  priorityReason?: string | null;
+  /**
+   * Human-readable sentence explaining the confidence level.
+   * Example: "Medium confidence — 4 feedback items and 1 voice signal; add more signals to increase confidence."
+   */
+  confidenceExplanation?: string | null;
+  /** Number of distinct source types that contributed at least 1 signal */
+  sourceDiversityCount?: number;
+  /** Signal velocity: percentage change in signal count vs. previous week (from TrendComputationService) */
+  velocityDelta?: number | null;
 }
 
 /** Lightweight feedback-level score (no theme aggregation needed) */
@@ -121,6 +139,34 @@ const VOICE_SOURCE_TYPES: FeedbackSourceType[] = [
 const SURVEY_SOURCE_TYPES: FeedbackSourceType[] = [
   FeedbackSourceType.SURVEY,
 ];
+
+/**
+ * Determine the effective source category for a feedback row.
+ *
+ * Uses `primarySource` (the new unified attribution field) as the authoritative
+ * classifier when present.  Falls back to the legacy `sourceType` enum for rows
+ * that pre-date the unified attribution migration so backward-compatibility is
+ * preserved without a data backfill.
+ *
+ * Categories:
+ *   'voice'    — extracted from voice / audio transcripts
+ *   'survey'   — collected via structured surveys (NPS, CSAT, custom)
+ *   'support'  — created from customer support tickets
+ *   'feedback' — everything else (direct, CSV, portal, email, Slack, API)
+ */
+function effectiveSourceCategory(
+  row: { primarySource: FeedbackPrimarySource | null; sourceType: string },
+): 'voice' | 'survey' | 'support' | 'feedback' {
+  // Authoritative path: use primarySource when it has been set
+  if (row.primarySource === FeedbackPrimarySource.VOICE)    return 'voice';
+  if (row.primarySource === FeedbackPrimarySource.SURVEY)   return 'survey';
+  if (row.primarySource === FeedbackPrimarySource.SUPPORT)  return 'support';
+  if (row.primarySource === FeedbackPrimarySource.FEEDBACK) return 'feedback';
+  // Legacy fallback: classify by sourceType for pre-migration rows
+  if (VOICE_SOURCE_TYPES.includes(row.sourceType as FeedbackSourceType))  return 'voice';
+  if (SURVEY_SOURCE_TYPES.includes(row.sourceType as FeedbackSourceType)) return 'survey';
+  return 'feedback';
+}
 
 /** Normalise a raw value to 0–100 using a log10 scale (handles wide ARR ranges) */
 function logNorm(value: number, scale = 6): number {
@@ -170,11 +216,11 @@ export class CiqService {
    * Uses workspace PrioritizationSettings for weights (falls back to defaults).
    */
   async scoreTheme(workspaceId: string, themeId: string): Promise<CiqScoreOutput> {
-    const [settings, feedbackRows, signalRows, dealLinks, supportClusters, voteRows] =
+    const [settings, feedbackRows, signalRows, dealLinks, supportClusters, voteRows, themeRow] =
       await Promise.all([
         this.getSettings(workspaceId),
 
-        // ── All feedback linked to this theme (includes VOICE, PUBLIC_PORTAL) ──
+        // ── All feedback linked to this theme (all sources: FEEDBACK / VOICE / SURVEY / SUPPORT) ──
         this.prisma.themeFeedback.findMany({
           where: { themeId },
           select: {
@@ -185,6 +231,10 @@ export class CiqService {
                 impactScore: true,
                 status: true,
                 sourceType: true,
+                // primarySource is the authoritative source classifier introduced by the
+                // unified attribution model.  Nullable for legacy rows — effectiveSourceCategory()
+                // falls back to sourceType so no data backfill is required.
+                primarySource: true,
                 createdAt: true,
                 customer: {
                   select: {
@@ -238,29 +288,62 @@ export class CiqService {
           },
           select: { id: true },
         }),
+
+        // ── Resurfacing metadata ────────────────────────────────────────────
+        // resurfaceCount > 0 means fresh evidence arrived after this theme was
+        // linked to a SHIPPED roadmap item — a strong urgency signal.
+        this.prisma.theme.findUnique({
+          where: { id: themeId },
+          select: {
+            resurfaceCount:     true,
+            resurfacedAt:       true,
+            // Velocity: pre-computed by TrendComputationService; used to add a
+            // velocitySignal component without re-querying all feedback timestamps.
+            trendDelta:         true,
+            currentWeekSignals: true,
+            prevWeekSignals:    true,
+          },
+        }),
       ]);
 
     // ── Filter out MERGED feedback ──────────────────────────────────────────
     const activeFeedback = feedbackRows.filter((tf) => tf.feedback.status !== 'MERGED');
 
     // ── Source breakdown counts ─────────────────────────────────────────────
+    // effectiveSourceCategory() uses primarySource as the authoritative classifier
+    // and falls back to sourceType for legacy rows.  This means:
+    //   - Survey open-text Feedback rows (primarySource=SURVEY) → surveyCount
+    //   - Support-ticket Feedback rows (primarySource=SUPPORT)  → supportFeedbackCount
+    //   - Voice Feedback rows (primarySource=VOICE)             → voiceCount
+    //   - Everything else                                        → textFeedbackCount
     const feedbackCount = activeFeedback.length;
-    const voiceCount    = activeFeedback.filter((tf) =>
-      VOICE_SOURCE_TYPES.includes(tf.feedback.sourceType as FeedbackSourceType),
+    const voiceCount    = activeFeedback.filter(
+      (tf) => effectiveSourceCategory(tf.feedback) === 'voice',
     ).length;
-    const surveyCount   = activeFeedback.filter((tf) =>
-      SURVEY_SOURCE_TYPES.includes(tf.feedback.sourceType as FeedbackSourceType),
+    const surveyFeedbackCount  = activeFeedback.filter(
+      (tf) => effectiveSourceCategory(tf.feedback) === 'survey',
     ).length;
-    // Pure text/manual feedback (everything that is NOT voice or survey)
-    const textFeedbackCount = feedbackCount - voiceCount - surveyCount;
+    const supportFeedbackCount = activeFeedback.filter(
+      (tf) => effectiveSourceCategory(tf.feedback) === 'support',
+    ).length;
+    // Pure text/manual feedback (everything that is NOT voice, survey, or support-sourced)
+    const textFeedbackCount = feedbackCount - voiceCount - surveyFeedbackCount - supportFeedbackCount;
 
-    // Support count: sum of ticketCount across all linked clusters
-    const supportCount = supportClusters.reduce(
+    // Support count: sum of ticketCount across all linked SupportIssueCluster rows
+    // (the authoritative support signal — independent of Feedback rows created from tickets)
+    const supportClusterCount = supportClusters.reduce(
       (sum, c) => sum + (c.ticketCount ?? 0), 0,
     );
+    // Combined support signal: cluster tickets + any Feedback rows with primarySource=SUPPORT
+    const supportCount = supportClusterCount + supportFeedbackCount;
     const hasSupportSpike = supportClusters.some((c) => c.hasActiveSpike);
 
-    const totalSignalCount = feedbackCount + supportCount + surveyCount;
+    // surveyCount = survey-sourced Feedback rows (open-text answers processed by AI pipeline)
+    const surveyCount = surveyFeedbackCount;
+
+    // totalSignalCount uses cluster count for support (not the combined supportCount)
+    // to avoid double-counting tickets that also created Feedback rows.
+    const totalSignalCount = feedbackCount + supportClusterCount + surveyCount;
 
     // ── Customer aggregates ─────────────────────────────────────────────────
     const customerIds = new Set(
@@ -315,15 +398,41 @@ export class CiqService {
         ? positiveSentiments.reduce((a, b) => a + b, 0) / positiveSentiments.length
         : 0;
     const normSentiment = avgPositiveSentiment * 100;
+    // ── Time-based signal weighting (3-tier recency decay) ────────────────────────
+    // Signals are weighted by age:
+    //   ≤ 30 days  → 1.0× (full weight — fresh signal)
+    //   31–90 days → 0.6× (medium weight — still relevant)
+    //   > 90 days  → 0.2× (reduced weight — stale signal)
+    // This replaces the previous binary 30d recency flag and ensures that
+    // themes with recent activity score higher than themes with only old signals.
+    const now30  = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const now90  = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    let weightedSignalCount = 0;
+    let recentFeedbackCount = 0; // kept for backward-compat with normRecency
+    for (const tf of activeFeedback) {
+      const createdAt = tf.feedback.createdAt ? new Date(tf.feedback.createdAt) : null;
+      if (!createdAt) {
+        weightedSignalCount += 0.2; // treat missing date as stale
+        continue;
+      }
+      if (createdAt > now30) {
+        weightedSignalCount += 1.0;
+        recentFeedbackCount++;
+      } else if (createdAt > now90) {
+        weightedSignalCount += 0.6;
+      } else {
+        weightedSignalCount += 0.2;
+      }
+    }
+    // weightedSignalCount is used as the primary frequency input so that
+    // themes with recent signals rank higher than themes with only old signals
+    // of equal raw count.
+    const effectiveSignalCount = weightedSignalCount;
 
-    // ── Recency ─────────────────────────────────────────────────────────────
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const recentFeedbackCount = activeFeedback.filter(
-      (tf) => tf.feedback.createdAt != null && new Date(tf.feedback.createdAt) > thirtyDaysAgo,
-    ).length;
-
-    // ── Normalise each input to 0–100 ───────────────────────────────────────
-    const normTextFeedback    = countNorm(textFeedbackCount, 50);
+    // ── Normalise each input to 0–100 ───────────────────────────────────────────
+    // Use effectiveSignalCount (time-weighted) for frequency normalisation
+    // instead of raw textFeedbackCount so recency is baked into the base score.
+    const normTextFeedback    = countNorm(effectiveSignalCount, 50);
     const normVoice           = countNorm(voiceCount, 20);
     const normSupport         = countNorm(supportCount, 30);
     const normCustomerCount   = countNorm(uniqueCustomerCount, 20);
@@ -337,12 +446,53 @@ export class CiqService {
     // ── Spike bonus: active support spike adds urgency ──────────────────────
     const spikeBonus = hasSupportSpike ? 10 : 0;
 
+    // ── Resurfacing boost: shipped theme receiving fresh evidence ───────────
+    // Each resurfacing event adds up to 15 points (capped), decaying over 90 days.
+    // This ensures a shipped item that keeps getting complaints rises back up.
+    const resurfaceCount = themeRow?.resurfaceCount ?? 0;
+    const resurfacedAt   = themeRow?.resurfacedAt ? new Date(themeRow.resurfacedAt) : null;
+    const daysSinceResurface = resurfacedAt
+      ? (Date.now() - resurfacedAt.getTime()) / (1000 * 60 * 60 * 24)
+      : 999;
+    // Decay: full boost within 7 days, linear decay to 0 at 90 days
+    const resurfaceDecay  = daysSinceResurface < 90
+      ? Math.max(0, 1 - daysSinceResurface / 90)
+      : 0;
+    const resurfaceBonus  = resurfaceCount > 0
+      ? Math.min(15, resurfaceCount * 5) * resurfaceDecay
+      : 0;
+    // ── Signal velocity ─────────────────────────────────────────────────────
+    // trendDelta is the % change in signal count vs. the previous 7-day window,
+    // pre-computed by TrendComputationService.  We convert it into a 0–100 score
+    // capped at ±50% change (beyond that, the signal is already very strong).
+    // Negative velocity (shrinking signal) is treated as 0 — we do not penalise
+    // themes for declining interest; recency and resurfacing already handle that.
+    const velocityDelta    = themeRow?.trendDelta ?? null;
+    const rawVelocity      = velocityDelta != null ? Math.max(0, velocityDelta) : 0;
+    const normVelocity     = Math.min(100, (rawVelocity / 50) * 100);
+    // ── Source diversity ────────────────────────────────────────────────────
+    // Count how many of the 4 primary sources have at least 1 signal.
+    // A theme corroborated by multiple independent sources is more reliable
+    // than one with many signals from a single channel.
+    const activeSources = [
+      textFeedbackCount > 0,
+      voiceCount        > 0,
+      supportCount      > 0,
+      surveyCount       > 0,
+    ].filter(Boolean).length;
+    // Normalise: 1 source = 25, 2 = 50, 3 = 75, 4 = 100
+    const normSourceDiversity = (activeSources / 4) * 100;
+
     // ── Build explanation with unified weights ──────────────────────────────
     // supportWeight and voiceWeight are multipliers on top of requestFrequencyWeight.
     // We apply them as separate breakdown entries so the UI can show the full picture.
     const effectiveSupportWeight = settings.requestFrequencyWeight * settings.supportWeight;
     const effectiveVoiceWeight   = settings.requestFrequencyWeight * settings.voiceWeight;
-
+    // Survey signals use the same base weight as regular feedback (1.0×).
+    // Survey respondents are high-intent (they opted in) so their signals are
+    // at least as valuable as direct feedback.  No separate surveyWeight setting
+    // is needed — the count is already separated into normSurvey.
+    const normSurvey = countNorm(surveyCount, 20);
     const explanation: Record<string, CiqScoreComponent> = {
       feedbackFrequency: {
         value:        normTextFeedback,
@@ -410,6 +560,38 @@ export class CiqService {
         contribution: normVotes * settings.voteWeight,
         label:        'Portal vote signal',
       },
+      // Survey signal: open-text survey responses that entered the AI pipeline.
+      // Weight = requestFrequencyWeight (same as direct text feedback) because survey
+      // responses are high-intent and should not be discounted relative to inbox items.
+      // This component is visible in the scoreExplanation breakdown so the UI can
+      // show "X survey responses contributed to this theme's priority".
+      surveySignal: {
+        value:        normSurvey,
+        weight:       settings.requestFrequencyWeight,
+        contribution: normSurvey * settings.requestFrequencyWeight,
+        label:        'Survey response signal',
+      },
+      // Signal velocity: growing themes get an urgency boost proportional to their
+      // week-over-week growth rate.  Weight is low (0.05) so a single fast-growing
+      // theme doesn't dominate the ranking, but consistent growth is rewarded.
+      velocitySignal: {
+        value:        normVelocity,
+        weight:       0.05,
+        contribution: normVelocity * 0.05,
+        label:        velocityDelta != null
+          ? `Signal velocity (+${velocityDelta.toFixed(0)}% WoW)`
+          : 'Signal velocity (no trend data yet)',
+      },
+      // Source diversity: themes corroborated by multiple independent sources are
+      // more reliable.  Weight is low (0.04) — this is a confidence amplifier, not
+      // a primary driver.  A theme with 4 active sources gets a small but visible
+      // boost that reflects cross-source validation.
+      sourceDiversitySignal: {
+        value:        normSourceDiversity,
+        weight:       0.04,
+        contribution: normSourceDiversity * 0.04,
+        label:        `Source diversity (${activeSources}/4 sources active)`,
+      },
     };
 
     // ── Normalise weights so the sum always stays within 0–100 ─────────────
@@ -427,8 +609,8 @@ export class CiqService {
 
     // ── Compute final score ─────────────────────────────────────────────────
     const rawScore      = Object.values(explanation).reduce((sum, c) => sum + c.contribution, 0);
-    // Sentiment penalty reduces total score slightly; spike bonus adds urgency
-    const adjustedScore = rawScore * (1 - sentimentPenalty * 0.1) + spikeBonus;
+    // Sentiment penalty reduces total score slightly; spike + resurfacing bonuses add urgency
+    const adjustedScore = rawScore * (1 - sentimentPenalty * 0.1) + spikeBonus + resurfaceBonus;
     const priorityScore = parseFloat(Math.min(100, adjustedScore).toFixed(2));
 
     const revenueImpactValue = arrValue;
@@ -439,6 +621,81 @@ export class CiqService {
     const confidenceScore = deriveConfidence(
       feedbackCount, voiceCount, supportCount, signalCount, uniqueCustomerCount,
     );
+
+    // ── Add resurfacing to score explanation if active ─────────────────────
+    if (resurfaceBonus > 0) {
+      explanation['resurfacingSignal'] = {
+        value:        resurfaceBonus,
+        weight:       1,
+        contribution: resurfaceBonus,
+        label:        `Resurfaced after shipped (×${resurfaceCount})`,
+      };
+    }
+
+    // ── Dominant driver ─────────────────────────────────────────────────────
+    // Find the explanation key with the highest weighted contribution.
+    // Excludes metadata-only keys (resurfacingSignal is a bonus, not a base factor).
+    const BASE_FACTOR_KEYS = new Set([
+      'feedbackFrequency', 'voiceSignal', 'supportSignal', 'customerCount',
+      'arrValue', 'accountPriority', 'dealInfluence', 'signalStrength',
+      'sentimentSignal', 'recencySignal', 'voteSignal', 'surveySignal',
+      'velocitySignal', 'sourceDiversitySignal',
+    ]);
+    const dominantDriver = Object.entries(explanation)
+      .filter(([k]) => BASE_FACTOR_KEYS.has(k))
+      .sort((a, b) => b[1].contribution - a[1].contribution)[0]?.[0] ?? null;
+
+    // ── Priority reason sentence ────────────────────────────────────────────
+    // Generate a deterministic one-sentence explanation of why this theme has
+    // its current priority score.  Uses the dominant driver and top-2 factors.
+    const topFactors = Object.entries(explanation)
+      .filter(([k]) => BASE_FACTOR_KEYS.has(k))
+      .sort((a, b) => b[1].contribution - a[1].contribution)
+      .slice(0, 2);
+    const DRIVER_PHRASES: Record<string, (v: number) => string> = {
+      feedbackFrequency:    (v) => `${Math.round(v)} direct feedback signal${Math.round(v) !== 1 ? 's' : ''}`,
+      voiceSignal:          (v) => `${Math.round(v)} voice signal${Math.round(v) !== 1 ? 's' : ''}`,
+      supportSignal:        (v) => `${Math.round(v)} support ticket${Math.round(v) !== 1 ? 's' : ''}`,
+      surveySignal:         (v) => `${Math.round(v)} survey response${Math.round(v) !== 1 ? 's' : ''}`,
+      arrValue:             (v) => `$${(v / 100 * 10).toFixed(1)}M ARR exposure`,
+      customerCount:        (v) => `${Math.round(v)} unique customer${Math.round(v) !== 1 ? 's' : ''}`,
+      accountPriority:      (_) => 'high-priority account signals',
+      dealInfluence:        (_) => 'active deal pipeline exposure',
+      signalStrength:       (_) => 'strong customer signal strength',
+      sentimentSignal:      (_) => 'positive sentiment signal',
+      recencySignal:        (v) => `${Math.round(v)} recent signal${Math.round(v) !== 1 ? 's' : ''} (30d)`,
+      voteSignal:           (v) => `${Math.round(v)} portal vote${Math.round(v) !== 1 ? 's' : ''}`,
+      velocitySignal:       (_) => `growing ${velocityDelta != null ? velocityDelta.toFixed(0) + '% WoW' : 'rapidly'}`,
+      sourceDiversitySignal: (_) => `${activeSources} independent source${activeSources !== 1 ? 's' : ''} corroborating`,
+    };
+    const band = priorityScore >= 70 ? 'High' : priorityScore >= 40 ? 'Moderate' : 'Low';
+    const driverPhrase = dominantDriver && DRIVER_PHRASES[dominantDriver]
+      ? DRIVER_PHRASES[dominantDriver](topFactors[0]?.[1].value ?? 0)
+      : 'multiple signals';
+    const secondPhrase = topFactors[1] && DRIVER_PHRASES[topFactors[1][0]]
+      ? ` and ${DRIVER_PHRASES[topFactors[1][0]](topFactors[1][1].value)}`
+      : '';
+    const priorityReason =
+      `${band} priority driven by ${driverPhrase}${secondPhrase}. ` +
+      `Score: ${Math.round(priorityScore)}/100.`;
+
+    // ── Confidence explanation sentence ────────────────────────────────────
+    const confBand = confidenceScore >= 0.75 ? 'High' : confidenceScore >= 0.45 ? 'Medium' : 'Low';
+    const signalSummaryParts: string[] = [];
+    if (feedbackCount > 0)  signalSummaryParts.push(`${feedbackCount} feedback item${feedbackCount !== 1 ? 's' : ''}`);
+    if (voiceCount > 0)     signalSummaryParts.push(`${voiceCount} voice signal${voiceCount !== 1 ? 's' : ''}`);
+    if (supportCount > 0)   signalSummaryParts.push(`${supportCount} support ticket${supportCount !== 1 ? 's' : ''}`);
+    if (surveyCount > 0)    signalSummaryParts.push(`${surveyCount} survey response${surveyCount !== 1 ? 's' : ''}`);
+    const signalSummary = signalSummaryParts.length > 0
+      ? signalSummaryParts.join(', ')
+      : 'no signals yet';
+    const confAdvice = confidenceScore < 0.45
+      ? ' Add more signals from multiple sources to increase confidence.'
+      : confidenceScore < 0.75
+      ? ' More cross-source signals will raise confidence further.'
+      : '';
+    const confidenceExplanation =
+      `${confBand} confidence — based on ${signalSummary}.${confAdvice}`;
 
     return {
       priorityScore,
@@ -454,6 +711,14 @@ export class CiqService {
       signalCount,
       uniqueCustomerCount,
       scoreExplanation: explanation,
+      dominantDriver,
+      sentimentScore: allSentiments.length > 0
+        ? parseFloat((allSentiments.reduce((a, b) => a + b, 0) / allSentiments.length).toFixed(3))
+        : null,
+      priorityReason,
+      confidenceExplanation,
+      sourceDiversityCount: activeSources,
+      velocityDelta,
     };
   }
 

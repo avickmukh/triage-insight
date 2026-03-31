@@ -5,6 +5,8 @@ import {
   Feedback,
   FeedbackComment,
   FeedbackListResponse,
+  FeedbackPrimarySource,
+  FeedbackSecondarySource,
   FeedbackSourceType,
   FeedbackStatus,
   UpdateFeedbackDto,
@@ -57,7 +59,12 @@ export const useRecentFeedback = (limit = 5) => {
 
 export interface FeedbackListParams {
   status?: FeedbackStatus;
+  /** Legacy filter — kept for backward compat */
   sourceType?: FeedbackSourceType;
+  /** Unified primary source filter (FEEDBACK | SUPPORT | VOICE | SURVEY) */
+  primarySource?: FeedbackPrimarySource;
+  /** Unified secondary source filter (MANUAL | CSV_UPLOAD | PORTAL | EMAIL | …) */
+  secondarySource?: FeedbackSecondarySource;
   search?: string;
   customerId?: string;
   limit?: number;

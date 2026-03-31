@@ -36,6 +36,8 @@ const CARD: React.CSSProperties = {
 const STATUS_COLORS: Record<ThemeStatus, { bg: string; color: string }> = {
   [ThemeStatus.AI_GENERATED]: { bg: '#e8f7f7', color: '#20A4A4' },
   [ThemeStatus.VERIFIED]:     { bg: '#e8f5e9', color: '#2e7d32' },
+  [ThemeStatus.RESURFACED]:   { bg: '#fff3e0', color: '#e65100' },
+  [ThemeStatus.REOPENED]:     { bg: '#f3e8ff', color: '#6d28d9' },
   [ThemeStatus.ARCHIVED]:     { bg: '#f0f4f8', color: '#6C757D' },
 };
 
@@ -54,6 +56,7 @@ const SOURCE_LABELS: Record<FeedbackSourceType, string> = {
   [FeedbackSourceType.SLACK]:         'Slack',
   [FeedbackSourceType.CSV_IMPORT]:    'CSV',
   [FeedbackSourceType.VOICE]:         'Voice',
+  [FeedbackSourceType.SURVEY]:        'Survey',
   [FeedbackSourceType.API]:           'API',
 };
 
@@ -560,6 +563,33 @@ export default function ThemeDetailPage() {
                   Verified by your team
                 </span>
               )}
+              {/* Resurfacing badge */}
+              {(theme as any).resurfaceCount > 0 && (
+                <span
+                  title={`This theme was shipped but received fresh signals ${(theme as any).resurfaceCount} time${(theme as any).resurfaceCount !== 1 ? 's' : ''}. The problem may not be fully resolved.`}
+                  style={{ fontSize: '0.75rem', background: '#fff3e0', color: '#e65100', borderRadius: '0.375rem', padding: '0.2rem 0.6rem', fontWeight: 600, border: '1px solid #ffcc80', cursor: 'help' }}
+                >
+                  🔄 Resurfacing ×{(theme as any).resurfaceCount} — shipped but still receiving signals
+                </span>
+              )}
+              {/* Recent Spike badge */}
+              {(theme as any).trendDelta != null && (theme as any).trendDelta >= 30 && (
+                <span
+                  title={`Signal velocity: +${Number((theme as any).trendDelta).toFixed(0)}% week-over-week — rapid signal growth detected`}
+                  style={{ fontSize: '0.75rem', background: '#e8f5e9', color: '#1b5e20', borderRadius: '0.375rem', padding: '0.2rem 0.6rem', fontWeight: 600, border: '1px solid #a5d6a7', cursor: 'help' }}
+                >
+                  ⚡ Recent Spike +{Number((theme as any).trendDelta).toFixed(0)}% WoW
+                </span>
+              )}
+              {/* Last Activity */}
+              {(theme as any).lastEvidenceAt && (
+                <span
+                  title={`Most recent signal attached: ${new Date((theme as any).lastEvidenceAt).toLocaleString()}`}
+                  style={{ fontSize: '0.75rem', background: '#f0f4f8', color: '#495057', borderRadius: '0.375rem', padding: '0.2rem 0.6rem', fontWeight: 500, cursor: 'help' }}
+                >
+                  📅 Last activity: {new Date((theme as any).lastEvidenceAt).toLocaleDateString()}
+                </span>
+              )}
             </div>
           </div>
           {canEdit && (
@@ -845,11 +875,13 @@ export default function ThemeDetailPage() {
             </p>
             {ciqScore && (
               <p style={{ fontSize: '0.78rem', color: ciqScore.priorityScore >= 70 ? '#c62828' : ciqScore.priorityScore >= 40 ? '#b8860b' : '#2e7d32', fontWeight: 600, margin: 0 }}>
-                {ciqScore.priorityScore >= 70
-                  ? `Score ${Math.round(ciqScore.priorityScore)}/100 — High urgency. This theme is affecting significant revenue and customer volume.`
-                  : ciqScore.priorityScore >= 40
-                  ? `Score ${Math.round(ciqScore.priorityScore)}/100 — Moderate priority. Worth tracking; consider adding to the roadmap.`
-                  : `Score ${Math.round(ciqScore.priorityScore)}/100 — Low urgency. Monitor for signal growth before escalating.`}
+                {ciqScore.priorityReason ?? (
+                  ciqScore.priorityScore >= 70
+                    ? `Score ${Math.round(ciqScore.priorityScore)}/100 — High urgency. This theme is affecting significant revenue and customer volume.`
+                    : ciqScore.priorityScore >= 40
+                    ? `Score ${Math.round(ciqScore.priorityScore)}/100 — Moderate priority. Worth tracking; consider adding to the roadmap.`
+                    : `Score ${Math.round(ciqScore.priorityScore)}/100 — Low urgency. Monitor for signal growth before escalating.`
+                )}
               </p>
             )}
           </div>
@@ -897,6 +929,11 @@ export default function ThemeDetailPage() {
                 <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0a2540' }}>
                   {Math.round(ciqScore.confidenceScore * 100)}%
                 </div>
+                {ciqScore.confidenceExplanation && (
+                  <div style={{ fontSize: '0.65rem', color: '#6C757D', marginTop: '0.25rem', lineHeight: 1.3 }}>
+                    {ciqScore.confidenceExplanation}
+                  </div>
+                )}
               </div>
               <div style={{ background: '#fff', borderRadius: '0.625rem', padding: '0.75rem', border: '1px solid #e3edf7', textAlign: 'center' }}>
                 <div style={{ fontSize: '0.7rem', color: '#adb5bd', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Revenue Impact</div>
@@ -922,6 +959,26 @@ export default function ThemeDetailPage() {
                 <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#1a6fc4', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>Top Driver</span>
                 <span style={{ fontSize: '0.8rem', color: '#1e3a5f' }}>
                   {ciqScore.scoreExplanation[ciqScore.dominantDriver].label} &mdash; contributing {ciqScore.scoreExplanation[ciqScore.dominantDriver].contribution.toFixed(1)} pts to the priority score
+                </span>
+              </div>
+            )}
+            {/* Velocity trend badge */}
+            {ciqScore.velocityDelta != null && ciqScore.velocityDelta !== 0 && (
+              <div style={{ marginBottom: '0.75rem', padding: '0.5rem 0.75rem', background: ciqScore.velocityDelta > 0 ? '#f0fdf4' : '#fff7ed', border: `1px solid ${ciqScore.velocityDelta > 0 ? '#bbf7d0' : '#fed7aa'}`, borderRadius: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ fontSize: '0.85rem' }}>{ciqScore.velocityDelta > 0 ? '📈' : '📉'}</span>
+                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: ciqScore.velocityDelta > 0 ? '#15803d' : '#c2410c', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>Signal Velocity</span>
+                <span style={{ fontSize: '0.8rem', color: '#1e3a5f' }}>
+                  {ciqScore.velocityDelta > 0 ? '+' : ''}{ciqScore.velocityDelta.toFixed(0)}% week-over-week &mdash; {ciqScore.velocityDelta > 20 ? 'rapidly growing signal' : ciqScore.velocityDelta > 0 ? 'growing signal' : 'declining signal'}
+                </span>
+              </div>
+            )}
+            {/* Source diversity badge */}
+            {(ciqScore.sourceDiversityCount ?? 0) > 1 && (
+              <div style={{ marginBottom: '0.75rem', padding: '0.5rem 0.75rem', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ fontSize: '0.85rem' }}>🔗</span>
+                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>Cross-Source</span>
+                <span style={{ fontSize: '0.8rem', color: '#1e3a5f' }}>
+                  Corroborated by {ciqScore.sourceDiversityCount} independent source{(ciqScore.sourceDiversityCount ?? 0) !== 1 ? 's' : ''} &mdash; higher confidence in this theme
                 </span>
               </div>
             )}
@@ -976,6 +1033,55 @@ export default function ThemeDetailPage() {
           </p>
         )}
       </div>
+
+      {/* ── Source Contribution Panel ── */}
+      {((theme.feedbackCount ?? 0) + (theme.voiceCount ?? 0) + (theme.supportCount ?? 0) + (theme.surveyCount ?? 0)) > 0 && (
+        <div style={{ ...CARD, border: '1px solid #e0e7ff', background: 'linear-gradient(135deg, #f8f9ff 0%, #f0f4ff 100%)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <div>
+              <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#0a2540', margin: '0 0 0.125rem' }}>Source Contribution</h3>
+              <p style={{ fontSize: '0.78rem', color: '#6C757D', margin: 0 }}>How each source strengthens this theme in the unified intelligence system</p>
+            </div>
+            {(theme.totalSignalCount ?? 0) > 0 && (
+              <span style={{ background: '#e0e7ff', color: '#3730a3', borderRadius: '2rem', padding: '0.25rem 0.75rem', fontSize: '0.8rem', fontWeight: 600 }}>
+                {theme.totalSignalCount} total signals
+              </span>
+            )}
+          </div>
+          {(() => {
+            const total = (theme.feedbackCount ?? 0) + (theme.voiceCount ?? 0) + (theme.supportCount ?? 0) + (theme.surveyCount ?? 0);
+            const sources = [
+              { label: 'Feedback', count: theme.feedbackCount ?? 0, color: '#20A4A4', icon: '💬', desc: 'Manual, CSV, portal, email, Slack, API' },
+              { label: 'Voice',    count: theme.voiceCount   ?? 0, color: '#1565c0', icon: '🎤', desc: 'Audio transcripts, public portal voice' },
+              { label: 'Support',  count: theme.supportCount ?? 0, color: '#6a1b9a', icon: '🎧', desc: 'Zendesk, Intercom, support ticket clusters' },
+              { label: 'Survey',   count: theme.surveyCount  ?? 0, color: '#b45309', icon: '📋', desc: 'NPS, CSAT, open-text survey responses' },
+            ].filter((s) => s.count > 0);
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+                {sources.map((src) => {
+                  const pct = total > 0 ? Math.round((src.count / total) * 100) : 0;
+                  return (
+                    <div key={src.label}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                        <span style={{ fontSize: '0.85rem' }}>{src.icon}</span>
+                        <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0a2540', flex: 1 }}>{src.label}</span>
+                        <span style={{ fontSize: '0.72rem', color: '#6C757D' }}>{src.desc}</span>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: src.color, width: '4rem', textAlign: 'right' }}>{src.count} ({pct}%)</span>
+                      </div>
+                      <div style={{ height: '6px', background: '#e9ecef', borderRadius: '3px' }}>
+                        <div style={{ width: `${pct}%`, height: '100%', background: src.color, borderRadius: '3px', transition: 'width 0.4s' }} />
+                      </div>
+                    </div>
+                  );
+                })}
+                <p style={{ fontSize: '0.75rem', color: '#6C757D', margin: '0.5rem 0 0', borderTop: '1px solid #e0e7ff', paddingTop: '0.625rem' }}>
+                  All sources feed the same CIQ priority score and roadmap. There is no separate survey or support score.
+                </p>
+              </div>
+            );
+          })()}
+        </div>
+      )}
 
       {/* ── Revenue Intelligence Panel ── */}
       <div style={{ ...CARD, background: 'linear-gradient(135deg, #f0fff4 0%, #e8f8f0 100%)', border: '1px solid #a7f3d0' }}>

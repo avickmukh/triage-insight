@@ -98,6 +98,49 @@ enum FeedbackSourceType {
   API
 }
 
+/// Top-level product category for a piece of feedback.
+/// Drives primary inbox filtering and source identity across the product.
+/// FEEDBACK = any direct user feedback (manual, CSV, portal, email, Slack, API)
+/// SUPPORT  = extracted from customer support tickets
+/// VOICE    = extracted from voice/audio transcripts
+/// SURVEY   = collected via structured surveys (NPS, CSAT, custom)
+enum FeedbackPrimarySource {
+  FEEDBACK
+  SUPPORT
+  VOICE
+  SURVEY
+}
+
+/// Operational ingestion channel within a primary source.
+/// Explains HOW the feedback arrived, not WHAT it is.
+/// Drives source badges in the inbox and evidence labels in theme/CIQ views.
+enum FeedbackSecondarySource {
+  /// Typed directly by a team member in the app
+  MANUAL
+  /// Bulk-imported from a CSV file
+  CSV_UPLOAD
+  /// Submitted through the public customer portal
+  PORTAL
+  /// Ingested from email (forwarded or parsed)
+  EMAIL
+  /// Ingested from a Slack channel or DM
+  SLACK
+  /// Ingested from Zendesk tickets
+  ZENDESK
+  /// Ingested from Intercom conversations
+  INTERCOM
+  /// Submitted via the REST API
+  API
+  /// Received via webhook from an external system
+  WEBHOOK
+  /// Extracted from a voice/audio transcript
+  TRANSCRIPT
+  /// Generic bulk import (non-CSV, e.g. JSON upload)
+  IMPORT
+  /// Catch-all for unclassified ingestion channels
+  OTHER
+}
+
 enum DuplicateSuggestionStatus {
   PENDING
   ACCEPTED
@@ -110,6 +153,12 @@ enum ThemeStatus {
   AI_GENERATED
   /// Human-reviewed and confirmed — trust signal only, does NOT affect CIQ.
   VERIFIED
+  /// Theme received fresh signals above the resurfacing threshold after its linked
+  /// RoadmapItem was SHIPPED. Fully participates in CIQ and rankings.
+  RESURFACED
+  /// Theme was manually reopened after being closed/shipped.
+  /// Fully participates in CIQ and rankings.
+  REOPENED
   /// Soft-deleted — excluded from all intelligence queries.
   ARCHIVED
 }
@@ -651,6 +700,12 @@ model Feedback {
   /// PortalUser who submitted this feedback (null for internal/CSV/Slack/API sources)
   portalUserId    String?
   sourceType      FeedbackSourceType
+  /// Unified primary source — product-facing category (FEEDBACK / SUPPORT / VOICE / SURVEY).
+  /// Nullable for backward-compatibility; backfilled from sourceType by migration.
+  primarySource   FeedbackPrimarySource?
+  /// Unified secondary source — operational ingestion channel (MANUAL / CSV_UPLOAD / PORTAL / etc.).
+  /// Nullable for backward-compatibility; backfilled from sourceType by migration.
+  secondarySource FeedbackSecondarySource?
   sourceRef       String?
   title           String
   description     String
@@ -698,6 +753,8 @@ model Feedback {
   @@index([portalUserId])
   @@index([status])
   @@index([sourceType])
+  @@index([primarySource])
+  @@index([secondarySource])
   @@index([createdAt])
   @@index([submittedAt])
   @@index([importBatchId])
@@ -879,6 +936,19 @@ model Theme {
   impactSentence     String?
   /// Timestamp of last centroid embedding update
   centroidUpdatedAt  DateTime?
+  /// Timestamp when fresh evidence last arrived for a theme whose linked RoadmapItem
+  /// is SHIPPED. Null if the theme has never been resurfaced. Used to surface
+  /// "shipped but still complained about" signals in the roadmap and CIQ views.
+  resurfacedAt       DateTime?
+  /// Count of times fresh evidence has arrived after the linked RoadmapItem was SHIPPED.
+  /// Incremented each time a new signal is attached while any roadmap item is SHIPPED.
+  resurfaceCount     Int?      @default(0)
+  /// Count of signals received in the last 30 days (updated on every ThemeFeedback upsert).
+  /// Used for time-based weighting in CIQ scoring and resurfacing threshold checks.
+  recentSignalCount  Int?      @default(0)
+  /// Timestamp of the most recent evidence attachment (any source).
+  /// Updated on every ThemeFeedback upsert so the theme list can be sorted by activity.
+  lastEvidenceAt     DateTime?
 
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
@@ -904,6 +974,10 @@ model ThemeFeedback {
   assignedBy       String   @default("manual")
   /// AI similarity confidence score (0–1); null for manual assignments
   confidence       Float?
+  /// Decomposed match factors for explainability UI:
+  /// { embeddingScore, keywordScore, hybridScore, threshold, clusterSize, matchedKeywords }
+  /// Null for manual assignments or legacy rows.
+  matchReason      Json?
 
   theme            Theme    @relation(fields: [themeId], references: [id], onDelete: Cascade)
   feedback         Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
@@ -1393,6 +1467,7 @@ model Survey {
   workspace  Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   questions  SurveyQuestion[]
   responses  SurveyResponse[]
+  evidence   SurveyEvidence[]
 
   @@index([workspaceId])
   @@index([status])
@@ -1444,7 +1519,7 @@ model SurveyResponse {
   portalUser PortalUser? @relation(fields: [portalUserId], references: [id], onDelete: SetNull)
   customer   Customer?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
   answers    SurveyAnswer[]
-
+  evidence   SurveyEvidence[]
   @@index([surveyId])
   @@index([workspaceId])
   @@index([portalUserId])
@@ -1465,6 +1540,44 @@ model SurveyAnswer {
 
   @@index([responseId])
   @@index([questionId])
+}
+
+/// Structured survey evidence for non-text answers (choice, rating, NPS).
+/// These rows are queryable as evidence for themes and analytics but do NOT
+/// enter the text-clustering pipeline. Open-text answers are stored as
+/// Feedback records instead and enter the main AI_ANALYSIS_QUEUE.
+model SurveyEvidence {
+  id              String             @id @default(uuid())
+  workspaceId     String
+  surveyId        String
+  responseId      String
+  questionId      String
+  /// Human-readable question label, denormalised for query convenience
+  questionText    String
+  /// The SurveyQuestionType at time of submission (denormalised)
+  questionType    SurveyQuestionType
+  /// Selected option(s) for SINGLE_CHOICE / MULTIPLE_CHOICE answers
+  choiceValues    Json?
+  /// Raw numeric value for RATING / NPS answers
+  numericValue    Float?
+  /// Score normalised to [0, 1] — 1 = most positive
+  normalisedScore Float?
+  /// Respondent email if known
+  respondentEmail String?
+  /// Linked Customer if resolved
+  customerId      String?
+  /// Arbitrary metadata (surveyTitle, questionOrder, etc.)
+  metadata        Json?
+  createdAt       DateTime           @default(now())
+
+  survey   Survey         @relation(fields: [surveyId],   references: [id], onDelete: Cascade)
+  response SurveyResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([surveyId])
+  @@index([responseId])
+  @@index([questionId])
+  @@index([workspaceId, questionType])
 }
 
 /// Secure password reset token.

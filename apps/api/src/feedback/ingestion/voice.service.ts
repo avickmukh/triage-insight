@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { FeedbackService } from '../feedback.service';
 import { PlanLimitService } from '../../billing/plan-limit.service';
-import { FeedbackSourceType } from '@prisma/client';
+import { FeedbackSourceType, FeedbackPrimarySource, FeedbackSecondarySource } from '@prisma/client';
 
 @Injectable()
 export class VoiceIngestionService {
@@ -24,8 +24,10 @@ export class VoiceIngestionService {
 
     return this.feedbackService.create(workspaceId, {
       title,
-      description: transcript,
-      sourceType: FeedbackSourceType.VOICE,
+      description:     transcript,
+      sourceType:      FeedbackSourceType.VOICE,
+      primarySource:   FeedbackPrimarySource.VOICE,
+      secondarySource: FeedbackSecondarySource.TRANSCRIPT,
       customerId,
     });
   }

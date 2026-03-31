@@ -16,6 +16,8 @@ import { RolesGuard } from '../workspace/guards/roles.guard';
 import { Roles } from '../workspace/decorators/roles.decorator';
 import { WorkspaceRole } from '@prisma/client';
 import { SurveyService } from './services/survey.service';
+import { SurveyEvidenceService } from './services/survey-evidence.service';
+import { SurveyBackfillService } from './scripts/survey-backfill.service';
 import {
   CreateSurveyDto,
   UpdateSurveyDto,
@@ -30,7 +32,11 @@ import {
 @Controller('workspaces/:workspaceId/surveys')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class SurveyController {
-  constructor(private readonly surveyService: SurveyService) {}
+  constructor(
+    private readonly surveyService: SurveyService,
+    private readonly surveyEvidenceService: SurveyEvidenceService,
+    private readonly surveyBackfillService: SurveyBackfillService,
+  ) {}
 
   @Post()
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
@@ -166,6 +172,49 @@ export class SurveyController {
   ) {
     return this.surveyService.getSurveyIntelligence(workspaceId, surveyId);
   }
+
+  // ─── Structured Evidence ───────────────────────────────────────────────────
+
+  /**
+   * GET /workspaces/:workspaceId/surveys/:surveyId/evidence
+   *
+   * Returns aggregated structured evidence for all non-text questions in a
+   * survey: choice tallies for SINGLE_CHOICE / MULTIPLE_CHOICE, and average
+   * normalised scores for RATING / NPS. This data never enters text clustering.
+   */
+  @Get(':surveyId/evidence')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
+  getSurveyEvidence(
+    @Param('workspaceId') workspaceId: string,
+    @Param('surveyId') surveyId: string,
+  ) {
+    return this.surveyEvidenceService.getSurveySummary(workspaceId, surveyId);
+  }
+
+  /**
+   * GET /workspaces/:workspaceId/surveys/:surveyId/evidence/raw
+   *
+   * Returns raw SurveyEvidence rows (paginated) for a survey.
+   * Optional query params: questionId, questionType, skip, take.
+   */
+  @Get(':surveyId/evidence/raw')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
+  getRawEvidence(
+    @Param('workspaceId') workspaceId: string,
+    @Param('surveyId') surveyId: string,
+    @Query('questionId') questionId?: string,
+    @Query('questionType') questionType?: string,
+    @Query('skip') skip?: string,
+    @Query('take') take?: string,
+  ) {
+    return this.surveyEvidenceService.listEvidence(workspaceId, {
+      surveyId,
+      questionId,
+      questionType: questionType as any,
+      skip: skip ? parseInt(skip, 10) : 0,
+      take: take ? parseInt(take, 10) : 50,
+    });
+  }
 }
 
 // ─── Public portal survey endpoints (no auth) ────────────────────────────────
@@ -195,5 +244,34 @@ export class PublicSurveyController {
     @Body() dto: SubmitSurveyResponseDto,
   ) {
     return this.surveyService.submitResponse(orgSlug, surveyId, dto);
+  }
+}
+
+// ─── Workspace-scoped admin backfill endpoint ─────────────────────────────────
+// POST /workspaces/:workspaceId/surveys/admin/backfill
+// Requires ADMIN role.  Safe to call multiple times — fully idempotent.
+@Controller('workspaces/:workspaceId/surveys')
+@UseGuards(JwtAuthGuard, RolesGuard)
+export class SurveyAdminController {
+  constructor(
+    private readonly surveyBackfillService: SurveyBackfillService,
+  ) {}
+
+  /**
+   * Trigger the idempotent survey backfill for a specific workspace.
+   *
+   * What it does:
+   *   1. Creates Feedback rows for historical survey text answers that were
+   *      never converted (pre-refactor responses).
+   *   2. Sets primarySource on legacy Feedback rows that have primarySource=null.
+   *   3. Enqueues CIQ re-score jobs for themes with stale source counts.
+   *
+   * Safe to call multiple times — already-processed items are skipped.
+   */
+  @Post('admin/backfill')
+  @Roles(WorkspaceRole.ADMIN)
+  @HttpCode(HttpStatus.OK)
+  runBackfill(@Param('workspaceId') workspaceId: string) {
+    return this.surveyBackfillService.run(workspaceId);
   }
 }

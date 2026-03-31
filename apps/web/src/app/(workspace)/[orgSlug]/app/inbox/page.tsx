@@ -3,7 +3,7 @@
 import { useRef, useState, useCallback } from 'react';
 import { useFeedback } from '@/hooks/use-feedback';
 import { useWorkspace, useCurrentMemberRole } from '@/hooks/use-workspace';
-import { Feedback, FeedbackSourceType, FeedbackStatus, SemanticSearchResult, ThemeFeedback, WorkspaceRole } from '@/lib/api-types';
+import { Feedback, FeedbackPrimarySource, FeedbackSecondarySource, FeedbackSourceType, FeedbackStatus, SemanticSearchResult, ThemeFeedback, WorkspaceRole } from '@/lib/api-types';
 import apiClient from '@/lib/api-client';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -28,6 +28,7 @@ const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
 };
 
 const SOURCE_LABELS: Record<string, string> = {
+  // Legacy sourceType labels (kept for backward compat)
   [FeedbackSourceType.MANUAL]: 'Manual',
   [FeedbackSourceType.PUBLIC_PORTAL]: 'Portal',
   [FeedbackSourceType.EMAIL]: 'Email',
@@ -36,6 +37,83 @@ const SOURCE_LABELS: Record<string, string> = {
   [FeedbackSourceType.VOICE]: 'Voice',
   [FeedbackSourceType.API]: 'API',
 };
+
+/** Human-readable labels for the unified secondary source badges */
+const SECONDARY_SOURCE_LABELS: Record<string, string> = {
+  [FeedbackSecondarySource.MANUAL]: 'Manual',
+  [FeedbackSecondarySource.CSV_UPLOAD]: 'CSV',
+  [FeedbackSecondarySource.PORTAL]: 'Portal',
+  [FeedbackSecondarySource.EMAIL]: 'Email',
+  [FeedbackSecondarySource.SLACK]: 'Slack',
+  [FeedbackSecondarySource.ZENDESK]: 'Zendesk',
+  [FeedbackSecondarySource.INTERCOM]: 'Intercom',
+  [FeedbackSecondarySource.API]: 'API',
+  [FeedbackSecondarySource.WEBHOOK]: 'Webhook',
+  [FeedbackSecondarySource.TRANSCRIPT]: 'Transcript',
+  [FeedbackSecondarySource.IMPORT]: 'Import',
+  [FeedbackSecondarySource.OTHER]: 'Other',
+};
+
+/** Primary source filter tabs for the inbox top-level source selector */
+const PRIMARY_SOURCE_TABS: { label: string; value: FeedbackPrimarySource | undefined; icon: string }[] = [
+  { label: 'All Sources', value: undefined,                          icon: '◈' },
+  { label: 'Feedback',    value: FeedbackPrimarySource.FEEDBACK,    icon: '💬' },
+  { label: 'Voice',       value: FeedbackPrimarySource.VOICE,       icon: '🎙' },
+  { label: 'Survey',      value: FeedbackPrimarySource.SURVEY,      icon: '📋' },
+  { label: 'Support',     value: FeedbackPrimarySource.SUPPORT,     icon: '🎧' },
+];
+
+/**
+ * Primary source badge colours — shown on rows when "All Sources" is active
+ * so users can visually distinguish source type at a glance.
+ */
+const PRIMARY_SOURCE_COLORS: Record<string, { bg: string; color: string; border: string }> = {
+  [FeedbackPrimarySource.FEEDBACK]: { bg: '#e8f7f7', color: '#20A4A4', border: '#b2dfdb' },
+  [FeedbackPrimarySource.VOICE]:    { bg: '#e8f0fe', color: '#1a73e8', border: '#c5d8fb' },
+  [FeedbackPrimarySource.SURVEY]:   { bg: '#fff8e1', color: '#b8860b', border: '#ffe082' },
+  [FeedbackPrimarySource.SUPPORT]:  { bg: '#fce8ff', color: '#7c3aed', border: '#e9d5ff' },
+};
+
+/**
+ * Secondary source options scoped to each primary source.
+ * When a primary source tab is active, only the relevant secondary sources
+ * are shown in the sub-filter dropdown — keeping the options meaningful.
+ * `undefined` key = "All Sources" tab (show all secondary options).
+ */
+const SECONDARY_SOURCE_BY_PRIMARY: Record<string, FeedbackSecondarySource[]> = {
+  [FeedbackPrimarySource.FEEDBACK]: [
+    FeedbackSecondarySource.MANUAL,
+    FeedbackSecondarySource.CSV_UPLOAD,
+    FeedbackSecondarySource.PORTAL,
+    FeedbackSecondarySource.EMAIL,
+    FeedbackSecondarySource.SLACK,
+    FeedbackSecondarySource.API,
+    FeedbackSecondarySource.WEBHOOK,
+    FeedbackSecondarySource.IMPORT,
+    FeedbackSecondarySource.OTHER,
+  ],
+  [FeedbackPrimarySource.VOICE]: [
+    FeedbackSecondarySource.TRANSCRIPT,
+    FeedbackSecondarySource.MANUAL,
+    FeedbackSecondarySource.OTHER,
+  ],
+  [FeedbackPrimarySource.SURVEY]: [
+    FeedbackSecondarySource.MANUAL,
+    FeedbackSecondarySource.API,
+    FeedbackSecondarySource.IMPORT,
+    FeedbackSecondarySource.OTHER,
+  ],
+  [FeedbackPrimarySource.SUPPORT]: [
+    FeedbackSecondarySource.ZENDESK,
+    FeedbackSecondarySource.INTERCOM,
+    FeedbackSecondarySource.EMAIL,
+    FeedbackSecondarySource.WEBHOOK,
+    FeedbackSecondarySource.API,
+    FeedbackSecondarySource.OTHER,
+  ],
+};
+/** All secondary sources — used when no primary source filter is active */
+const ALL_SECONDARY_SOURCES: FeedbackSecondarySource[] = Object.values(FeedbackSecondarySource);
 
 const TABS: { label: string; value: FeedbackStatus | undefined }[] = [
   { label: 'All', value: undefined },
@@ -379,6 +457,8 @@ export default function InboxPage() {
   const slug = (Array.isArray(params.orgSlug) ? params.orgSlug[0] : params.orgSlug) ?? '';
   const r = appRoutes(slug);
   const [activeStatus, setActiveStatus] = useState<FeedbackStatus | undefined>(undefined);
+  const [activePrimarySource, setActivePrimarySource] = useState<FeedbackPrimarySource | undefined>(undefined);
+  const [activeSecondarySource, setActiveSecondarySource] = useState<FeedbackSecondarySource | undefined>(undefined);
   const [search, setSearch] = useState('');
   const [showCsvModal, setShowCsvModal] = useState(false);
   const [currentBatchId, setCurrentBatchId] = useState<string | undefined>(undefined);
@@ -428,8 +508,27 @@ export default function InboxPage() {
   const { data, isLoading, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useFeedbackList({
       status: activeStatus,
+      primarySource: activePrimarySource,
+      secondarySource: activeSecondarySource,
       search: search.trim() || undefined,
     });
+
+  /**
+   * When the user switches primary source tabs, reset the secondary source
+   * filter if the currently selected secondary source is not valid for the
+   * new primary source (keeps the combination meaningful).
+   */
+  const handlePrimarySourceChange = (value: FeedbackPrimarySource | undefined) => {
+    setActivePrimarySource(value);
+    if (activeSecondarySource) {
+      const validForNew = value
+        ? SECONDARY_SOURCE_BY_PRIMARY[value] ?? []
+        : ALL_SECONDARY_SOURCES;
+      if (!validForNew.includes(activeSecondarySource)) {
+        setActiveSecondarySource(undefined);
+      }
+    }
+  };
 
   const allItems: Feedback[] = data?.pages?.flatMap((p) => p.data) ?? [];
 
@@ -690,29 +789,135 @@ export default function InboxPage() {
           </div>
         )}
 
-        {/* Status filter tabs (keyword mode only) */}
+        {/* ── Primary source filter tabs ─────────────────────────────────── */}
         {!aiMode && (
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            {TABS.map((t) => (
-              <button
-                key={t.label}
-                onClick={() => setActiveStatus(t.value)}
+          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', borderBottom: '1px solid #f0f4f8', paddingBottom: '0.5rem' }}>
+            {PRIMARY_SOURCE_TABS.map((t) => {
+              const isActive = activePrimarySource === t.value;
+              const pc = t.value ? PRIMARY_SOURCE_COLORS[t.value] : null;
+              return (
+                <button
+                  key={t.label}
+                  onClick={() => handlePrimarySourceChange(t.value)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.3rem',
+                    padding: '0.35rem 0.85rem',
+                    borderRadius: '999px',
+                    border: '1px solid',
+                    fontSize: '0.78rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    borderColor: isActive ? (pc?.border ?? '#0A2540') : '#dee2e6',
+                    background:  isActive ? (pc?.bg    ?? '#0A2540') : '#fff',
+                    color:       isActive ? (pc?.color ?? '#fff')    : '#6C757D',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  <span style={{ fontSize: '0.7rem' }}>{t.icon}</span>
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── Secondary source sub-filter + status tabs row ─────────────── */}
+        {!aiMode && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            {/* Secondary source dropdown */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <span style={{ fontSize: '0.75rem', color: '#6C757D', fontWeight: 600, whiteSpace: 'nowrap' }}>Channel:</span>
+              <select
+                value={activeSecondarySource ?? ''}
+                onChange={(e) => setActiveSecondarySource((e.target.value as FeedbackSecondarySource) || undefined)}
                 style={{
-                  padding: '0.4rem 1rem',
-                  borderRadius: '999px',
+                  padding: '0.3rem 0.65rem',
+                  borderRadius: '0.4rem',
                   border: '1px solid',
-                  fontSize: '0.82rem',
+                  borderColor: activeSecondarySource ? '#0A2540' : '#dee2e6',
+                  background: activeSecondarySource ? '#0A2540' : '#fff',
+                  color: activeSecondarySource ? '#fff' : '#6C757D',
+                  fontSize: '0.78rem',
                   fontWeight: 600,
                   cursor: 'pointer',
-                  borderColor: activeStatus === t.value ? '#20A4A4' : '#dee2e6',
-                  background: activeStatus === t.value ? '#e8f7f7' : '#fff',
-                  color: activeStatus === t.value ? '#20A4A4' : '#6C757D',
-                  transition: 'all 0.15s',
+                  outline: 'none',
+                  appearance: 'none',
+                  WebkitAppearance: 'none',
+                  paddingRight: '1.5rem',
+                  backgroundImage: activeSecondarySource
+                    ? `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23fff' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")`
+                    : `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236C757D' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")`,
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 0.4rem center',
                 }}
               >
-                {t.label}
+                <option value=''>All channels</option>
+                {(activePrimarySource
+                  ? (SECONDARY_SOURCE_BY_PRIMARY[activePrimarySource] ?? ALL_SECONDARY_SOURCES)
+                  : ALL_SECONDARY_SOURCES
+                ).map((s) => (
+                  <option key={s} value={s}>{SECONDARY_SOURCE_LABELS[s] ?? s}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Separator */}
+            <span style={{ color: '#dee2e6', fontSize: '0.75rem' }}>|</span>
+
+            {/* Status filter tabs */}
+            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', flex: 1 }}>
+              {TABS.map((t) => (
+                <button
+                  key={t.label}
+                  onClick={() => setActiveStatus(t.value)}
+                  style={{
+                    padding: '0.3rem 0.85rem',
+                    borderRadius: '999px',
+                    border: '1px solid',
+                    fontSize: '0.78rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    borderColor: activeStatus === t.value ? '#20A4A4' : '#dee2e6',
+                    background: activeStatus === t.value ? '#e8f7f7' : '#fff',
+                    color: activeStatus === t.value ? '#20A4A4' : '#6C757D',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Active filter summary + clear-all */}
+            {(activePrimarySource || activeSecondarySource || activeStatus) && (
+              <button
+                onClick={() => {
+                  setActivePrimarySource(undefined);
+                  setActiveSecondarySource(undefined);
+                  setActiveStatus(undefined);
+                }}
+                title="Clear all source and status filters"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.25rem',
+                  padding: '0.3rem 0.7rem',
+                  borderRadius: '999px',
+                  border: '1px solid #f5c6cb',
+                  background: '#fef2f2',
+                  color: '#c0392b',
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                }}
+              >
+                × Clear filters
               </button>
-            ))}
+            )}
           </div>
         )}
       </div>
@@ -752,8 +957,15 @@ export default function InboxPage() {
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {aiResults.map((fb, i) => {
                 const sc = STATUS_COLORS[fb.status] ?? { bg: '#f0f4f8', color: '#6C757D' };
-                const sourceLabel = SOURCE_LABELS[fb.sourceType] ?? fb.sourceType;
+                // Prefer unified secondarySource label; fall back to legacy sourceType label
+                const sourceLabel = (fb.secondarySource && SECONDARY_SOURCE_LABELS[fb.secondarySource])
+                  ?? SOURCE_LABELS[fb.sourceType]
+                  ?? fb.sourceType;
                 const pct = Math.round(Number(fb.similarity) * 100);
+                const aiPrimaryLabel = fb.primarySource
+                  ? PRIMARY_SOURCE_TABS.find((t) => t.value === fb.primarySource)?.label ?? fb.primarySource
+                  : null;
+                const aiPc = fb.primarySource ? PRIMARY_SOURCE_COLORS[fb.primarySource] : null;
                 return (
                   <Link
                     key={fb.id}
@@ -779,7 +991,25 @@ export default function InboxPage() {
                       )}
                     </div>
                     {/* Badges */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: '1rem', flexShrink: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginLeft: '1rem', flexShrink: 0 }}>
+                      {/* Primary source badge — always shown in AI search since no source tab is active */}
+                      {aiPrimaryLabel && aiPc && (
+                        <span
+                          title={`Primary source: ${aiPrimaryLabel}`}
+                          style={{
+                            fontSize: '0.68rem',
+                            fontWeight: 700,
+                            padding: '0.12rem 0.45rem',
+                            borderRadius: '999px',
+                            background: aiPc.bg,
+                            color: aiPc.color,
+                            border: `1px solid ${aiPc.border}`,
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {aiPrimaryLabel}
+                        </span>
+                      )}
                       {/* Similarity score badge */}
                       <span
                         title={`Cosine similarity: ${fb.similarity}`}
@@ -875,7 +1105,16 @@ export default function InboxPage() {
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {allItems.map((fb, i) => {
               const sc = STATUS_COLORS[fb.status] ?? { bg: '#f0f4f8', color: '#6C757D' };
-              const sourceLabel = SOURCE_LABELS[fb.sourceType] ?? fb.sourceType;
+              // Prefer unified secondarySource label; fall back to legacy sourceType label
+              const sourceLabel = (fb.secondarySource && SECONDARY_SOURCE_LABELS[fb.secondarySource])
+                ?? SOURCE_LABELS[fb.sourceType]
+                ?? fb.sourceType;
+              // Primary source badge — shown when "All Sources" is active so users can
+              // distinguish source type at a glance without switching tabs
+              const primaryLabel = fb.primarySource
+                ? PRIMARY_SOURCE_TABS.find((t) => t.value === fb.primarySource)?.label ?? fb.primarySource
+                : null;
+              const pc = fb.primarySource ? PRIMARY_SOURCE_COLORS[fb.primarySource] : null;
               return (
                 <Link
                   key={fb.id}
@@ -960,11 +1199,31 @@ export default function InboxPage() {
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '0.5rem',
+                      gap: '0.4rem',
                       marginLeft: '1rem',
                       flexShrink: 0,
                     }}
                   >
+                    {/* Primary source badge — only shown when "All Sources" tab is active
+                        so the user can see which source each row belongs to */}
+                    {!activePrimarySource && primaryLabel && pc && (
+                      <span
+                        title={`Primary source: ${primaryLabel}`}
+                        style={{
+                          fontSize: '0.68rem',
+                          fontWeight: 700,
+                          padding: '0.12rem 0.45rem',
+                          borderRadius: '999px',
+                          background: pc.bg,
+                          color: pc.color,
+                          border: `1px solid ${pc.border}`,
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {primaryLabel}
+                      </span>
+                    )}
+                    {/* Secondary source / channel badge */}
                     <span
                       style={{
                         fontSize: '0.7rem',

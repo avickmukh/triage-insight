@@ -3,18 +3,19 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { AiModule } from '../ai/ai.module';
 import { SurveyService } from './services/survey.service';
 import { SurveyIntelligenceService } from './services/survey-intelligence.service';
-import { SurveyController, PublicSurveyController } from './survey.controller';
+import { SurveyEvidenceService } from './services/survey-evidence.service';
+import { SurveyController, PublicSurveyController, SurveyAdminController } from './survey.controller';
+import { SurveyBackfillService } from './scripts/survey-backfill.service';
 
 @Module({
   imports: [
     PrismaModule,
     AiModule,
-
   ],
-  controllers: [SurveyController, PublicSurveyController],
-  providers: [SurveyService, SurveyIntelligenceService],
-  // SurveyIntelligenceService exported so WorkerProcessorsModule can resolve
-  // SurveyIntelligenceProcessor's dependency.
-  exports: [SurveyService, SurveyIntelligenceService],
+  controllers: [SurveyController, PublicSurveyController, SurveyAdminController],
+  providers: [SurveyService, SurveyIntelligenceService, SurveyEvidenceService, SurveyBackfillService],
+  // All services exported so WorkerProcessorsModule can resolve
+  // SurveyIntelligenceProcessor's dependencies.
+  exports: [SurveyService, SurveyIntelligenceService, SurveyEvidenceService, SurveyBackfillService],
 })
 export class SurveyModule {}

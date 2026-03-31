@@ -2,7 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { parse } from 'csv-parse';
 import { FeedbackService } from '../feedback.service';
 import { PrismaService } from '../../prisma/prisma.service';
-import { FeedbackSourceType } from '@prisma/client';
+import {
+  FeedbackSourceType,
+  FeedbackPrimarySource,
+  FeedbackSecondarySource,
+} from '@prisma/client';
 
 /**
  * Flexible CSV import for feedback.
@@ -29,6 +33,7 @@ import { FeedbackSourceType } from '@prisma/client';
  * Rows with no resolvable title AND no resolvable description are skipped.
  */
 
+/** Legacy sourceType string → FeedbackSourceType enum */
 const SOURCE_TYPE_MAP: Record<string, FeedbackSourceType> = {
   email:       FeedbackSourceType.EMAIL,
   slack:       FeedbackSourceType.SLACK,
@@ -41,6 +46,35 @@ const SOURCE_TYPE_MAP: Record<string, FeedbackSourceType> = {
   portal:      FeedbackSourceType.PUBLIC_PORTAL,
   voice:       FeedbackSourceType.VOICE,
 };
+
+/**
+ * Maps a resolved FeedbackSourceType to the unified (primarySource, secondarySource) pair.
+ * This is the single source of truth for the CSV import path.
+ */
+function resolveUnifiedSources(sourceType: FeedbackSourceType): {
+  primarySource: FeedbackPrimarySource;
+  secondarySource: FeedbackSecondarySource;
+} {
+  switch (sourceType) {
+    case FeedbackSourceType.VOICE:
+      return { primarySource: FeedbackPrimarySource.VOICE,    secondarySource: FeedbackSecondarySource.TRANSCRIPT };
+    case FeedbackSourceType.SURVEY:
+      return { primarySource: FeedbackPrimarySource.SURVEY,   secondarySource: FeedbackSecondarySource.PORTAL };
+    case FeedbackSourceType.EMAIL:
+      return { primarySource: FeedbackPrimarySource.FEEDBACK, secondarySource: FeedbackSecondarySource.EMAIL };
+    case FeedbackSourceType.SLACK:
+      return { primarySource: FeedbackPrimarySource.FEEDBACK, secondarySource: FeedbackSecondarySource.SLACK };
+    case FeedbackSourceType.PUBLIC_PORTAL:
+      return { primarySource: FeedbackPrimarySource.FEEDBACK, secondarySource: FeedbackSecondarySource.PORTAL };
+    case FeedbackSourceType.API:
+      return { primarySource: FeedbackPrimarySource.FEEDBACK, secondarySource: FeedbackSecondarySource.API };
+    case FeedbackSourceType.MANUAL:
+      return { primarySource: FeedbackPrimarySource.FEEDBACK, secondarySource: FeedbackSecondarySource.MANUAL };
+    case FeedbackSourceType.CSV_IMPORT:
+    default:
+      return { primarySource: FeedbackPrimarySource.FEEDBACK, secondarySource: FeedbackSecondarySource.CSV_UPLOAD };
+  }
+}
 
 function resolveColumn(record: Record<string, string>, candidates: string[]): string | undefined {
   for (const key of candidates) {
@@ -115,6 +149,9 @@ export class CsvImportService {
           (rawSource && SOURCE_TYPE_MAP[rawSource.toLowerCase()]) ||
           FeedbackSourceType.CSV_IMPORT;
 
+        // ── Derive unified primary/secondary source from sourceType ──────────
+        const { primarySource, secondarySource } = resolveUnifiedSources(sourceType);
+
         // ── Resolve customerId ───────────────────────────────────────────────
         const customerId = resolveColumn(record, [
           'customerId', 'customer_id', 'customer', 'account', 'accountId', 'account_id',
@@ -127,11 +164,13 @@ export class CsvImportService {
           : undefined;
 
         await this.feedbackService.create(workspaceId, {
-          title:         (rawTitle ?? rawDescription ?? '').trim() || 'Untitled',
-          description:   (rawDescription ?? '').trim(),
+          title:           (rawTitle ?? rawDescription ?? '').trim() || 'Untitled',
+          description:     (rawDescription ?? '').trim(),
           customerId,
           sourceType,
-          importBatchId: batch.id,
+          primarySource,
+          secondarySource,
+          importBatchId:   batch.id,
           ...(sentiment !== undefined && { sentiment }),
         });
         importedCount++;

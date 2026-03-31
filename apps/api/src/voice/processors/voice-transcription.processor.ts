@@ -7,7 +7,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { TranscriptionService } from '../services/transcription.service';
 import { SummarizationService } from '../../ai/services/summarization.service';
 import { VoiceTranscriptionJobPayload, VOICE_TRANSCRIPTION_QUEUE } from '../services/voice.service';
-import { AiJobStatus, FeedbackSourceType, FeedbackStatus } from '@prisma/client';
+import { AiJobStatus, FeedbackSourceType, FeedbackPrimarySource, FeedbackSecondarySource, FeedbackStatus } from '@prisma/client';
 import { VOICE_EXTRACTION_QUEUE, VoiceExtractionJobPayload } from './voice-extraction.processor';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -72,11 +72,15 @@ export class VoiceTranscriptionProcessor {
         ? `Submitted Comment:\n${submittedText}\n\n--- Transcript ---\n${transcript}`
         : transcript;
 
+      // Determine unified source attribution based on submission path
+      const isPortalVoice = !!portalUserId;
       const feedback = await this.prisma.feedback.create({
         data: {
           workspaceId,
-          // If portalUserId is present, this came from the public portal
-          sourceType: portalUserId ? FeedbackSourceType.PUBLIC_PORTAL : FeedbackSourceType.VOICE,
+          // If portalUserId is present, this came from the public portal voice upload
+          sourceType:      isPortalVoice ? FeedbackSourceType.PUBLIC_PORTAL : FeedbackSourceType.VOICE,
+          primarySource:   FeedbackPrimarySource.VOICE,
+          secondarySource: isPortalVoice ? FeedbackSecondarySource.PORTAL : FeedbackSecondarySource.TRANSCRIPT,
           sourceRef: uploadAssetId,
           title,
           description: fullDescription,
