@@ -107,15 +107,46 @@ export class ThemeClusteringService {
       return existingLink.themeId;
     }
 
+    // ── Pre-compute embedding OUTSIDE the transaction ───────────────────────
+    // Embedding generation is an external API call (OpenAI) that can take 5–15s.
+    // Running it inside a Prisma interactive transaction was the root cause of the
+    // "Transaction API error: expired transaction" bug — the 60s timeout was
+    // consumed by the embedding call before any DB writes even started.
+    //
+    // Fix: generate the embedding here (no DB lock held), then pass it into the
+    // transaction so the locked section only does fast DB operations.
+    let resolvedEmbedding: number[] | undefined = embedding;
+    if (!resolvedEmbedding || resolvedEmbedding.length === 0) {
+      // We need the feedback text to generate the embedding
+      const feedbackForEmbed = await this.prisma.feedback.findUnique({
+        where: { id: feedbackId },
+        select: { title: true, description: true },
+      });
+      if (feedbackForEmbed) {
+        try {
+          resolvedEmbedding = await this.embeddingService.generateEmbedding(
+            `${feedbackForEmbed.title} ${feedbackForEmbed.description ?? ''}`.trim(),
+          );
+        } catch (err) {
+          this.logger.warn(
+            `[CLUSTER] Pre-tx embedding failed for feedback ${feedbackId}: ${(err as Error).message}. Will create new theme.`,
+          );
+          resolvedEmbedding = undefined;
+        }
+      }
+    }
+
     // ── Workspace-level advisory lock ────────────────────────────────────────
     // Serialises clustering per workspace so concurrent jobs don't race.
     // pg_advisory_xact_lock is released automatically at transaction end.
+    // Timeout raised to 120s — the transaction now only does fast DB operations
+    // (embedding is pre-computed above), so 120s is a very conservative ceiling.
     return this.prisma.$transaction(async (tx) => {
       const lockKey = workspaceIdToLockKey(workspaceId);
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockKey})`;
       // FIX: pass the tx client so createCandidateTheme writes inside the transaction
-      return this._assignFeedbackToThemeInTx(tx as unknown as PrismaService, workspaceId, feedbackId, embedding);
-    }, { timeout: 60_000 });
+      return this._assignFeedbackToThemeInTx(tx as unknown as PrismaService, workspaceId, feedbackId, resolvedEmbedding);
+    }, { timeout: 120_000 });
   }
 
   /** Inner implementation — runs inside the advisory-locked transaction. */
@@ -142,17 +173,15 @@ export class ThemeClusteringService {
       return null;
     }
 
-    // Generate or reuse the feedback embedding
+    // Embedding is pre-computed outside the transaction (see assignFeedbackToTheme).
+    // If it is still missing here (pre-tx generation failed), fall back to a new theme.
     let feedbackEmbedding: number[];
-    try {
-      feedbackEmbedding = embedding ?? await this.embeddingService.generateEmbedding(
-        `${feedback.title} ${feedback.description ?? ''}`.trim(),
-      );
-    } catch (err) {
+    if (embedding && embedding.length > 0) {
+      feedbackEmbedding = embedding;
+    } else {
       this.logger.warn(
-        `[CLUSTER] Embedding failed for feedback ${feedbackId}: ${(err as Error).message}. Creating new theme.`,
+        `[CLUSTER] No embedding available for feedback ${feedbackId} inside tx — creating new theme.`,
       );
-      // FIX: pass prisma (tx client) so the embedding write is inside the transaction
       return this.createCandidateTheme(prisma, workspaceId, feedbackId, feedback.title, undefined, feedback.description ?? undefined);
     }
 

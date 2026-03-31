@@ -506,7 +506,14 @@ export default function InboxPage() {
   const canEdit = memberRole === WorkspaceRole.ADMIN || memberRole === WorkspaceRole.EDITOR;
 
   const { useFeedbackList } = useFeedback();
-  const { data, isLoading, isError } = useFeedbackList({
+  const {
+    data,
+    isLoading,
+    isError,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useFeedbackList({
     status:          activeStatus,
     primarySource:   activePrimarySource,
     secondarySource: activeSecondarySource,
@@ -514,7 +521,8 @@ export default function InboxPage() {
     limit:           50,
   });
 
-  const feedbackItems: Feedback[] = data?.pages[0]?.data ?? [];
+  // Flatten all loaded pages into a single list
+  const feedbackItems: Feedback[] = data?.pages.flatMap((p) => p.data) ?? [];
   const total = data?.pages[0]?.total ?? 0;
 
   const handleBulkDismiss = async () => {
@@ -765,6 +773,51 @@ export default function InboxPage() {
               inboxItemHref={r.inboxItem(item.id)}
             />
           ))}
+
+          {/* ── Pagination footer ─────────────────────────────────────────── */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', padding: '1.25rem 0 0.5rem' }}>
+            {/* Item count summary */}
+            <p style={{ fontSize: '0.82rem', color: GREY, margin: 0 }}>
+              Showing <strong>{feedbackItems.length}</strong> of <strong>{total}</strong> items
+            </p>
+
+            {/* Load More button — only shown when more pages exist */}
+            {hasNextPage && (
+              <button
+                onClick={() => fetchNextPage()}
+                disabled={isFetchingNextPage}
+                style={{
+                  padding: '0.6rem 2rem',
+                  borderRadius: '0.625rem',
+                  border: `1px solid ${TEAL}`,
+                  background: '#fff',
+                  color: TEAL,
+                  fontWeight: 700,
+                  fontSize: '0.88rem',
+                  cursor: isFetchingNextPage ? 'not-allowed' : 'pointer',
+                  opacity: isFetchingNextPage ? 0.65 : 1,
+                  transition: 'all 0.15s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                }}
+              >
+                {isFetchingNextPage ? (
+                  <>
+                    <span style={{ display: 'inline-block', width: '0.85rem', height: '0.85rem', border: `2px solid ${TEAL}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                    Loading…
+                  </>
+                ) : (
+                  'Load more'
+                )}
+              </button>
+            )}
+
+            {/* End-of-list indicator */}
+            {!hasNextPage && feedbackItems.length > 0 && (
+              <p style={{ fontSize: '0.78rem', color: '#adb5bd', margin: 0 }}>You have reached the end</p>
+            )}
+          </div>
         </div>
       )}
 
