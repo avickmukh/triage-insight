@@ -111,6 +111,7 @@ import {
   PromoteThemePreview,
   PromoteThemeDto,
   AiRoadmapSuggestionsResponse,
+  ActionPlanResponse,
 } from "@/lib/api-types";
 
 const getApiBaseUrl = () => {
@@ -512,6 +513,9 @@ const apiClient = {
     /** PATCH /workspaces/:id/prioritization/themes/:themeId/strategic-tag */
     setStrategicTag: (workspaceId: string, themeId: string, strategicTag: string | null): Promise<Theme> =>
       api.patch(`/workspaces/${workspaceId}/prioritization/themes/${themeId}/strategic-tag`, { strategicTag }).then(handleResponse),
+    /** GET /workspaces/:id/prioritization/action-plan — weekly top-5 action plan */
+    getActionPlan: (workspaceId: string): Promise<ActionPlanResponse> =>
+      api.get(`/workspaces/${workspaceId}/prioritization/action-plan`).then(handleResponse),
   },
 
   support: {

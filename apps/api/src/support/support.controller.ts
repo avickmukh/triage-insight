@@ -445,7 +445,7 @@ export class SupportController {
       catch (err) { console.warn(`[Queue] Redis unavailable — ${label} job skipped:`, (err as Error).message); }
     }
 
-    return { imported: imported.length, total: tickets.length, message: `Successfully imported ${imported.length} of ${tickets.length} tickets.` };
+    return { imported: imported.ingested, bridged: imported.bridged, total: tickets.length, message: `Successfully imported ${imported.ingested} of ${tickets.length} tickets (${imported.bridged} bridged to unified pipeline).` };
   }
 
   // ─── POST /support/sync ───────────────────────────────────────────────────────

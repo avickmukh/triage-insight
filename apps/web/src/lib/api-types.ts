@@ -242,7 +242,9 @@ export interface ThemeFeedback {
   id?: string;
   themeId: string;
   feedbackId: string;
-  theme?: Theme;
+  /** Confidence score for this theme assignment (0–1) */
+  confidence?: number | null;
+  theme?: Theme & { ciqScore?: number | null; priorityScore?: number | null };
   /** Feedback fields present when theme linked feedback is expanded */
   title?: string;
   description?: string | null;
@@ -2514,4 +2516,37 @@ export interface AiRoadmapSuggestionsResponse {
     monitor:          number;
     noAction:         number;
   };
+}
+
+// ─── Weekly Action Plan ───────────────────────────────────────────────────────
+
+export type ActionType = 'ADD_TO_ROADMAP' | 'INCREASE_PRIORITY' | 'INVESTIGATE' | 'MONITOR';
+export type ActionPriority = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+
+export interface ActionPlanSignals {
+  feedbackCount:    number;
+  supportCount:     number;
+  voiceCount:       number;
+  surveyCount:      number;
+  totalSignalCount: number;
+  trendDelta:       number | null;
+  resurfaceCount:   number;
+  lastEvidenceAt:   string | null;
+}
+
+export interface ActionPlanItem {
+  themeId:               string;
+  themeName:             string;
+  shortLabel:            string | null;
+  priority:              ActionPriority;
+  ciqScore:              number;
+  decisionPriorityScore: number;
+  recommendedAction:     ActionType;
+  reason:                string;
+  signals:               ActionPlanSignals;
+}
+
+export interface ActionPlanResponse {
+  generatedAt: string;
+  items:       ActionPlanItem[];
 }

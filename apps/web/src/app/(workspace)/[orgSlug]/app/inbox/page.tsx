@@ -1182,7 +1182,13 @@ export default function InboxPage() {
                             }}
                           >
                             <span style={{ fontSize: '0.6rem' }}>⬡</span>
-                            {tf.theme?.title ?? 'Theme'}
+                            {tf.theme?.shortLabel ?? tf.theme?.title ?? 'Theme'}
+                            {/* CIQ score inline — decision context at a glance */}
+                            {(tf.theme?.ciqScore ?? tf.theme?.priorityScore) != null && (
+                              <span style={{ fontSize: '0.6rem', fontWeight: 700, opacity: 0.75 }}>
+                                &nbsp;{Math.round((tf.theme!.ciqScore ?? tf.theme!.priorityScore)!)}
+                              </span>
+                            )}
                           </span>
                         ))}
                         {fb.themes.length > 3 && (
@@ -1249,6 +1255,24 @@ export default function InboxPage() {
                     >
                       {fb.status.replace('_', '\u00a0')}
                     </span>
+                    {/* Customer ARR badge — decision context */}
+                    {fb.customer?.arrValue != null && fb.customer.arrValue > 0 && (
+                      <span
+                        title={`Customer ARR: $${(fb.customer.arrValue / 100).toLocaleString()}`}
+                        style={{
+                          fontSize: '0.68rem',
+                          fontWeight: 700,
+                          padding: '0.12rem 0.45rem',
+                          borderRadius: '999px',
+                          background: '#f0fdf4',
+                          color: '#15803d',
+                          border: '1px solid #bbf7d0',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        ${(fb.customer.arrValue / 100).toLocaleString()}
+                      </span>
+                    )}
                     {/* Merged-away indicator: this item was merged into another */}
                     {fb.mergedIntoId && (
                       <span

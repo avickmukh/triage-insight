@@ -3,6 +3,7 @@ import {
   UseGuards, Req, ParseIntPipe, DefaultValuePipe,
 } from "@nestjs/common";
 import { PrioritizationService, SetManualOverrideDto } from "./services/prioritization.service";
+import { ActionPlanService } from "./services/action-plan.service";
 import { CiqService } from "../ai/services/ciq.service";
 import { UpdateSettingsDto } from "./dto/update-settings.dto";
 import { QueryPrioritizationDto } from "./dto/query-prioritization.dto";
@@ -39,6 +40,7 @@ export class PrioritizationController {
   constructor(
     private readonly prioritizationService: PrioritizationService,
     private readonly ciqService: CiqService,
+    private readonly actionPlanService: ActionPlanService,
   ) {}
 
   // ─── Theme Ranking ────────────────────────────────────────────────────────
@@ -188,6 +190,14 @@ export class PrioritizationController {
     @Req() req: AuthenticatedRequest,
   ) {
     return this.prioritizationService.enqueueWorkspaceRescore(workspaceId, req.user.sub);
+  }
+
+  // ─── Weekly Action Plan ──────────────────────────────────────────────────
+
+  @Get('action-plan')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
+  getActionPlan(@Param('workspaceId') workspaceId: string) {
+    return this.actionPlanService.getActionPlan(workspaceId);
   }
 
   // ─── Settings ─────────────────────────────────────────────────────────────

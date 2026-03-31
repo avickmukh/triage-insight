@@ -64,6 +64,7 @@ export const appRoutes = (slug: string) => ({
   prioritizationBoard:         `/${slug}/app/prioritization/board`,
   prioritizationSettings:      `/${slug}/app/prioritization/settings`,
   roadmapAiSuggestions:        `/${slug}/app/roadmap/ai-suggestions`,
+  actionPlan:                  `/${slug}/app/action-plan`,
   reports:    `/${slug}/app/reports`,
   profile:    `/${slug}/app/profile`,
   upgrade:    `/${slug}/app/upgrade`,

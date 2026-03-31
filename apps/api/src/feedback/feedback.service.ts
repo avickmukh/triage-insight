@@ -177,7 +177,8 @@ export class FeedbackService {
             where: { theme: { status: { not: 'ARCHIVED' } } },
             include: {
               theme: {
-                select: { id: true, title: true, shortLabel: true },
+                // ciqScore + priorityScore surfaced for Inbox decision context
+                select: { id: true, title: true, shortLabel: true, ciqScore: true, priorityScore: true },
               },
             },
             orderBy: { confidence: 'desc' },

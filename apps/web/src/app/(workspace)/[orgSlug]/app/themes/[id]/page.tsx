@@ -10,6 +10,7 @@ import {
 } from '@/hooks/use-themes';
 import { useCurrentMemberRole, useWorkspace } from '@/hooks/use-workspace';
 import { useThemeCiqScore, useRecalculateThemeCiq, useThemeRevenueIntelligence } from '@/hooks/use-ciq';
+import { useAiRoadmapSuggestions } from '@/hooks/use-roadmap';
 import { CiqImpactBadge } from '@/components/ciq/CiqImpactBadge';
 import { CiqSignalBreakdown } from '@/components/ciq/CiqSignalBreakdown';
 import { PromoteToRoadmapModal } from '@/components/roadmap/PromoteToRoadmapModal';
@@ -398,7 +399,11 @@ export default function ThemeDetailPage() {
   const { data: theme, isLoading, isError, error } = useThemeDetail(themeId);
   const { data: ciqScore, isLoading: ciqLoading } = useThemeCiqScore(themeId || null);
   const { data: revenueIntel, isLoading: revenueLoading } = useThemeRevenueIntelligence(themeId || null);
+  // Load AI roadmap suggestions to surface ADD_TO_ROADMAP / INCREASE_PRIORITY banners
+  const { data: aiSuggestions } = useAiRoadmapSuggestions(workspaceId);
+  const aiSuggestion = aiSuggestions?.data?.find((s) => s.themeId === themeId);
   const recalculate = useRecalculateThemeCiq();
+  const updateTheme = useUpdateTheme(themeId);
   const [rescoreToast, setRescoreToast] = useState<string | null>(null);
   const [actionToast, setActionToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [promoteModalOpen, setPromoteModalOpen] = useState(false);
@@ -778,6 +783,92 @@ export default function ThemeDetailPage() {
           </div>
         )}
       </div>
+
+      {/* ── AI Roadmap Recommendation Banner ── */}
+      {aiSuggestion && (aiSuggestion.suggestionType === 'ADD_TO_ROADMAP' || aiSuggestion.suggestionType === 'INCREASE_PRIORITY') && (
+        <div
+          style={{
+            borderRadius: '0.875rem',
+            padding: '1.25rem 1.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '1rem',
+            flexWrap: 'wrap',
+            background: aiSuggestion.suggestionType === 'ADD_TO_ROADMAP'
+              ? 'linear-gradient(135deg, #ede9fe 0%, #f5f3ff 100%)'
+              : 'linear-gradient(135deg, #fef3c7 0%, #fffbeb 100%)',
+            border: `1px solid ${aiSuggestion.suggestionType === 'ADD_TO_ROADMAP' ? '#c4b5fd' : '#fde68a'}`,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+              <span style={{ fontSize: '1rem' }}>
+                {aiSuggestion.suggestionType === 'ADD_TO_ROADMAP' ? '🗺️' : '⬆️'}
+              </span>
+              <span
+                style={{
+                  fontSize: '0.72rem',
+                  fontWeight: 800,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  color: aiSuggestion.suggestionType === 'ADD_TO_ROADMAP' ? '#7c3aed' : '#b45309',
+                }}
+              >
+                AI Recommendation — {aiSuggestion.suggestionType === 'ADD_TO_ROADMAP' ? 'Add to Roadmap' : 'Increase Priority'}
+              </span>
+            </div>
+            <p style={{ margin: 0, fontSize: '0.875rem', color: '#1e293b', lineHeight: 1.55 }}>
+              {aiSuggestion.reason}
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+            {aiSuggestion.suggestionType === 'ADD_TO_ROADMAP' && canEdit && (
+              <button
+                onClick={handleAddToRoadmap}
+                style={{
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  padding: '0.5rem 1.1rem',
+                  borderRadius: '0.5rem',
+                  background: '#7c3aed',
+                  color: '#fff',
+                  border: 'none',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                + Add to Roadmap
+              </button>
+            )}
+            {aiSuggestion.suggestionType === 'INCREASE_PRIORITY' && canEdit && (
+              <button
+                onClick={() => {
+                  if (!themeId) return;
+                  updateTheme.mutate(
+                    { status: ThemeStatus.VERIFIED, pinned: true },
+                    { onSuccess: () => setActionToast({ message: 'Theme verified and pinned — priority increased.', type: 'success' }) },
+                  );
+                }}
+                style={{
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  padding: '0.5rem 1.1rem',
+                  borderRadius: '0.5rem',
+                  background: '#b45309',
+                  color: '#fff',
+                  border: 'none',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Mark High Priority
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── AI Intelligence Panel ── */}
       <div

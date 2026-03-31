@@ -6,6 +6,7 @@ import { PrioritizationService } from "./services/prioritization.service";
 import { AggregationService } from "./services/aggregation.service";
 import { ScoringService } from "./services/scoring.service";
 import { PrioritizationCacheService } from "./services/prioritization-cache.service";
+import { ActionPlanService } from "./services/action-plan.service";
 
 @Module({
   imports: [
@@ -19,7 +20,8 @@ import { PrioritizationCacheService } from "./services/prioritization-cache.serv
     AggregationService,
     ScoringService,
     PrioritizationCacheService,
+    ActionPlanService,
   ],
-  exports: [PrioritizationService, AggregationService, ScoringService, PrioritizationCacheService],
+  exports: [PrioritizationService, AggregationService, ScoringService, PrioritizationCacheService, ActionPlanService],
 })
 export class PrioritizationModule {}
