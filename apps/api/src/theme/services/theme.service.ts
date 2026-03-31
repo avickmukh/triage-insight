@@ -518,4 +518,90 @@ export class ThemeService {
     }
     return { message: 'Theme reclustering job dispatched.', jobId };
   }
+  // ── Support Spike → Theme Linking (Step 4 Gap Fix) ──────────────────────────
+
+  /**
+   * GET /workspaces/:workspaceId/themes/:id/linked-spikes
+   *
+   * Returns all SupportIssueCluster rows whose themeId matches this theme,
+   * plus their active IssueSpikeEvents from the last 14 days.
+   * This surfaces the support spike → theme connection in the UI.
+   */
+  async getLinkedSupportSpikes(workspaceId: string, themeId: string) {
+    // Verify theme belongs to workspace
+    const theme = await this.prisma.theme.findFirst({ where: { id: themeId, workspaceId } });
+    if (!theme) throw new NotFoundException('Theme not found');
+
+    const clusters = await this.prisma.supportIssueCluster.findMany({
+      where: { workspaceId, themeId },
+      include: {
+        spikeEvents: {
+          where: {
+            windowStart: { gte: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000) },
+          },
+          orderBy: { windowStart: 'desc' },
+          take: 5,
+        },
+      },
+      orderBy: { ticketCount: 'desc' },
+    });
+
+    return {
+      themeId,
+      clusters: clusters.map((c) => ({
+        id:               c.id,
+        title:            c.title,
+        description:      c.description,
+        ticketCount:      c.ticketCount,
+        arrExposure:      c.arrExposure,
+        avgSentiment:     c.avgSentiment,
+        negativeTicketPct: c.negativeTicketPct,
+        hasActiveSpike:   c.hasActiveSpike,
+        spikeEvents:      c.spikeEvents.map((s) => ({
+          id:          s.id,
+          windowStart: s.windowStart,
+          windowEnd:   s.windowEnd,
+          ticketCount: s.ticketCount,
+          zScore:      s.zScore,
+        })),
+      })),
+      totalClusters:    clusters.length,
+      activeSpikeCount: clusters.filter((c) => c.hasActiveSpike).length,
+    };
+  }
+
+  /**
+   * POST /workspaces/:workspaceId/themes/:id/link-support-cluster
+   *
+   * Manually links a SupportIssueCluster to this theme.
+   * Triggers a CIQ re-score so the spike signal is immediately reflected.
+   */
+  async linkSupportCluster(workspaceId: string, userId: string, themeId: string, clusterId: string) {
+    const theme = await this.prisma.theme.findFirst({ where: { id: themeId, workspaceId } });
+    if (!theme) throw new NotFoundException('Theme not found');
+
+    const cluster = await this.prisma.supportIssueCluster.findFirst({ where: { id: clusterId, workspaceId } });
+    if (!cluster) throw new NotFoundException('Support cluster not found');
+
+    await this.prisma.supportIssueCluster.update({
+      where: { id: clusterId },
+      data: { themeId },
+    });
+
+    await this.auditService.logAction(workspaceId, userId, AuditLogAction.THEME_UPDATE, {
+      themeId,
+      action: 'LINK_SUPPORT_CLUSTER',
+      clusterId,
+    });
+
+    // Re-score theme so the support spike signal is immediately reflected in CIQ
+    try {
+      await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId });
+    } catch (queueErr) {
+      console.warn('[Queue] Redis unavailable — CIQ re-score skipped:', (queueErr as Error).message);
+    }
+
+    return { themeId, clusterId, linked: true };
+  }
+
 }

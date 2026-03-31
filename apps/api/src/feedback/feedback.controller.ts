@@ -23,6 +23,7 @@ import { SemanticSearchDto } from './dto/semantic-search.dto';
 import { CreateAttachmentDto } from './dto/create-attachment.dto';
 import { ConfirmAttachmentDto } from './dto/confirm-attachment.dto';
 import { PublicFeedbackDto } from './dto/public-feedback.dto';
+import { BulkDismissFeedbackDto, BulkAssignFeedbackDto } from './dto/bulk-feedback.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../workspace/guards/roles.guard';
 import { Roles } from '../workspace/decorators/roles.decorator';
@@ -148,6 +149,33 @@ export class FeedbackController {
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
   getPipelineStatus(@Param('workspaceId') workspaceId: string) {
     return this.feedbackService.getPipelineStatus(workspaceId);
+  }
+
+  // ─── Bulk action routes (Step 3 Gap Fix) ─────────────────────────────────────
+  /**
+   * POST /workspaces/:workspaceId/feedback/bulk/dismiss
+   * Sets status to ARCHIVED for all supplied feedbackIds.
+   */
+  @Post('bulk/dismiss')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  bulkDismiss(
+    @Param('workspaceId') workspaceId: string,
+    @Body() dto: BulkDismissFeedbackDto,
+  ) {
+    return this.feedbackService.bulkDismiss(workspaceId, dto.feedbackIds);
+  }
+
+  /**
+   * POST /workspaces/:workspaceId/feedback/bulk/assign
+   * Links all supplied feedbackIds to the given themeId.
+   */
+  @Post('bulk/assign')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  bulkAssign(
+    @Param('workspaceId') workspaceId: string,
+    @Body() dto: BulkAssignFeedbackDto,
+  ) {
+    return this.feedbackService.bulkAssignToTheme(workspaceId, dto.feedbackIds, dto.themeId);
   }
 
   // ─── Item routes (:id segment) ──────────────────────────────────────────────

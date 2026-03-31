@@ -78,6 +78,7 @@ export const orgAdminRoutes = (slug: string) => ({
   billing:      `/${slug}/admin/billing`,
   integrations: `/${slug}/admin/integrations`,
   aiSettings:   `/${slug}/admin/ai-settings`,
+  auditLog:     `/${slug}/admin/audit-log`,
 });
 
 /** Public portal routes (unauthenticated) */

@@ -215,6 +215,19 @@ const apiClient = {
       portalUrl: string;
     }> =>
       api.patch('/workspace/current/portal-settings', data).then(handleResponse),
+    /**
+     * GET /workspace/current/audit-log
+     * Returns paginated audit log entries for the current workspace. ADMIN only.
+     */
+    getAuditLog: (
+      page = 1,
+      limit = 50,
+      action?: string,
+      userId?: string
+    ): Promise<import('./api-types').AuditLogResponse> =>
+      api
+        .get('/workspace/current/audit-log', { params: { page, limit, action, userId } })
+        .then(handleResponse),
   },
 
   feedback: {
@@ -356,6 +369,29 @@ const apiClient = {
       api
         .get(`/workspaces/${workspaceId}/feedback/pipeline-status`)
         .then(handleResponse),
+    /**
+     * POST /workspaces/:id/feedback/bulk/dismiss
+     * Sets status to ARCHIVED for all supplied feedbackIds.
+     */
+    bulkDismiss: (
+      workspaceId: string,
+      feedbackIds: string[]
+    ): Promise<import('./api-types').BulkActionResult> =>
+      api
+        .post(`/workspaces/${workspaceId}/feedback/bulk/dismiss`, { feedbackIds })
+        .then(handleResponse),
+    /**
+     * POST /workspaces/:id/feedback/bulk/assign
+     * Links all feedbackIds to the given themeId.
+     */
+    bulkAssign: (
+      workspaceId: string,
+      feedbackIds: string[],
+      themeId: string
+    ): Promise<import('./api-types').BulkActionResult> =>
+      api
+        .post(`/workspaces/${workspaceId}/feedback/bulk/assign`, { feedbackIds, themeId })
+        .then(handleResponse),
   },
 
   themes: {
@@ -365,6 +401,19 @@ const apiClient = {
       params?: { page?: number; limit?: number; search?: string; status?: string; pinned?: boolean }
     ): Promise<ThemeListResponse> =>
       api.get(`/workspaces/${workspaceId}/themes`, { params }).then(handleResponse),
+    /** GET /workspaces/:id/themes/:themeId/linked-spikes — support clusters linked to this theme */
+    getLinkedSpikes: (
+      workspaceId: string,
+      themeId: string
+    ): Promise<import('./api-types').LinkedSpikesResponse> =>
+      api.get(`/workspaces/${workspaceId}/themes/${themeId}/linked-spikes`).then(handleResponse),
+    /** POST /workspaces/:id/themes/:themeId/link-support-cluster — manually link a cluster */
+    linkSupportCluster: (
+      workspaceId: string,
+      themeId: string,
+      clusterId: string
+    ): Promise<{ themeId: string; clusterId: string; linked: boolean }> =>
+      api.post(`/workspaces/${workspaceId}/themes/${themeId}/link-support-cluster`, { clusterId }).then(handleResponse),
     /** GET /workspaces/:id/themes/:themeId — includes linkedFeedback[] and aggregatedPriorityScore */
     getById: (workspaceId: string, themeId: string): Promise<Theme> =>
       api.get(`/workspaces/${workspaceId}/themes/${themeId}`).then(handleResponse),

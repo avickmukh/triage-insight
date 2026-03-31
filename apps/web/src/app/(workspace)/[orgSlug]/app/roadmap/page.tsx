@@ -8,8 +8,9 @@ import {
   useCreateRoadmapItem,
   useUpdateRoadmapItem,
   useDeleteRoadmapItem,
+  useAiRoadmapSuggestions,
 } from '@/hooks/use-roadmap';
-import { useCurrentMemberRole } from '@/hooks/use-workspace';
+import { useCurrentMemberRole, useWorkspace } from '@/hooks/use-workspace';
 import { CiqImpactBadge } from '@/components/ciq/CiqImpactBadge';
 import {
   CreateRoadmapItemDto,
@@ -456,6 +457,16 @@ export default function RoadmapPage() {
   const deleteMutation = useDeleteRoadmapItem();
   const { role } = useCurrentMemberRole();
   const canEdit = role === WorkspaceRole.ADMIN || role === WorkspaceRole.EDITOR;
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id ?? '';
+  // AI Recommended — fetch top actionable suggestions inline (Step 2 Gap Fix)
+  const { data: aiSuggestionsData } = useAiRoadmapSuggestions(workspaceId, 5);
+  const aiRecommended = (aiSuggestionsData?.data ?? [])
+    .filter((s) => s.suggestionType === 'ADD_TO_ROADMAP' || s.suggestionType === 'INCREASE_PRIORITY')
+    .filter((s) => !s.roadmapItemId) // exclude already-on-roadmap items
+    .slice(0, 5);
+  const [dismissedAiIds, setDismissedAiIds] = useState<Set<string>>(new Set());
+  const visibleAiRecommended = aiRecommended.filter((s) => !dismissedAiIds.has(s.themeId));
 
   const [showCreate, setShowCreate] = useState(false);
   const [editItem, setEditItem]     = useState<RoadmapItem | null>(null);
@@ -548,31 +559,84 @@ export default function RoadmapPage() {
           )}
         </div>
 
-        {/* ── AI Suggestions banner ── */}
-        <div style={{
-          ...CARD, padding: '0.875rem 1.25rem',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          flexWrap: 'wrap', gap: '0.5rem', background: '#fff3cd',
-          border: '1px solid #f0e6b0',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-            <span style={{ fontSize: '1rem' }}>🔥</span>
-            <div>
-              <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#b8860b' }}>AI Roadmap Suggestions</span>
-              <span style={{ fontSize: '0.78rem', color: '#6C757D', marginLeft: '0.5rem' }}>
-                AI-assisted prioritisation based on CIQ scoring, velocity, and cross-source signals.
-              </span>
+        {/* ── AI Recommended section (Step 2 Gap Fix) ── */}
+        {visibleAiRecommended.length > 0 && (
+          <div style={{ ...CARD, border: '1px solid #f0e6b0', background: 'linear-gradient(135deg, #fffdf0 0%, #fff8e1 100%)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.875rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ fontSize: '1rem' }}>🤖</span>
+                <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#b8860b' }}>AI Recommended</span>
+                <span style={{ fontSize: '0.72rem', background: '#fef3c7', color: '#b8860b', border: '1px solid #fde68a', borderRadius: '999px', padding: '0.1rem 0.5rem', fontWeight: 600 }}>
+                  {visibleAiRecommended.length} suggestion{visibleAiRecommended.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              {orgSlug && (
+                <Link href={appRoutes(orgSlug).roadmapAiSuggestions} style={{ fontSize: '0.75rem', color: '#b8860b', textDecoration: 'none', fontWeight: 600 }}>
+                  View all →
+                </Link>
+              )}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+              {visibleAiRecommended.map((s) => {
+                const confColor = s.confidence === 'HIGH' ? '#15803d' : s.confidence === 'MEDIUM' ? '#b8860b' : '#6C757D';
+                const confBg    = s.confidence === 'HIGH' ? '#f0fdf4' : s.confidence === 'MEDIUM' ? '#fefce8' : '#f8fafc';
+                return (
+                  <div
+                    key={s.themeId}
+                    style={{
+                      display: 'flex', alignItems: 'flex-start', gap: '0.75rem',
+                      padding: '0.75rem 0.875rem',
+                      background: '#fff', border: '1px solid #fde68a', borderRadius: '0.625rem',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    {/* Theme name + reason */}
+                    <div style={{ flex: 1, minWidth: '12rem' }}>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0a2540', marginBottom: '0.2rem' }}>{s.themeTitle}</div>
+                      <div style={{ fontSize: '0.75rem', color: '#495057', lineHeight: 1.4 }}>{s.reason}</div>
+                    </div>
+                    {/* Metadata pills */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#1a6fc4', background: '#eef6ff', border: '1px solid #bfdbfe', borderRadius: '999px', padding: '0.1rem 0.45rem' }}>
+                        CIQ {Math.round(s.ciqScore)}
+                      </span>
+                      <span style={{ fontSize: '0.68rem', fontWeight: 700, color: confColor, background: confBg, borderRadius: '999px', padding: '0.1rem 0.45rem' }}>
+                        {s.confidence}
+                      </span>
+                      {/* Add to roadmap CTA */}
+                      {canEdit && (
+                        <button
+                          onClick={() => {
+                            createMutation.mutate(
+                              { title: s.themeTitle, status: RoadmapStatus.BACKLOG, themeId: s.themeId },
+                              { onSuccess: () => setDismissedAiIds((prev) => new Set([...prev, s.themeId])) },
+                            );
+                          }}
+                          disabled={createMutation.isPending}
+                          style={{
+                            fontSize: '0.72rem', fontWeight: 700, color: '#fff',
+                            background: '#b8860b', border: 'none', borderRadius: '0.375rem',
+                            padding: '0.25rem 0.625rem', cursor: 'pointer',
+                          }}
+                        >
+                          + Add to roadmap
+                        </button>
+                      )}
+                      {/* Dismiss */}
+                      <button
+                        onClick={() => setDismissedAiIds((prev) => new Set([...prev, s.themeId]))}
+                        style={{ fontSize: '0.7rem', color: '#adb5bd', background: 'none', border: 'none', cursor: 'pointer', padding: '0.1rem 0.25rem' }}
+                        title="Dismiss suggestion"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
-          {orgSlug && (
-            <Link
-              href={appRoutes(orgSlug).roadmapAiSuggestions}
-              style={{ fontSize: '0.82rem', fontWeight: 600, color: '#b8860b', textDecoration: 'none' }}
-            >
-              View AI Suggestions →
-            </Link>
-          )}
-        </div>
+        )}
 
         {/* ── Public portal banner ── */}
         <div style={{

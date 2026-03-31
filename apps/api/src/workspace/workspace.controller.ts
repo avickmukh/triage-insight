@@ -9,8 +9,13 @@ import {
   Param,
   UseGuards,
   Req,
+  Query,
+  DefaultValuePipe,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { WorkspaceService } from './workspace.service';
+import { AuditService } from '../ai/services/audit.service';
+import { AuditLogAction } from '@prisma/client';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 import { InviteMemberDto } from './dto/invite-member.dto';
 import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
@@ -36,7 +41,10 @@ interface AuthenticatedRequest {
 @Controller('workspace')
 @UseGuards(JwtAuthGuard)
 export class WorkspaceController {
-  constructor(private readonly workspaceService: WorkspaceService) {}
+  constructor(
+    private readonly workspaceService: WorkspaceService,
+    private readonly auditService: AuditService,
+  ) {}
 
   // ── Read-only ──────────────────────────────────────────────────────────────
 
@@ -217,5 +225,27 @@ export class WorkspaceController {
   @Roles(WorkspaceRole.ADMIN)
   removeDomain(@Req() req: AuthenticatedRequest) {
     return this.workspaceService.removeDomain(req.user.sub);
+  }
+
+  // ── Audit Log (Step 5 Gap Fix) ─────────────────────────────────────────────
+
+  /**
+   * GET /workspace/current/audit-log
+   * Returns paginated audit log entries for the current workspace.
+   * ADMIN only — sensitive operational history.
+   */
+  @Get('current/audit-log')
+  @UseGuards(RolesGuard)
+  @Roles(WorkspaceRole.ADMIN)
+  getAuditLog(
+    @Req() req: AuthenticatedRequest,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
+    @Query('action') action?: AuditLogAction,
+    @Query('userId') userId?: string,
+  ) {
+    return this.workspaceService.getCurrentWorkspace(req.user.sub).then((ws) =>
+      this.auditService.listWorkspaceAuditLogs(ws.id, page, limit, action, userId)
+    );
   }
 }
