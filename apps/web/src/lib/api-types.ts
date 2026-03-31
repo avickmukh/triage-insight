@@ -2585,3 +2585,44 @@ export interface TrendAlertResponse {
   generatedAt: string;
   alerts:      TrendAlert[];
 }
+
+// ─── Executive Decision Dashboard ─────────────────────────────────────────────
+
+export type ExecActionType =
+  | 'ADD_TO_ROADMAP'
+  | 'INCREASE_PRIORITY'
+  | 'INVESTIGATE'
+  | 'MONITOR'
+  | 'WATCH_DECLINE';
+
+export interface ExecDashboardSignals {
+  totalSignalCount: number;
+  trendDelta:       number | null;
+  resurfaceCount:   number;
+  revenueInfluence: number | null;
+  feedbackCount:    number;
+  supportCount:     number;
+  voiceCount:       number;
+  surveyCount:      number;
+  lastEvidenceAt:   string | null;
+  negativePct:      number | null;
+}
+
+export interface ExecDashboardItem {
+  themeId:    string;
+  themeName:  string;
+  shortLabel: string | null;
+  ciqScore:   number;
+  reason:     string;
+  action:     ExecActionType;
+  signals:    ExecDashboardSignals;
+}
+
+export interface ExecutiveDashboardResponse {
+  generatedAt:        string;
+  topProblems:        ExecDashboardItem[];
+  risingIssues:       ExecDashboardItem[];
+  decliningThemes:    ExecDashboardItem[];
+  recommendedActions: ExecDashboardItem[];
+  revenueImpact:      ExecDashboardItem[];
+}

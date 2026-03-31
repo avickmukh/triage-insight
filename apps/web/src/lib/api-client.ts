@@ -113,6 +113,7 @@ import {
   AiRoadmapSuggestionsResponse,
   ActionPlanResponse,
   TrendAlertResponse,
+  ExecutiveDashboardResponse,
 } from "@/lib/api-types";
 
 const getApiBaseUrl = () => {
@@ -520,6 +521,9 @@ const apiClient = {
     /** GET /workspaces/:id/prioritization/trend-alerts — top-5 trend alerts */
     getTrendAlerts: (workspaceId: string): Promise<TrendAlertResponse> =>
       api.get(`/workspaces/${workspaceId}/prioritization/trend-alerts`).then(handleResponse),
+    /** GET /workspaces/:id/prioritization/executive-dashboard — 5-section executive decision dashboard */
+    getExecutiveDashboard: (workspaceId: string): Promise<ExecutiveDashboardResponse> =>
+      api.get(`/workspaces/${workspaceId}/prioritization/executive-dashboard`).then(handleResponse),
   },
 
   support: {

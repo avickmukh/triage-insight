@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/shared/ui/tooltip";
-import { Home, Settings, Package, Package2, Users2, LineChart, Headphones, User, Building2, Brain, Sparkles, BarChart2, MessageSquare } from "lucide-react";
+import { Home, Settings, Package, Package2, Users2, LineChart, Headphones, User, Building2, Brain, Sparkles, BarChart2, MessageSquare, LayoutDashboard } from "lucide-react";
 import { appRoutes, orgAdminRoutes } from "@/lib/routes";
 
 export function Sidebar({ orgSlug: orgSlugProp }: { orgSlug?: string }) {
@@ -23,6 +23,7 @@ export function Sidebar({ orgSlug: orgSlugProp }: { orgSlug?: string }) {
     { href: r.customers,        icon: Building2,  label: "Customers" },
     { href: r.intelligence,      icon: Sparkles,   label: "Intelligence" },
     { href: r.prioritization,     icon: BarChart2,  label: "Prioritization" },
+    { href: r.executiveDashboard,  icon: LayoutDashboard, label: "Executive Dashboard" },
   ];
 
   return (

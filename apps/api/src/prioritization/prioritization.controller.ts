@@ -4,6 +4,7 @@ import {
 } from "@nestjs/common";
 import { PrioritizationService, SetManualOverrideDto } from "./services/prioritization.service";
 import { ActionPlanService } from "./services/action-plan.service";
+import { ExecutiveDashboardService } from "./services/executive-dashboard.service";
 import { TrendAlertService } from "./services/trend-alert.service";
 import { CiqService } from "../ai/services/ciq.service";
 import { UpdateSettingsDto } from "./dto/update-settings.dto";
@@ -43,6 +44,7 @@ export class PrioritizationController {
     private readonly actionPlanService: ActionPlanService,
     private readonly trendAlertService: TrendAlertService,
     private readonly ciqService: CiqService,
+    private readonly executiveDashboardService: ExecutiveDashboardService,
   ) {}
 
   // ─── Theme Ranking ────────────────────────────────────────────────────────
@@ -200,6 +202,18 @@ export class PrioritizationController {
   getActionPlan(@Param('workspaceId') workspaceId: string) {
     return this.actionPlanService.getActionPlan(workspaceId);
   }
+  // ─── Executive Decision Dashboard ────────────────────────────────────────
+  /**
+   * GET /workspaces/:workspaceId/prioritization/executive-dashboard
+   * Returns a single-page executive decision dashboard with 5 sections:
+   * Top Problems, Rising Issues, Declining Themes, Recommended Actions, Revenue Impact.
+   */
+  @Get('executive-dashboard')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
+  getExecutiveDashboard(@Param('workspaceId') workspaceId: string) {
+    return this.executiveDashboardService.getDashboard(workspaceId);
+  }
+
   // ─── Trend Alerts ─────────────────────────────────────────────────────────
   @Get('trend-alerts')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
