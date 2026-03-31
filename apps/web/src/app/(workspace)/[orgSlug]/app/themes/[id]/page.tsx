@@ -10,6 +10,7 @@ import {
 } from '@/hooks/use-themes';
 import { useCurrentMemberRole, useWorkspace } from '@/hooks/use-workspace';
 import { useThemeCiqScore, useRecalculateThemeCiq, useThemeRevenueIntelligence } from '@/hooks/use-ciq';
+import { useAiRoadmapSuggestions } from '@/hooks/use-roadmap';
 import { CiqImpactBadge } from '@/components/ciq/CiqImpactBadge';
 import { CiqSignalBreakdown } from '@/components/ciq/CiqSignalBreakdown';
 import { PromoteToRoadmapModal } from '@/components/roadmap/PromoteToRoadmapModal';
@@ -398,7 +399,11 @@ export default function ThemeDetailPage() {
   const { data: theme, isLoading, isError, error } = useThemeDetail(themeId);
   const { data: ciqScore, isLoading: ciqLoading } = useThemeCiqScore(themeId || null);
   const { data: revenueIntel, isLoading: revenueLoading } = useThemeRevenueIntelligence(themeId || null);
+  // Load AI roadmap suggestions to surface ADD_TO_ROADMAP / INCREASE_PRIORITY banners
+  const { data: aiSuggestions } = useAiRoadmapSuggestions(workspaceId);
+  const aiSuggestion = aiSuggestions?.data?.find((s) => s.themeId === themeId);
   const recalculate = useRecalculateThemeCiq();
+  const updateTheme = useUpdateTheme(themeId);
   const [rescoreToast, setRescoreToast] = useState<string | null>(null);
   const [actionToast, setActionToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [promoteModalOpen, setPromoteModalOpen] = useState(false);
@@ -569,7 +574,7 @@ export default function ThemeDetailPage() {
                   title={`This theme was shipped but received fresh signals ${(theme as any).resurfaceCount} time${(theme as any).resurfaceCount !== 1 ? 's' : ''}. The problem may not be fully resolved.`}
                   style={{ fontSize: '0.75rem', background: '#fff3e0', color: '#e65100', borderRadius: '0.375rem', padding: '0.2rem 0.6rem', fontWeight: 600, border: '1px solid #ffcc80', cursor: 'help' }}
                 >
-                  🔄 Resurfacing ×{(theme as any).resurfaceCount} — shipped but still receiving signals
+                  🔄 Resurfacing ×{(theme as any).resurfaceCount}
                 </span>
               )}
               {/* Recent Spike badge */}
@@ -578,16 +583,19 @@ export default function ThemeDetailPage() {
                   title={`Signal velocity: +${Number((theme as any).trendDelta).toFixed(0)}% week-over-week — rapid signal growth detected`}
                   style={{ fontSize: '0.75rem', background: '#e8f5e9', color: '#1b5e20', borderRadius: '0.375rem', padding: '0.2rem 0.6rem', fontWeight: 600, border: '1px solid #a5d6a7', cursor: 'help' }}
                 >
-                  ⚡ Recent Spike +{Number((theme as any).trendDelta).toFixed(0)}% WoW
+                  ⚡ +{Number((theme as any).trendDelta).toFixed(0)}% WoW
                 </span>
               )}
-              {/* Last Activity */}
-              {(theme as any).lastEvidenceAt && (
+              {/* Last Activity — only shown when no stronger signal badge is present */}
+              {(theme as any).lastEvidenceAt
+                && !((theme as any).resurfaceCount > 0)
+                && !((theme as any).trendDelta != null && (theme as any).trendDelta >= 30)
+                && (
                 <span
                   title={`Most recent signal attached: ${new Date((theme as any).lastEvidenceAt).toLocaleString()}`}
                   style={{ fontSize: '0.75rem', background: '#f0f4f8', color: '#495057', borderRadius: '0.375rem', padding: '0.2rem 0.6rem', fontWeight: 500, cursor: 'help' }}
                 >
-                  📅 Last activity: {new Date((theme as any).lastEvidenceAt).toLocaleDateString()}
+                  📅 {new Date((theme as any).lastEvidenceAt).toLocaleDateString()}
                 </span>
               )}
             </div>
@@ -779,6 +787,138 @@ export default function ThemeDetailPage() {
         )}
       </div>
 
+      {/* ── AI Roadmap Recommendation Banner ── */}
+      {aiSuggestion && (aiSuggestion.suggestionType === 'ADD_TO_ROADMAP' || aiSuggestion.suggestionType === 'INCREASE_PRIORITY') && (
+        <div
+          style={{
+            borderRadius: '0.875rem',
+            padding: '1.25rem 1.5rem',
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: '1rem',
+            flexWrap: 'wrap',
+            background: aiSuggestion.suggestionType === 'ADD_TO_ROADMAP'
+              ? 'linear-gradient(135deg, #ede9fe 0%, #f5f3ff 100%)'
+              : 'linear-gradient(135deg, #fef3c7 0%, #fffbeb 100%)',
+            border: `1px solid ${aiSuggestion.suggestionType === 'ADD_TO_ROADMAP' ? '#c4b5fd' : '#fde68a'}`,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>            {/* ── What to do ── */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem' }}>
+              <span style={{ fontSize: '1rem' }}>
+                {aiSuggestion.suggestionType === 'ADD_TO_ROADMAP' ? '🗺️' : '⬆️'}
+              </span>
+              <span
+                style={{
+                  fontSize: '0.68rem',
+                  fontWeight: 800,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  color: '#adb5bd',
+                }}
+              >
+                What to do
+              </span>
+              <span
+                style={{
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  color: aiSuggestion.suggestionType === 'ADD_TO_ROADMAP' ? '#7c3aed' : '#b45309',
+                }}
+              >
+                {aiSuggestion.suggestionType === 'ADD_TO_ROADMAP' ? 'Add to Roadmap' : 'Increase Priority'}
+              </span>
+            </div>
+            {/* ── Why this matters ── */}
+            <div style={{ marginBottom: '0.4rem' }}>
+              <span style={{ fontSize: '0.68rem', fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase' as const, color: '#adb5bd' }}>Why this matters&nbsp;</span>
+              <span style={{ fontSize: '0.875rem', color: '#1e293b', lineHeight: 1.55 }}>{aiSuggestion.reason}</span>
+            </div>
+            {/* ── Dominant driver ── */}
+            {aiSuggestion.dominantDriver && (
+              <div style={{ marginBottom: '0.4rem' }}>
+                <span style={{ fontSize: '0.68rem', fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase' as const, color: '#adb5bd' }}>Dominant driver&nbsp;</span>
+                <span style={{ fontSize: '0.82rem', color: '#475569', fontWeight: 600, lineHeight: 1.5 }}>{aiSuggestion.dominantDriver}</span>
+              </div>
+            )}
+            {/* ── Confidence ── */}
+            {aiSuggestion.confidenceExplanation && (
+              <div style={{ marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.68rem', fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase' as const, color: '#adb5bd' }}>Confidence&nbsp;</span>
+                <span style={{
+                  fontSize: '0.7rem', fontWeight: 700,
+                  padding: '0.1rem 0.45rem', borderRadius: '999px',
+                  background: aiSuggestion.confidence === 'HIGH' ? '#f0fdf4' : aiSuggestion.confidence === 'MEDIUM' ? '#fefce8' : '#f8fafc',
+                  color: aiSuggestion.confidence === 'HIGH' ? '#15803d' : aiSuggestion.confidence === 'MEDIUM' ? '#a16207' : '#6C757D',
+                }}>{aiSuggestion.confidence}</span>
+                <span style={{ fontSize: '0.78rem', color: '#6C757D', lineHeight: 1.5 }}>{aiSuggestion.confidenceExplanation}</span>
+              </div>
+            )}
+            {/* ── What changed ── */}
+            {((aiSuggestion.signalSummary?.trendDelta != null && Math.abs(aiSuggestion.signalSummary.trendDelta) >= 10) ||
+              (aiSuggestion.signalSummary?.resurfaceCount != null && aiSuggestion.signalSummary.resurfaceCount > 0)) && (
+              <div>
+                <span style={{ fontSize: '0.68rem', fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase' as const, color: '#adb5bd' }}>What changed&nbsp;</span>
+                <span style={{ fontSize: '0.82rem', color: '#475569', lineHeight: 1.5 }}>
+                  {aiSuggestion.signalSummary?.trendDelta != null && Math.abs(aiSuggestion.signalSummary.trendDelta) >= 10
+                    ? `Signal velocity ${aiSuggestion.signalSummary.trendDelta > 0 ? '+' : ''}${Math.round(aiSuggestion.signalSummary.trendDelta)}% WoW`
+                    : ''}
+                  {aiSuggestion.signalSummary?.resurfaceCount != null && aiSuggestion.signalSummary.resurfaceCount > 0
+                    ? `${aiSuggestion.signalSummary.trendDelta != null && Math.abs(aiSuggestion.signalSummary.trendDelta) >= 10 ? ' · ' : ''}Resurfaced ×${aiSuggestion.signalSummary.resurfaceCount} after shipping`
+                    : ''}
+                </span>
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+            {aiSuggestion.suggestionType === 'ADD_TO_ROADMAP' && canEdit && (
+              <button
+                onClick={handleAddToRoadmap}
+                style={{
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  padding: '0.5rem 1.1rem',
+                  borderRadius: '0.5rem',
+                  background: '#7c3aed',
+                  color: '#fff',
+                  border: 'none',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                + Add to Roadmap
+              </button>
+            )}
+            {aiSuggestion.suggestionType === 'INCREASE_PRIORITY' && canEdit && (
+              <button
+                onClick={() => {
+                  if (!themeId) return;
+                  updateTheme.mutate(
+                    { status: ThemeStatus.VERIFIED, pinned: true },
+                    { onSuccess: () => setActionToast({ message: 'Theme verified and pinned — priority increased.', type: 'success' }) },
+                  );
+                }}
+                style={{
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  padding: '0.5rem 1.1rem',
+                  borderRadius: '0.5rem',
+                  background: '#b45309',
+                  color: '#fff',
+                  border: 'none',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Mark High Priority
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── AI Intelligence Panel ── */}
       <div
         style={{
@@ -874,13 +1014,17 @@ export default function ThemeDetailPage() {
               A higher score means more customers are affected and more revenue is at stake.
             </p>
             {ciqScore && (
-              <p style={{ fontSize: '0.78rem', color: ciqScore.priorityScore >= 70 ? '#c62828' : ciqScore.priorityScore >= 40 ? '#b8860b' : '#2e7d32', fontWeight: 600, margin: 0 }}>
+              <p style={{ fontSize: '0.82rem', color: ciqScore.priorityScore >= 70 ? '#c62828' : ciqScore.priorityScore >= 40 ? '#b8860b' : '#2e7d32', fontWeight: 600, margin: 0 }}>
+                <span style={{ marginRight: '0.3rem' }}>
+                  {ciqScore.priorityScore >= 70 ? '🔴' : ciqScore.priorityScore >= 40 ? '🟡' : '🟢'}
+                </span>
+                <span style={{ fontSize: '0.68rem', fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#adb5bd', marginRight: '0.3rem' }}>Why this matters</span>
                 {ciqScore.priorityReason ?? (
                   ciqScore.priorityScore >= 70
-                    ? `Score ${Math.round(ciqScore.priorityScore)}/100 — High urgency. This theme is affecting significant revenue and customer volume.`
+                    ? `High urgency — this theme is affecting significant revenue and customer volume.`
                     : ciqScore.priorityScore >= 40
-                    ? `Score ${Math.round(ciqScore.priorityScore)}/100 — Moderate priority. Worth tracking; consider adding to the roadmap.`
-                    : `Score ${Math.round(ciqScore.priorityScore)}/100 — Low urgency. Monitor for signal growth before escalating.`
+                    ? `Moderate priority — worth tracking; consider adding to the roadmap.`
+                    : `Low urgency — monitor for signal growth before escalating.`
                 )}
               </p>
             )}

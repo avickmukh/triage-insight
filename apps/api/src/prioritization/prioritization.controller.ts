@@ -3,6 +3,9 @@ import {
   UseGuards, Req, ParseIntPipe, DefaultValuePipe,
 } from "@nestjs/common";
 import { PrioritizationService, SetManualOverrideDto } from "./services/prioritization.service";
+import { ActionPlanService } from "./services/action-plan.service";
+import { ExecutiveDashboardService } from "./services/executive-dashboard.service";
+import { TrendAlertService } from "./services/trend-alert.service";
 import { CiqService } from "../ai/services/ciq.service";
 import { UpdateSettingsDto } from "./dto/update-settings.dto";
 import { QueryPrioritizationDto } from "./dto/query-prioritization.dto";
@@ -38,7 +41,10 @@ class SetStrategicTagDto {
 export class PrioritizationController {
   constructor(
     private readonly prioritizationService: PrioritizationService,
+    private readonly actionPlanService: ActionPlanService,
+    private readonly trendAlertService: TrendAlertService,
     private readonly ciqService: CiqService,
+    private readonly executiveDashboardService: ExecutiveDashboardService,
   ) {}
 
   // ─── Theme Ranking ────────────────────────────────────────────────────────
@@ -188,6 +194,31 @@ export class PrioritizationController {
     @Req() req: AuthenticatedRequest,
   ) {
     return this.prioritizationService.enqueueWorkspaceRescore(workspaceId, req.user.sub);
+  }
+
+   // ─── Weekly Action Plan ──────────────────────────────────────────────────
+  @Get('action-plan')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
+  getActionPlan(@Param('workspaceId') workspaceId: string) {
+    return this.actionPlanService.getActionPlan(workspaceId);
+  }
+  // ─── Executive Decision Dashboard ────────────────────────────────────────
+  /**
+   * GET /workspaces/:workspaceId/prioritization/executive-dashboard
+   * Returns a single-page executive decision dashboard with 5 sections:
+   * Top Problems, Rising Issues, Declining Themes, Recommended Actions, Revenue Impact.
+   */
+  @Get('executive-dashboard')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
+  getExecutiveDashboard(@Param('workspaceId') workspaceId: string) {
+    return this.executiveDashboardService.getDashboard(workspaceId);
+  }
+
+  // ─── Trend Alerts ─────────────────────────────────────────────────────────
+  @Get('trend-alerts')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
+  getTrendAlerts(@Param('workspaceId') workspaceId: string) {
+    return this.trendAlertService.getAlerts(workspaceId);
   }
 
   // ─── Settings ─────────────────────────────────────────────────────────────

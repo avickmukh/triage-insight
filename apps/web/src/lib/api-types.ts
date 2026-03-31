@@ -242,7 +242,9 @@ export interface ThemeFeedback {
   id?: string;
   themeId: string;
   feedbackId: string;
-  theme?: Theme;
+  /** Confidence score for this theme assignment (0–1) */
+  confidence?: number | null;
+  theme?: Theme & { ciqScore?: number | null; priorityScore?: number | null };
   /** Feedback fields present when theme linked feedback is expanded */
   title?: string;
   description?: string | null;
@@ -407,7 +409,11 @@ export interface RoadmapItem {
   status: RoadmapStatus;
   isPublic: boolean;
   themeId?: string | null;
-  theme?: Theme | null;
+  theme?: (Theme & {
+    ciqScore?: number | null;
+    trendDelta?: number | null;
+    resurfaceCount?: number | null;
+  }) | null;
   // Intelligence fields
   priorityScore?: number | null;
   confidenceScore?: number | null;
@@ -2473,6 +2479,8 @@ export interface AiSuggestionSignalSummary {
   surveyCount:    number;
   activeSources:  number;
   velocityDelta:  number | null;
+  trendDelta:     number | null;
+  resurfaceCount: number;
   sentimentScore: number | null;
 }
 
@@ -2514,4 +2522,107 @@ export interface AiRoadmapSuggestionsResponse {
     monitor:          number;
     noAction:         number;
   };
+}
+
+// ─── Weekly Action Plan ───────────────────────────────────────────────────────
+
+export type ActionType = 'ADD_TO_ROADMAP' | 'INCREASE_PRIORITY' | 'INVESTIGATE' | 'MONITOR';
+export type ActionPriority = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+
+export interface ActionPlanSignals {
+  feedbackCount:    number;
+  supportCount:     number;
+  voiceCount:       number;
+  surveyCount:      number;
+  totalSignalCount: number;
+  trendDelta:       number | null;
+  resurfaceCount:   number;
+  lastEvidenceAt:   string | null;
+}
+
+export interface ActionPlanItem {
+  themeId:               string;
+  themeName:             string;
+  shortLabel:            string | null;
+  priority:              ActionPriority;
+  ciqScore:              number;
+  decisionPriorityScore: number;
+  recommendedAction:     ActionType;
+  reason:                string;
+  signals:               ActionPlanSignals;
+}
+
+export interface ActionPlanResponse {
+  generatedAt: string;
+  items:       ActionPlanItem[];
+}
+
+// ─── Trend Alerts ─────────────────────────────────────────────────────────────
+export type AlertType    = 'VELOCITY_SPIKE' | 'RESURFACED' | 'SENTIMENT_DROP';
+export type UrgencyLevel = 'CRITICAL' | 'HIGH' | 'MEDIUM';
+
+export interface TrendAlertSignals {
+  trendDelta:     number | null;
+  resurfaceCount: number;
+  resurfacedAt:   string | null;
+  negativePct:    number | null;
+  totalSignals:   number;
+  ciqScore:       number;
+}
+
+export interface TrendAlert {
+  themeId:       string;
+  themeName:     string;
+  shortLabel:    string | null;
+  alertType:     AlertType;
+  urgency:       UrgencyLevel;
+  changePercent: number | null;
+  reason:        string;
+  signals:       TrendAlertSignals;
+}
+
+export interface TrendAlertResponse {
+  generatedAt: string;
+  alerts:      TrendAlert[];
+}
+
+// ─── Executive Decision Dashboard ─────────────────────────────────────────────
+
+export type ExecActionType =
+  | 'ADD_TO_ROADMAP'
+  | 'INCREASE_PRIORITY'
+  | 'INVESTIGATE'
+  | 'MONITOR'
+  | 'WATCH_DECLINE';
+
+export interface ExecDashboardSignals {
+  totalSignalCount: number;
+  trendDelta:       number | null;
+  resurfaceCount:   number;
+  revenueInfluence: number | null;
+  feedbackCount:    number;
+  supportCount:     number;
+  voiceCount:       number;
+  surveyCount:      number;
+  lastEvidenceAt:   string | null;
+  negativePct:      number | null;
+}
+
+export interface ExecDashboardItem {
+  themeId:    string;
+  themeName:  string;
+  shortLabel: string | null;
+  ciqScore:   number;
+  reason:     string;
+  action:     ExecActionType;
+  signals:    ExecDashboardSignals;
+}
+
+export interface ExecutiveDashboardResponse {
+  generatedAt:        string;
+  topProblems:        ExecDashboardItem[];
+  risingIssues:       ExecDashboardItem[];
+  decliningThemes:    ExecDashboardItem[];
+  recommendedActions: ExecDashboardItem[];
+  revenueImpact:      ExecDashboardItem[];
 }

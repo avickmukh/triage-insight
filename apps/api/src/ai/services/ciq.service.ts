@@ -329,21 +329,17 @@ export class CiqService {
     // Pure text/manual feedback (everything that is NOT voice, survey, or support-sourced)
     const textFeedbackCount = feedbackCount - voiceCount - surveyFeedbackCount - supportFeedbackCount;
 
-    // Support count: sum of ticketCount across all linked SupportIssueCluster rows
-    // (the authoritative support signal — independent of Feedback rows created from tickets)
-    const supportClusterCount = supportClusters.reduce(
-      (sum, c) => sum + (c.ticketCount ?? 0), 0,
-    );
-    // Combined support signal: cluster tickets + any Feedback rows with primarySource=SUPPORT
-    const supportCount = supportClusterCount + supportFeedbackCount;
+    // Support count: Feedback rows with primarySource=SUPPORT (unified pipeline).
+    // SupportIssueCluster rows are kept for legacy analytics but no longer feed CIQ
+    // to prevent double-counting tickets that also created Feedback records.
+    const supportCount = supportFeedbackCount;
     const hasSupportSpike = supportClusters.some((c) => c.hasActiveSpike);
 
     // surveyCount = survey-sourced Feedback rows (open-text answers processed by AI pipeline)
     const surveyCount = surveyFeedbackCount;
 
-    // totalSignalCount uses cluster count for support (not the combined supportCount)
-    // to avoid double-counting tickets that also created Feedback rows.
-    const totalSignalCount = feedbackCount + supportClusterCount + surveyCount;
+    // totalSignalCount = all Feedback rows (support, survey, voice, text) — single source of truth
+    const totalSignalCount = feedbackCount;
 
     // ── Customer aggregates ─────────────────────────────────────────────────
     const customerIds = new Set(

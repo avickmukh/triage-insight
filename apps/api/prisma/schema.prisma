@@ -748,6 +748,9 @@ model Feedback {
   duplicateSuggestionsAsSource FeedbackDuplicateSuggestion[] @relation("SourceFeedback")
   duplicateSuggestionsAsTarget FeedbackDuplicateSuggestion[] @relation("TargetFeedback")
 
+  /// Reverse relation: the SupportTicket that was bridged into this Feedback record
+  sourceSupportTicket SupportTicket?
+
   @@index([workspaceId])
   @@index([customerId])
   @@index([portalUserId])
@@ -1143,8 +1146,13 @@ model SupportTicket {
 
   embedding         Unsupported("vector(1536)")?
 
+  /// ID of the unified Feedback record created when this ticket was ingested.
+  /// Null for tickets ingested before the unified pipeline was introduced.
+  unifiedFeedbackId String?  @unique
+
   workspace         Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   customer          Customer?                @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  unifiedFeedback   Feedback?                @relation(fields: [unifiedFeedbackId], references: [id], onDelete: SetNull)
   clusterMaps       SupportIssueClusterMap[]
 
   @@unique([workspaceId, provider, externalId])

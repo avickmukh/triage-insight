@@ -1115,6 +1115,20 @@ export default function InboxPage() {
                 ? PRIMARY_SOURCE_TABS.find((t) => t.value === fb.primarySource)?.label ?? fb.primarySource
                 : null;
               const pc = fb.primarySource ? PRIMARY_SOURCE_COLORS[fb.primarySource] : null;
+              // Visual priority dot based on highest CIQ score of linked themes
+              const maxCiq = fb.themes && fb.themes.length > 0
+                ? Math.max(...(fb.themes as ThemeFeedback[]).map((tf) => tf.theme?.ciqScore ?? tf.theme?.priorityScore ?? 0))
+                : 0;
+              const priorityDot = maxCiq >= 70 ? '🔴' : maxCiq >= 40 ? '🟡' : maxCiq > 0 ? '🟢' : null;
+              // Why this matters — shown when ARR is significant or CIQ is high
+              const arrValue = fb.customer?.arrValue ?? 0;
+              const whyMatters = arrValue > 0 && maxCiq >= 70
+                ? `$${(arrValue / 100).toLocaleString()} ARR at risk · CIQ ${Math.round(maxCiq)}`
+                : arrValue > 0
+                ? `$${(arrValue / 100).toLocaleString()} ARR`
+                : maxCiq >= 70
+                ? `CIQ ${Math.round(maxCiq)} — high urgency`
+                : null;
               return (
                 <Link
                   key={fb.id}
@@ -1140,10 +1154,21 @@ export default function InboxPage() {
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.35rem',
                       }}
                     >
-                      {fb.title}
+                      {priorityDot && <span style={{ fontSize: '0.7rem', flexShrink: 0 }}>{priorityDot}</span>}
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fb.title}</span>
                     </p>
+                    {/* Why this matters — only when ARR or high CIQ */}
+                    {whyMatters && (
+                      <p style={{ fontSize: '0.72rem', color: '#b91c1c', fontWeight: 600, margin: '0 0 0.15rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <span style={{ fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase', color: '#adb5bd', marginRight: '0.25rem' }}>Why this matters</span>
+                        {whyMatters}
+                      </p>
+                    )}
                     {fb.description && (
                       <p
                         style={{
@@ -1182,7 +1207,13 @@ export default function InboxPage() {
                             }}
                           >
                             <span style={{ fontSize: '0.6rem' }}>⬡</span>
-                            {tf.theme?.title ?? 'Theme'}
+                            {tf.theme?.shortLabel ?? tf.theme?.title ?? 'Theme'}
+                            {/* CIQ score inline — decision context at a glance */}
+                            {(tf.theme?.ciqScore ?? tf.theme?.priorityScore) != null && (
+                              <span style={{ fontSize: '0.6rem', fontWeight: 700, opacity: 0.75 }}>
+                                &nbsp;{Math.round((tf.theme!.ciqScore ?? tf.theme!.priorityScore)!)}
+                              </span>
+                            )}
                           </span>
                         ))}
                         {fb.themes.length > 3 && (
@@ -1223,20 +1254,22 @@ export default function InboxPage() {
                         {primaryLabel}
                       </span>
                     )}
-                    {/* Secondary source / channel badge */}
-                    <span
-                      style={{
-                        fontSize: '0.7rem',
-                        fontWeight: 600,
-                        padding: '0.15rem 0.5rem',
-                        borderRadius: '999px',
-                        background: '#f0f4f8',
-                        color: '#6C757D',
-                        border: '1px solid #e9ecef',
-                      }}
-                    >
-                      {sourceLabel}
-                    </span>
+                    {/* Secondary source / channel badge — hidden when primary badge already shown */}
+                    {(activePrimarySource || !primaryLabel) && (
+                      <span
+                        style={{
+                          fontSize: '0.7rem',
+                          fontWeight: 600,
+                          padding: '0.15rem 0.5rem',
+                          borderRadius: '999px',
+                          background: '#f0f4f8',
+                          color: '#6C757D',
+                          border: '1px solid #e9ecef',
+                        }}
+                      >
+                        {sourceLabel}
+                      </span>
+                    )}
                     <span
                       style={{
                         fontSize: '0.72rem',
@@ -1249,6 +1282,7 @@ export default function InboxPage() {
                     >
                       {fb.status.replace('_', '\u00a0')}
                     </span>
+                    {/* ARR is now surfaced in the "Why this matters" line — no duplicate badge needed */}
                     {/* Merged-away indicator: this item was merged into another */}
                     {fb.mergedIntoId && (
                       <span

@@ -163,15 +163,49 @@ function ItemCard({ item, canEdit, onEdit, onMove }: ItemCardProps) {
         )}
       </div>
 
-      {/* Inherited impact explanation from linked theme */}
-      {item.theme && (item.theme as { aiExplanation?: string | null }).aiExplanation && (
-        <p style={{
-          fontSize: '0.72rem', color: '#7c5cbf', margin: '0 0 0.375rem',
-          overflow: 'hidden', display: '-webkit-box',
-          WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', lineHeight: 1.4,
-        }}>
-          💡 {(item.theme as { aiExplanation?: string | null }).aiExplanation}
-        </p>
+      {/* Roadmap Intelligence block — Why this matters / CIQ / dominant driver */}
+      {item.theme && (
+        <div style={{ margin: '0 0 0.375rem', display: 'flex', flexDirection: 'column', gap: '0.18rem' }}>
+          {item.theme.aiExplanation && (
+            <p style={{
+              fontSize: '0.72rem', color: '#7c5cbf', margin: 0,
+              overflow: 'hidden', display: '-webkit-box',
+              WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', lineHeight: 1.4,
+            }}>
+              <span style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: '0.62rem', color: '#adb5bd', marginRight: '0.3rem' }}>Why this matters</span>
+              {item.theme.aiExplanation}
+            </p>
+          )}
+          {(item.theme.ciqScore != null || (item.theme as { trendDelta?: number | null }).trendDelta != null || item.theme.aiRecommendation) && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+              {item.theme.ciqScore != null && (
+                <span style={{
+                  fontSize: '0.65rem', fontWeight: 700,
+                  padding: '0.08rem 0.4rem', borderRadius: '999px',
+                  background: item.theme.ciqScore >= 70 ? '#fef2f2' : item.theme.ciqScore >= 40 ? '#fefce8' : '#f0fdf4',
+                  color: item.theme.ciqScore >= 70 ? '#dc2626' : item.theme.ciqScore >= 40 ? '#a16207' : '#15803d',
+                }}>
+                  CIQ {Math.round(item.theme.ciqScore)}
+                </span>
+              )}
+              {(item.theme as { trendDelta?: number | null }).trendDelta != null && ((item.theme as { trendDelta?: number | null }).trendDelta ?? 0) > 10 && (
+                <span style={{ fontSize: '0.65rem', fontWeight: 600, color: '#ea580c', background: '#fff7ed', padding: '0.08rem 0.4rem', borderRadius: '999px' }}>
+                  ⚡ +{Math.round((item.theme as { trendDelta?: number | null }).trendDelta ?? 0)}% WoW
+                </span>
+              )}
+              {(item.theme as { resurfaceCount?: number | null }).resurfaceCount != null && ((item.theme as { resurfaceCount?: number | null }).resurfaceCount ?? 0) > 0 && (
+                <span style={{ fontSize: '0.65rem', fontWeight: 600, color: '#7c3aed', background: '#faf5ff', padding: '0.08rem 0.4rem', borderRadius: '999px' }}>
+                  🔄 Resurfaced ×{(item.theme as { resurfaceCount?: number | null }).resurfaceCount}
+                </span>
+              )}
+              {item.theme.aiRecommendation && (
+                <span style={{ fontSize: '0.65rem', color: '#475569', background: '#f0f4f8', padding: '0.08rem 0.4rem', borderRadius: '999px', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span style={{ fontWeight: 700 }}>What to do:</span> {item.theme.aiRecommendation}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Description */}
