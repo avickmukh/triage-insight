@@ -66,6 +66,12 @@ const W_VELOCITY  = 0.25;
 const W_RECENCY   = 0.20;
 const W_RESURFACE = 0.20;
 
+/** Minimum total signal count for a theme to appear in any section. */
+const MIN_SIGNAL_THRESHOLD = 3;
+
+/** DPS multiplier for near-duplicate themes (autoMergeCandidate=true). */
+const NEAR_DUPLICATE_PENALTY = 0.80;
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatArr(value: number): string {
@@ -134,6 +140,8 @@ export class ExecutiveDashboardService {
         status:                true,
         ciqScore:              true,
         priorityScore:         true,
+        aiConfidence:          true,
+        autoMergeCandidate:    true,
         trendDelta:            true,
         resurfaceCount:        true,
         resurfacedAt:          true,
@@ -169,10 +177,12 @@ export class ExecutiveDashboardService {
 
     // ── 2. Pre-compute derived values for every theme ─────────────────────────
     type Enriched = {
-      t:           typeof themes[0];
-      ciq:         number;
-      delta:       number;
-      dps:         number;
+      t:              typeof themes[0];
+      ciq:            number;
+      delta:          number;
+      dps:            number;
+      signalCount:    number;
+      isNearDuplicate: boolean;
       onRoadmap:   boolean;
       negativePct: number | null;
     };
@@ -180,7 +190,12 @@ export class ExecutiveDashboardService {
     const enriched: Enriched[] = themes.map((t) => {
       const ciq  = Math.min(100, Math.max(0, t.ciqScore ?? t.priorityScore ?? 0));
       const delta = t.trendDelta ?? 0;
-      const dps   = computeDps(ciq, delta, t.lastEvidenceAt, t.resurfaceCount ?? 0, now);
+      // Use canonical totalSignalCount; fall back to feedbackCount for unscored themes
+      const signalCount = t.totalSignalCount ?? t.feedbackCount ?? 0;
+      const isNearDuplicate = t.autoMergeCandidate ?? false;
+      // Apply near-duplicate penalty to DPS
+      const rawDps = computeDps(ciq, delta, t.lastEvidenceAt, t.resurfaceCount ?? 0, now);
+      const dps = isNearDuplicate ? rawDps * NEAR_DUPLICATE_PENALTY : rawDps;
       const onRoadmap = (t.roadmapItems ?? []).some((r) => r.status !== 'SHIPPED');
 
       // Sentiment: extract negativePct from sentimentDistribution JSON
@@ -196,11 +211,13 @@ export class ExecutiveDashboardService {
         if (total >= 3) negativePct = neg / total;
       }
 
-      return { t, ciq, delta, dps, onRoadmap, negativePct };
+      return { t, ciq, delta, dps, signalCount, isNearDuplicate, onRoadmap, negativePct };
     });
 
-    // ── 3. Build each section ─────────────────────────────────────────────────
+    // ── 3. Filter by minimum signal threshold ────────────────────────────────
+    const eligible = enriched.filter((e) => e.signalCount >= MIN_SIGNAL_THRESHOLD);
 
+    // ── 4. Build each section ─────────────────────────────────────────────────
     // Helper: convert an Enriched entry into an ExecDashboardItem
     const toItem = (e: Enriched, isDecline = false): ExecDashboardItem => {
       const { t, ciq, delta, dps, onRoadmap } = e;
@@ -222,16 +239,16 @@ export class ExecutiveDashboardService {
       if ((t.revenueInfluence ?? 0) > 0) {
         parts.push(`${formatArr(t.revenueInfluence!)} ARR exposure`);
       }
-      if (e.negativePct != null && e.negativePct >= 0.4) {
+       if (e.negativePct != null && e.negativePct >= 0.4) {
         parts.push(`${Math.round(e.negativePct * 100)}% negative sentiment`);
       }
-
       // Extract dominant driver from signalBreakdown JSON
       const bd = t.signalBreakdown as Record<string, unknown> | null;
       const dominantDriver = bd?.dominantDriver as string | undefined;
       if (dominantDriver) parts.push(`driver: ${dominantDriver}`);
-
-      const reason = parts.join(' · ');
+      if (t.aiConfidence != null) parts.push(`${Math.round(t.aiConfidence * 100)}% AI confidence`);
+      if (e.isNearDuplicate) parts.push('⚠ near-duplicate — consider merging');
+      const reason = parts.join(' · ');;
 
       return {
         themeId:    t.id,
@@ -255,38 +272,45 @@ export class ExecutiveDashboardService {
       };
     };
 
-    // ── Section 1: 🔥 Top Problems — highest CIQ ─────────────────────────────
-    const topProblems = [...enriched]
-      .sort((a, b) => b.ciq - a.ciq)
+       // Confidence-aware sort helper: use aiConfidence as tiebreaker within 0.5 pts
+    const sortByDps = (arr: Enriched[]) =>
+      [...arr].sort((a, b) => {
+        const diff = b.dps - a.dps;
+        if (Math.abs(diff) < 0.5) return (b.t.aiConfidence ?? 0) - (a.t.aiConfidence ?? 0);
+        return diff;
+      });
+
+    // ── Section 1: 🔥 Top Problems — highest CIQ (min-signal eligible only) ──
+    const topProblems = [...eligible]
+      .sort((a, b) => {
+        const diff = b.ciq - a.ciq;
+        if (Math.abs(diff) < 0.5) return (b.t.aiConfidence ?? 0) - (a.t.aiConfidence ?? 0);
+        return diff;
+      })
       .slice(0, 5)
       .map((e) => toItem(e));
-
     // ── Section 2: 🚨 Rising Issues — fastest positive velocity ──────────────
-    const risingIssues = [...enriched]
+    const risingIssues = [...eligible]
       .filter((e) => e.delta > 0)
       .sort((a, b) => b.delta - a.delta)
       .slice(0, 5)
       .map((e) => toItem(e));
-
     // ── Section 3: 📉 Declining — steepest negative velocity ─────────────────
-    const decliningThemes = [...enriched]
+    const decliningThemes = [...eligible]
       .filter((e) => e.delta < 0)
       .sort((a, b) => a.delta - b.delta)   // most negative first
       .slice(0, 5)
       .map((e) => toItem(e, true));
-
-    // ── Section 4: 🧠 Recommended Actions — highest DPS ──────────────────────
-    const recommendedActions = [...enriched]
-      .sort((a, b) => b.dps - a.dps)
+    // ── Section 4: 🧠 Recommended Actions — highest DPS (with penalty) ────────
+    const recommendedActions = sortByDps(eligible)
       .slice(0, 5)
       .map((e) => toItem(e));
-
     // ── Section 5: 💰 Revenue Impact — highest ARR exposure ──────────────────
-    const revenueImpact = [...enriched]
+    const revenueImpact = [...eligible]
       .filter((e) => (e.t.revenueInfluence ?? 0) > 0)
       .sort((a, b) => (b.t.revenueInfluence ?? 0) - (a.t.revenueInfluence ?? 0))
       .slice(0, 5)
-      .map((e) => toItem(e));
+      .map((e) => toItem(e));;
 
     this.logger.log(
       `[ExecutiveDashboard] Generated for workspace ${workspaceId}: ` +

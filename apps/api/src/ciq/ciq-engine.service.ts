@@ -105,6 +105,10 @@ export interface ThemeRankingItem {
   /** Total signal count across all sources */
   totalSignalCount: number;
   lastScoredAt: Date | null;
+  /** AI confidence score for the theme cluster (0–1) */
+  aiConfidence: number | null;
+  /** Whether this theme is flagged as a near-duplicate merge candidate */
+  isNearDuplicate: boolean;
   breakdown: Record<string, CiqScoreBreakdown>;
 }
 
@@ -288,6 +292,8 @@ export class CiqEngineService {
         voiceCount:       true,
         supportCount:     true,
         totalSignalCount: true,
+        aiConfidence:       true,
+        autoMergeCandidate: true,
         feedbacks: {
           select: {
             feedback: {
@@ -400,11 +406,17 @@ export class CiqEngineService {
       const persistedSupportCount  = theme.supportCount  ?? 0;
       const persistedTotalSignals  = theme.totalSignalCount ?? (feedbackCount + (theme.supportCount ?? 0));
 
+      // ── Near-duplicate penalty (20% CIQ reduction for merge candidates) ────
+      const isNearDuplicate = theme.autoMergeCandidate ?? false;
+      const effectiveCiqScore = isNearDuplicate
+        ? parseFloat((ciqScore * 0.80).toFixed(2))
+        : parseFloat(ciqScore.toFixed(2));
+
       return {
         themeId:            theme.id,
         title:              theme.title,
         status:             theme.status,
-        ciqScore:           parseFloat(ciqScore.toFixed(2)),
+        ciqScore:           effectiveCiqScore,
         priorityScore:      theme.priorityScore,
         revenueInfluence:   theme.revenueInfluence ?? 0,
         feedbackCount:      persistedFeedbackCount,
@@ -417,9 +429,13 @@ export class CiqEngineService {
         supportCount:       persistedSupportCount,
         totalSignalCount:   persistedTotalSignals,
         lastScoredAt:       theme.lastScoredAt,
+        aiConfidence:       theme.aiConfidence ?? null,
+        isNearDuplicate,
         breakdown,
       };
-    });
+    })
+    // ── Min-signal guard: exclude themes with fewer than 3 total signals ────
+    .filter((t) => t.totalSignalCount >= 3);
   }
 
   // ─── 3. Customer Ranking ──────────────────────────────────────────────────
