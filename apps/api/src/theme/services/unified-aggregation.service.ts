@@ -4,7 +4,7 @@
  * Computes and persists cross-source aggregation fields on the Theme model:
  *   - feedbackCount  (all sourceTypes via ThemeFeedback)
  *   - voiceCount     (VOICE sourceType only)
- *   - supportCount   (sum of ticketCount from linked SupportIssueClusters)
+ *   - supportCount   (Feedback rows with primarySource=SUPPORT — unified pipeline)
  *   - totalSignalCount
  *   - sentimentDistribution  { positive, neutral, negative }
  *   - crossSourceInsight     (AI-generated trend sentence)
@@ -62,7 +62,7 @@ export class UnifiedAggregationService {
       where: { themeId },
       include: {
         feedback: {
-          select: { sourceType: true, sentiment: true },
+          select: { sourceType: true, primarySource: true, sentiment: true },
         },
       },
     });
@@ -87,14 +87,15 @@ export class UnifiedAggregationService {
       }
     }
 
-    // 4. Support ticket count via linked SupportIssueClusters
-    const clusterAgg = await this.prisma.supportIssueCluster.aggregate({
-      where: { themeId },
-      _sum: { ticketCount: true },
-    });
-    const supportCount = clusterAgg._sum.ticketCount ?? 0;
+    // 4. Support ticket count via Feedback rows with primarySource=SUPPORT (unified pipeline).
+    // SupportIssueCluster rows are kept for legacy analytics views but no longer feed aggregation
+    // to prevent double-counting tickets that also created Feedback records.
+    const supportCount = feedbackRows.filter(
+      (tf) => tf.feedback.primarySource === 'SUPPORT',
+    ).length;
 
-    const totalSignalCount = feedbackCount + supportCount + voiceCount;
+    // totalSignalCount = all Feedback rows — single source of truth
+    const totalSignalCount = feedbackCount;
 
     // 5. Generate cross-source insight sentence (LLM if key available, fallback to rule-based)
     const crossSourceInsight = await this.generateInsightAsync({

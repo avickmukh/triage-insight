@@ -587,16 +587,9 @@ export class SurveyService {
 
       // 2. Create one Feedback per substantive open-text answer
       const createdFeedbackIds: string[] = [];
-      if (!survey.convertToFeedback && textCandidates.length > 0) {
-        // convertToFeedback is disabled on this survey — open-text answers will
-        // not enter the AI pipeline. Log so operators can diagnose missing signals.
-        this.logger.stepWarn(
-          { jobType: 'SURVEY_SUBMIT', workspaceId: workspace.id, entityId: surveyId },
-          'CONVERT_TO_FEEDBACK_DISABLED',
-          `Survey ${surveyId} has convertToFeedback=false — ${textCandidates.length} open-text answer(s) will not be analysed`,
-        );
-      }
-      if (survey.convertToFeedback && textCandidates.length > 0) {
+      // All open-text answers create Feedback records regardless of convertToFeedback flag.
+      // The flag is preserved for backward-compat API surface but no longer gates signal creation.
+      if (textCandidates.length > 0) {
         for (const candidate of textCandidates) {
           const fb = await tx.feedback.create({
             data: {
