@@ -4,6 +4,7 @@ import {
 } from "@nestjs/common";
 import { PrioritizationService, SetManualOverrideDto } from "./services/prioritization.service";
 import { ActionPlanService } from "./services/action-plan.service";
+import { TrendAlertService } from "./services/trend-alert.service";
 import { CiqService } from "../ai/services/ciq.service";
 import { UpdateSettingsDto } from "./dto/update-settings.dto";
 import { QueryPrioritizationDto } from "./dto/query-prioritization.dto";
@@ -39,8 +40,9 @@ class SetStrategicTagDto {
 export class PrioritizationController {
   constructor(
     private readonly prioritizationService: PrioritizationService,
-    private readonly ciqService: CiqService,
     private readonly actionPlanService: ActionPlanService,
+    private readonly trendAlertService: TrendAlertService,
+    private readonly ciqService: CiqService,
   ) {}
 
   // ─── Theme Ranking ────────────────────────────────────────────────────────
@@ -192,12 +194,17 @@ export class PrioritizationController {
     return this.prioritizationService.enqueueWorkspaceRescore(workspaceId, req.user.sub);
   }
 
-  // ─── Weekly Action Plan ──────────────────────────────────────────────────
-
+   // ─── Weekly Action Plan ──────────────────────────────────────────────────
   @Get('action-plan')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
   getActionPlan(@Param('workspaceId') workspaceId: string) {
     return this.actionPlanService.getActionPlan(workspaceId);
+  }
+  // ─── Trend Alerts ─────────────────────────────────────────────────────────
+  @Get('trend-alerts')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
+  getTrendAlerts(@Param('workspaceId') workspaceId: string) {
+    return this.trendAlertService.getAlerts(workspaceId);
   }
 
   // ─── Settings ─────────────────────────────────────────────────────────────

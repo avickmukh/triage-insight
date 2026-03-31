@@ -112,6 +112,7 @@ import {
   PromoteThemeDto,
   AiRoadmapSuggestionsResponse,
   ActionPlanResponse,
+  TrendAlertResponse,
 } from "@/lib/api-types";
 
 const getApiBaseUrl = () => {
@@ -516,6 +517,9 @@ const apiClient = {
     /** GET /workspaces/:id/prioritization/action-plan — weekly top-5 action plan */
     getActionPlan: (workspaceId: string): Promise<ActionPlanResponse> =>
       api.get(`/workspaces/${workspaceId}/prioritization/action-plan`).then(handleResponse),
+    /** GET /workspaces/:id/prioritization/trend-alerts — top-5 trend alerts */
+    getTrendAlerts: (workspaceId: string): Promise<TrendAlertResponse> =>
+      api.get(`/workspaces/${workspaceId}/prioritization/trend-alerts`).then(handleResponse),
   },
 
   support: {

@@ -2552,3 +2552,32 @@ export interface ActionPlanResponse {
   generatedAt: string;
   items:       ActionPlanItem[];
 }
+
+// ─── Trend Alerts ─────────────────────────────────────────────────────────────
+export type AlertType    = 'VELOCITY_SPIKE' | 'RESURFACED' | 'SENTIMENT_DROP';
+export type UrgencyLevel = 'CRITICAL' | 'HIGH' | 'MEDIUM';
+
+export interface TrendAlertSignals {
+  trendDelta:     number | null;
+  resurfaceCount: number;
+  resurfacedAt:   string | null;
+  negativePct:    number | null;
+  totalSignals:   number;
+  ciqScore:       number;
+}
+
+export interface TrendAlert {
+  themeId:       string;
+  themeName:     string;
+  shortLabel:    string | null;
+  alertType:     AlertType;
+  urgency:       UrgencyLevel;
+  changePercent: number | null;
+  reason:        string;
+  signals:       TrendAlertSignals;
+}
+
+export interface TrendAlertResponse {
+  generatedAt: string;
+  alerts:      TrendAlert[];
+}

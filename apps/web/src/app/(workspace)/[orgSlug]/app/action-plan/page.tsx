@@ -6,11 +6,17 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import apiClient from '@/lib/api-client';
 import { appRoutes } from '@/lib/routes';
-import type { ActionPlanItem, ActionPriority, ActionType } from '@/lib/api-types';
+import type {
+  ActionPlanItem,
+  ActionPriority,
+  ActionType,
+  TrendAlert,
+  AlertType,
+  UrgencyLevel,
+} from '@/lib/api-types';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
-/** Visual priority dot + colour for each priority level */
 const PRIORITY_DOT: Record<ActionPriority, { dot: string; bg: string; color: string; border: string }> = {
   CRITICAL: { dot: '🔴', bg: '#fef2f2', color: '#b91c1c', border: '#fecaca' },
   HIGH:     { dot: '🔴', bg: '#fff7ed', color: '#c2410c', border: '#fed7aa' },
@@ -23,6 +29,18 @@ const ACTION_STYLE: Record<ActionType, { bg: string; color: string; label: strin
   INCREASE_PRIORITY: { bg: '#fef3c7', color: '#b45309', label: 'Increase Priority', cta: '↑ Increase Priority →' },
   INVESTIGATE:       { bg: '#fce7f3', color: '#9d174d', label: 'Investigate',        cta: '🔍 Investigate →' },
   MONITOR:           { bg: '#f0f4f8', color: '#475569', label: 'Monitor',            cta: '👁 Monitor →' },
+};
+
+const ALERT_STYLE: Record<AlertType, { icon: string; label: string; bg: string; color: string; border: string }> = {
+  VELOCITY_SPIKE: { icon: '⚡', label: 'Velocity Spike',  bg: '#fff7ed', color: '#c2410c', border: '#fed7aa' },
+  RESURFACED:     { icon: '🔄', label: 'Resurfaced',       bg: '#fef2f2', color: '#b91c1c', border: '#fecaca' },
+  SENTIMENT_DROP: { icon: '📉', label: 'Sentiment Drop',   bg: '#fce7f3', color: '#9d174d', border: '#f9a8d4' },
+};
+
+const URGENCY_DOT: Record<UrgencyLevel, string> = {
+  CRITICAL: '🔴',
+  HIGH:     '🟠',
+  MEDIUM:   '🟡',
 };
 
 const CARD: React.CSSProperties = {
@@ -44,7 +62,6 @@ const LABEL: React.CSSProperties = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Build the "What changed" line from signal data */
 function buildWhatChanged(item: ActionPlanItem): string {
   const parts: string[] = [];
   const total = (item.signals.feedbackCount ?? 0)
@@ -77,6 +94,12 @@ export default function ActionPlanPage() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const { data: alertData, isLoading: alertsLoading } = useQuery({
+    queryKey: ['trend-alerts', orgSlug],
+    queryFn: () => apiClient.prioritization.getTrendAlerts(orgSlug),
+    staleTime: 5 * 60 * 1000,
+  });
+
   if (isLoading) {
     return (
       <div style={{ padding: '2rem', maxWidth: '860px', margin: '0 auto' }}>
@@ -99,9 +122,55 @@ export default function ActionPlanPage() {
     );
   }
 
+  const alerts = alertData?.alerts ?? [];
+
   return (
     <div style={{ padding: '2rem', maxWidth: '860px', margin: '0 auto' }}>
-      {/* Page header */}
+
+      {/* ── 🚨 What needs attention right now ── */}
+      {(alertsLoading || alerts.length > 0) && (
+        <section style={{ marginBottom: '2rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.875rem' }}>
+            <span style={{ fontSize: '1.15rem' }}>🚨</span>
+            <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0A2540', margin: 0 }}>
+              What needs attention right now
+            </h2>
+            {alerts.length > 0 && (
+              <span style={{
+                fontSize: '0.68rem', fontWeight: 800,
+                padding: '0.1rem 0.5rem', borderRadius: '999px',
+                background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca',
+              }}>
+                {alerts.length} alert{alerts.length !== 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+
+          {alertsLoading && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {[1, 2].map((n) => (
+                <div key={n} style={{ ...CARD, height: '4rem', background: '#f8fafc' }} />
+              ))}
+            </div>
+          )}
+
+          {!alertsLoading && alerts.length === 0 && (
+            <div style={{ ...CARD, color: '#6C757D', fontSize: '0.875rem', textAlign: 'center', padding: '1.25rem' }}>
+              No active alerts. All themes are within normal velocity and sentiment ranges.
+            </div>
+          )}
+
+          {!alertsLoading && alerts.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+              {alerts.map((alert: TrendAlert) => (
+                <AlertCard key={`${alert.themeId}-${alert.alertType}`} alert={alert} r={r} />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ── Weekly Action Plan header ── */}
       <div style={{ marginBottom: '1.75rem' }}>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0A2540', margin: '0 0 0.25rem' }}>
           Weekly Action Plan
@@ -127,6 +196,87 @@ export default function ActionPlanPage() {
         ))}
       </div>
     </div>
+  );
+}
+
+// ─── Alert Card ───────────────────────────────────────────────────────────────
+
+function AlertCard({ alert, r }: { alert: TrendAlert; r: ReturnType<typeof appRoutes> }) {
+  const as_ = ALERT_STYLE[alert.alertType] ?? ALERT_STYLE.VELOCITY_SPIKE;
+  const urgencyDot = URGENCY_DOT[alert.urgency] ?? '🟡';
+
+  return (
+    <Link
+      href={r.themeItem(alert.themeId)}
+      style={{ textDecoration: 'none' }}
+    >
+      <div
+        style={{
+          ...CARD,
+          borderLeft: `4px solid ${as_.border}`,
+          background: as_.bg,
+          padding: '0.875rem 1.25rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '1rem',
+          cursor: 'pointer',
+          transition: 'box-shadow 0.15s',
+        }}
+      >
+        {/* Alert type icon */}
+        <span style={{ fontSize: '1.25rem', flexShrink: 0 }}>{as_.icon}</span>
+
+        {/* Content */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {/* Top row: urgency dot + theme name + alert type badge */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.3rem', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.75rem' }}>{urgencyDot}</span>
+            <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#0A2540', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {alert.shortLabel ?? alert.themeName}
+            </span>
+            <span style={{
+              fontSize: '0.65rem', fontWeight: 800,
+              padding: '0.1rem 0.45rem', borderRadius: '999px',
+              background: '#fff', color: as_.color, border: `1px solid ${as_.border}`,
+              whiteSpace: 'nowrap',
+            }}>
+              {as_.label}
+            </span>
+            {alert.changePercent != null && (
+              <span style={{
+                fontSize: '0.72rem', fontWeight: 700,
+                color: as_.color,
+              }}>
+                {alert.alertType === 'SENTIMENT_DROP'
+                  ? `${alert.changePercent}% negative`
+                  : `+${alert.changePercent}% WoW`}
+              </span>
+            )}
+          </div>
+
+          {/* Reason sentence */}
+          <p style={{ fontSize: '0.8rem', color: '#475569', margin: 0, lineHeight: 1.5 }}>
+            <span style={{ ...LABEL, display: 'inline', marginRight: '0.3rem' }}>Why this matters</span>
+            {alert.reason}
+          </p>
+        </div>
+
+        {/* CIQ badge */}
+        {alert.signals.ciqScore > 0 && (
+          <div style={{ flexShrink: 0, textAlign: 'center' }}>
+            <div style={{ fontSize: '1.1rem', fontWeight: 800, color: as_.color, lineHeight: 1 }}>
+              {alert.signals.ciqScore}
+            </div>
+            <div style={{ fontSize: '0.6rem', color: '#adb5bd', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+              CIQ
+            </div>
+          </div>
+        )}
+
+        {/* Arrow */}
+        <span style={{ color: as_.color, fontSize: '0.9rem', flexShrink: 0 }}>→</span>
+      </div>
+    </Link>
   );
 }
 
@@ -166,17 +316,14 @@ function ActionCard({ item, rank, r }: { item: ActionPlanItem; rank: number; r: 
 
           {/* ── Decision language block ── */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', paddingLeft: '1.6rem' }}>
-            {/* Why this matters */}
             <div>
               <p style={{ ...LABEL, display: 'inline' }}>Why this matters&nbsp;</p>
               <span style={{ fontSize: '0.82rem', color: '#1e293b', lineHeight: 1.5 }}>{item.reason}</span>
             </div>
-            {/* What changed */}
             <div>
               <p style={{ ...LABEL, display: 'inline' }}>What changed&nbsp;</p>
               <span style={{ fontSize: '0.82rem', color: '#475569', lineHeight: 1.5 }}>{whatChanged}</span>
             </div>
-            {/* What to do */}
             <div>
               <p style={{ ...LABEL, display: 'inline' }}>What to do&nbsp;</p>
               <span style={{ fontSize: '0.82rem', color: as_.color, fontWeight: 600, lineHeight: 1.5 }}>{as_.label} this theme.</span>
