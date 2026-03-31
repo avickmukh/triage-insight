@@ -139,14 +139,40 @@ export class ThemeClusteringService {
     // ── Workspace-level advisory lock ────────────────────────────────────────
     // Serialises clustering per workspace so concurrent jobs don't race.
     // pg_advisory_xact_lock is released automatically at transaction end.
-    // Timeout raised to 120s — the transaction now only does fast DB operations
-    // (embedding is pre-computed above), so 120s is a very conservative ceiling.
-    return this.prisma.$transaction(async (tx) => {
+    //
+    // STABILITY FIX (2026-04-01):
+    //   recomputeClusterConfidence and ciqQueue.add are moved OUTSIDE the
+    //   transaction. They were previously called inside _assignFeedbackToThemeInTx
+    //   while the advisory lock was held, adding 2 extra DB round-trips + a Redis
+    //   call to the critical section. For large workspaces this pushed total time
+    //   past 120s. The transaction now only does the minimum: lock, find candidates,
+    //   upsert ThemeFeedback, update Theme. Everything else runs after commit.
+    const assignedThemeId = await this.prisma.$transaction(async (tx) => {
       const lockKey = workspaceIdToLockKey(workspaceId);
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockKey})`;
-      // FIX: pass the tx client so createCandidateTheme writes inside the transaction
       return this._assignFeedbackToThemeInTx(tx as unknown as PrismaService, workspaceId, feedbackId, resolvedEmbedding);
     }, { timeout: 120_000 });
+
+    // ── Post-transaction work (runs after advisory lock is released) ──────────
+    if (assignedThemeId) {
+      // Recompute cluster confidence using outer prisma (no lock needed — read-heavy)
+      await this.recomputeClusterConfidence(assignedThemeId, feedbackId);
+
+      // Enqueue CIQ re-score with a deduplication key so that N assignments to the
+      // same theme within a 30-second window only produce ONE CIQ job (flood control).
+      // jobId = 'ciq:<workspaceId>:<themeId>' — BullMQ deduplicates by jobId.
+      try {
+        const jobId = `ciq:${workspaceId}:${assignedThemeId}`;
+        await this.ciqQueue.add(
+          { type: 'THEME_SCORED', workspaceId, themeId: assignedThemeId },
+          { jobId, delay: 5_000 },  // 5s delay: coalesces rapid-fire assignments
+        );
+      } catch (queueErr) {
+        this.logger.warn(`[CIQ] Redis unavailable — re-score skipped: ${(queueErr as Error).message}`);
+      }
+    }
+
+    return assignedThemeId;
   }
 
   /** Inner implementation — runs inside the advisory-locked transaction. */
@@ -367,17 +393,11 @@ export class ThemeClusteringService {
         `clusterSize=${bestClusterSize}, matchedKeywords=[${matchedKeywords.join(',')}])`,
       );
 
-      // Recompute cluster confidence and update centroid
-      await this.recomputeClusterConfidence(bestThemeId, feedback.title);
+      // Update centroid inside the transaction (fast SQL UPDATE, no external calls)
       await this.updateThemeCentroid(prisma, bestThemeId);
 
-      try {
-        // Always re-score CIQ — this covers both normal assignment and resurfacing.
-        // The CIQ processor reads resurfaceCount and resurfacedAt to boost urgency.
-        await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId: bestThemeId });
-      } catch (queueErr) {
-        this.logger.warn(`[CIQ] Redis unavailable — re-score skipped: ${(queueErr as Error).message}`);
-      }
+      // NOTE: recomputeClusterConfidence and ciqQueue.add have been moved OUTSIDE
+      // the transaction (see assignFeedbackToTheme) to reduce lock hold time.
       return bestThemeId;
     }
 
@@ -648,12 +668,8 @@ export class ThemeClusteringService {
       `[CLUSTER] ✦ Created new theme "${theme.title}" (${theme.id}) for feedback ${feedbackId}`,
     );
 
-    try {
-      await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId: theme.id });
-    } catch (queueErr) {
-      this.logger.warn(`[CIQ] Redis unavailable — initial score skipped: ${(queueErr as Error).message}`);
-    }
-
+     // NOTE: CIQ enqueue for new themes is handled by the caller (assignFeedbackToTheme)
+    // after the transaction commits. Do NOT enqueue here to avoid double-scoring.
     return theme.id;
   }
 

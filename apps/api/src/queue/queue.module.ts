@@ -129,8 +129,33 @@ function parseRedisUrl(url: string): {
      * because this module is @Global() and its exports are available everywhere.
      */
     BullModule.registerQueue(
-      { name: QUEUE_NAMES.AI_ANALYSIS },
-      { name: QUEUE_NAMES.CIQ_SCORING },
+      {
+        name: QUEUE_NAMES.AI_ANALYSIS,
+        // STABILITY FIX (2026-04-01):
+        // Default BullMQ lockDuration is 30s. Each ai-analysis job takes 15–90s
+        // (embedding API + advisory-locked DB clustering). Without a longer lock,
+        // BullMQ marks jobs as stalled after 30s and re-queues them, causing
+        // duplicate processing and cascading Prisma transaction timeouts.
+        //
+        // lockDuration: 5 minutes — safely covers worst-case job duration.
+        // stalledInterval: 60s — check for stalled jobs every 60s.
+        // maxStalledCount: 1 — fail after 1 stall (prevents infinite re-queue loops).
+        settings: {
+          lockDuration: 300_000,
+          stalledInterval: 60_000,
+          maxStalledCount: 1,
+        },
+      },
+      {
+        name: QUEUE_NAMES.CIQ_SCORING,
+        // CIQ scoring jobs are fast (< 10s) but can flood under bulk imports.
+        // Deduplication by jobId (see ThemeClusteringService) prevents queue saturation.
+        settings: {
+          lockDuration: 60_000,
+          stalledInterval: 30_000,
+          maxStalledCount: 2,
+        },
+      },
       { name: QUEUE_NAMES.VOICE_TRANSCRIPTION },
       { name: QUEUE_NAMES.VOICE_EXTRACTION },
       { name: QUEUE_NAMES.SURVEY_INTELLIGENCE },

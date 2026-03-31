@@ -98,24 +98,30 @@ export class AiAnalysisProcessor {
 
     this.logger.start(ctx);
 
+    // ── 0. Load feedback ─────────────────────────────────────────────────────
+    const t0 = Date.now();
     const feedback = await this.prisma.feedback.findUnique({ where: { id: feedbackId } });
     if (!feedback) {
       this.logger.stepWarn(ctx, 'LOAD', `Feedback ${feedbackId} not found — skipping`);
       await this.idempotencyService.markCompleted(logId, Date.now() - startedAt);
       return;
     }
+    this.logger.debug(ctx, `[STEP] LOAD ${Date.now() - t0}ms | feedback=${feedbackId}`);
 
     // ── 1. Generate Embedding ────────────────────────────────────────────────
+    const t1 = Date.now();
     let embedding: number[] = [];
     try {
       embedding = await this.embeddingService.generateEmbedding(feedback.description);
     } catch (err) {
       this.logger.stepWarn(ctx, 'EMBEDDING', (err as Error).message);
     }
+    this.logger.debug(ctx, `[STEP] EMBEDDING ${Date.now() - t1}ms | dims=${embedding.length}`);
 
     // ── 2. Analyse Sentiment ─────────────────────────────────────────────────
     // Score is in [-1, +1]: negative = frustrated/churning, 0 = neutral, positive = happy.
     // Fallback to 0 (neutral) on any failure so the rest of the pipeline is not interrupted.
+    const t2 = Date.now();
     let sentiment = 0;
     try {
       sentiment = await this.sentimentService.analyseSentiment(feedback.description);
@@ -123,18 +129,22 @@ export class AiAnalysisProcessor {
       this.logger.stepWarn(ctx, 'SENTIMENT', (err as Error).message);
       // sentiment remains 0 — neutral fallback
     }
+    this.logger.debug(ctx, `[STEP] SENTIMENT ${Date.now() - t2}ms | score=${sentiment}`);
 
     // ── 3. Generate Summary ──────────────────────────────────────────────────
+    const t3 = Date.now();
     let summary: string | null = null;
     try {
       summary = await this.summarizationService.summarize(feedback.description);
     } catch (err) {
       this.logger.stepWarn(ctx, 'SUMMARIZATION', (err as Error).message);
     }
+    this.logger.debug(ctx, `[STEP] SUMMARIZATION ${Date.now() - t3}ms | hasSummary=${!!summary}`);
 
     // ── 4. Persist AI data ───────────────────────────────────────────────────
     // sentiment is always written (0 = neutral fallback) so CiqService never
     // encounters a null and can apply its sentimentPenalty / sentimentUrgency logic.
+    const t4 = Date.now();
     await this.prisma.feedback.update({
       where: { id: feedbackId },
       data: {
@@ -153,8 +163,10 @@ export class AiAnalysisProcessor {
         WHERE id = ${feedbackId};
       `;
     }
+    this.logger.debug(ctx, `[STEP] PERSIST ${Date.now() - t4}ms`);
 
     // ── 5. Duplicate detection ───────────────────────────────────────────────
+    const t5 = Date.now();
     try {
       await this.duplicateDetectionService.generateSuggestions(
         feedback.workspaceId,
@@ -164,17 +176,20 @@ export class AiAnalysisProcessor {
     } catch (err) {
       this.logger.stepWarn(ctx, 'DUPLICATE_DETECTION', (err as Error).message);
     }
+    this.logger.debug(ctx, `[STEP] DEDUP ${Date.now() - t5}ms`);
 
     // ── 6. Theme clustering ──────────────────────────────────────────────────
     // NOTE: We do NOT catch clustering errors here. If clustering fails, the job
     // should be retried (Bull will re-queue it with exponential backoff) rather
     // than silently completing. A silent COMPLETED record would block reprocessPipeline
     // from re-queuing the same feedback via the idempotency check.
+    const t6 = Date.now();
     await this.themeClusteringService.assignFeedbackToTheme(
       feedback.workspaceId,
       feedbackId,
       embedding.length > 0 ? embedding : undefined,
     );
+    this.logger.debug(ctx, `[STEP] CLUSTERING ${Date.now() - t6}ms`);
 
     const durationMs = Date.now() - startedAt;
     await this.idempotencyService.markCompleted(logId, durationMs);
