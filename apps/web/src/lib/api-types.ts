@@ -2475,6 +2475,8 @@ export interface AiSuggestionSignalSummary {
   surveyCount:    number;
   activeSources:  number;
   velocityDelta:  number | null;
+  trendDelta:     number | null;
+  resurfaceCount: number;
   sentimentScore: number | null;
 }
 
