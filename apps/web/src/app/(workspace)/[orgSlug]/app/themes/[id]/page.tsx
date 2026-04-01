@@ -763,10 +763,10 @@ export default function ThemeDetailPage() {
             <span style={{ fontSize: '1rem' }}>🔍</span>
             <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#15803d', margin: 0 }}>Why This Theme Exists</h2>
           </div>
-          {/* Cluster confidence badge */}
+          {/* Evidence Quality badge (cluster cohesion — distinct from AI confidence) */}
           {theme.clusterConfidence != null && (
             <span
-              title={`Cluster confidence: ${Math.round(theme.clusterConfidence)}% — based on semantic similarity, cluster size, and variance`}
+              title={`Evidence Quality: ${Math.round(theme.clusterConfidence)}% — measures how cohesive the feedback cluster is (semantic similarity, cluster size, and variance). High ≥70%: feedback items are tightly related. Medium 40–69%: moderate cohesion. Low <40%: mixed signals, some items may not belong. This is NOT the same as AI Confidence.`}
               style={{
                 fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.04em',
                 padding: '0.2rem 0.6rem', borderRadius: '999px', cursor: 'help',
@@ -775,7 +775,7 @@ export default function ThemeDetailPage() {
               }}
             >
               {theme.status === 'AI_GENERATED' ? 'AI Generated • ' : ''}
-              Confidence: {Math.round(theme.clusterConfidence)}%
+              🔍 Evidence Quality: {Math.round(theme.clusterConfidence)}%
             </span>
           )}
         </div>
@@ -990,15 +990,21 @@ export default function ThemeDetailPage() {
           </div>
           {theme.aiConfidence != null && (
             <span
-              title={`AI confidence: ${Math.round(theme.aiConfidence * 100)}%`}
+              title={
+                theme.aiConfidence >= 0.75
+                  ? `AI Confidence: High (${Math.round(theme.aiConfidence * 100)}%) — The AI had rich, consistent evidence to generate reliable insights. Summaries and recommendations can be trusted.`
+                  : theme.aiConfidence >= 0.45
+                  ? `AI Confidence: Medium (${Math.round(theme.aiConfidence * 100)}%) — Moderate evidence available. Review AI insights alongside the raw feedback before acting.`
+                  : `AI Confidence: Low (${Math.round(theme.aiConfidence * 100)}%) — Limited or inconsistent evidence. AI insights are provisional. Gather more feedback signals before relying on them.`
+              }
               style={{
                 fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.04em',
-                padding: '0.2rem 0.6rem', borderRadius: '999px',
+                padding: '0.2rem 0.6rem', borderRadius: '999px', cursor: 'help',
                 background: theme.aiConfidence >= 0.75 ? '#e8f5e9' : theme.aiConfidence >= 0.45 ? '#fff8e1' : '#f0f4f8',
                 color: theme.aiConfidence >= 0.75 ? '#2e7d32' : theme.aiConfidence >= 0.45 ? '#b8860b' : '#6C757D',
               }}
             >
-              {theme.aiConfidence >= 0.75 ? 'High confidence' : theme.aiConfidence >= 0.45 ? 'Medium confidence' : 'Low confidence'}
+              {theme.aiConfidence >= 0.75 ? 'Confidence: High' : theme.aiConfidence >= 0.45 ? 'Confidence: Medium' : 'Confidence: Low'}
             </span>
           )}
         </div>

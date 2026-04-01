@@ -90,7 +90,8 @@ const SORT_OPTIONS: { value: RoadmapSortField; label: string }[] = [
 function ScoreBar({ score }: { score: number | null | undefined }) {
   if (score == null) return <span style={{ color: '#adb5bd', fontSize: '0.75rem' }}>—</span>;
   const pct = Math.min(100, Math.max(0, score));
-  const color = pct >= 75 ? '#b91c1c' : pct >= 50 ? '#c2410c' : pct >= 25 ? '#b45309' : '#15803d';
+  // Thresholds aligned with CiqImpactBadge: ≥80 Critical, ≥55 High, ≥30 Medium, <30 Low
+  const color = pct >= 80 ? '#b91c1c' : pct >= 55 ? '#c2410c' : pct >= 30 ? '#b45309' : '#15803d';
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
       <div style={{ flex: 1, height: 6, background: '#e9ecef', borderRadius: 3, overflow: 'hidden', minWidth: 60 }}>
@@ -128,10 +129,10 @@ function AiConfidenceBadge({ confidence }: { confidence: number | null | undefin
   const isMedium = confidence >= 0.45;
   const bg    = isHigh ? '#e8f5e9' : isMedium ? '#fff8e1' : '#f0f4f8';
   const color = isHigh ? '#2e7d32' : isMedium ? '#b8860b' : '#6C757D';
-  const label = isHigh ? 'High' : isMedium ? 'Med' : 'Low';
+  const label = isHigh ? 'Confidence: High' : isMedium ? 'Confidence: Medium' : 'Confidence: Low';
   return (
     <span
-      title={`AI confidence: ${pct}% — ${isHigh ? 'High confidence: strong signal data' : isMedium ? 'Medium confidence: moderate signal data' : 'Low confidence: limited signal data'}`}
+      title={`AI Confidence: ${pct}% — ${isHigh ? 'High: the AI had rich, consistent evidence to generate reliable insights.' : isMedium ? 'Medium: moderate evidence available. Review AI insights alongside raw feedback.' : 'Low: limited or inconsistent evidence. Treat AI insights as provisional.'}`}
       style={{
         display: 'inline-block',
         padding: '0.15rem 0.45rem',
@@ -155,8 +156,9 @@ function AiConfidenceBadge({ confidence }: { confidence: number | null | undefin
 function ScoreExplainer({ score, explanation }: { score: number | null | undefined; explanation?: string | null }) {
   const [open, setOpen] = useState(false);
   if (score == null) return null;
-  const tier = score >= 75 ? 'Critical' : score >= 50 ? 'High' : score >= 25 ? 'Moderate' : 'Low';
-  const tierColor = score >= 75 ? '#b91c1c' : score >= 50 ? '#c2410c' : score >= 25 ? '#b45309' : '#15803d';
+  // Thresholds aligned with CiqImpactBadge: ≥80 Critical, ≥55 High, ≥30 Medium, <30 Low
+  const tier = score >= 80 ? 'Critical' : score >= 55 ? 'High' : score >= 30 ? 'Medium' : 'Low';
+  const tierColor = score >= 80 ? '#b91c1c' : score >= 55 ? '#c2410c' : score >= 30 ? '#b45309' : '#15803d';
   return (
     <div style={{ position: 'relative', display: 'inline-block' }}>
       <button
@@ -204,13 +206,13 @@ function ScoreExplainer({ score, explanation }: { score: number | null | undefin
           <p style={{ margin: 0, color: '#374151', lineHeight: 1.5, fontSize: '0.8rem' }}>
             {explanation
               ? explanation
-              : score >= 75
-              ? 'This item scores in the critical tier. It is driven by high feedback volume, significant ARR at risk, and strong urgency signals from linked customers.'
-              : score >= 50
-              ? 'This item scores in the high tier. It has moderate feedback volume and revenue signals that warrant near-term attention.'
-              : score >= 25
-              ? 'This item scores in the moderate tier. Signal volume is growing but not yet urgent. Monitor for changes.'
-              : 'This item has limited signal data. The score will improve as more feedback is linked and customers engage.'}
+              : score >= 80
+              ? 'Decision Priority: Critical. This item is driven by high feedback volume, significant ARR at risk, and strong urgency signals. Act now.'
+              : score >= 55
+              ? 'Decision Priority: High. Moderate-to-strong feedback volume and revenue signals warrant near-term roadmap attention.'
+              : score >= 30
+              ? 'Decision Priority: Medium. Signal volume is growing but not yet urgent. Monitor for changes before committing resources.'
+              : 'Decision Priority: Low. Limited signal data. The score will improve as more feedback is linked and customers engage.'}
           </p>
           <p style={{ margin: '0.5rem 0 0', color: '#adb5bd', fontSize: '0.75rem' }}>
             CIQ score = weighted sum of demand strength, revenue impact, strategic importance, and urgency signals.

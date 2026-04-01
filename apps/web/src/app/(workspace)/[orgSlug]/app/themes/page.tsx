@@ -178,22 +178,43 @@ function CreateThemeModal({
 }
 
 // ─── AI Confidence Badge ─────────────────────────────────────────────────────
+/**
+ * ConfidenceBadge
+ *
+ * Shows the AI CONFIDENCE level for this theme's narration.
+ * Confidence = how certain the AI is about its summary, explanation, and
+ * recommendation — based on signal volume, cluster cohesion, and consistency
+ * of the underlying feedback. It is NOT the same as Decision Priority.
+ *
+ * High confidence (≥75%) means the AI had rich, consistent evidence.
+ * Medium confidence (45–74%) means moderate evidence; review AI insights carefully.
+ * Low confidence (<45%) means limited or noisy evidence; treat AI insights as provisional.
+ */
 function ConfidenceBadge({ confidence }: { confidence?: number | null }) {
   if (confidence == null) return null;
   const pct = Math.round(confidence * 100);
   const style =
     confidence >= 0.75
-      ? { bg: '#e8f5e9', color: '#2e7d32', label: 'High' }
+      ? {
+          bg: '#e8f5e9', color: '#2e7d32', label: 'Confidence: High',
+          tooltip: `AI Confidence: High (${pct}%) — The AI had rich, consistent evidence to generate reliable insights for this theme. Summaries and recommendations can be trusted.`,
+        }
       : confidence >= 0.45
-      ? { bg: '#fff8e1', color: '#b8860b', label: 'Med' }
-      : { bg: '#f0f4f8', color: '#6C757D', label: 'Low' };
+      ? {
+          bg: '#fff8e1', color: '#b8860b', label: 'Confidence: Medium',
+          tooltip: `AI Confidence: Medium (${pct}%) — Moderate evidence available. The AI’s insights are reasonable but review them alongside the raw feedback before acting.`,
+        }
+      : {
+          bg: '#f0f4f8', color: '#6C757D', label: 'Confidence: Low',
+          tooltip: `AI Confidence: Low (${pct}%) — Limited or inconsistent evidence. AI insights for this theme are provisional. Gather more feedback signals before relying on them.`,
+        };
   return (
     <span
-      title={`AI confidence: ${pct}%`}
+      title={style.tooltip}
       style={{
         fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.04em',
         padding: '0.15rem 0.5rem', borderRadius: '999px',
-        background: style.bg, color: style.color,
+        background: style.bg, color: style.color, cursor: 'help',
       }}
     >
       ✨ {style.label}
@@ -260,7 +281,7 @@ function ThemeCard({ theme, href }: { theme: Theme; href: string }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
             {theme.clusterConfidence != null && (
               <span
-                title={`Cluster confidence: ${Math.round(theme.clusterConfidence)}% — based on semantic similarity, size, and variance`}
+                title={`Evidence Quality: ${Math.round(theme.clusterConfidence)}% — measures how cohesive the feedback cluster is (semantic similarity, cluster size, and variance). High ≥70%: feedback items are tightly related. Medium 40–69%: moderate cohesion. Low <40%: mixed signals, some items may not belong.`}
                 style={{
                   fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.04em',
                   padding: '0.15rem 0.5rem', borderRadius: '999px', cursor: 'help',
@@ -268,7 +289,7 @@ function ThemeCard({ theme, href }: { theme: Theme; href: string }) {
                   color: theme.clusterConfidence >= 70 ? '#2e7d32' : theme.clusterConfidence >= 40 ? '#b8860b' : '#c62828',
                 }}
               >
-                {theme.status === 'AI_GENERATED' ? 'AI Generated • ' : ''}Confidence: {Math.round(theme.clusterConfidence)}%
+                🔍 Evidence Quality: {Math.round(theme.clusterConfidence)}%
               </span>
             )}
             {theme.outlierCount != null && theme.outlierCount > 0 && (

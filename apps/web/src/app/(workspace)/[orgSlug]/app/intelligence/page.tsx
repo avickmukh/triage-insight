@@ -245,14 +245,14 @@ function UnifiedIssueRow({
             <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginBottom: '0.3rem', alignItems: 'center' }}>
               {issue.clusterConfidence != null && (
                 <span
-                  title={`Cluster confidence: ${Math.round(issue.clusterConfidence)}% — based on semantic similarity, size, and variance`}
+                  title={`Evidence Quality: ${Math.round(issue.clusterConfidence)}% — measures how cohesive the feedback cluster is. High ≥70%: tightly related feedback. Medium 40–69%: moderate cohesion. Low <40%: mixed signals. This is NOT the same as AI Confidence.`}
                   style={{
                     fontSize: '0.68rem', fontWeight: 700, padding: '0.1rem 0.4rem', borderRadius: '0.3rem', cursor: 'help',
                     background: issue.clusterConfidence >= 70 ? '#e8f5e9' : issue.clusterConfidence >= 40 ? '#fff8e1' : '#fdecea',
                     color: issue.clusterConfidence >= 70 ? '#2e7d32' : issue.clusterConfidence >= 40 ? '#b8860b' : '#c62828',
                   }}
                 >
-                  🔍 Confidence: {Math.round(issue.clusterConfidence)}%
+                  🔍 Evidence Quality: {Math.round(issue.clusterConfidence)}%
                 </span>
               )}
               {issue.outlierCount != null && issue.outlierCount > 0 && (
