@@ -4,22 +4,31 @@
  * Produces a single, decision-grade Executive Dashboard payload with five
  * sections that a CPO / VP-Product can act on immediately:
  *
- *   1. 🔥 Top Problems        — top 5 themes by CIQ score
- *   2. 🚨 Rising Issues       — top 5 themes with fastest positive velocity (trendDelta)
- *   3. 📉 What Is Declining   — top 5 themes with the steepest negative velocity
- *   4. 🧠 Recommended Actions — top 5 themes by Decision Priority Score (DPS)
- *   5. 💰 Revenue Impact      — top 5 themes by ARR exposure (revenueInfluence)
+ *   1. 🔥 Top Problems        — top 5 themes by CIQ score (min-signal eligible)
+ *   2. 🚨 Rising Issues       — top 5 themes with fastest positive velocity
+ *   3. 📉 What Is Declining   — top 5 themes with steepest negative velocity
+ *   4. 🧠 Recommended Actions — top 5 themes by Decision Ranking Score (DRS)
+ *   5. 💰 Revenue Impact      — top 5 themes by ARR exposure
  *
- * Every item includes:
- *   • themeId / themeName / shortLabel
- *   • ciqScore
- *   • reason  (deterministic sentence built from DB values — no LLM)
- *   • action  (ADD_TO_ROADMAP | INCREASE_PRIORITY | INVESTIGATE | MONITOR | WATCH_DECLINE)
+ * Ranking is fully delegated to ThemeRankingEngine (single source of truth).
+ * DRS formula: CIQ×0.30 + Velocity×0.20 + Recency×0.18 + Resurface×0.15
+ *              + SourceDiversity×0.10 + Confidence×0.07
  *
- * No LLM calls.  All output is derived from real database values.
+ * Quality guards (enforced by ThemeRankingEngine):
+ *   • MIN_SIGNALS (3): hard gate — themes with fewer signals excluded
+ *   • NEAR_DUP_PENALTY (0.80): soft — near-duplicate themes ranked lower
+ *   • LOW_CONF_PENALTY (0.85): soft — low-confidence themes ranked lower
+ *   • WEAK_SIGNAL_PENALTY (0.90): soft — 3–5 signal themes ranked lower
+ *
+ * No LLM calls. All output is derived from real database values.
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import {
+  ThemeRankingEngine,
+  RankedTheme,
+  SignalQualityLabel,
+} from './theme-ranking-engine.service';
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
 
@@ -35,8 +44,12 @@ export interface ExecDashboardItem {
   themeName:  string;
   shortLabel: string | null;
   ciqScore:   number;
+  /** Decision Ranking Score — the composite score used for Recommended Actions. */
+  drs:        number;
   reason:     string;
   action:     ExecActionType;
+  /** Signal quality labels for UI explainability chips. */
+  signalLabels: SignalQualityLabel[];
   signals: {
     totalSignalCount: number;
     trendDelta:       number | null;
@@ -46,73 +59,32 @@ export interface ExecDashboardItem {
     supportCount:     number;
     voiceCount:       number;
     surveyCount:      number;
+    sourceDiversity:  number;
     lastEvidenceAt:   Date | null;
-    negativePct:      number | null;   // 0–1 fraction of negative signals (for declining)
+    negativePct:      number | null;
   };
 }
 
 export interface ExecutiveDashboardResponse {
   generatedAt:        string;
-  topProblems:        ExecDashboardItem[];   // 🔥 Top 5 by CIQ
-  risingIssues:       ExecDashboardItem[];   // 🚨 Top 5 by velocity (positive trendDelta)
-  decliningThemes:    ExecDashboardItem[];   // 📉 Top 5 by velocity (negative trendDelta)
-  recommendedActions: ExecDashboardItem[];   // 🧠 Top 5 by DPS
-  revenueImpact:      ExecDashboardItem[];   // 💰 Top 5 by ARR exposure
+  topProblems:        ExecDashboardItem[];
+  risingIssues:       ExecDashboardItem[];
+  decliningThemes:    ExecDashboardItem[];
+  recommendedActions: ExecDashboardItem[];
+  revenueImpact:      ExecDashboardItem[];
 }
-
-// ─── DPS weights (same as ActionPlanService for consistency) ──────────────────
-const W_CIQ       = 0.35;
-const W_VELOCITY  = 0.25;
-const W_RECENCY   = 0.20;
-const W_RESURFACE = 0.20;
-
-/** Minimum total signal count for a theme to appear in any section. */
-const MIN_SIGNAL_THRESHOLD = 3;
-
-/** DPS multiplier for near-duplicate themes (autoMergeCandidate=true). */
-const NEAR_DUPLICATE_PENALTY = 0.80;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function formatArr(value: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-function computeDps(
-  ciq: number,
-  delta: number,
-  lastEvidenceAt: Date | null,
-  resurfaceCount: number,
-  now: number,
-): number {
-  const velocityNorm  = Math.min(100, Math.max(0, ((delta + 50) / 100) * 100));
-  let recencyNorm     = 0;
-  if (lastEvidenceAt) {
-    const ageDays = (now - new Date(lastEvidenceAt).getTime()) / 86_400_000;
-    recencyNorm   = Math.max(0, 100 * Math.exp(-ageDays / 30));
-  }
-  const resurfaceNorm = Math.min(100, resurfaceCount * 25);
-  return (
-    W_CIQ       * ciq +
-    W_VELOCITY  * velocityNorm +
-    W_RECENCY   * recencyNorm +
-    W_RESURFACE * resurfaceNorm
-  );
-}
-
 function pickAction(
-  dps: number,
+  drs: number,
   delta: number,
   resurfaceCount: number,
   onRoadmap: boolean,
   isDecline: boolean,
 ): ExecActionType {
   if (isDecline) return 'WATCH_DECLINE';
-  if (!onRoadmap && dps >= 60) return 'ADD_TO_ROADMAP';
+  if (!onRoadmap && drs >= 60) return 'ADD_TO_ROADMAP';
   if (onRoadmap && delta > 20)  return 'INCREASE_PRIORITY';
   if (resurfaceCount > 0)       return 'INVESTIGATE';
   return 'MONITOR';
@@ -124,44 +96,17 @@ function pickAction(
 export class ExecutiveDashboardService {
   private readonly logger = new Logger(ExecutiveDashboardService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly rankingEngine: ThemeRankingEngine,
+  ) {}
 
   async getDashboard(workspaceId: string): Promise<ExecutiveDashboardResponse> {
-    // ── 1. Fetch all non-archived themes with every field we need ─────────────
-    const themes = await this.prisma.theme.findMany({
-      where: {
-        workspaceId,
-        status: { not: 'ARCHIVED' },
-      },
-      select: {
-        id:                    true,
-        title:                 true,
-        shortLabel:            true,
-        status:                true,
-        ciqScore:              true,
-        priorityScore:         true,
-        aiConfidence:          true,
-        autoMergeCandidate:    true,
-        trendDelta:            true,
-        resurfaceCount:        true,
-        resurfacedAt:          true,
-        lastEvidenceAt:        true,
-        feedbackCount:         true,
-        supportCount:          true,
-        voiceCount:            true,
-        surveyCount:           true,
-        totalSignalCount:      true,
-        revenueInfluence:      true,
-        signalBreakdown:       true,
-        sentimentDistribution: true,
-        roadmapItems: {
-          select: { id: true, status: true },
-          take: 1,
-        },
-      },
-    });
+    // ── 1. Get all eligible ranked themes from the unified engine ─────────────
+    const allRanked = await this.rankingEngine.rankThemes(workspaceId);
+    const eligible = allRanked.filter((t) => t.eligibility !== 'INELIGIBLE');
 
-    if (themes.length === 0) {
+    if (eligible.length === 0) {
       const empty: ExecDashboardItem[] = [];
       return {
         generatedAt:        new Date().toISOString(),
@@ -173,144 +118,78 @@ export class ExecutiveDashboardService {
       };
     }
 
-    const now = Date.now();
+    // ── 2. Fetch roadmap status for all eligible themes ───────────────────────
+    const themeIds = eligible.map((t) => t.themeId);
+    const roadmapSet = await this.fetchRoadmapSet(workspaceId, themeIds);
 
-    // ── 2. Pre-compute derived values for every theme ─────────────────────────
-    type Enriched = {
-      t:              typeof themes[0];
-      ciq:            number;
-      delta:          number;
-      dps:            number;
-      signalCount:    number;
-      isNearDuplicate: boolean;
-      onRoadmap:   boolean;
-      negativePct: number | null;
-    };
-
-    const enriched: Enriched[] = themes.map((t) => {
-      const ciq  = Math.min(100, Math.max(0, t.ciqScore ?? t.priorityScore ?? 0));
-      const delta = t.trendDelta ?? 0;
-      // Use canonical totalSignalCount; fall back to feedbackCount for unscored themes
-      const signalCount = t.totalSignalCount ?? t.feedbackCount ?? 0;
-      const isNearDuplicate = t.autoMergeCandidate ?? false;
-      // Apply near-duplicate penalty to DPS
-      const rawDps = computeDps(ciq, delta, t.lastEvidenceAt, t.resurfaceCount ?? 0, now);
-      const dps = isNearDuplicate ? rawDps * NEAR_DUPLICATE_PENALTY : rawDps;
-      const onRoadmap = (t.roadmapItems ?? []).some((r) => r.status !== 'SHIPPED');
-
-      // Sentiment: extract negativePct from sentimentDistribution JSON
-      let negativePct: number | null = null;
-      const dist = t.sentimentDistribution as {
-        positive?: number; neutral?: number; negative?: number;
-      } | null;
-      if (dist) {
-        const pos = dist.positive ?? 0;
-        const neu = dist.neutral  ?? 0;
-        const neg = dist.negative ?? 0;
-        const total = pos + neu + neg;
-        if (total >= 3) negativePct = neg / total;
-      }
-
-      return { t, ciq, delta, dps, signalCount, isNearDuplicate, onRoadmap, negativePct };
-    });
-
-    // ── 3. Filter by minimum signal threshold ────────────────────────────────
-    const eligible = enriched.filter((e) => e.signalCount >= MIN_SIGNAL_THRESHOLD);
-
-    // ── 4. Build each section ─────────────────────────────────────────────────
-    // Helper: convert an Enriched entry into an ExecDashboardItem
-    const toItem = (e: Enriched, isDecline = false): ExecDashboardItem => {
-      const { t, ciq, delta, dps, onRoadmap } = e;
-      const action = pickAction(dps, delta, t.resurfaceCount ?? 0, onRoadmap, isDecline);
-
-      // Build deterministic reason sentence
-      const parts: string[] = [];
-      parts.push(`CIQ ${Math.round(ciq)}/100`);
-
-      if (delta > 10)  parts.push(`+${Math.round(delta)}% signal velocity WoW`);
-      if (delta < -10) parts.push(`${Math.round(delta)}% signal velocity WoW`);
-
-      if ((t.resurfaceCount ?? 0) > 0) {
-        parts.push(`resurfaced ${t.resurfaceCount}× after shipping`);
-      }
-      if ((t.totalSignalCount ?? 0) > 0) {
-        parts.push(`${t.totalSignalCount} total signals`);
-      }
-      if ((t.revenueInfluence ?? 0) > 0) {
-        parts.push(`${formatArr(t.revenueInfluence!)} ARR exposure`);
-      }
-       if (e.negativePct != null && e.negativePct >= 0.4) {
-        parts.push(`${Math.round(e.negativePct * 100)}% negative sentiment`);
-      }
-      // Extract dominant driver from signalBreakdown JSON
-      const bd = t.signalBreakdown as Record<string, unknown> | null;
-      const dominantDriver = bd?.dominantDriver as string | undefined;
-      if (dominantDriver) parts.push(`driver: ${dominantDriver}`);
-      if (t.aiConfidence != null) parts.push(`${Math.round(t.aiConfidence * 100)}% AI confidence`);
-      if (e.isNearDuplicate) parts.push('⚠ near-duplicate — consider merging');
-      const reason = parts.join(' · ');;
-
+    // ── 3. Build converter ────────────────────────────────────────────────────
+    const toItem = (ranked: RankedTheme, isDecline = false): ExecDashboardItem => {
+      const delta = ranked.signals.trendDelta ?? 0;
+      const onRoadmap = roadmapSet.has(ranked.themeId);
+      const action = pickAction(
+        ranked.drs, delta, ranked.signals.resurfaceCount, onRoadmap, isDecline,
+      );
       return {
-        themeId:    t.id,
-        themeName:  t.title,
-        shortLabel: t.shortLabel ?? null,
-        ciqScore:   Math.round(ciq),
-        reason,
+        themeId:      ranked.themeId,
+        themeName:    ranked.title,
+        shortLabel:   ranked.shortLabel,
+        ciqScore:     ranked.ciqScore,
+        drs:          Math.round(ranked.drs),
+        reason:       ranked.reason,
         action,
+        signalLabels: ranked.signalLabels,
         signals: {
-          totalSignalCount: t.totalSignalCount ?? 0,
-          trendDelta:       delta !== 0 ? delta : null,
-          resurfaceCount:   t.resurfaceCount ?? 0,
-          revenueInfluence: t.revenueInfluence ?? null,
-          feedbackCount:    t.feedbackCount ?? 0,
-          supportCount:     t.supportCount ?? 0,
-          voiceCount:       t.voiceCount ?? 0,
-          surveyCount:      t.surveyCount ?? 0,
-          lastEvidenceAt:   t.lastEvidenceAt ?? null,
-          negativePct:      e.negativePct,
+          totalSignalCount: ranked.signals.totalSignalCount,
+          trendDelta:       ranked.signals.trendDelta,
+          resurfaceCount:   ranked.signals.resurfaceCount,
+          revenueInfluence: ranked.signals.revenueInfluence > 0 ? ranked.signals.revenueInfluence : null,
+          feedbackCount:    ranked.signals.feedbackCount,
+          supportCount:     ranked.signals.supportCount,
+          voiceCount:       ranked.signals.voiceCount,
+          surveyCount:      ranked.signals.surveyCount,
+          sourceDiversity:  ranked.signals.sourceDiversity,
+          lastEvidenceAt:   ranked.signals.lastEvidenceAt,
+          negativePct:      ranked.signals.negativePct,
         },
       };
     };
 
-       // Confidence-aware sort helper: use aiConfidence as tiebreaker within 0.5 pts
-    const sortByDps = (arr: Enriched[]) =>
-      [...arr].sort((a, b) => {
-        const diff = b.dps - a.dps;
-        if (Math.abs(diff) < 0.5) return (b.t.aiConfidence ?? 0) - (a.t.aiConfidence ?? 0);
-        return diff;
-      });
-
     // ── Section 1: 🔥 Top Problems — highest CIQ (min-signal eligible only) ──
     const topProblems = [...eligible]
       .sort((a, b) => {
-        const diff = b.ciq - a.ciq;
-        if (Math.abs(diff) < 0.5) return (b.t.aiConfidence ?? 0) - (a.t.aiConfidence ?? 0);
+        const diff = b.ciqScore - a.ciqScore;
+        if (Math.abs(diff) < 0.5) return (b.aiConfidence ?? 0) - (a.aiConfidence ?? 0);
         return diff;
       })
       .slice(0, 5)
       .map((e) => toItem(e));
+
     // ── Section 2: 🚨 Rising Issues — fastest positive velocity ──────────────
     const risingIssues = [...eligible]
-      .filter((e) => e.delta > 0)
-      .sort((a, b) => b.delta - a.delta)
+      .filter((e) => (e.signals.trendDelta ?? 0) > 0)
+      .sort((a, b) => (b.signals.trendDelta ?? 0) - (a.signals.trendDelta ?? 0))
       .slice(0, 5)
       .map((e) => toItem(e));
+
     // ── Section 3: 📉 Declining — steepest negative velocity ─────────────────
     const decliningThemes = [...eligible]
-      .filter((e) => e.delta < 0)
-      .sort((a, b) => a.delta - b.delta)   // most negative first
+      .filter((e) => (e.signals.trendDelta ?? 0) < 0)
+      .sort((a, b) => (a.signals.trendDelta ?? 0) - (b.signals.trendDelta ?? 0))
       .slice(0, 5)
       .map((e) => toItem(e, true));
-    // ── Section 4: 🧠 Recommended Actions — highest DPS (with penalty) ────────
-    const recommendedActions = sortByDps(eligible)
+
+    // ── Section 4: 🧠 Recommended Actions — highest DRS (with all penalties) ──
+    // eligible is already sorted by DRS desc from ThemeRankingEngine
+    const recommendedActions = eligible
       .slice(0, 5)
       .map((e) => toItem(e));
+
     // ── Section 5: 💰 Revenue Impact — highest ARR exposure ──────────────────
     const revenueImpact = [...eligible]
-      .filter((e) => (e.t.revenueInfluence ?? 0) > 0)
-      .sort((a, b) => (b.t.revenueInfluence ?? 0) - (a.t.revenueInfluence ?? 0))
+      .filter((e) => e.signals.revenueInfluence > 0)
+      .sort((a, b) => b.signals.revenueInfluence - a.signals.revenueInfluence)
       .slice(0, 5)
-      .map((e) => toItem(e));;
+      .map((e) => toItem(e));
 
     this.logger.log(
       `[ExecutiveDashboard] Generated for workspace ${workspaceId}: ` +
@@ -327,5 +206,26 @@ export class ExecutiveDashboardService {
       recommendedActions,
       revenueImpact,
     };
+  }
+
+  // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+  private async fetchRoadmapSet(
+    workspaceId: string,
+    themeIds: string[],
+  ): Promise<Set<string>> {
+    const items = await this.prisma.roadmapItem.findMany({
+      where: {
+        themeId: { in: themeIds },
+        theme:   { workspaceId },
+        status:  { not: 'SHIPPED' },
+      },
+      select: { themeId: true },
+    });
+    const set = new Set<string>();
+    for (const item of items) {
+      if (item.themeId) set.add(item.themeId);
+    }
+    return set;
   }
 }

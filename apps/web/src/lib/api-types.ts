@@ -1819,6 +1819,16 @@ export interface ThemeRankingItem {
   /** Total signal count across all sources */
   totalSignalCount: number;
   lastScoredAt: string | null;
+  /** AI confidence score for the theme cluster (0–1) */
+  aiConfidence: number | null;
+  /** Whether this theme is flagged as a near-duplicate merge candidate */
+  isNearDuplicate: boolean;
+  /** Decision Ranking Score — unified composite score from ThemeRankingEngine */
+  drs: number;
+  /** Signal quality labels for UI explainability chips */
+  signalLabels: string[];
+  /** Rank eligibility status */
+  eligibility: 'ELIGIBLE' | 'PENALISED' | 'INELIGIBLE';
   breakdown: Record<string, CiqScoreBreakdown>;
 }
 
@@ -2535,9 +2545,25 @@ export interface ActionPlanSignals {
   voiceCount:       number;
   surveyCount:      number;
   totalSignalCount: number;
+  sourceDiversity:  number;
   trendDelta:       number | null;
   resurfaceCount:   number;
   lastEvidenceAt:   string | null;
+}
+
+export interface DrsBreakdownRow {
+  weight: string;
+  value:  string;
+}
+
+export interface ActionPlanDrsBreakdown {
+  ciq:             DrsBreakdownRow;
+  velocity:        DrsBreakdownRow;
+  recency:         DrsBreakdownRow;
+  resurfacing:     DrsBreakdownRow;
+  sourceDiversity: DrsBreakdownRow;
+  aiConfidence:    DrsBreakdownRow;
+  penalties:       string | null;
 }
 
 export interface ActionPlanItem {
@@ -2549,7 +2575,11 @@ export interface ActionPlanItem {
   decisionPriorityScore: number;
   recommendedAction:     ActionType;
   reason:                string;
+  isNearDuplicate:       boolean;
+  /** Signal quality labels for UI explainability chips */
+  signalLabels:          string[];
   signals:               ActionPlanSignals;
+  drsBreakdown:          ActionPlanDrsBreakdown;
 }
 
 export interface ActionPlanResponse {
@@ -2604,18 +2634,23 @@ export interface ExecDashboardSignals {
   supportCount:     number;
   voiceCount:       number;
   surveyCount:      number;
+  sourceDiversity:  number;
   lastEvidenceAt:   string | null;
   negativePct:      number | null;
 }
 
 export interface ExecDashboardItem {
-  themeId:    string;
-  themeName:  string;
-  shortLabel: string | null;
-  ciqScore:   number;
-  reason:     string;
-  action:     ExecActionType;
-  signals:    ExecDashboardSignals;
+  themeId:      string;
+  themeName:    string;
+  shortLabel:   string | null;
+  ciqScore:     number;
+  /** Decision Ranking Score — composite score used for Recommended Actions. */
+  drs:          number;
+  reason:       string;
+  action:       ExecActionType;
+  /** Signal quality labels for UI explainability chips */
+  signalLabels: string[];
+  signals:      ExecDashboardSignals;
 }
 
 export interface ExecutiveDashboardResponse {

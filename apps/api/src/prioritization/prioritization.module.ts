@@ -9,6 +9,7 @@ import { PrioritizationCacheService } from "./services/prioritization-cache.serv
 import { ActionPlanService } from "./services/action-plan.service";
 import { ExecutiveDashboardService } from "./services/executive-dashboard.service";
 import { TrendAlertService } from "./services/trend-alert.service";
+import { ThemeRankingEngine } from "./services/theme-ranking-engine.service";
 
 @Module({
   imports: [
@@ -22,10 +23,11 @@ import { TrendAlertService } from "./services/trend-alert.service";
     AggregationService,
     ScoringService,
     PrioritizationCacheService,
+    ThemeRankingEngine,
     ActionPlanService,
     TrendAlertService,
     ExecutiveDashboardService,
   ],
-  exports: [PrioritizationService, AggregationService, ScoringService, PrioritizationCacheService, ActionPlanService, TrendAlertService, ExecutiveDashboardService],
+  exports: [PrioritizationService, AggregationService, ScoringService, PrioritizationCacheService, ThemeRankingEngine, ActionPlanService, TrendAlertService, ExecutiveDashboardService],
 })
 export class PrioritizationModule {}

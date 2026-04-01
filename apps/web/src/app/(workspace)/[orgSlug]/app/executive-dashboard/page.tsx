@@ -94,6 +94,19 @@ const CARD: React.CSSProperties = {
   boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
 };
 
+/** Visual styling for each signal quality label chip */
+const SIGNAL_LABEL_META: Record<string, { bg: string; color: string }> = {
+  'Strong signal':       { bg: '#e8f5e9', color: '#2e7d32' },
+  'Multi-source':        { bg: '#e0f2fe', color: '#0369a1' },
+  'Rising':              { bg: '#fff7ed', color: '#c2410c' },
+  'Declining':           { bg: '#f0f9ff', color: '#0369a1' },
+  'High revenue impact': { bg: '#f0fdf4', color: '#15803d' },
+  'Resurfaced':          { bg: '#fce7f3', color: '#9d174d' },
+  'Emerging issue':      { bg: '#fefce8', color: '#a16207' },
+  'Needs more data':     { bg: '#f8fafc', color: '#6C757D' },
+  'Near-duplicate':      { bg: '#fef2f2', color: '#b91c1c' },
+};
+
 const LABEL: React.CSSProperties = {
   fontSize: '0.67rem',
   fontWeight: 800,
@@ -223,6 +236,25 @@ function ItemCard({
               {am.label} this theme.
             </span>
           </div>
+
+          {/* Signal quality labels */}
+          {item.signalLabels && item.signalLabels.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginTop: '0.5rem', marginBottom: '0.25rem' }}>
+              {item.signalLabels.map((lbl) => {
+                const meta = SIGNAL_LABEL_META[lbl] ?? { bg: '#f0f4f8', color: '#475569' };
+                return (
+                  <span key={lbl} style={{
+                    fontSize: '0.63rem', fontWeight: 700,
+                    padding: '0.12rem 0.45rem', borderRadius: '999px',
+                    background: meta.bg, color: meta.color,
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {lbl}
+                  </span>
+                );
+              })}
+            </div>
+          )}
 
           {/* Signal pills row */}
           <div

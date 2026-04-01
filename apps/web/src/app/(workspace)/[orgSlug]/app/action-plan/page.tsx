@@ -52,6 +52,19 @@ const CARD: React.CSSProperties = {
   boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
 };
 
+/** Visual styling for each signal quality label chip */
+const SIGNAL_LABEL_META: Record<string, { bg: string; color: string }> = {
+  'Strong signal':       { bg: '#e8f5e9', color: '#2e7d32' },
+  'Multi-source':        { bg: '#e0f2fe', color: '#0369a1' },
+  'Rising':              { bg: '#fff7ed', color: '#c2410c' },
+  'Declining':           { bg: '#f0f9ff', color: '#0369a1' },
+  'High revenue impact': { bg: '#f0fdf4', color: '#15803d' },
+  'Resurfaced':          { bg: '#fce7f3', color: '#9d174d' },
+  'Emerging issue':      { bg: '#fefce8', color: '#a16207' },
+  'Needs more data':     { bg: '#f8fafc', color: '#6C757D' },
+  'Near-duplicate':      { bg: '#fef2f2', color: '#b91c1c' },
+};
+
 const LABEL: React.CSSProperties = {
   fontSize: '0.68rem',
   fontWeight: 800,
@@ -367,6 +380,25 @@ function ActionCard({ item, rank, r }: { item: ActionPlanItem; rank: number; r: 
             </span>
           </div>
 
+          {/* ── Signal quality labels ── */}
+          {item.signalLabels && item.signalLabels.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginBottom: '0.6rem', paddingLeft: '1.6rem' }}>
+              {item.signalLabels.map((label) => {
+                const meta = SIGNAL_LABEL_META[label] ?? { bg: '#f0f4f8', color: '#475569' };
+                return (
+                  <span key={label} style={{
+                    fontSize: '0.65rem', fontWeight: 700,
+                    padding: '0.15rem 0.5rem', borderRadius: '999px',
+                    background: meta.bg, color: meta.color,
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {label}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+
           {/* ── Decision language block ── */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', paddingLeft: '1.6rem' }}>
             <div>
@@ -422,12 +454,32 @@ function ActionCard({ item, rank, r }: { item: ActionPlanItem; rank: number; r: 
               </tr>
             </thead>
             <tbody>
-              <ScoreRow label="CIQ Score"              weight="35%" value={`${item.ciqScore}/100`} />
-              <ScoreRow label="Signal Velocity (WoW)"  weight="25%" value={item.signals.trendDelta != null ? `${item.signals.trendDelta > 0 ? '+' : ''}${Math.round(item.signals.trendDelta)}%` : 'n/a'} />
-              <ScoreRow label="Recency"                weight="20%" value={item.signals.lastEvidenceAt ? new Date(item.signals.lastEvidenceAt).toLocaleDateString() : 'n/a'} />
-              <ScoreRow label="Resurfacing bonus"      weight="20%" value={item.signals.resurfaceCount > 0 ? `×${item.signals.resurfaceCount}` : 'none'} />
+              {item.drsBreakdown ? (
+                <>
+                  <ScoreRow label="CIQ Score"              weight={item.drsBreakdown.ciq.weight}             value={item.drsBreakdown.ciq.value} />
+                  <ScoreRow label="Signal Velocity (WoW)"  weight={item.drsBreakdown.velocity.weight}        value={item.drsBreakdown.velocity.value} />
+                  <ScoreRow label="Recency"                weight={item.drsBreakdown.recency.weight}         value={item.drsBreakdown.recency.value} />
+                  <ScoreRow label="Resurfacing bonus"      weight={item.drsBreakdown.resurfacing.weight}     value={item.drsBreakdown.resurfacing.value} />
+                  <ScoreRow label="Source diversity"       weight={item.drsBreakdown.sourceDiversity.weight} value={item.drsBreakdown.sourceDiversity.value} />
+                  <ScoreRow label="AI confidence"          weight={item.drsBreakdown.aiConfidence.weight}    value={item.drsBreakdown.aiConfidence.value} />
+                  {item.drsBreakdown.penalties && (
+                    <tr>
+                      <td colSpan={3} style={{ padding: '0.22rem 0', color: '#c2410c', fontSize: '0.72rem' }}>
+                        ⚠ Penalties applied: {item.drsBreakdown.penalties}
+                      </td>
+                    </tr>
+                  )}
+                </>
+              ) : (
+                <>
+                  <ScoreRow label="CIQ Score"              weight="30%" value={`${item.ciqScore}/100`} />
+                  <ScoreRow label="Signal Velocity (WoW)"  weight="20%" value={item.signals.trendDelta != null ? `${item.signals.trendDelta > 0 ? '+' : ''}${Math.round(item.signals.trendDelta)}%` : 'n/a'} />
+                  <ScoreRow label="Recency"                weight="18%" value={item.signals.lastEvidenceAt ? new Date(item.signals.lastEvidenceAt).toLocaleDateString() : 'n/a'} />
+                  <ScoreRow label="Resurfacing bonus"      weight="15%" value={item.signals.resurfaceCount > 0 ? `×${item.signals.resurfaceCount}` : 'none'} />
+                </>
+              )}
               <tr style={{ borderTop: '1px solid #e9ecef' }}>
-                <td style={{ paddingTop: '0.3rem', fontWeight: 700, color: '#0A2540' }}>Decision Priority Score</td>
+                <td style={{ paddingTop: '0.3rem', fontWeight: 700, color: '#0A2540' }}>Decision Ranking Score</td>
                 <td />
                 <td style={{ paddingTop: '0.3rem', fontWeight: 700, color: '#0A2540', textAlign: 'right' }}>{item.decisionPriorityScore}/100</td>
               </tr>

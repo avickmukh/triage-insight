@@ -109,6 +109,12 @@ export interface ThemeRankingItem {
   aiConfidence: number | null;
   /** Whether this theme is flagged as a near-duplicate merge candidate */
   isNearDuplicate: boolean;
+  /** Decision Ranking Score — unified composite score from ThemeRankingEngine */
+  drs: number;
+  /** Signal quality labels for UI explainability chips */
+  signalLabels: string[];
+  /** Rank eligibility status */
+  eligibility: 'ELIGIBLE' | 'PENALISED' | 'INELIGIBLE';
   breakdown: Record<string, CiqScoreBreakdown>;
 }
 
@@ -431,6 +437,12 @@ export class CiqEngineService {
         lastScoredAt:       theme.lastScoredAt,
         aiConfidence:       theme.aiConfidence ?? null,
         isNearDuplicate,
+        // drs / signalLabels / eligibility are not computed here (CIQ engine is
+        // the live-scoring path; DRS is computed by ThemeRankingEngine).
+        // Provide sensible defaults so the interface is satisfied.
+        drs:          effectiveCiqScore,
+        signalLabels: isNearDuplicate ? ['Near-duplicate'] : [],
+        eligibility:  (persistedTotalSignals < 3 ? 'INELIGIBLE' : isNearDuplicate ? 'PENALISED' : 'ELIGIBLE') as 'ELIGIBLE' | 'PENALISED' | 'INELIGIBLE',
         breakdown,
       };
     })

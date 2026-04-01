@@ -222,6 +222,7 @@ export default function IntelligenceThemesPage() {
                   <th style={TH}>#</th>
                   <th style={{ ...TH, textAlign: 'left' }}>Theme</th>
                   <th style={{ ...TH, textAlign: 'left', minWidth: 140 }}>CIQ Score</th>
+                  <th style={{ ...TH, textAlign: 'right', minWidth: 60 }}>DRS</th>
                   <th style={{ ...TH, textAlign: 'center' }}>Trend</th>
                   <th style={{ ...TH, textAlign: 'right' }}>Signals</th>
                   <th style={{ ...TH, textAlign: 'right' }}>Customers</th>
@@ -258,7 +259,36 @@ export default function IntelligenceThemesPage() {
                         }}>
                           {why}
                         </p>
-                        {/* Signal hint chips */}
+                        {/* Signal quality labels from ThemeRankingEngine */}
+                        {theme.signalLabels && theme.signalLabels.length > 0 && (
+                          <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
+                            {theme.signalLabels.map((lbl) => {
+                              const LABEL_COLORS: Record<string, { bg: string; color: string }> = {
+                                'Strong signal':       { bg: '#e8f5e9', color: '#2e7d32' },
+                                'Multi-source':        { bg: '#e0f2fe', color: '#0369a1' },
+                                'Rising':              { bg: '#fff7ed', color: '#c2410c' },
+                                'Declining':           { bg: '#f0f9ff', color: '#0369a1' },
+                                'High revenue impact': { bg: '#f0fdf4', color: '#15803d' },
+                                'Resurfaced':          { bg: '#fce7f3', color: '#9d174d' },
+                                'Emerging issue':      { bg: '#fefce8', color: '#a16207' },
+                                'Needs more data':     { bg: '#f8fafc', color: '#6C757D' },
+                                'Near-duplicate':      { bg: '#fef2f2', color: '#b91c1c' },
+                              };
+                              const meta = LABEL_COLORS[lbl] ?? { bg: '#f0f4f8', color: '#475569' };
+                              return (
+                                <span key={lbl} style={{
+                                  fontSize: '0.62rem', fontWeight: 700,
+                                  padding: '0.1rem 0.38rem', borderRadius: '999px',
+                                  background: meta.bg, color: meta.color,
+                                  whiteSpace: 'nowrap',
+                                }}>
+                                  {lbl}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
+                        {/* Legacy signal hint chips */}
                         <SignalHints item={theme} />
                         {/* Scored date */}
                         {theme.lastScoredAt && (
@@ -271,6 +301,19 @@ export default function IntelligenceThemesPage() {
                       {/* CIQ score bar */}
                       <td style={{ padding: '0.875rem 0.5rem', minWidth: 140 }}>
                         <ScoreBar score={theme.ciqScore} />
+                      </td>
+
+                      {/* DRS score */}
+                      <td style={{ padding: '0.875rem 0.5rem', textAlign: 'right' }}>
+                        <span style={{
+                          fontSize: '0.78rem', fontWeight: 700,
+                          color: theme.eligibility === 'INELIGIBLE' ? '#adb5bd'
+                               : theme.drs >= 60 ? '#b91c1c'
+                               : theme.drs >= 40 ? '#c2410c'
+                               : '#6C757D',
+                        }}>
+                          {theme.eligibility === 'INELIGIBLE' ? '—' : Math.round(theme.drs)}
+                        </span>
                       </td>
 
                       {/* Trend badge */}
