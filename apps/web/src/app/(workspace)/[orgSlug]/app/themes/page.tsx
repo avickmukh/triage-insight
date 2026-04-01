@@ -60,16 +60,23 @@ function Skeleton({ style }: { style?: React.CSSProperties }) {
 }
 
 // ─── Priority score bar ───────────────────────────────────────────────────────
+// priorityScore is stored as a 0–100 float by the CIQ scoring engine.
+// IMPORTANT: Do NOT multiply by 100 — the value is already on a 0–100 scale.
+// Color thresholds are aligned with CiqImpactBadge: ≥80 Critical, ≥55 High, ≥30 Medium, <30 Low.
 function PriorityBar({ score }: { score: number | null | undefined }) {
   if (score == null) return <span style={{ color: '#adb5bd', fontSize: '0.8rem' }}>—</span>;
-  const pct = Math.min(100, Math.round(score * 100));
-  const color = pct >= 70 ? '#e63946' : pct >= 40 ? '#f4a261' : '#20A4A4';
+  const pct = Math.min(100, Math.round(score));
+  const color = pct >= 80 ? '#e63946' : pct >= 55 ? '#f4a261' : pct >= 30 ? '#f59e0b' : '#20A4A4';
+  const bandLabel = pct >= 80 ? 'Critical' : pct >= 55 ? 'High' : pct >= 30 ? 'Medium' : 'Low';
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+    <div
+      style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+      title={`CIQ Priority Score: ${pct}/100 (${bandLabel}) — composite of signal volume, ARR exposure, deal pipeline, voice urgency, and support pressure. Connect your CRM to unlock full scoring potential.`}
+    >
       <div style={{ flex: 1, height: '6px', background: '#e9ecef', borderRadius: '3px', minWidth: '60px' }}>
         <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: '3px', transition: 'width 0.3s' }} />
       </div>
-      <span style={{ fontSize: '0.75rem', color, fontWeight: 600, minWidth: '2.5rem' }}>{pct}%</span>
+      <span style={{ fontSize: '0.75rem', color, fontWeight: 600, minWidth: '2.5rem', cursor: 'help' }}>{pct}</span>
     </div>
   );
 }
@@ -394,9 +401,9 @@ function ThemeCard({ theme, href }: { theme: Theme; href: string }) {
 
         {/* Stats row */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
-          <div>
-            <span style={{ fontSize: '0.75rem', color: '#adb5bd', display: 'block' }}>Signals</span>
-            <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0a2540' }}>
+          <div title="Direct Signals: count of feedback items, voice recordings, support tickets, and survey responses directly linked to this theme. This may differ from the total Linked Feedback count shown on the detail page, which includes broader related evidence.">
+            <span style={{ fontSize: '0.75rem', color: '#adb5bd', display: 'block', cursor: 'help' }}>Direct Signals</span>
+            <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0a2540', cursor: 'help' }}>
               {theme.totalSignalCount ?? theme._count?.feedbacks ?? theme.feedbackCount ?? 0}
             </span>
           </div>

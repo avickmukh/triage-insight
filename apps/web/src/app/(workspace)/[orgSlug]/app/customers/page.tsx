@@ -262,15 +262,19 @@ function CiqScoreBar({ score, max = 100 }: { score: number | null | undefined; m
   );
 }
 
-// ─── Health Badge ─────────────────────────────────────────────────────────────
+// ─── Health Badge ───────────────────────────────────────────────────────────────────
+// healthScore is stored as 0–100 by the CIQ engine. Do NOT multiply by 100.
 function HealthBadge({ score }: { score: number | null | undefined }) {
   if (score == null) return <span style={{ color: '#adb5bd', fontSize: '0.8rem' }}>—</span>;
-  const pct = Math.round(score * 100);
+  const pct = Math.min(100, Math.round(score));
   const { bg, color } = pct >= 70 ? { bg: '#e8f5e9', color: '#2e7d32' } : pct >= 40 ? { bg: '#fff8e1', color: '#b8860b' } : { bg: '#fce4ec', color: '#c62828' };
   const label = pct >= 70 ? 'Healthy' : pct >= 40 ? 'At Risk' : 'Critical';
   return (
-    <span style={{ background: bg, color, padding: '0.2rem 0.5rem', borderRadius: '1rem', fontSize: '0.7rem', fontWeight: 700 }}>
-      {label} {pct}%
+    <span
+      style={{ background: bg, color, padding: '0.2rem 0.5rem', borderRadius: '1rem', fontSize: '0.7rem', fontWeight: 700, cursor: 'help' }}
+      title={`Customer Health Score: ${pct}/100 — composite of lifecycle stage, churn risk indicators, and recent activity. ≥70: Healthy, 40–69: At Risk, <40: Critical.`}
+    >
+      {label} {pct}
     </span>
   );
 }

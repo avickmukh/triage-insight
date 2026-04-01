@@ -53,7 +53,8 @@ function BulletList({ items }: { items: string[] }) {
 }
 
 function ThemeRow({ theme }: { theme: DigestTopTheme }) {
-  const ciq = theme.ciqScore != null ? Math.round(theme.ciqScore) : theme.priorityScore != null ? Math.round(theme.priorityScore * 100) : null;
+  // Both ciqScore and priorityScore are stored as 0–100 by the CIQ engine. Do NOT multiply by 100.
+  const ciq = theme.ciqScore != null ? Math.round(theme.ciqScore) : theme.priorityScore != null ? Math.round(theme.priorityScore) : null;
   const urgency = theme.urgencyScore != null ? Math.round(theme.urgencyScore) : null;
   const sources: string[] = [];
   if ((theme.feedbackCount ?? 0) > 0) sources.push(`${theme.feedbackCount} feedback`);

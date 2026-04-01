@@ -78,17 +78,23 @@ function Skeleton({ style }: { style?: React.CSSProperties }) {
   );
 }
 
-// ─── Priority Bar ─────────────────────────────────────────────────────────────
+/// ─── Priority Bar ───────────────────────────────────────────────────────
+// priorityScore is stored as 0–100 by the CIQ engine. Do NOT multiply by 100.
+// Color thresholds aligned with CiqImpactBadge: ≥80 Critical, ≥55 High, ≥30 Medium, <30 Low.
 function PriorityBar({ score }: { score: number | null | undefined }) {
-  if (score == null) return <span style={{ color: '#adb5bd', fontSize: '0.875rem' }}>No score available</span>;
-  const pct = Math.min(100, Math.round(score * 100));
-  const color = pct >= 70 ? '#e63946' : pct >= 40 ? '#f4a261' : '#20A4A4';
+  if (score == null) return <span style={{ color: '#adb5bd', fontSize: '0.875rem' }}>No score yet — trigger a rescore to compute the CIQ priority</span>;
+  const pct = Math.min(100, Math.round(score));
+  const color = pct >= 80 ? '#e63946' : pct >= 55 ? '#f4a261' : pct >= 30 ? '#f59e0b' : '#20A4A4';
+  const bandLabel = pct >= 80 ? 'Critical' : pct >= 55 ? 'High' : pct >= 30 ? 'Medium' : 'Low';
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+    <div
+      style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}
+      title={`CIQ Priority Score: ${pct}/100 (${bandLabel}) — composite of signal volume, ARR exposure, deal pipeline, voice urgency, and support pressure. Connect your CRM to unlock full scoring potential.`}
+    >
       <div style={{ flex: 1, height: '8px', background: '#e9ecef', borderRadius: '4px', maxWidth: '200px' }}>
         <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: '4px', transition: 'width 0.4s' }} />
       </div>
-      <span style={{ fontSize: '1rem', fontWeight: 700, color }}>{pct}%</span>
+      <span style={{ fontSize: '1rem', fontWeight: 700, color, cursor: 'help' }}>{pct}</span>
     </div>
   );
 }
