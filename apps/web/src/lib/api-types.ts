@@ -478,6 +478,15 @@ export interface DuplicateSuggestion {
   similarityScore: number;
   /** Alias for similarityScore — used in some components */
   similarity?: number;
+  /** Composite hybrid score (0–1) combining embedding + title + keyword signals */
+  hybridScore?: number | null;
+  /**
+   * Strict match class: EXACT_DUPLICATE | NEAR_DUPLICATE | RELATED_SAME_THEME | NOT_DUPLICATE
+   * Only EXACT_DUPLICATE and NEAR_DUPLICATE are surfaced in the UI.
+   */
+  matchType?: string | null;
+  /** Short human-readable explanation for the match (e.g. "Similar title and description") */
+  matchReason?: string | null;
   status: DuplicateSuggestionStatus;
   createdAt: string;
   updatedAt: string;

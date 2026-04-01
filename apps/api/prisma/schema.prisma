@@ -830,7 +830,14 @@ model FeedbackDuplicateSuggestion {
   id            String                     @id @default(uuid())
   sourceId      String
   targetId      String
+  /// Raw embedding cosine similarity (0–1) from pgvector
   similarity    Float
+  /// Composite hybrid score (0–1) combining embedding + title + keyword signals
+  hybridScore   Float?
+  /// Strict match class: EXACT_DUPLICATE | NEAR_DUPLICATE | RELATED_SAME_THEME | NOT_DUPLICATE
+  matchType     String                     @default("NEAR_DUPLICATE")
+  /// Short human-readable explanation shown in the UI (e.g. "Similar title and description")
+  matchReason   String?
   status        DuplicateSuggestionStatus  @default(PENDING)
   createdAt     DateTime                   @default(now())
   updatedAt     DateTime                   @updatedAt
@@ -840,6 +847,7 @@ model FeedbackDuplicateSuggestion {
 
   @@unique([sourceId, targetId])
   @@index([status])
+  @@index([matchType])
 }
 
 //

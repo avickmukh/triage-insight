@@ -41,6 +41,8 @@ export class DuplicateSuggestionsService {
       where: {
         sourceFeedback: { workspaceId },
         ...(status ? { status } : { status: DuplicateSuggestionStatus.PENDING }),
+        // Only surface actionable match classes — never RELATED_SAME_THEME
+        matchType: { in: ['EXACT_DUPLICATE', 'NEAR_DUPLICATE'] },
       },
       include: {
         sourceFeedback: {
@@ -50,7 +52,8 @@ export class DuplicateSuggestionsService {
           select: { id: true, title: true, status: true, sourceType: true },
         },
       },
-      orderBy: [{ similarity: 'desc' }, { createdAt: 'desc' }],
+      // Order by hybridScore (most confident first), fall back to similarity, then recency
+      orderBy: [{ hybridScore: 'desc' }, { similarity: 'desc' }, { createdAt: 'desc' }],
     });
   }
 
@@ -70,6 +73,8 @@ export class DuplicateSuggestionsService {
       where: {
         OR: [{ sourceId: feedbackId }, { targetId: feedbackId }],
         ...(status ? { status } : { status: DuplicateSuggestionStatus.PENDING }),
+        // Only surface actionable match classes — never RELATED_SAME_THEME
+        matchType: { in: ['EXACT_DUPLICATE', 'NEAR_DUPLICATE'] },
       },
       include: {
         sourceFeedback: {
@@ -79,7 +84,8 @@ export class DuplicateSuggestionsService {
           select: { id: true, title: true, status: true, sourceType: true },
         },
       },
-      orderBy: { similarity: 'desc' },
+      // Order by hybridScore (most confident first), fall back to similarity
+      orderBy: [{ hybridScore: 'desc' }, { similarity: 'desc' }],
     });
   }
 

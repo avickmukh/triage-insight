@@ -109,10 +109,14 @@ export class AiAnalysisProcessor {
     this.logger.debug(ctx, `[STEP] LOAD ${Date.now() - t0}ms | feedback=${feedbackId}`);
 
     // ── 1. Generate Embedding ────────────────────────────────────────────────
+    // Use composite text (title + description) so the embedding captures both
+    // the subject and the detail. Using description alone caused false positives
+    // in duplicate detection when titles were completely different topics.
     const t1 = Date.now();
     let embedding: number[] = [];
     try {
-      embedding = await this.embeddingService.generateEmbedding(feedback.description);
+      const compositeText = `Title: ${feedback.title}\nDescription: ${feedback.description}`;
+      embedding = await this.embeddingService.generateEmbedding(compositeText);
     } catch (err) {
       this.logger.stepWarn(ctx, 'EMBEDDING', (err as Error).message);
     }

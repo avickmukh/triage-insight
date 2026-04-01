@@ -33,11 +33,28 @@ const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function confidenceLabel(score: number): { label: string; color: string } {
-  if (score >= 0.85) return { label: 'Very High', color: '#2e7d32' };
-  if (score >= 0.7) return { label: 'High', color: '#20A4A4' };
-  if (score >= 0.5) return { label: 'Medium', color: '#b8860b' };
-  return { label: 'Low', color: '#6C757D' };
+/**
+ * Map matchType to a human-readable label and color.
+ * Falls back to the legacy similarity-based label for old rows without matchType.
+ */
+function matchTypeDisplay(
+  matchType: string | null | undefined,
+  hybridScore: number | null | undefined,
+  similarity: number,
+): { label: string; color: string; bg: string } {
+  // New rows: use matchType for accurate classification
+  if (matchType === 'EXACT_DUPLICATE') {
+    return { label: 'Exact duplicate', color: '#2e7d32', bg: '#e8f5e9' };
+  }
+  if (matchType === 'NEAR_DUPLICATE') {
+    return { label: 'Near duplicate', color: '#20A4A4', bg: '#e8f7f7' };
+  }
+  // Legacy rows (no matchType): fall back to similarity thresholds
+  const score = hybridScore ?? similarity;
+  if (score >= 0.92) return { label: 'Exact duplicate', color: '#2e7d32', bg: '#e8f5e9' };
+  if (score >= 0.82) return { label: 'Near duplicate', color: '#20A4A4', bg: '#e8f7f7' };
+  if (score >= 0.70) return { label: 'Possible duplicate', color: '#b8860b', bg: '#fff8e1' };
+  return { label: 'Low confidence', color: '#6C757D', bg: '#f0f4f8' };
 }
 
 // ─── Single suggestion row ────────────────────────────────────────────────────
@@ -75,9 +92,11 @@ function SuggestionRow({
 
   // Use similarity alias if present, fall back to similarityScore
   const similarityScore = suggestion.similarity ?? suggestion.similarityScore ?? 0;
+  // Use hybridScore when available (new rows); fall back to raw similarity for legacy rows
+  const displayScore = suggestion.hybridScore ?? similarityScore;
 
   const sc = STATUS_COLORS[other.status] ?? { bg: '#f0f4f8', color: '#6C757D' };
-  const conf = confidenceLabel(similarityScore);
+  const matchDisplay = matchTypeDisplay(suggestion.matchType, suggestion.hybridScore, similarityScore);
   const isBusy = isActing && actionId === suggestion.id;
 
   return (
@@ -130,22 +149,31 @@ function SuggestionRow({
           >
             {other.status.replace('_', '\u00a0')}
           </span>
-          {/* Confidence */}
+          {/* Match type label — uses strict classification from backend */}
           <span
             style={{
-              fontSize: '0.72rem',
-              color: conf.color,
-              fontWeight: 600,
+              fontSize: '0.68rem',
+              fontWeight: 700,
+              padding: '0.15rem 0.45rem',
+              borderRadius: '999px',
+              background: matchDisplay.bg,
+              color: matchDisplay.color,
             }}
           >
-            {conf.label} match
+            {matchDisplay.label}
           </span>
-          {/* Visual similarity bar */}
+          {/* Match reason — short explanation from backend */}
+          {suggestion.matchReason && (
+            <span style={{ fontSize: '0.70rem', color: '#6C757D', fontStyle: 'italic' }}>
+              {suggestion.matchReason}
+            </span>
+          )}
+          {/* Visual hybrid score bar */}
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
             <span style={{ display: 'inline-block', width: '48px', height: '5px', borderRadius: '999px', background: '#e9ecef', overflow: 'hidden' }}>
-              <span style={{ display: 'block', height: '100%', width: `${Math.round(similarityScore * 100)}%`, background: conf.color, borderRadius: '999px', transition: 'width 0.3s' }} />
+              <span style={{ display: 'block', height: '100%', width: `${Math.round(displayScore * 100)}%`, background: matchDisplay.color, borderRadius: '999px', transition: 'width 0.3s' }} />
             </span>
-            <span style={{ fontSize: '0.68rem', color: '#adb5bd', fontWeight: 600 }}>{Math.round(similarityScore * 100)}%</span>
+            <span style={{ fontSize: '0.68rem', color: '#adb5bd', fontWeight: 600 }}>{Math.round(displayScore * 100)}%</span>
           </span>
           {/* Date */}
           <span style={{ fontSize: '0.72rem', color: '#adb5bd' }}>
@@ -346,8 +374,9 @@ export function DuplicateSuggestionsPanel({
       <div style={{ background: '#f8fafc', border: '1px solid #e9ecef', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', marginBottom: '0.875rem', display: 'flex', alignItems: 'flex-start', gap: '0.4rem' }}>
         <span style={{ fontSize: '0.8rem', flexShrink: 0 }}>🤖</span>
         <p style={{ fontSize: '0.75rem', color: '#6C757D', margin: 0, lineHeight: 1.5 }}>
-          These items were flagged by the AI using <strong>semantic similarity</strong> — comparing meaning, not just keywords.
-          A match above 70% is considered high confidence. Review and accept to merge, or dismiss if they are unrelated.
+          These items were flagged by the AI using a <strong>hybrid score</strong> combining semantic meaning,
+          title similarity, and keyword overlap. Only <strong>Exact duplicate</strong> and <strong>Near duplicate</strong> matches
+          are shown. Review and accept to merge, or dismiss if they are unrelated.
         </p>
       </div>
 
