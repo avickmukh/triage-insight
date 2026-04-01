@@ -608,8 +608,11 @@ export default function ThemeDetailPage() {
             {/* ── Insight context strip — why this theme exists ── */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.25rem' }}>
               {(theme.feedbackCount ?? 0) > 0 && (
-                <span style={{ fontSize: '0.75rem', background: '#f0f4f8', color: '#495057', borderRadius: '0.375rem', padding: '0.2rem 0.6rem', fontWeight: 500 }}>
-                  {theme.feedbackCount} feedback signal{theme.feedbackCount !== 1 ? 's' : ''} grouped here
+                <span
+                  title={`${theme.feedbackCount} feedback item${(theme.feedbackCount ?? 0) !== 1 ? 's' : ''} are directly assigned to this theme by the AI clustering engine. The \"Linked Feedback\" section below may show additional semantically-related items.`}
+                  style={{ fontSize: '0.75rem', background: '#f0f4f8', color: '#495057', borderRadius: '0.375rem', padding: '0.2rem 0.6rem', fontWeight: 500, cursor: 'help' }}
+                >
+                  {theme.feedbackCount} direct signal{(theme.feedbackCount ?? 0) !== 1 ? 's' : ''}
                 </span>
               )}
               {(theme.feedbackCount ?? 0) >= 3 && (
@@ -1109,6 +1112,29 @@ export default function ThemeDetailPage() {
         {rescoreToast && (
           <div style={{ padding: '0.5rem 0.75rem', background: '#e8f5e9', border: '1px solid #c8e6c9', borderRadius: '0.5rem', fontSize: '0.78rem', color: '#2e7d32', marginBottom: '1rem' }}>
             {rescoreToast}
+          </div>
+        )}
+
+        {/* Signal-only mode banner — shown when no CRM data is available */}
+        {ciqScore && (ciqScore.scoringMode === 'signal-only' || (ciqScore.revenueImpactValue === 0 && ciqScore.uniqueCustomerCount === 0)) && (
+          <div style={{
+            padding: '0.625rem 0.875rem',
+            background: '#fff8e1',
+            border: '1px solid #ffe082',
+            borderRadius: '0.5rem',
+            fontSize: '0.78rem',
+            color: '#795548',
+            marginBottom: '1rem',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '0.5rem',
+          }}>
+            <span style={{ fontSize: '1rem', flexShrink: 0 }}>💡</span>
+            <span>
+              <strong>Scoring in signal-only mode.</strong> No CRM data (ARR, customers, or deals) is linked to this workspace yet.
+              The priority score is based entirely on feedback volume, recency, velocity, and source diversity.
+              <strong> Connect your CRM</strong> (Salesforce, HubSpot) via Integrations to unlock revenue-weighted prioritization and see which themes are affecting your highest-value accounts.
+            </span>
           </div>
         )}
 

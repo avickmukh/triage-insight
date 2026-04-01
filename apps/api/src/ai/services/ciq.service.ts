@@ -94,6 +94,12 @@ export interface CiqScoreOutput {
   sourceDiversityCount?: number;
   /** Signal velocity: percentage change in signal count vs. previous week (from TrendComputationService) */
   velocityDelta?: number | null;
+  /**
+   * Indicates whether the score was computed in signal-only mode (no CRM data available)
+   * or in full mode (ARR + deal pipeline + customer data contributed).
+   * The UI uses this to show a contextual explanation banner encouraging CRM integration.
+   */
+  scoringMode?: 'signal-only' | 'full';
 }
 
 /** Lightweight feedback-level score (no theme aggregation needed) */
@@ -590,6 +596,32 @@ export class CiqService {
       },
     };
 
+    // ── Adaptive scoring: signal-only mode for workspaces without CRM data ────
+    // When a workspace has no ARR, no linked customers, and no deal pipeline data,
+    // the CRM-dependent factors (customerCount, arrValue, accountPriority,
+    // dealInfluence, signalStrength) all contribute 0 to the score, but their
+    // weights still consume ~60% of the total weight budget.  This causes every
+    // theme to score below 10/100 regardless of signal volume, making the
+    // Priority badge permanently show "Low" for new customers.
+    //
+    // Fix: if no CRM data is present, zero out the CRM factor weights so the
+    // weight normalisation step redistributes the full budget to signal factors.
+    // This preserves the relative ranking between themes while producing
+    // meaningful absolute scores (e.g. 5 signals -> ~40-60/100 instead of ~3/100).
+    const hasCrmData = arrValue > 0 || uniqueCustomerCount > 0 || dealInfluenceValue > 0;
+    const scoringMode: 'signal-only' | 'full' = hasCrmData ? 'full' : 'signal-only';
+    if (!hasCrmData) {
+      // Zero out weights for factors that require CRM data.
+      // The normalisation step below will redistribute these weights to the
+      // active signal factors, so the total score stays in the 0-100 range.
+      const CRM_FACTOR_KEYS = ['customerCount', 'arrValue', 'accountPriority', 'dealInfluence', 'signalStrength'];
+      for (const key of CRM_FACTOR_KEYS) {
+        if (explanation[key]) {
+          explanation[key] = { ...explanation[key], weight: 0, contribution: 0 };
+        }
+      }
+    }
+
     // ── Normalise weights so the sum always stays within 0–100 ─────────────
     const totalWeight = Object.values(explanation).reduce((sum, c) => sum + c.weight, 0);
     const normFactor  = totalWeight > 0 ? 1 / totalWeight : 1;
@@ -671,9 +703,12 @@ export class CiqService {
     const secondPhrase = topFactors[1] && DRIVER_PHRASES[topFactors[1][0]]
       ? ` and ${DRIVER_PHRASES[topFactors[1][0]](topFactors[1][1].value)}`
       : '';
+    const signalOnlyNote = scoringMode === 'signal-only'
+      ? ' Scored in signal-only mode (no CRM data). Connect your CRM to unlock revenue-weighted prioritization.'
+      : '';
     const priorityReason =
       `${band} priority driven by ${driverPhrase}${secondPhrase}. ` +
-      `Score: ${Math.round(priorityScore)}/100.`;
+      `Score: ${Math.round(priorityScore)}/100.${signalOnlyNote}`;
 
     // ── Confidence explanation sentence ────────────────────────────────────
     const confBand = confidenceScore >= 0.75 ? 'High' : confidenceScore >= 0.45 ? 'Medium' : 'Low';
@@ -715,6 +750,7 @@ export class CiqService {
       confidenceExplanation,
       sourceDiversityCount: activeSources,
       velocityDelta,
+      scoringMode,
     };
   }
 

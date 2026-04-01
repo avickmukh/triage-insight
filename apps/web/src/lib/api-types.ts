@@ -1133,6 +1133,12 @@ export interface CiqScoreOutput {
   surveyCount?: number;
   /** Total cross-source signal count */
   totalSignalCount?: number;
+  /**
+   * Indicates whether the score was computed in signal-only mode (no CRM data available)
+   * or in full mode (ARR + deal pipeline + customer data contributed).
+   * When 'signal-only', the UI should show a contextual banner encouraging CRM integration.
+   */
+  scoringMode?: 'signal-only' | 'full';
 }
 
 /**
