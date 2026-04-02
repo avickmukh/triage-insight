@@ -20,7 +20,7 @@ export class EmbeddingService {
       );
     }
     const response = await this.openai.embeddings.create({
-      model: 'text-embedding-3-small',
+      model: 'text-embedding-3-large',
       input: text.replace(/\n/g, ' '),
     });
     return response.data[0].embedding;

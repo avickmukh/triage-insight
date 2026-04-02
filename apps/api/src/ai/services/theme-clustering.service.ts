@@ -8,72 +8,104 @@ import { CIQ_SCORING_QUEUE } from '../processors/ciq-scoring.processor';
 /**
  * ThemeClusteringService
  *
- * Semantic clustering using pgvector cosine similarity with hybrid scoring.
+ * PURPOSE
+ * -------
+ * This service is responsible for semantic theme clustering.
  *
- * ROOT CAUSE FIXES (2026-03-29):
- *   1. feedbackCount was always 0 — cluster size now queried live from ThemeFeedback
- *      so getDynamicThreshold() gets the real count, not the stale denormalized column.
- *   2. createCandidateTheme embedding write was outside the advisory-locked transaction
- *      (used this.prisma instead of the tx client) — now passes the tx prisma client in.
- *   3. Thresholds were too strict: THRESHOLD_NEW=0.65 with EMBEDDING_WEIGHT=0.7 meant
- *      a cosine similarity of 0.93 was needed to pass (0.93×0.7=0.65). Lowered to 0.50.
- *   4. No post-clustering merge pass — added runPostMerge() to merge themes whose
- *      centroids are within 0.82 cosine similarity after a batch completes.
+ * It uses:
+ * - embeddings (AI semantic vectors)
+ * - pgvector cosine similarity
+ * - lightweight keyword overlap
  *
- * HYBRID SIMILARITY:
- *   score = (embedding_cosine × 0.7) + (keyword_jaccard × 0.3)
+ * It decides:
+ * - whether a feedback item should be attached to an existing theme
+ * - or whether a new theme should be created
  *
- * DYNAMIC THRESHOLDS (based on live cluster size):
- *   ≥ 10 items → 0.72   (well-defined cluster, moderate strictness)
- *    5–9 items → 0.65
- *    1–4 items → 0.55   (growing cluster, looser)
- *      0 items → 0.50   (brand-new theme, centroid = first feedback embedding)
+ * IMPORTANT
+ * ---------
+ * This is AI-powered clustering, but NOT LLM narration.
+ * The "AI" here is semantic similarity via embeddings.
  *
- * PERFORMANCE:
- *   - Candidate search: single pgvector O(log n) query
- *   - Cluster size: COUNT(*) on ThemeFeedback (indexed on themeId)
- *   - Centroid update: single SQL UPDATE using pgvector avg()
- *   - Post-merge: O(k²) on theme count k (typically < 50 per workspace)
- *   - Advisory lock: serialises per-workspace, no cross-workspace blocking
+ * MAIN CHANGES IN THIS VERSION
+ * ----------------------------
+ * 1. Thresholds are lowered so similar feedback is more likely to join an existing theme
+ * 2. Embedding weight is increased because semantic similarity is more reliable than keyword overlap
+ * 3. A soft-match fallback is added to reduce theme explosion
+ * 4. A theme-cap guardrail is added so the system does not keep creating tiny micro-themes
+ * 5. Post-merge threshold is slightly relaxed to merge near-duplicate themes more aggressively
  */
 @Injectable()
 export class ThemeClusteringService {
   private readonly logger = new Logger(ThemeClusteringService.name);
 
-  /** Embedding similarity weight in the hybrid score. */
-  private readonly EMBEDDING_WEIGHT = 0.7;
-
-  /** Keyword overlap weight in the hybrid score. */
-  private readonly KEYWORD_WEIGHT = 0.3;
+  /**
+   * Embedding similarity is the strongest signal.
+   * We give it most of the weight because embeddings capture semantic meaning
+   * better than exact keyword overlap.
+   */
+  private readonly EMBEDDING_WEIGHT = 0.85;
 
   /**
-   * Dynamic thresholds based on LIVE cluster size (not stale feedbackCount column).
-   * Lowered from previous values to fix the "1 feedback = 1 theme" problem.
-   * The effective cosine similarity needed = threshold / EMBEDDING_WEIGHT when keyword=0.
+   * Keyword overlap is still useful as a secondary signal, but should not dominate.
    */
-  // Hybrid score = embedding×0.7 + keyword×0.3
-  // Minimum cosine similarity needed (with 0 keyword overlap) = threshold / 0.7
-  //
-  // THRESHOLD_NEW  = 0.60 → needs cosine ≥ 0.86  (brand-new theme)
-  // THRESHOLD_SMALL = 0.62 → needs cosine ≥ 0.89  (1–4 items)
-  // THRESHOLD_MEDIUM = 0.68 → needs cosine ≥ 0.97  (5–9 items, well-formed)
-  // THRESHOLD_LARGE  = 0.72 → needs cosine ≥ 1.03  (≥10 items, keyword overlap required)
-  //
-  // These values prevent over-grouping of unrelated feedback while still
-  // consolidating genuinely similar items (e.g. 15 "Login issue" variants).
-  private readonly THRESHOLD_LARGE  = 0.72;  // ≥ 10 items
-  private readonly THRESHOLD_MEDIUM = 0.68;  //  5–9 items
-  private readonly THRESHOLD_SMALL  = 0.62;  //  1–4 items
-  private readonly THRESHOLD_NEW    = 0.60;  //    0 items  (brand-new theme)
+  private readonly KEYWORD_WEIGHT = 0.15;
 
-  /** Hybrid score below this value marks a feedback item as a potential outlier. */
-  private readonly OUTLIER_THRESHOLD = 0.50;
+  /**
+   * Dynamic thresholds by live cluster size.
+   *
+   * These are intentionally lower than before.
+   * The previous values were still too strict, causing near-duplicate feedback
+   * to fail assignment and create too many themes.
+   *
+   * Rough intuition:
+   * - new / tiny themes should be easier to grow
+   * - mature themes can be a bit stricter
+   *
+   * With EMBEDDING_WEIGHT = 0.85:
+   * threshold 0.50 ~= requires embedding similarity ~0.59 if keywords = 0
+   * threshold 0.62 ~= requires embedding similarity ~0.73 if keywords = 0
+   *
+   * In real life keyword overlap is often low even when semantics match,
+   * so thresholds must remain practical.
+   */
+  private readonly THRESHOLD_NEW = 0.50;     // 0 items
+  private readonly THRESHOLD_SMALL = 0.52;   // 1–4 items
+  private readonly THRESHOLD_MEDIUM = 0.58;  // 5–9 items
+  private readonly THRESHOLD_LARGE = 0.62;   // >=10 items
 
-  /** Number of top candidates to retrieve from pgvector before hybrid re-ranking. */
-  private readonly VECTOR_CANDIDATES = 10;
+  /**
+   * Below this hybrid score, a feedback item is considered a possible outlier.
+   */
+  private readonly OUTLIER_THRESHOLD = 0.45;
 
-  /** Cosine similarity above which two themes are merged in the post-merge pass. */
-  private readonly MERGE_THRESHOLD = 0.82;
+  /**
+   * How many nearest vector candidates to fetch before hybrid re-ranking.
+   */
+  private readonly VECTOR_CANDIDATES = 12;
+
+  /**
+   * Soft match multiplier.
+   *
+   * If best score is close to the threshold, prefer assignment over creating
+   * a brand-new theme. This dramatically reduces theme explosion.
+   *
+   * Example:
+   * threshold = 0.58
+   * soft threshold = 0.58 * 0.92 = 0.5336
+   */
+  private readonly SOFT_MATCH_MULTIPLIER = 0.92;
+
+  /**
+   * If workspace already has many themes, be conservative about creating more.
+   * This is a simple guardrail, not a hard business rule.
+   */
+  private readonly THEME_CAP_GUARDRAIL = 20;
+
+  /**
+   * Merge themes whose centroids are very close.
+   * Slightly more aggressive than before to clean up micro-theme duplication.
+   */
+  private readonly MERGE_THRESHOLD = 0.78;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -81,25 +113,28 @@ export class ThemeClusteringService {
     @InjectQueue(CIQ_SCORING_QUEUE) private readonly ciqQueue: Queue,
   ) {}
 
-  // ─── Public API ───────────────────────────────────────────────────────────
-
   /**
-   * Assign a single feedback item to the best-matching theme in the workspace.
+   * Assign a feedback item to the best theme in the workspace.
    *
-   * Uses hybrid similarity: embedding cosine similarity + keyword overlap.
-   * Dynamic threshold is applied based on the LIVE cluster size (COUNT from DB).
-   *
-   * Returns the themeId the feedback was assigned to, or null if skipped.
+   * Flow:
+   * 1. Skip if already linked
+   * 2. Ensure embedding exists
+   * 3. Take workspace-level advisory lock
+   * 4. Search nearest themes
+   * 5. Score candidates using hybrid score
+   * 6. Assign if strong enough
+   * 7. Else create new theme
+   * 8. After commit: recompute confidence + enqueue CIQ scoring
    */
   async assignFeedbackToTheme(
     workspaceId: string,
     feedbackId: string,
     embedding?: number[],
   ): Promise<string | null> {
-    // Skip if already linked to any theme
     const existingLink = await this.prisma.themeFeedback.findFirst({
       where: { feedbackId },
     });
+
     if (existingLink) {
       this.logger.debug(
         `[CLUSTER] Feedback ${feedbackId} already linked to theme ${existingLink.themeId} — skipping`,
@@ -107,21 +142,18 @@ export class ThemeClusteringService {
       return existingLink.themeId;
     }
 
-    // ── Pre-compute embedding OUTSIDE the transaction ───────────────────────
-    // Embedding generation is an external API call (OpenAI) that can take 5–15s.
-    // Running it inside a Prisma interactive transaction was the root cause of the
-    // "Transaction API error: expired transaction" bug — the 60s timeout was
-    // consumed by the embedding call before any DB writes even started.
-    //
-    // Fix: generate the embedding here (no DB lock held), then pass it into the
-    // transaction so the locked section only does fast DB operations.
+    /**
+     * Generate embedding outside transaction.
+     * External API calls inside DB transaction cause timeout and lock inflation.
+     */
     let resolvedEmbedding: number[] | undefined = embedding;
+
     if (!resolvedEmbedding || resolvedEmbedding.length === 0) {
-      // We need the feedback text to generate the embedding
       const feedbackForEmbed = await this.prisma.feedback.findUnique({
         where: { id: feedbackId },
         select: { title: true, description: true },
       });
+
       if (feedbackForEmbed) {
         try {
           resolvedEmbedding = await this.embeddingService.generateEmbedding(
@@ -129,60 +161,60 @@ export class ThemeClusteringService {
           );
         } catch (err) {
           this.logger.warn(
-            `[CLUSTER] Pre-tx embedding failed for feedback ${feedbackId}: ${(err as Error).message}. Will create new theme.`,
+            `[CLUSTER] Pre-tx embedding failed for feedback ${feedbackId}: ${(err as Error).message}. Will fall back to new theme if needed.`,
           );
           resolvedEmbedding = undefined;
         }
       }
     }
 
-    // ── Workspace-level advisory lock ────────────────────────────────────────
-    // Serialises clustering per workspace so concurrent jobs don't race.
-    // pg_advisory_xact_lock is released automatically at transaction end.
-    //
-    // STABILITY FIX (2026-04-01):
-    //   recomputeClusterConfidence and ciqQueue.add are moved OUTSIDE the
-    //   transaction. They were previously called inside _assignFeedbackToThemeInTx
-    //   while the advisory lock was held, adding 2 extra DB round-trips + a Redis
-    //   call to the critical section. For large workspaces this pushed total time
-    //   past 120s. The transaction now only does the minimum: lock, find candidates,
-    //   upsert ThemeFeedback, update Theme. Everything else runs after commit.
+    /**
+     * Advisory lock serializes clustering per workspace.
+     * This prevents concurrent jobs from creating competing themes at the same time.
+     */
     const assignedThemeId = await this.prisma.$transaction(async (tx) => {
       const lockKey = workspaceIdToLockKey(workspaceId);
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockKey})`;
-      return this._assignFeedbackToThemeInTx(tx as unknown as PrismaService, workspaceId, feedbackId, resolvedEmbedding);
+      return this._assignFeedbackToThemeInTx(
+        tx as unknown as PrismaService,
+        workspaceId,
+        feedbackId,
+        resolvedEmbedding,
+      );
     }, { timeout: 120_000 });
 
-    // ── Post-transaction work (runs after advisory lock is released) ──────────
+    /**
+     * Post-transaction work.
+     * Do not keep lock open for derived read/write work or Redis calls.
+     */
     if (assignedThemeId) {
-      // Recompute cluster confidence using outer prisma (no lock needed — read-heavy)
       await this.recomputeClusterConfidence(assignedThemeId, feedbackId);
 
-      // Enqueue CIQ re-score with a deduplication key so that N assignments to the
-      // same theme within a 30-second window only produce ONE CIQ job (flood control).
-      // jobId = 'ciq:<workspaceId>:<themeId>' — BullMQ deduplicates by jobId.
       try {
         const jobId = `ciq:${workspaceId}:${assignedThemeId}`;
         await this.ciqQueue.add(
           { type: 'THEME_SCORED', workspaceId, themeId: assignedThemeId },
-          { jobId, delay: 5_000 },  // 5s delay: coalesces rapid-fire assignments
+          { jobId, delay: 5_000 },
         );
       } catch (queueErr) {
-        this.logger.warn(`[CIQ] Redis unavailable — re-score skipped: ${(queueErr as Error).message}`);
+        this.logger.warn(
+          `[CIQ] Redis unavailable — re-score skipped: ${(queueErr as Error).message}`,
+        );
       }
     }
 
     return assignedThemeId;
   }
 
-  /** Inner implementation — runs inside the advisory-locked transaction. */
+  /**
+   * Core theme assignment logic executed inside advisory-locked transaction.
+   */
   private async _assignFeedbackToThemeInTx(
     prisma: PrismaService,
     workspaceId: string,
     feedbackId: string,
     embedding?: number[],
   ): Promise<string | null> {
-
     const feedback = await prisma.feedback.findUnique({
       where: { id: feedbackId },
       select: {
@@ -199,8 +231,10 @@ export class ThemeClusteringService {
       return null;
     }
 
-    // Embedding is pre-computed outside the transaction (see assignFeedbackToTheme).
-    // If it is still missing here (pre-tx generation failed), fall back to a new theme.
+    /**
+     * If embedding is unavailable, we cannot perform semantic clustering.
+     * In that case create a candidate theme rather than dropping the signal.
+     */
     let feedbackEmbedding: number[];
     if (embedding && embedding.length > 0) {
       feedbackEmbedding = embedding;
@@ -208,7 +242,14 @@ export class ThemeClusteringService {
       this.logger.warn(
         `[CLUSTER] No embedding available for feedback ${feedbackId} inside tx — creating new theme.`,
       );
-      return this.createCandidateTheme(prisma, workspaceId, feedbackId, feedback.title, undefined, feedback.description ?? undefined);
+      return this.createCandidateTheme(
+        prisma,
+        workspaceId,
+        feedbackId,
+        feedback.title,
+        undefined,
+        feedback.description ?? undefined,
+      );
     }
 
     const vectorStr = `[${feedbackEmbedding.join(',')}]`;
@@ -216,9 +257,10 @@ export class ThemeClusteringService {
       `${feedback.title} ${feedback.normalizedText ?? feedback.description ?? ''}`,
     );
 
-    // ── Step 1: Retrieve top-N candidates by embedding similarity ─────────
-    // Scoped to workspace, excludes ARCHIVED themes.
-    // FIX: use live COUNT from ThemeFeedback, not stale feedbackCount column.
+    /**
+     * Step 1: get top vector candidates in the workspace.
+     * Use live ThemeFeedback counts, not stale denormalized counts.
+     */
     const candidates = await prisma.$queryRaw<Array<{
       id: string;
       title: string;
@@ -243,11 +285,21 @@ export class ThemeClusteringService {
     `;
 
     this.logger.log(
-      `[CLUSTER] Feedback "${feedback.title}" (${feedbackId}) — ` +
-      `found ${candidates.length} candidates in workspace ${workspaceId}`,
+      `[CLUSTER] Feedback "${feedback.title}" (${feedbackId}) — found ${candidates.length} candidates in workspace ${workspaceId}`,
     );
 
-    // ── Step 2: Hybrid re-ranking ─────────────────────────────────────────
+    /**
+     * Step 2: hybrid re-ranking.
+     *
+     * embeddingScore:
+     *   semantic similarity from pgvector cosine distance
+     *
+     * keywordScore:
+     *   simple lexical overlap, mainly to slightly reward aligned vocabulary
+     *
+     * hybridScore:
+     *   final decision score
+     */
     let bestThemeId: string | null = null;
     let bestThemeTitle = '';
     let bestHybridScore = 0;
@@ -261,22 +313,26 @@ export class ThemeClusteringService {
       let themeKeywords: string[] = [];
       try {
         if (candidate.topKeywords) {
-          themeKeywords = typeof candidate.topKeywords === 'string'
-            ? JSON.parse(candidate.topKeywords)
-            : (candidate.topKeywords as string[]);
+          themeKeywords =
+            typeof candidate.topKeywords === 'string'
+              ? JSON.parse(candidate.topKeywords)
+              : (candidate.topKeywords as string[]);
         }
       } catch {
         themeKeywords = [];
       }
 
       const keywordScore = computeKeywordOverlap(feedbackKeywords, themeKeywords);
-      const hybridScore = embeddingScore * this.EMBEDDING_WEIGHT + keywordScore * this.KEYWORD_WEIGHT;
+      const hybridScore =
+        embeddingScore * this.EMBEDDING_WEIGHT +
+        keywordScore * this.KEYWORD_WEIGHT;
+
       const liveCount = Number(candidate.liveCount);
 
       this.logger.debug(
-        `[CLUSTER]   Candidate "${candidate.title}" (${candidate.id}): ` +
-        `embedding=${embeddingScore.toFixed(3)}, keyword=${keywordScore.toFixed(3)}, ` +
-        `hybrid=${hybridScore.toFixed(3)}, size=${liveCount}`,
+        `[CLUSTER] Candidate "${candidate.title}" (${candidate.id}): ` +
+          `embedding=${embeddingScore.toFixed(3)}, keyword=${keywordScore.toFixed(3)}, ` +
+          `hybrid=${hybridScore.toFixed(3)}, size=${liveCount}`,
       );
 
       if (hybridScore > bestHybridScore) {
@@ -289,36 +345,66 @@ export class ThemeClusteringService {
       }
     }
 
-    // ── Step 3: Apply dynamic threshold based on LIVE cluster size ────────
+    /**
+     * Step 3: decide assignment threshold based on current live cluster size.
+     */
     const threshold = this.getDynamicThreshold(bestClusterSize);
+    const softThreshold = threshold * this.SOFT_MATCH_MULTIPLIER;
 
-    if (bestThemeId && bestHybridScore >= threshold) {
-      // Build the matchReason payload for explainability UI.
-      // Captures all scoring factors so the UI can show "why" a signal was assigned.
-      const feedbackKeywordsForReason = feedbackKeywords;
+    /**
+     * Theme-cap guardrail:
+     * if workspace already has many themes and we found a moderately good match,
+     * prefer assignment over creating yet another micro-theme.
+     */
+    const activeThemeCount = await prisma.theme.count({
+      where: {
+        workspaceId,
+        status: { not: 'ARCHIVED' },
+      },
+    });
+
+    const shouldAssignStrong =
+      !!bestThemeId && bestHybridScore >= threshold;
+
+    const shouldAssignSoft =
+      !!bestThemeId &&
+      bestHybridScore >= softThreshold &&
+      activeThemeCount >= this.THEME_CAP_GUARDRAIL;
+
+    if (shouldAssignStrong || shouldAssignSoft) {
       let themeKeywordsForReason: string[] = [];
+
       const bestCandidate = candidates.find((c) => c.id === bestThemeId);
       if (bestCandidate?.topKeywords) {
         try {
-          themeKeywordsForReason = typeof bestCandidate.topKeywords === 'string'
-            ? JSON.parse(bestCandidate.topKeywords)
-            : (bestCandidate.topKeywords as string[]);
-        } catch { themeKeywordsForReason = []; }
+          themeKeywordsForReason =
+            typeof bestCandidate.topKeywords === 'string'
+              ? JSON.parse(bestCandidate.topKeywords)
+              : (bestCandidate.topKeywords as string[]);
+        } catch {
+          themeKeywordsForReason = [];
+        }
       }
-      const matchedKeywords = feedbackKeywordsForReason.filter((k) => themeKeywordsForReason.includes(k));
+
+      const matchedKeywords = feedbackKeywords.filter((k) =>
+        themeKeywordsForReason.includes(k),
+      );
+
       const matchReason = {
         embeddingScore: parseFloat(bestEmbeddingScore.toFixed(4)),
-        keywordScore:   parseFloat(bestKeywordScore.toFixed(4)),
-        hybridScore:    parseFloat(bestHybridScore.toFixed(4)),
-        threshold:      parseFloat(threshold.toFixed(4)),
-        clusterSize:    bestClusterSize,
+        keywordScore: parseFloat(bestKeywordScore.toFixed(4)),
+        hybridScore: parseFloat(bestHybridScore.toFixed(4)),
+        threshold: parseFloat(threshold.toFixed(4)),
+        softThreshold: parseFloat(softThreshold.toFixed(4)),
+        clusterSize: bestClusterSize,
         matchedKeywords,
+        assignmentMode: shouldAssignStrong ? 'strong' : 'soft_guardrail',
       };
 
       await prisma.themeFeedback.upsert({
-        where: { themeId_feedbackId: { themeId: bestThemeId, feedbackId } },
+        where: { themeId_feedbackId: { themeId: bestThemeId!, feedbackId } },
         create: {
-          themeId: bestThemeId,
+          themeId: bestThemeId!,
           feedbackId,
           assignedBy: 'ai',
           confidence: bestHybridScore,
@@ -331,110 +417,117 @@ export class ThemeClusteringService {
         },
       });
 
-      // ── Update lastEvidenceAt on the theme so it can be sorted by activity ──
       const now = new Date();
       const themeUpdate: Record<string, unknown> = { lastEvidenceAt: now };
 
-      // ── Recompute recentSignalCount (signals in last 30 days) ─────────────
-      // Count all ThemeFeedback rows for this theme whose linked Feedback was
-      // created within the last 30 days.  This is a cheap COUNT query that runs
-      // on every assignment so the value is always fresh.
+      /**
+       * Keep recent signal count fresh.
+       */
       const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
       const recentCount = await prisma.themeFeedback.count({
         where: {
-          themeId: bestThemeId,
+          themeId: bestThemeId!,
           feedback: { createdAt: { gte: thirtyDaysAgo } },
         },
       });
-      // +1 to include the feedback being assigned right now (not yet committed)
+
       themeUpdate.recentSignalCount = recentCount + 1;
 
-      // ── Resurfacing detection ─────────────────────────────────────────────
-      // If any RoadmapItem linked to this theme is SHIPPED, fresh evidence means
-      // the problem was not fully resolved. Increment resurfaceCount and set
-      // resurfacedAt so the roadmap and CIQ views can surface this signal.
-      // When recentSignalCount crosses the RESURFACING_THRESHOLD (5 signals in
-      // 30 days), also promote the theme status to RESURFACED so it re-enters
-      // the full intelligence pipeline.
+      /**
+       * Resurfacing logic:
+       * if a shipped roadmap item gets new evidence, mark resurfacing signals.
+       */
       const RESURFACING_THRESHOLD = 5;
+
       const shippedRoadmapItem = await prisma.roadmapItem.findFirst({
-        where: { themeId: bestThemeId, status: 'SHIPPED' },
+        where: { themeId: bestThemeId!, status: 'SHIPPED' },
         select: { id: true },
       });
+
       if (shippedRoadmapItem) {
-        themeUpdate.resurfacedAt   = now;
+        themeUpdate.resurfacedAt = now;
         themeUpdate.resurfaceCount = { increment: 1 };
-        // Auto-promote to RESURFACED when signal volume crosses the threshold
+
         if ((recentCount + 1) >= RESURFACING_THRESHOLD) {
           themeUpdate.status = 'RESURFACED';
           this.logger.warn(
-            `[CLUSTER] ⚠ AUTO-PROMOTED to RESURFACED: theme "${bestThemeTitle}" (${bestThemeId}) ` +
-            `crossed ${RESURFACING_THRESHOLD} recent signals (${recentCount + 1}) after SHIPPED roadmap item. ` +
-            `Status set to RESURFACED.`,
+            `[CLUSTER] ⚠ AUTO-PROMOTED to RESURFACED: theme "${bestThemeTitle}" (${bestThemeId}) crossed ${RESURFACING_THRESHOLD} recent signals`,
           );
         } else {
           this.logger.warn(
-            `[CLUSTER] ⚠ RESURFACED: theme "${bestThemeTitle}" (${bestThemeId}) ` +
-            `has a SHIPPED roadmap item but received fresh evidence from feedback ${feedbackId}. ` +
-            `resurfaceCount incremented (recentSignals=${recentCount + 1}/${RESURFACING_THRESHOLD}).`,
+            `[CLUSTER] ⚠ RESURFACED: theme "${bestThemeTitle}" (${bestThemeId}) received fresh evidence`,
           );
         }
       }
 
       await prisma.theme.update({
-        where: { id: bestThemeId },
+        where: { id: bestThemeId! },
         data: themeUpdate as Parameters<typeof prisma.theme.update>[0]['data'],
       });
 
       this.logger.log(
         `[CLUSTER] ✓ ASSIGNED feedback "${feedback.title}" → theme "${bestThemeTitle}" ` +
-        `(hybrid=${bestHybridScore.toFixed(3)} ≥ threshold=${threshold}, ` +
-        `embedding=${bestEmbeddingScore.toFixed(3)}, keyword=${bestKeywordScore.toFixed(3)}, ` +
-        `clusterSize=${bestClusterSize}, matchedKeywords=[${matchedKeywords.join(',')}])`,
+          `(mode=${shouldAssignStrong ? 'strong' : 'soft_guardrail'}, ` +
+          `hybrid=${bestHybridScore.toFixed(3)}, threshold=${threshold.toFixed(3)}, ` +
+          `embedding=${bestEmbeddingScore.toFixed(3)}, keyword=${bestKeywordScore.toFixed(3)}, ` +
+          `clusterSize=${bestClusterSize}, matchedKeywords=[${matchedKeywords.join(',')}])`,
       );
 
-      // Update centroid inside the transaction (fast SQL UPDATE, no external calls)
-      await this.updateThemeCentroid(prisma, bestThemeId);
-
-      // NOTE: recomputeClusterConfidence and ciqQueue.add have been moved OUTSIDE
-      // the transaction (see assignFeedbackToTheme) to reduce lock hold time.
-      return bestThemeId;
+      await this.updateThemeCentroid(prisma, bestThemeId!);
+      return bestThemeId!;
     }
 
-    // No good match — create a new candidate theme
+    /**
+     * No good match found, so create a new theme.
+     */
     this.logger.log(
       `[CLUSTER] ✗ NO MATCH for feedback "${feedback.title}" ` +
-      `(bestHybrid=${bestHybridScore.toFixed(3)} < threshold=${threshold}, ` +
-      `bestCandidate="${bestThemeTitle}") — creating new theme`,
+        `(bestHybrid=${bestHybridScore.toFixed(3)} < threshold=${threshold.toFixed(3)}, ` +
+        `bestCandidate="${bestThemeTitle}", activeThemes=${activeThemeCount}) — creating new theme`,
     );
-    // FIX: pass prisma (tx client) so the embedding write is inside the transaction
-    return this.createCandidateTheme(prisma, workspaceId, feedbackId, feedback.title, feedbackEmbedding, feedback.description ?? undefined);
+
+    return this.createCandidateTheme(
+      prisma,
+      workspaceId,
+      feedbackId,
+      feedback.title,
+      feedbackEmbedding,
+      feedback.description ?? undefined,
+    );
   }
 
   /**
-   * Run a full workspace reclustering pass.
+   * Full workspace reclustering pass.
    *
-   * Processes unlinked feedback items sequentially (advisory lock serialises per workspace).
-   * After all items are processed, runs a post-merge pass to merge near-duplicate themes.
+   * Processes currently unlinked feedback, then runs a cleanup merge pass.
    */
   async runClustering(
     workspaceId: string,
   ): Promise<{ processed: number; assigned: number; created: number; merged: number }> {
-    const totalFeedback = await this.prisma.feedback.count({ where: { workspaceId, status: { not: 'MERGED' } } });
-    const themesBefore = await this.prisma.theme.count({ where: { workspaceId, status: { not: 'ARCHIVED' } } });
+    const totalFeedback = await this.prisma.feedback.count({
+      where: { workspaceId, status: { not: 'MERGED' } },
+    });
+
+    const themesBefore = await this.prisma.theme.count({
+      where: { workspaceId, status: { not: 'ARCHIVED' } },
+    });
 
     this.logger.log(
       `[CLUSTER] ══ Starting reclustering for workspace ${workspaceId} ` +
-      `(totalFeedback=${totalFeedback}, themesBefore=${themesBefore}) ══`,
+        `(totalFeedback=${totalFeedback}, themesBefore=${themesBefore}) ══`,
     );
 
     const BATCH_SIZE = 50;
-    let skip = 0;
     let assigned = 0;
     let created = 0;
     let processed = 0;
 
     while (true) {
+      /**
+       * Always fetch the current first page of unlinked items.
+       * Do NOT use skip here because the result set shrinks as items get linked.
+       * Using skip on a shrinking set can accidentally skip remaining rows.
+       */
       const unlinked = await this.prisma.feedback.findMany({
         where: {
           workspaceId,
@@ -443,52 +536,52 @@ export class ThemeClusteringService {
         },
         select: { id: true },
         take: BATCH_SIZE,
-        skip,
+        orderBy: { createdAt: 'asc' },
       });
 
       if (unlinked.length === 0) break;
 
       for (const { id: feedbackId } of unlinked) {
-        const themeCountBefore = await this.prisma.theme.count({ where: { workspaceId } });
+        const themeCountBefore = await this.prisma.theme.count({
+          where: { workspaceId, status: { not: 'ARCHIVED' } },
+        });
+
         const themeId = await this.assignFeedbackToTheme(workspaceId, feedbackId);
+
         if (themeId) {
-          const themeCountAfter = await this.prisma.theme.count({ where: { workspaceId } });
+          const themeCountAfter = await this.prisma.theme.count({
+            where: { workspaceId, status: { not: 'ARCHIVED' } },
+          });
+
           if (themeCountAfter > themeCountBefore) {
             created++;
           } else {
             assigned++;
           }
         }
+
         processed++;
       }
-
-      skip += BATCH_SIZE;
     }
 
-    // ── Post-clustering merge pass ─────────────────────────────────────────
     const merged = await this.runPostMerge(workspaceId);
 
-    const themesAfter = await this.prisma.theme.count({ where: { workspaceId, status: { not: 'ARCHIVED' } } });
+    const themesAfter = await this.prisma.theme.count({
+      where: { workspaceId, status: { not: 'ARCHIVED' } },
+    });
 
     this.logger.log(
       `[CLUSTER] ══ Reclustering complete for workspace ${workspaceId}: ` +
-      `processed=${processed}, assigned=${assigned}, created=${created}, ` +
-      `merged=${merged}, themesAfter=${themesAfter} (was ${themesBefore}) ══`,
+        `processed=${processed}, assigned=${assigned}, created=${created}, merged=${merged}, themesAfter=${themesAfter} (was ${themesBefore}) ══`,
     );
 
     return { processed, assigned, created, merged };
   }
 
   /**
-   * Post-clustering merge pass.
+   * Merge near-duplicate themes after clustering completes.
    *
-   * Finds pairs of themes whose centroids are within MERGE_THRESHOLD cosine similarity
-   * and merges the smaller cluster into the larger one.
-   *
-   * This cleans up near-duplicate themes that were created before their centroids
-   * were fully formed (e.g. during parallel ingestion).
-   *
-   * Returns the number of themes merged (absorbed).
+   * This is a cleanup step, not the primary clustering mechanism.
    */
   async runPostMerge(workspaceId: string): Promise<number> {
     const themes = await this.prisma.$queryRaw<Array<{
@@ -512,8 +605,7 @@ export class ThemeClusteringService {
     if (themes.length < 2) return 0;
 
     this.logger.log(
-      `[MERGE] Starting post-merge pass for workspace ${workspaceId} ` +
-      `(${themes.length} active themes)`,
+      `[MERGE] Starting post-merge pass for workspace ${workspaceId} (${themes.length} active themes)`,
     );
 
     const absorbed = new Set<string>();
@@ -527,7 +619,6 @@ export class ThemeClusteringService {
         const source = themes[j];
         if (absorbed.has(source.id)) continue;
 
-        // Compute cosine similarity between the two theme centroids
         const result = await this.prisma.$queryRaw<Array<{ sim: number }>>`
           SELECT 1 - (a.embedding <=> b.embedding) AS sim
           FROM "Theme" a, "Theme" b
@@ -539,14 +630,10 @@ export class ThemeClusteringService {
 
         if (sim >= this.MERGE_THRESHOLD) {
           this.logger.log(
-            `[MERGE] Merging theme "${source.title}" (${source.id}, size=${source.liveCount}) ` +
-            `→ "${target.title}" (${target.id}, size=${target.liveCount}) ` +
-            `[cosine=${sim.toFixed(3)}]`,
+            `[MERGE] Merging "${source.title}" (${source.id}, size=${source.liveCount}) ` +
+              `→ "${target.title}" (${target.id}, size=${target.liveCount}) [cosine=${sim.toFixed(3)}]`,
           );
 
-          // Re-assign all ThemeFeedback from source → target.
-          // Use raw SQL with ON CONFLICT DO NOTHING to handle the case where
-          // a feedback item is already linked to the target theme (composite PK violation).
           await this.prisma.$executeRaw`
             INSERT INTO "ThemeFeedback" ("themeId", "feedbackId", "assignedBy", "confidence", "assignedAt")
             SELECT
@@ -559,12 +646,11 @@ export class ThemeClusteringService {
             WHERE tf."themeId" = ${source.id}
             ON CONFLICT ("themeId", "feedbackId") DO NOTHING;
           `;
-          // Delete the old source rows (already moved or skipped due to conflict)
+
           await this.prisma.themeFeedback.deleteMany({
             where: { themeId: source.id },
           });
 
-          // Archive the source theme (preserve history)
           await this.prisma.theme.update({
             where: { id: source.id },
             data: { status: 'ARCHIVED' },
@@ -573,39 +659,32 @@ export class ThemeClusteringService {
           absorbed.add(source.id);
           mergedCount++;
 
-          // Update target centroid after absorbing source
           await this.updateThemeCentroid(this.prisma, target.id);
         }
       }
     }
 
     this.logger.log(
-      `[MERGE] Post-merge complete for workspace ${workspaceId}: ` +
-      `${mergedCount} themes absorbed`,
+      `[MERGE] Post-merge complete for workspace ${workspaceId}: ${mergedCount} themes absorbed`,
     );
 
     return mergedCount;
   }
 
-  // ─── Private helpers ──────────────────────────────────────────────────────
-
   /**
-   * Returns the similarity threshold based on LIVE cluster size.
-   * Uses real COUNT from ThemeFeedback, not the stale feedbackCount column.
+   * Dynamic assignment threshold based on current cluster size.
    */
   private getDynamicThreshold(clusterSize: number): number {
     if (clusterSize >= 10) return this.THRESHOLD_LARGE;
-    if (clusterSize >= 5)  return this.THRESHOLD_MEDIUM;
-    if (clusterSize >= 1)  return this.THRESHOLD_SMALL;
-    return this.THRESHOLD_NEW; // brand-new theme: centroid = first feedback embedding
+    if (clusterSize >= 5) return this.THRESHOLD_MEDIUM;
+    if (clusterSize >= 1) return this.THRESHOLD_SMALL;
+    return this.THRESHOLD_NEW;
   }
 
   /**
-   * Create a new AI_GENERATED candidate theme seeded from a single feedback item.
-   * Stores the feedback's embedding as the theme's initial centroid.
+   * Create a new candidate theme from a single feedback item.
    *
-   * FIX: accepts prisma (the tx client) so the embedding $executeRaw runs inside
-   * the advisory-locked transaction, making it visible to the next job immediately.
+   * The feedback embedding becomes the initial centroid for the new theme.
    */
   private async createCandidateTheme(
     prisma: PrismaService,
@@ -615,20 +694,16 @@ export class ThemeClusteringService {
     feedbackEmbedding?: number[],
     feedbackDescription?: string,
   ): Promise<string> {
-    // normalizeThemeTitle returns null when the title is a question label,
-    // survey title, or other source-specific metadata.
-    // In that case, use the first 80 chars of the answer text (description)
-    // as the theme title so the theme is named after the content, not the question.
     const normalised = normalizeThemeTitle(feedbackTitle);
+
     let candidateTitle: string;
     if (normalised === null) {
-      // Question label detected — use the answer text as the theme title.
       const fallback = feedbackDescription ?? feedbackTitle;
       const truncated = fallback.length > 80 ? `${fallback.slice(0, 77)}…` : fallback;
       candidateTitle = truncated.replace(/[.!?]+$/, '').trim();
+
       this.logger.debug(
-        `[CLUSTER] Question-label detected for feedback ${feedbackId}: ` +
-        `"${feedbackTitle}" — using answer text as theme title: "${candidateTitle}"`,
+        `[CLUSTER] Question-label detected for feedback ${feedbackId}: "${feedbackTitle}" — using answer text as theme title: "${candidateTitle}"`,
       );
     } else {
       candidateTitle = normalised;
@@ -643,17 +718,21 @@ export class ThemeClusteringService {
         confidenceFactors: { avgSimilarity: 1.0, size: 1, variance: 0 },
         outlierCount: 0,
         topKeywords: extractKeywords(feedbackDescription ?? feedbackTitle),
-        dominantSignal: (feedbackDescription ?? feedbackTitle).length > 120
-          ? `${(feedbackDescription ?? feedbackTitle).slice(0, 117)}…`
-          : (feedbackDescription ?? feedbackTitle),
+        dominantSignal:
+          (feedbackDescription ?? feedbackTitle).length > 120
+            ? `${(feedbackDescription ?? feedbackTitle).slice(0, 117)}…`
+            : (feedbackDescription ?? feedbackTitle),
         lastEvidenceAt: new Date(),
         feedbacks: {
-          create: { feedbackId, assignedBy: 'ai', confidence: 1.0 },
+          create: {
+            feedbackId,
+            assignedBy: 'ai',
+            confidence: 1.0,
+          },
         },
       },
     });
 
-    // FIX: use the tx prisma client so this write is inside the transaction
     if (feedbackEmbedding && feedbackEmbedding.length > 0) {
       const vectorStr = `[${feedbackEmbedding.join(',')}]`;
       await prisma.$executeRaw`
@@ -668,14 +747,11 @@ export class ThemeClusteringService {
       `[CLUSTER] ✦ Created new theme "${theme.title}" (${theme.id}) for feedback ${feedbackId}`,
     );
 
-     // NOTE: CIQ enqueue for new themes is handled by the caller (assignFeedbackToTheme)
-    // after the transaction commits. Do NOT enqueue here to avoid double-scoring.
     return theme.id;
   }
 
   /**
-   * Update the theme's centroid embedding as the mean of all linked feedback embeddings.
-   * FIX: accepts prisma client (may be a tx client) so it runs in the right context.
+   * Recompute theme centroid as average of linked feedback embeddings.
    */
   private async updateThemeCentroid(prisma: PrismaService, themeId: string): Promise<void> {
     try {
@@ -691,37 +767,54 @@ export class ThemeClusteringService {
         "centroidUpdatedAt" = NOW()
         WHERE t.id = ${themeId};
       `;
+
       this.logger.debug(`[Centroid] Updated centroid for theme ${themeId}`);
     } catch (err) {
-      this.logger.warn(`[Centroid] Failed for theme ${themeId}: ${(err as Error).message}`);
+      this.logger.warn(
+        `[Centroid] Failed for theme ${themeId}: ${(err as Error).message}`,
+      );
     }
   }
 
   /**
-   * Recompute and persist the cluster confidence for a theme.
+   * Recompute cluster confidence for explainability and quality display.
    */
-  private async recomputeClusterConfidence(themeId: string, _newFeedbackTitle?: string): Promise<void> {
+  private async recomputeClusterConfidence(
+    themeId: string,
+    _newFeedbackTitle?: string,
+  ): Promise<void> {
     try {
       const links = await this.prisma.themeFeedback.findMany({
         where: { themeId, assignedBy: 'ai', confidence: { not: null } },
         select: { confidence: true },
       });
+
       const similarities = links.map((l) => l.confidence as number);
       const size = similarities.length;
+
       if (size === 0) return;
 
-      const avgSimilarity = similarities.reduce((s, v) => s + v, 0) / size;
+      const avgSimilarity =
+        similarities.reduce((sum, value) => sum + value, 0) / size;
+
       const variance =
         size > 1
           ? Math.sqrt(
-              similarities.reduce((s, v) => s + (v - avgSimilarity) ** 2, 0) / size,
+              similarities.reduce((sum, value) => sum + (value - avgSimilarity) ** 2, 0) / size,
             )
           : 0;
-      const outlierCount = similarities.filter((s) => s < this.OUTLIER_THRESHOLD).length;
+
+      const outlierCount = similarities.filter(
+        (score) => score < this.OUTLIER_THRESHOLD,
+      ).length;
 
       const avgSimilarityScore = Math.min(100, avgSimilarity * 100);
-      const sizeScore = Math.min(100, (Math.log10(Math.max(1, size)) / Math.log10(50)) * 100);
+      const sizeScore = Math.min(
+        100,
+        (Math.log10(Math.max(1, size)) / Math.log10(50)) * 100,
+      );
       const varianceScore = Math.max(0, 100 - variance * 500);
+
       const clusterConfidence = parseFloat(
         (avgSimilarityScore * 0.5 + sizeScore * 0.3 + varianceScore * 0.2).toFixed(1),
       );
@@ -731,10 +824,13 @@ export class ThemeClusteringService {
         select: { feedback: { select: { title: true } } },
         take: 100,
       });
+
       const titles = allLinks.map((l) => l.feedback.title);
       const topKeywords = extractKeywords(titles.join(' '));
       const dominantSignal = titles[0]
-        ? titles[0].length > 120 ? `${titles[0].slice(0, 117)}…` : titles[0]
+        ? titles[0].length > 120
+          ? `${titles[0].slice(0, 117)}…`
+          : titles[0]
         : null;
 
       await this.prisma.theme.update({
@@ -753,87 +849,76 @@ export class ThemeClusteringService {
       });
 
       this.logger.debug(
-        `[Confidence] Theme ${themeId}: score=${clusterConfidence}, size=${size}, ` +
-        `avgSim=${avgSimilarity.toFixed(3)}, variance=${variance.toFixed(3)}, outliers=${outlierCount}`,
+        `[Confidence] Theme ${themeId}: score=${clusterConfidence}, size=${size}, avgSim=${avgSimilarity.toFixed(3)}, variance=${variance.toFixed(3)}, outliers=${outlierCount}`,
       );
     } catch (err) {
-      this.logger.warn(`[Confidence] Failed for theme ${themeId}: ${(err as Error).message}`);
+      this.logger.warn(
+        `[Confidence] Failed for theme ${themeId}: ${(err as Error).message}`,
+      );
     }
   }
 }
 
-// ─── Utility: normalize theme title ──────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Utility: source-label detection and title normalization
+// ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Patterns that indicate the text is a question label, survey title, or
- * other source-specific metadata rather than a meaningful theme title.
- *
- * If a candidate title matches any of these patterns, it is considered
- * a "label explosion" risk and should NOT become a standalone theme title.
- * The clustering service will fall back to creating a theme with a generic
- * placeholder title derived from the source type.
- */
 const QUESTION_LABEL_PATTERNS = [
   /^(what|how|why|when|where|who|which|do you|did you|have you|would you|could you|please|tell us|describe|explain|rate|rank|select|choose|pick|list)/i,
-  /\?$/,                          // ends with a question mark
-  /^survey response:/i,           // legacy survey blob title
+  /\?$/,
+  /^survey response:/i,
   /^(feedback|support|voice|survey)\s+(response|submission|ticket|call|transcript):/i,
 ];
 
-/**
- * Returns true if the candidate title is a question label, survey title,
- * or other source-specific metadata that should NOT become a theme title.
- */
 export function isSourceLabel(title: string): boolean {
   const trimmed = title.trim();
   return QUESTION_LABEL_PATTERNS.some((re) => re.test(trimmed));
 }
 
-/**
- * Normalize a theme title to avoid sentence-like or duplicate names.
- * - Rejects question-form labels (survey question text, form labels)
- * - Truncates to 80 chars
- * - Strips trailing punctuation (. ! ?)
- * - Title-cases the result
- *
- * If the raw title is a question label, returns null so the caller can
- * skip theme creation or use a fallback title derived from the answer text.
- */
 function normalizeThemeTitle(raw: string): string | null {
   if (isSourceLabel(raw)) return null;
+
   const truncated = raw.length > 80 ? `${raw.slice(0, 77)}…` : raw;
   const stripped = truncated.replace(/[.!?]+$/, '').trim();
-  // Title-case: capitalise first letter of each word, lowercase the rest
+
   return stripped
     .split(' ')
-    .map((w) => (w.length > 0 ? w[0].toUpperCase() + w.slice(1).toLowerCase() : w))
+    .map((word) =>
+      word.length > 0 ? word[0].toUpperCase() + word.slice(1).toLowerCase() : word,
+    )
     .join(' ');
 }
 
-// ─── Utility: keyword overlap (Jaccard coefficient) ──────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Utility: keyword overlap
+// ─────────────────────────────────────────────────────────────────────────────
 
 function computeKeywordOverlap(a: string[], b: string[]): number {
   if (a.length === 0 || b.length === 0) return 0;
+
   const setA = new Set(a);
   const setB = new Set(b);
-  const intersection = [...setA].filter((w) => setB.has(w)).length;
+  const intersection = [...setA].filter((word) => setB.has(word)).length;
   const union = new Set([...setA, ...setB]).size;
+
   return union === 0 ? 0 : intersection / union;
 }
 
-// ─── Utility: extract top keywords from text ─────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Utility: keyword extraction
+// ─────────────────────────────────────────────────────────────────────────────
 
 const STOP_WORDS = new Set([
-  'a','an','the','and','or','but','in','on','at','to','for','of','with','by',
-  'from','is','are','was','were','be','been','being','have','has','had','do',
-  'does','did','will','would','could','should','may','might','can','this','that',
-  'these','those','i','we','you','he','she','it','they','my','our','your','his',
-  'her','its','their','not','no','so','if','as','up','out','about','into','than',
-  'then','when','where','who','which','what','how','all','any','each','every',
-  'some','such','more','most','other','also','just','only','very','too','now',
-  'get','got','getting','please','need','want','use','using','used','make','made',
-  'work','working','works','worked','try','tried','trying','cant','dont','doesnt',
-  'isnt','wasnt','wont','wouldnt','couldnt','shouldnt',
+  'a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by',
+  'from', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do',
+  'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that',
+  'these', 'those', 'i', 'we', 'you', 'he', 'she', 'it', 'they', 'my', 'our', 'your', 'his',
+  'her', 'its', 'their', 'not', 'no', 'so', 'if', 'as', 'up', 'out', 'about', 'into', 'than',
+  'then', 'when', 'where', 'who', 'which', 'what', 'how', 'all', 'any', 'each', 'every',
+  'some', 'such', 'more', 'most', 'other', 'also', 'just', 'only', 'very', 'too', 'now',
+  'get', 'got', 'getting', 'please', 'need', 'want', 'use', 'using', 'used', 'make', 'made',
+  'work', 'working', 'works', 'worked', 'try', 'tried', 'trying', 'cant', 'dont', 'doesnt',
+  'isnt', 'wasnt', 'wont', 'wouldnt', 'couldnt', 'shouldnt',
 ]);
 
 function extractKeywords(text: string): string[] {
@@ -841,26 +926,31 @@ function extractKeywords(text: string): string[] {
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
-    .filter((w) => w.length > 3 && !STOP_WORDS.has(w));
+    .filter((word) => word.length > 3 && !STOP_WORDS.has(word));
 
   const freq: Record<string, number> = {};
-  for (const w of words) {
-    freq[w] = (freq[w] ?? 0) + 1;
+
+  for (const word of words) {
+    freq[word] = (freq[word] ?? 0) + 1;
   }
 
   return Object.entries(freq)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 8)
-    .map(([w]) => w);
+    .map(([word]) => word);
 }
 
-// ─── Utility: workspace advisory lock key ────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Utility: workspace advisory lock key
+// ─────────────────────────────────────────────────────────────────────────────
 
 function workspaceIdToLockKey(workspaceId: string): number {
   const hex = workspaceId.replace(/-/g, '');
   let key = 0;
+
   for (let i = 0; i < hex.length; i += 8) {
     key ^= parseInt(hex.slice(i, i + 8), 16) | 0;
   }
+
   return key;
 }
