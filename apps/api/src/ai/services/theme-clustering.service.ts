@@ -698,9 +698,11 @@ export class ThemeClusteringService {
 
     let candidateTitle: string;
     if (normalised === null) {
+      // Source-label detected (e.g. a question string): use description text
+      // but still enforce the 3–4 word limit via normalizeThemeTitle.
       const fallback = feedbackDescription ?? feedbackTitle;
-      const truncated = fallback.length > 80 ? `${fallback.slice(0, 77)}…` : fallback;
-      candidateTitle = truncated.replace(/[.!?]+$/, '').trim();
+      const fallbackNormalised = normalizeThemeTitle(fallback);
+      candidateTitle = fallbackNormalised ?? fallback.split(/\s+/).slice(0, 4).join(' ');
 
       this.logger.debug(
         `[CLUSTER] Question-label detected for feedback ${feedbackId}: "${feedbackTitle}" — using answer text as theme title: "${candidateTitle}"`,
@@ -875,18 +877,60 @@ export function isSourceLabel(title: string): boolean {
   return QUESTION_LABEL_PATTERNS.some((re) => re.test(trimmed));
 }
 
+/**
+ * Normalise a raw feedback title into a concise 3–4 word theme label.
+ *
+ * Strategy:
+ * 1. Reject source-label strings (returns null → caller uses description fallback).
+ * 2. Strip trailing punctuation and leading articles.
+ * 3. Pick the first 4 meaningful (non-stop-word) tokens from the title.
+ *    If fewer than 3 meaningful tokens exist, fall back to the first 4 raw tokens
+ *    so we always return something readable.
+ * 4. Title-case each word.
+ *
+ * Examples:
+ *   "Password Reset Emails Are Delayed Or Not Received, Preventing Users From Rega…"
+ *   → "Password Reset Emails Delayed"
+ *
+ *   "App login failing intermittently across sessions"
+ *   → "App Login Failing Intermittently"
+ */
 function normalizeThemeTitle(raw: string): string | null {
   if (isSourceLabel(raw)) return null;
 
-  const truncated = raw.length > 80 ? `${raw.slice(0, 77)}…` : raw;
-  const stripped = truncated.replace(/[.!?]+$/, '').trim();
+  const stripped = raw.replace(/[.!?,;:]+$/, '').trim();
 
-  return stripped
-    .split(' ')
-    .map((word) =>
-      word.length > 0 ? word[0].toUpperCase() + word.slice(1).toLowerCase() : word,
-    )
-    .join(' ');
+  // Split into tokens, drop empty strings
+  const tokens = stripped.split(/\s+/).filter((t) => t.length > 0);
+
+  // Title-case helper
+  const titleCase = (word: string) =>
+    word.length > 0 ? word[0].toUpperCase() + word.slice(1).toLowerCase() : word;
+
+  // Collect up to 4 meaningful (non-stop-word) tokens
+  const TITLE_STOP = new Set([
+    'a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+    'of', 'with', 'by', 'from', 'is', 'are', 'was', 'were', 'be', 'been',
+    'not', 'no', 'so', 'if', 'as', 'up', 'out', 'into', 'that', 'this',
+    'it', 'its', 'i', 'we', 'you', 'he', 'she', 'they', 'my', 'our',
+  ]);
+
+  const meaningful: string[] = [];
+  for (const token of tokens) {
+    if (meaningful.length >= 4) break;
+    const lower = token.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (lower.length > 0 && !TITLE_STOP.has(lower)) {
+      meaningful.push(titleCase(token.replace(/[^a-zA-Z0-9]/g, '')));
+    }
+  }
+
+  // Fallback: if fewer than 3 meaningful tokens, use first 4 raw tokens
+  const words =
+    meaningful.length >= 3
+      ? meaningful.slice(0, 4)
+      : tokens.slice(0, 4).map(titleCase);
+
+  return words.join(' ');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
