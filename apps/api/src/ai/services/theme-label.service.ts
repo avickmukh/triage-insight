@@ -5,17 +5,18 @@ import { PrismaService } from '../../prisma/prisma.service';
 /**
  * ThemeLabelService
  *
- * Generates short, specific, actionable labels for AI_GENERATED themes.
+ * Generates short, specific, actionable labels for themes.
  *
- * LABEL GENERATION (PRD Part 4):
- *   - Produces a shortLabel of ≤ 6 words that is specific and actionable
+ * LABEL GENERATION:
+ *   - Produces a shortLabel of 3–6 words that is specific and actionable
  *   - Avoids generic labels like "User Feedback", "Product Issue", "Bug Report"
- *   - Uses the theme's top keywords and a sample of feedback titles as context
- *   - Falls back to a keyword-based heuristic if the LLM call fails
+ *   - Uses the theme's top keywords AND actual feedback phrases as grounded context
+ *   - Falls back to a bigram/trigram n-gram heuristic if the LLM call fails
+ *   - Processes PROVISIONAL, STABLE, and AI_GENERATED themes
  *
  * PERFORMANCE:
  *   - Only regenerates if shortLabelAt is null or > 7 days old
- *   - Processes themes in batches of 10 to avoid rate limits
+ *   - Processes themes in batches of 50 to avoid rate limits
  *   - Single LLM call per theme (no loops)
  */
 @Injectable()
@@ -31,7 +32,7 @@ export class ThemeLabelService {
     'user feedback', 'product issue', 'bug report', 'feature request',
     'customer complaint', 'general feedback', 'misc issue', 'other',
     'unknown', 'untitled', 'new theme', 'theme', 'issue', 'problem',
-    'request', 'feedback', 'complaint', 'suggestion',
+    'request', 'feedback', 'complaint', 'suggestion', 'error', 'failure',
   ]);
 
   constructor(private readonly prisma: PrismaService) {
@@ -54,8 +55,15 @@ export class ThemeLabelService {
         shortLabel: true,
         shortLabelAt: true,
         feedbacks: {
-          take: 5,
-          select: { feedback: { select: { title: true } } },
+          take: 8,
+          select: {
+            feedback: {
+              select: {
+                title: true,
+                description: true,
+              },
+            },
+          },
           orderBy: { assignedAt: 'desc' },
         },
       },
@@ -73,9 +81,14 @@ export class ThemeLabelService {
 
     const keywords = parseKeywords(theme.topKeywords);
     const sampleTitles = theme.feedbacks.map((f) => f.feedback.title).filter(Boolean);
+    const sampleDescriptions = theme.feedbacks
+      .map((f) => f.feedback.description)
+      .filter((d): d is string => !!d)
+      .slice(0, 3);
 
-    const label = await this.callLLM(theme.title, keywords, sampleTitles)
-      ?? this.heuristicLabel(theme.title, keywords);
+    const label =
+      (await this.callLLM(theme.title, keywords, sampleTitles, sampleDescriptions)) ??
+      this.ngramHeuristicLabel(theme.title, keywords, sampleTitles);
 
     await this.prisma.theme.update({
       where: { id: themeId },
@@ -87,8 +100,10 @@ export class ThemeLabelService {
   }
 
   /**
-   * Batch generate labels for all AI_GENERATED themes in a workspace
+   * Batch generate labels for all active themes in a workspace
    * that do not yet have a shortLabel or have a stale one.
+   *
+   * Processes PROVISIONAL, STABLE, and AI_GENERATED themes.
    */
   async generateLabelsForWorkspace(workspaceId: string): Promise<{ processed: number }> {
     const cutoff = new Date(Date.now() - this.LABEL_TTL_DAYS * 24 * 60 * 60 * 1000);
@@ -96,7 +111,7 @@ export class ThemeLabelService {
     const themes = await this.prisma.theme.findMany({
       where: {
         workspaceId,
-        status: 'AI_GENERATED',
+        status: { in: ['AI_GENERATED', 'PROVISIONAL', 'STABLE', 'VERIFIED', 'RESURFACED', 'REOPENED'] },
         OR: [
           { shortLabel: null },
           { shortLabelAt: null },
@@ -122,35 +137,60 @@ export class ThemeLabelService {
 
   // ─── Private helpers ──────────────────────────────────────────────────────
 
+  /**
+   * Grounded LLM call.
+   *
+   * The prompt includes actual feedback titles and description excerpts
+   * so the model derives the label from real evidence, not hallucination.
+   */
   private async callLLM(
     themeTitle: string,
     keywords: string[],
     sampleTitles: string[],
+    sampleDescriptions: string[],
   ): Promise<string | null> {
     try {
+      const evidenceLines: string[] = [];
+      if (keywords.length > 0) {
+        evidenceLines.push(`Top keywords: ${keywords.slice(0, 6).join(', ')}`);
+      }
+      if (sampleTitles.length > 0) {
+        evidenceLines.push(
+          `Sample feedback titles:\n${sampleTitles.map((t) => `  - "${t}"`).join('\n')}`,
+        );
+      }
+      if (sampleDescriptions.length > 0) {
+        evidenceLines.push(
+          `Sample feedback excerpts:\n${sampleDescriptions
+            .map((d) => `  - "${d.slice(0, 80).trim()}${d.length > 80 ? '…' : ''}"`)  
+            .join('\n')}`,
+        );
+      }
       const prompt = [
         'You are a product manager labelling customer feedback themes.',
-        'Generate a SHORT LABEL (maximum 6 words) for this theme.',
-        'The label must be:',
-        '  - Specific and actionable (e.g. "Payment Failures at Checkout")',
-        '  - NOT generic (avoid: "User Feedback", "Product Issue", "Bug Report", "Feature Request")',
-        '  - In title case',
-        '  - Under 6 words',
+        'Generate a SHORT LABEL (3–6 words) for this theme.',
+        '',
+        'RULES:',
+        '  1. Use ONLY the evidence provided below — do not invent details.',
+        '  2. Be specific and actionable (e.g. "Payment Failures at Checkout").',
+        '  3. Do NOT use generic labels like: "User Feedback", "Product Issue",',
+        '     "Bug Report", "Feature Request", "Customer Complaint", "Error".',
+        '  4. Write in title case.',
+        '  5. Maximum 6 words.',
         '',
         `Theme title: "${themeTitle}"`,
-        keywords.length > 0 ? `Top keywords: ${keywords.slice(0, 5).join(', ')}` : '',
-        sampleTitles.length > 0
-          ? `Sample feedback:\n${sampleTitles.map((t) => `  - "${t}"`).join('\n')}`
-          : '',
+        '',
+        'Evidence:',
+        ...evidenceLines,
         '',
         'Respond with ONLY the label, nothing else.',
-      ].filter(Boolean).join('\n');
+      ].join('\n');
 
       const response = await this.openai.chat.completions.create({
         model: 'gpt-4.1-mini',
         messages: [{ role: 'user', content: prompt }],
         max_tokens: 20,
-        temperature: 0.3,
+        temperature: 0.2,
       });
 
       const raw = response.choices[0]?.message?.content?.trim() ?? '';
@@ -159,6 +199,7 @@ export class ThemeLabelService {
 
       // Reject generic labels
       if (!label || this.GENERIC_LABELS.has(label.toLowerCase())) {
+        this.logger.debug(`[Label] LLM returned generic label "${label}" — falling back`);
         return null;
       }
 
@@ -172,20 +213,96 @@ export class ThemeLabelService {
   }
 
   /**
-   * Fallback: build a label from the top 3 keywords in title case.
-   * Example: keywords ["payment", "failure", "checkout"] → "Payment Failure Checkout"
+   * N-gram heuristic fallback.
+   *
+   * Strategy (in priority order):
+   * 1. Extract bigrams and trigrams from sample feedback titles.
+   *    Pick the most frequent bigram/trigram that is not a stop-phrase.
+   * 2. If no good n-gram found, use top 3 keywords in title case.
+   * 3. Last resort: truncate the theme title to 4 words.
    */
-  private heuristicLabel(themeTitle: string, keywords: string[]): string {
+  private ngramHeuristicLabel(
+    themeTitle: string,
+    keywords: string[],
+    sampleTitles: string[],
+  ): string {
+    // Try n-gram extraction from sample titles
+    if (sampleTitles.length >= 2) {
+      const ngrams = extractNgrams(sampleTitles, 2, 3);
+      const best = ngrams.find((ng) => !isGenericNgram(ng));
+      if (best) {
+        return titleCase(best);
+      }
+    }
+    // Fall back to top keywords
     if (keywords.length >= 2) {
       return keywords
         .slice(0, 3)
         .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
         .join(' ');
     }
-    // Last resort: truncate the theme title to 6 words
+    // Last resort: truncate theme title to 4 words
     const words = themeTitle.split(/\s+/);
-    return words.length > 6 ? `${words.slice(0, 6).join(' ')}…` : themeTitle;
+    return words.length > 4 ? words.slice(0, 4).join(' ') : themeTitle;
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Utilities
+// ─────────────────────────────────────────────────────────────────────────────
+
+const NGRAM_STOP = new Set([
+  'a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by',
+  'from', 'is', 'are', 'was', 'were', 'be', 'been', 'not', 'no', 'this', 'that', 'it', 'its',
+  'i', 'we', 'you', 'he', 'she', 'they', 'my', 'our', 'your', 'his', 'her', 'their',
+  'get', 'got', 'please', 'need', 'want', 'use', 'using', 'used', 'make', 'made',
+  'cant', 'dont', 'doesnt', 'isnt', 'wasnt', 'wont',
+]);
+
+const GENERIC_NGRAMS = new Set([
+  'user feedback', 'product issue', 'bug report', 'feature request',
+  'customer complaint', 'general feedback', 'misc issue', 'other issue',
+  'app issue', 'app problem', 'app error', 'app bug', 'app crash',
+  'not working', 'does not work', 'doesnt work', 'not loading',
+]);
+
+function isGenericNgram(ngram: string): boolean {
+  return GENERIC_NGRAMS.has(ngram.toLowerCase());
+}
+
+/**
+ * Extract the most frequent bigrams and trigrams from a list of sentences.
+ * Returns n-grams sorted by frequency (descending), filtered to exclude
+ * n-grams that start or end with stop words.
+ */
+function extractNgrams(sentences: string[], minN: number, maxN: number): string[] {
+  const freq: Record<string, number> = {};
+  for (const sentence of sentences) {
+    const tokens = sentence
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter((t) => t.length > 1);
+    for (let n = minN; n <= maxN; n++) {
+      for (let i = 0; i <= tokens.length - n; i++) {
+        const gram = tokens.slice(i, i + n);
+        if (NGRAM_STOP.has(gram[0]) || NGRAM_STOP.has(gram[gram.length - 1])) continue;
+        const key = gram.join(' ');
+        freq[key] = (freq[key] ?? 0) + 1;
+      }
+    }
+  }
+  return Object.entries(freq)
+    .filter(([, count]) => count >= 2)
+    .sort((a, b) => b[1] - a[1])
+    .map(([ngram]) => ngram);
+}
+
+function titleCase(str: string): string {
+  return str
+    .split(' ')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
 }
 
 function parseKeywords(raw: unknown): string[] {

@@ -148,8 +148,14 @@ enum DuplicateSuggestionStatus {
 }
 
 enum ThemeStatus {
+  /// Newly created theme with only 1 signal — not yet stable enough for full CIQ.
+  /// Promoted to STABLE once support >= dynamicMinSupport.
+  PROVISIONAL
+  /// Theme has reached minimum support threshold and is fully stable.
+  /// Fully participates in CIQ, dashboard, and rankings.
+  STABLE
   /// AI-created theme — fully participates in CIQ, dashboard, and rankings.
-  /// This is the default state for all themes created by the pipeline.
+  /// This is the default state for themes created before lifecycle tracking was added.
   AI_GENERATED
   /// Human-reviewed and confirmed — trust signal only, does NOT affect CIQ.
   VERIFIED
