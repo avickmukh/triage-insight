@@ -657,6 +657,37 @@ export class SurveyService {
       return { responseId: resp.id, feedbackIds: createdFeedbackIds };
     });
 
+    // ── Create ImportBatch so batch finalization fires after all items complete ──
+    // The AiAnalysisProcessor.updateBatchProgress() increments completedRows/failedRows
+    // per item. When all rows are accounted for it triggers runBatchFinalization(),
+    // which runs borderline reassignment, merge, suppress, centroid refresh, promote,
+    // and confidence refresh — giving the clustering engine a full batch-level view.
+    if (feedbackIds.length > 0) {
+      try {
+        const batch = await this.prisma.importBatch.create({
+          data: {
+            workspaceId: workspace.id,
+            totalRows: feedbackIds.length,
+            completedRows: 0,
+            failedRows: 0,
+            stage: 'ANALYZING',
+            status: 'PROCESSING',
+          },
+          select: { id: true },
+        });
+        await this.prisma.feedback.updateMany({
+          where: { id: { in: feedbackIds } },
+          data: { importBatchId: batch.id },
+        });
+      } catch (batchErr) {
+        this.logger.stepWarn(
+          { jobType: 'SURVEY_SUBMIT', workspaceId: workspace.id, entityId: surveyId },
+          'BATCH_CREATE_FAILED',
+          `Non-fatal: failed to create ImportBatch for survey response: ${(batchErr as Error).message}`,
+        );
+      }
+    }
+
     // ── Enqueue AI analysis for each open-text Feedback (fire-and-forget) ─────
     // Uses RetryPolicy.standard() so survey signals get the same retry/backoff
     // guarantees as feedback inbox items. The analysis processor's idempotency

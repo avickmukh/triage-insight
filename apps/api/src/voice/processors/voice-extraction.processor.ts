@@ -6,6 +6,8 @@
  * 2. @OnQueueFailed DLQ handler for exhausted jobs
  * 3. Partial-processing guard: marks AiJobLog as DEAD_LETTERED on final failure
  * 4. Re-throw on fatal failure so Bull retries with exponential backoff
+ * 5. Batch finalization: triggers runBatchFinalization() after clustering so
+ *    weak provisional themes created by this voice item are cleaned up.
  */
 import { Process, Processor, OnQueueFailed } from '@nestjs/bull';
 import { InjectQueue } from '@nestjs/bull';
@@ -30,6 +32,8 @@ export interface VoiceExtractionJobPayload {
   feedbackId: string;
   transcript: string;
   label?: string;
+  /** ImportBatch id created by VoiceTranscriptionProcessor. Used to trigger batch finalization. */
+  batchId?: string;
 }
 
 @Processor(VOICE_EXTRACTION_QUEUE)
@@ -48,7 +52,7 @@ export class VoiceExtractionProcessor {
 
   @Process()
   async handleExtraction(job: Job<VoiceExtractionJobPayload>) {
-    const { uploadAssetId, workspaceId, feedbackId, transcript, label } = job.data;
+    const { uploadAssetId, workspaceId, feedbackId, transcript, label, batchId } = job.data;
     const ctx = { jobType: 'VOICE_EXTRACTION', workspaceId, entityId: feedbackId, jobId: job.id };
     const startedAt = Date.now();
 
@@ -144,6 +148,32 @@ export class VoiceExtractionProcessor {
         }
       }
 
+      // ── 6b. Batch finalization ─────────────────────────────────────────────
+      // Voice is always single-item. The ImportBatch created by the transcription
+      // processor has totalRows=1. Mark it COMPLETED and trigger the post-batch
+      // finalization pass (borderline reassignment, merge, suppress, centroid
+      // refresh, promote, confidence refresh) so weak provisional themes are
+      // cleaned up before they become visible.
+      if (batchId) {
+        try {
+          await this.prisma.importBatch.update({
+            where: { id: batchId },
+            data: { completedRows: 1, stage: 'COMPLETED', status: 'COMPLETED' },
+          });
+          this.clusteringService
+            .runBatchFinalization(workspaceId, batchId)
+            .catch((finErr: Error) =>
+              this.logger.stepWarn(ctx, 'BATCH_FINALIZE', `Non-fatal: ${finErr.message}`),
+            );
+        } catch (batchErr) {
+          this.logger.stepWarn(
+            ctx,
+            'BATCH_FINALIZE',
+            `Failed to update ImportBatch ${batchId}: ${(batchErr as Error).message}`,
+          );
+        }
+      }
+
       // ── 7. Mark extraction job as COMPLETED ───────────────────────────────
       await this.prisma.aiJobLog.update({
         where: { id: extractionJob.id },
@@ -203,6 +233,16 @@ export class VoiceExtractionProcessor {
           data: { status: AiJobStatus.DEAD_LETTERED },
         })
         .catch(() => {/* best-effort */});
+
+      // If the batch exists, count this as a failed row so the batch can still
+      // reach COMPLETED (all rows accounted for).
+      const { batchId } = job.data;
+      if (batchId) {
+        await this.prisma.importBatch.update({
+          where: { id: batchId },
+          data: { failedRows: 1, stage: 'COMPLETED', status: 'FAILED' },
+        }).catch(() => {/* best-effort */});
+      }
     }
   }
 }

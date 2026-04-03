@@ -248,6 +248,37 @@ export class AiAnalysisProcessor {
         where: { id: batchId },
         data: { stage: 'COMPLETED', status: 'COMPLETED' },
       });
+
+      // ── Batch finalization ───────────────────────────────────────────────
+      // Now that every item in the batch has been embedded and assigned to a
+      // provisional cluster, run the post-batch finalization pass:
+      //   1. Borderline reassignment (low-confidence links re-evaluated)
+      //   2. Batch merge pass (aggressive threshold collapses near-duplicate clusters)
+      //   3. Weak cluster suppression (single-item noise clusters archived)
+      //   4. Centroid refresh, promote PROVISIONAL → STABLE, confidence refresh
+      //
+      // This is intentionally fire-and-forget (non-fatal). The batch is already
+      // COMPLETED from the user's perspective; finalization is a quality pass.
+      const batchRow = await this.prisma.importBatch.findUnique({
+        where: { id: batchId },
+        select: { workspaceId: true },
+      });
+      if (batchRow?.workspaceId) {
+        this.themeClusteringService
+          .runBatchFinalization(batchRow.workspaceId, batchId)
+          .catch((err: Error) =>
+            this.logger.stepWarn(
+              {
+                jobType: 'BATCH_FINALIZE',
+                workspaceId: batchRow.workspaceId,
+                entityId: batchId,
+                jobId: batchId,
+              },
+              'BATCH_FINALIZE',
+              `Non-fatal finalization error: ${err.message}`,
+            ),
+          );
+      }
     }
   }
 

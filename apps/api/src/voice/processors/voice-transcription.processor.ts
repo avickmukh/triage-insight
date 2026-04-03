@@ -74,6 +74,27 @@ export class VoiceTranscriptionProcessor {
 
       // Determine unified source attribution based on submission path
       const isPortalVoice = !!portalUserId;
+
+      // Create an ImportBatch so batch finalization fires after extraction completes.
+      // Voice uploads are always single-item, so the batch has totalRows=1.
+      let batchId: string | null = null;
+      try {
+        const batch = await this.prisma.importBatch.create({
+          data: {
+            workspaceId,
+            totalRows: 1,
+            completedRows: 0,
+            failedRows: 0,
+            stage: 'ANALYZING',
+            status: 'PROCESSING',
+          },
+          select: { id: true },
+        });
+        batchId = batch.id;
+      } catch (batchErr) {
+        this.logger.warn(`Failed to create ImportBatch for voice upload ${uploadAssetId}: ${(batchErr as Error).message}`);
+      }
+
       const feedback = await this.prisma.feedback.create({
         data: {
           workspaceId,
@@ -89,6 +110,7 @@ export class VoiceTranscriptionProcessor {
           language: 'en',
           status: FeedbackStatus.NEW,
           portalUserId: portalUserId ?? null,
+          ...(batchId ? { importBatchId: batchId } : {}),
           metadata: {
             uploadAssetId,
             aiJobLogId,
@@ -123,6 +145,7 @@ export class VoiceTranscriptionProcessor {
           feedbackId: feedback.id,
           transcript,
           label,
+          batchId: batchId ?? undefined,
         },
         {
           attempts: 3,

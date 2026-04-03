@@ -21,6 +21,19 @@ import { RetryPolicy } from "../../common/queue/retry-policy";
  * as all other signal types. The SupportTicket row stores a reference to
  * the bridged Feedback via `unifiedFeedbackId` to prevent duplicate creation
  * on subsequent syncs.
+ *
+ * BATCH FINALIZATION
+ * ------------------
+ * When multiple tickets are ingested in a single call, an ImportBatch record
+ * is created and each Feedback is linked to it via `importBatchId`. The
+ * AiAnalysisProcessor.updateBatchProgress() method detects when the last item
+ * completes and automatically triggers ThemeClusteringService.runBatchFinalization(),
+ * which runs borderline reassignment, batch merge, weak cluster suppression,
+ * centroid refresh, promotion, and confidence refresh.
+ *
+ * Single-ticket ingestions (e.g. webhook-driven) also get a batch record so
+ * the same finalization path fires, giving the clustering engine a chance to
+ * suppress any weak provisional themes created by the new item.
  */
 @Injectable()
 export class IngestionService {
@@ -114,6 +127,48 @@ export class IngestionService {
       }
     }
 
+    if (createdFeedbackIds.length === 0) {
+      this.logger.log(
+        `Ingested ${validTickets.length} tickets for workspace ${workspaceId}; 0 new Feedback records (all already bridged)`,
+      );
+      return { ingested: validTickets.length, bridged: 0 };
+    }
+
+    // ── Create an ImportBatch so batch finalization fires automatically ───────
+    // The AiAnalysisProcessor increments completedRows/failedRows as each job
+    // finishes. When all rows are accounted for it triggers runBatchFinalization()
+    // which runs borderline reassignment, merge, suppress, centroid refresh,
+    // promote, and confidence refresh — giving the clustering engine a full
+    // batch-level view before themes become visible.
+    let batchId: string | null = null;
+    try {
+      const batch = await this.prisma.importBatch.create({
+        data: {
+          workspaceId,
+          totalRows: createdFeedbackIds.length,
+          completedRows: 0,
+          failedRows: 0,
+          stage: 'ANALYZING',
+          status: 'PROCESSING',
+        },
+        select: { id: true },
+      });
+      batchId = batch.id;
+
+      // Link each feedback to the batch
+      if (batchId) {
+        await this.prisma.feedback.updateMany({
+          where: { id: { in: createdFeedbackIds } },
+          data: { importBatchId: batchId },
+        });
+      }
+    } catch (err) {
+      // Non-fatal: batch tracking is a quality enhancement, not a blocker.
+      this.logger.warn(
+        `Failed to create ImportBatch for support sync (workspace=${workspaceId}): ${(err as Error).message}`,
+      );
+    }
+
     // ── Enqueue AI analysis for all newly bridged Feedback records ───────────
     for (const feedbackId of createdFeedbackIds) {
       try {
@@ -129,7 +184,9 @@ export class IngestionService {
     }
 
     this.logger.log(
-      `Ingested ${validTickets.length} tickets for workspace ${workspaceId}; bridged ${createdFeedbackIds.length} new Feedback records`,
+      `Ingested ${validTickets.length} tickets for workspace ${workspaceId}; ` +
+        `bridged ${createdFeedbackIds.length} new Feedback records` +
+        (batchId ? ` (batchId=${batchId})` : ''),
     );
 
     return { ingested: validTickets.length, bridged: createdFeedbackIds.length };

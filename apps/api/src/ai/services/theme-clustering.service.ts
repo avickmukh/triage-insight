@@ -71,6 +71,34 @@ export class ThemeClusteringService {
    */
   private readonly CIQ_HIGH_THRESHOLD = 60;
 
+  // ─── Batch finalization thresholds (configurable) ────────────────────────
+  /**
+   * Minimum feedback count a PROVISIONAL theme must reach after batch
+   * finalization to survive. Themes below this are merged or archived.
+   * Default: 2 — a single-item cluster is treated as noise.
+   */
+  private readonly BATCH_MIN_CLUSTER_SIZE = 2;
+  /**
+   * Confidence score below which a ThemeFeedback link is considered
+   * borderline and eligible for reassignment during batch finalization.
+   * Default: 0.60
+   */
+  private readonly BORDERLINE_SCORE_THRESHOLD = 0.60;
+  /**
+   * Cosine similarity threshold used during the batch merge pass.
+   * More aggressive than the incremental merge threshold so draft clusters
+   * collapse before becoming visible.
+   * Default: 0.78
+   */
+  private readonly BATCH_MERGE_THRESHOLD = 0.78;
+  /**
+   * Cosine similarity threshold for merging a weak cluster into its nearest
+   * neighbour during weak-cluster suppression.
+   * If no neighbour exceeds this, the cluster is archived.
+   * Default: 0.65
+   */
+  private readonly WEAK_CLUSTER_MERGE_THRESHOLD = 0.65;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly embeddingService: EmbeddingService,
@@ -323,6 +351,456 @@ export class ThemeClusteringService {
     );
 
     return { promoted, archived, merged, centroidsUpdated };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PUBLIC: BATCH FINALIZATION
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Post-batch finalization pass.
+   *
+   * Runs automatically when the last item of an ImportBatch completes its
+   * AI analysis pipeline. Implements the full batch-first clustering lifecycle:
+   *
+   *   1. BORDERLINE REASSIGNMENT — items whose current cluster confidence is
+   *      below BORDERLINE_SCORE_THRESHOLD are re-evaluated against all active
+   *      themes. If a meaningfully better fit exists, they are moved.
+   *
+   *   2. BATCH MERGE PASS — pairs of PROVISIONAL themes with cosine similarity
+   *      above BATCH_MERGE_THRESHOLD are merged (lower-CIQ into higher-CIQ).
+   *      More aggressive than the incremental merge threshold.
+   *
+   *   3. WEAK CLUSTER SUPPRESSION — PROVISIONAL themes with fewer than
+   *      BATCH_MIN_CLUSTER_SIZE members are either merged into their nearest
+   *      neighbour (if similarity >= WEAK_CLUSTER_MERGE_THRESHOLD) or archived.
+   *
+   *   4. CENTROID REFRESH — all surviving active theme centroids are recomputed
+   *      from their final member set.
+   *
+   *   5. PROMOTE — PROVISIONAL themes that now meet dynamicMinSupport are
+   *      promoted to STABLE.
+   *
+   *   6. CONFIDENCE REFRESH — cluster confidence scores are recomputed for all
+   *      active themes.
+   *
+   * This pass does NOT run LLM narration or labelling — those are triggered
+   * separately by the CIQ scoring queue after each theme is scored, ensuring
+   * they always use finalized cluster evidence.
+   *
+   * @param workspaceId  The workspace to finalize.
+   * @param batchId      The ImportBatch that just completed (used for logging).
+   * @returns Summary of all actions taken.
+   */
+  async runBatchFinalization(
+    workspaceId: string,
+    batchId: string,
+  ): Promise<{
+    reassigned: number;
+    merged: number;
+    suppressed: number;
+    promoted: number;
+    centroidsUpdated: number;
+  }> {
+    const logPrefix = `[BATCH_FINALIZE][batch=${batchId}][ws=${workspaceId}]`;
+    this.logger.log(`${logPrefix} ══ Starting batch finalization ══`);
+    const startedAt = Date.now();
+
+    // ── 1. Borderline reassignment ──────────────────────────────────────────
+    const reassigned = await this._reassignBorderlineItems(workspaceId, logPrefix);
+
+    // ── 2. Batch merge pass (more aggressive than incremental) ──────────────
+    const merged = await this._runBatchMergePass(workspaceId, logPrefix);
+
+    // ── 3. Weak cluster suppression ─────────────────────────────────────────
+    const suppressed = await this._suppressWeakClusters(workspaceId, logPrefix);
+
+    // ── 4. Centroid refresh ─────────────────────────────────────────────────
+    const centroidsUpdated = await this._updateAllCentroids(workspaceId);
+
+    // ── 5. Promote PROVISIONAL → STABLE ────────────────────────────────────
+    const N = await this.prisma.theme.count({
+      where: { workspaceId, status: { not: 'ARCHIVED' } },
+    });
+    const dynamicMinSupport = computeDynamicMinSupport(N);
+    const promoted = await this._promoteProvisionalThemes(workspaceId, dynamicMinSupport);
+
+    // ── 6. Confidence refresh ───────────────────────────────────────────────
+    const activeThemes = await this.prisma.theme.findMany({
+      where: { workspaceId, status: { not: 'ARCHIVED' } },
+      select: { id: true },
+    });
+    for (const { id } of activeThemes) {
+      await this.recomputeClusterConfidence(id);
+    }
+
+    // ── 7. Enqueue CIQ re-scoring for all surviving themes ────────────────────────
+    // CIQ scoring triggers ThemeNarrationService.narrate() inside the CIQ processor.
+    // Running narration AFTER finalization ensures the LLM sees the final cluster
+    // membership (not the noisy provisional state from incremental assignment).
+    let ciqEnqueued = 0;
+    for (const { id } of activeThemes) {
+      try {
+        await this.ciqQueue.add(
+          { type: 'THEME_SCORED', workspaceId, themeId: id },
+          { attempts: 2, backoff: { type: 'exponential', delay: 3000 }, removeOnComplete: true },
+        );
+        ciqEnqueued++;
+      } catch (ciqErr) {
+        this.logger.warn(
+          `${logPrefix} Failed to enqueue CIQ re-score for theme ${id}: ${(ciqErr as Error).message}`,
+        );
+      }
+    }
+
+    const durationMs = Date.now() - startedAt;
+    this.logger.log(
+      `${logPrefix} ══ Batch finalization complete in ${durationMs}ms: ` +
+        `reassigned=${reassigned}, merged=${merged}, suppressed=${suppressed}, ` +
+        `promoted=${promoted}, centroidsUpdated=${centroidsUpdated}, ` +
+        `ciqEnqueued=${ciqEnqueued} ══`,
+    );
+
+    return { reassigned, merged, suppressed, promoted, centroidsUpdated };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PRIVATE: BATCH FINALIZATION HELPERS
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Borderline reassignment pass.
+   *
+   * Finds all ThemeFeedback links where the stored confidence score is below
+   * BORDERLINE_SCORE_THRESHOLD. For each borderline item, re-runs the
+   * nearest-neighbour search and moves the item if a meaningfully better
+   * cluster exists (improvement >= 0.08 over current score).
+   *
+   * This corrects the "first-come, first-served" bias of the incremental
+   * assignment pass: items that arrived early and were assigned to a weak
+   * provisional theme get a chance to join a better cluster.
+   */
+  private async _reassignBorderlineItems(
+    workspaceId: string,
+    logPrefix: string,
+  ): Promise<number> {
+    const borderlineLinks = await this.prisma.$queryRaw<Array<{
+      themeId: string;
+      feedbackId: string;
+      confidence: number;
+    }>>`
+      SELECT tf."themeId", tf."feedbackId", tf.confidence
+      FROM "ThemeFeedback" tf
+      JOIN "Theme" t ON t.id = tf."themeId"
+      JOIN "Feedback" f ON f.id = tf."feedbackId"
+      WHERE t."workspaceId" = ${workspaceId}
+        AND tf."assignedBy" = 'ai'
+        AND tf.confidence IS NOT NULL
+        AND tf.confidence < ${this.BORDERLINE_SCORE_THRESHOLD}
+        AND f.embedding IS NOT NULL
+        AND t.status != 'ARCHIVED'
+      ORDER BY tf.confidence ASC
+      LIMIT 200;
+    `;
+
+    if (borderlineLinks.length === 0) {
+      this.logger.debug(`${logPrefix} No borderline items found`);
+      return 0;
+    }
+
+    this.logger.log(
+      `${logPrefix} Found ${borderlineLinks.length} borderline items (confidence < ${this.BORDERLINE_SCORE_THRESHOLD})`,
+    );
+
+    let reassigned = 0;
+    for (const link of borderlineLinks) {
+      try {
+        const feedbackRow = await this.prisma.$queryRaw<Array<{ embedding: string | null }>>`
+          SELECT embedding::text FROM "Feedback" WHERE id = ${link.feedbackId};
+        `;
+        const embeddingStr = feedbackRow[0]?.embedding;
+        if (!embeddingStr) continue;
+
+        const embedding: number[] = JSON.parse(embeddingStr);
+        if (!embedding || embedding.length === 0) continue;
+
+        const vectorStr = `[${embedding.join(',')}]`;
+
+        const alternatives = await this.prisma.$queryRaw<Array<{
+          id: string;
+          title: string;
+          similarity: number;
+        }>>`
+          SELECT
+            t.id,
+            t.title,
+            1 - (t.embedding <=> ${vectorStr}::vector) AS similarity
+          FROM "Theme" t
+          WHERE t."workspaceId" = ${workspaceId}
+            AND t.embedding IS NOT NULL
+            AND t.status != 'ARCHIVED'
+            AND t.id != ${link.themeId}
+          ORDER BY similarity DESC
+          LIMIT 3;
+        `;
+
+        if (alternatives.length === 0) continue;
+
+        const best = alternatives[0];
+        // Only reassign if the alternative is meaningfully better
+        if (best.similarity < link.confidence + 0.08) continue;
+
+        // Move the feedback to the better cluster
+        await this.prisma.$executeRaw`
+          INSERT INTO "ThemeFeedback" ("themeId", "feedbackId", "assignedBy", "confidence", "assignedAt")
+          VALUES (${best.id}, ${link.feedbackId}, 'ai', ${best.similarity}, NOW())
+          ON CONFLICT ("themeId", "feedbackId") DO UPDATE
+            SET confidence = ${best.similarity}, "assignedBy" = 'ai', "assignedAt" = NOW();
+        `;
+
+        // Remove from old cluster
+        await this.prisma.themeFeedback.deleteMany({
+          where: { themeId: link.themeId, feedbackId: link.feedbackId },
+        });
+
+        this.logger.debug(
+          `${logPrefix} Reassigned feedback ${link.feedbackId}: ` +
+            `"${link.themeId}" (score=${link.confidence.toFixed(3)}) → ` +
+            `"${best.title}" (${best.id}, score=${best.similarity.toFixed(3)})`,
+        );
+        reassigned++;
+
+        // Update centroids of both affected themes
+        await this.updateThemeCentroid(this.prisma, link.themeId);
+        await this.updateThemeCentroid(this.prisma, best.id);
+      } catch (err) {
+        this.logger.warn(
+          `${logPrefix} Borderline reassignment failed for feedback ${link.feedbackId}: ${(err as Error).message}`,
+        );
+      }
+    }
+
+    this.logger.log(`${logPrefix} Borderline reassignment: moved ${reassigned} items`);
+    return reassigned;
+  }
+
+  /**
+   * Batch merge pass — more aggressive than the incremental merge.
+   *
+   * Uses BATCH_MERGE_THRESHOLD (default 0.78) instead of the incremental
+   * computeMergeThreshold (starts at 0.72, grows with N). This collapses
+   * draft clusters that are semantically close before they become visible.
+   *
+   * Merge direction: lower-CIQ into higher-CIQ (same as incremental merge).
+   */
+  private async _runBatchMergePass(
+    workspaceId: string,
+    logPrefix: string,
+  ): Promise<number> {
+    const themes = await this.prisma.$queryRaw<Array<{
+      id: string;
+      title: string;
+      liveCount: number;
+      ciqScore: number | null;
+    }>>`
+      SELECT
+        t.id,
+        t.title,
+        COUNT(tf.*)::int AS "liveCount",
+        t."priorityScore" AS "ciqScore"
+      FROM "Theme" t
+      LEFT JOIN "ThemeFeedback" tf ON tf."themeId" = t.id
+      WHERE t."workspaceId" = ${workspaceId}
+        AND t.embedding IS NOT NULL
+        AND t.status != 'ARCHIVED'
+      GROUP BY t.id, t.title, t."priorityScore"
+      ORDER BY COUNT(tf.*) DESC;
+    `;
+
+    if (themes.length < 2) return 0;
+
+    this.logger.log(
+      `${logPrefix} Batch merge pass: ${themes.length} themes, threshold=${this.BATCH_MERGE_THRESHOLD}`,
+    );
+
+    const absorbed = new Set<string>();
+    let mergedCount = 0;
+
+    for (let i = 0; i < themes.length; i++) {
+      const target = themes[i];
+      if (absorbed.has(target.id)) continue;
+
+      for (let j = i + 1; j < themes.length; j++) {
+        const source = themes[j];
+        if (absorbed.has(source.id)) continue;
+
+        const result = await this.prisma.$queryRaw<Array<{ sim: number }>>`
+          SELECT 1 - (a.embedding <=> b.embedding) AS sim
+          FROM "Theme" a, "Theme" b
+          WHERE a.id = ${target.id} AND b.id = ${source.id}
+            AND a.embedding IS NOT NULL AND b.embedding IS NOT NULL;
+        `;
+
+        const sim = result[0]?.sim ?? 0;
+        if (sim < this.BATCH_MERGE_THRESHOLD) continue;
+
+        // Merge direction: lower-CIQ into higher-CIQ; equal → smaller into larger
+        const targetCiq = target.ciqScore ?? 0;
+        const sourceCiq = source.ciqScore ?? 0;
+        const targetSize = Number(target.liveCount);
+        const sourceSize = Number(source.liveCount);
+
+        let mergeTarget = target;
+        let mergeSource = source;
+        if (sourceCiq > targetCiq || (sourceCiq === targetCiq && sourceSize > targetSize)) {
+          mergeTarget = source;
+          mergeSource = target;
+        }
+
+        this.logger.log(
+          `${logPrefix} Batch merge: "${mergeSource.title}" → "${mergeTarget.title}" [sim=${sim.toFixed(3)}]`,
+        );
+
+        await this.prisma.$executeRaw`
+          INSERT INTO "ThemeFeedback" ("themeId", "feedbackId", "assignedBy", "confidence", "assignedAt")
+          SELECT
+            ${mergeTarget.id}::text,
+            tf."feedbackId",
+            tf."assignedBy",
+            tf."confidence",
+            NOW()
+          FROM "ThemeFeedback" tf
+          WHERE tf."themeId" = ${mergeSource.id}
+          ON CONFLICT ("themeId", "feedbackId") DO NOTHING;
+        `;
+
+        await this.prisma.themeFeedback.deleteMany({ where: { themeId: mergeSource.id } });
+        await this.prisma.theme.update({
+          where: { id: mergeSource.id },
+          data: { status: 'ARCHIVED' },
+        });
+
+        absorbed.add(mergeSource.id);
+        mergedCount++;
+
+        await this.updateThemeCentroid(this.prisma, mergeTarget.id);
+      }
+    }
+
+    this.logger.log(`${logPrefix} Batch merge complete: ${mergedCount} themes absorbed`);
+    return mergedCount;
+  }
+
+  /**
+   * Weak cluster suppression.
+   *
+   * PROVISIONAL themes with fewer than BATCH_MIN_CLUSTER_SIZE members are
+   * treated as noise and either:
+   *   a) Merged into their nearest active neighbour (if cosine similarity
+   *      >= WEAK_CLUSTER_MERGE_THRESHOLD), or
+   *   b) Archived if no suitable neighbour exists.
+   *
+   * This prevents single-item outliers from becoming visible themes.
+   */
+  private async _suppressWeakClusters(
+    workspaceId: string,
+    logPrefix: string,
+  ): Promise<number> {
+    const weakThemes = await this.prisma.$queryRaw<Array<{
+      id: string;
+      title: string;
+      liveCount: number;
+    }>>`
+      SELECT
+        t.id,
+        t.title,
+        COUNT(tf.*)::int AS "liveCount"
+      FROM "Theme" t
+      LEFT JOIN "ThemeFeedback" tf ON tf."themeId" = t.id
+      WHERE t."workspaceId" = ${workspaceId}
+        AND t.status = 'PROVISIONAL'
+        AND t.embedding IS NOT NULL
+      GROUP BY t.id, t.title
+      HAVING COUNT(tf.*) < ${this.BATCH_MIN_CLUSTER_SIZE};
+    `;
+
+    if (weakThemes.length === 0) {
+      this.logger.debug(`${logPrefix} No weak clusters found`);
+      return 0;
+    }
+
+    this.logger.log(
+      `${logPrefix} Found ${weakThemes.length} weak clusters (size < ${this.BATCH_MIN_CLUSTER_SIZE})`,
+    );
+
+    let suppressed = 0;
+    for (const weak of weakThemes) {
+      try {
+        const neighbours = await this.prisma.$queryRaw<Array<{
+          id: string;
+          title: string;
+          sim: number;
+        }>>`
+          SELECT
+            t.id,
+            t.title,
+            1 - (t.embedding <=> (SELECT embedding FROM "Theme" WHERE id = ${weak.id})) AS sim
+          FROM "Theme" t
+          WHERE t."workspaceId" = ${workspaceId}
+            AND t.embedding IS NOT NULL
+            AND t.status != 'ARCHIVED'
+            AND t.id != ${weak.id}
+          ORDER BY sim DESC
+          LIMIT 1;
+        `;
+
+        const nearest = neighbours[0];
+
+        if (nearest && nearest.sim >= this.WEAK_CLUSTER_MERGE_THRESHOLD) {
+          // Merge into nearest neighbour
+          await this.prisma.$executeRaw`
+            INSERT INTO "ThemeFeedback" ("themeId", "feedbackId", "assignedBy", "confidence", "assignedAt")
+            SELECT
+              ${nearest.id}::text,
+              tf."feedbackId",
+              tf."assignedBy",
+              tf."confidence",
+              NOW()
+            FROM "ThemeFeedback" tf
+            WHERE tf."themeId" = ${weak.id}
+            ON CONFLICT ("themeId", "feedbackId") DO NOTHING;
+          `;
+          await this.prisma.themeFeedback.deleteMany({ where: { themeId: weak.id } });
+          await this.prisma.theme.update({
+            where: { id: weak.id },
+            data: { status: 'ARCHIVED' },
+          });
+          this.logger.log(
+            `${logPrefix} Suppressed weak cluster "${weak.title}" (${weak.id}, size=${weak.liveCount}) ` +
+              `→ merged into "${nearest.title}" (${nearest.id}, sim=${nearest.sim.toFixed(3)})`,
+          );
+          await this.updateThemeCentroid(this.prisma, nearest.id);
+        } else {
+          // No suitable neighbour — archive the isolated weak cluster
+          await this.prisma.theme.update({
+            where: { id: weak.id },
+            data: { status: 'ARCHIVED' },
+          });
+          this.logger.log(
+            `${logPrefix} Archived isolated weak cluster "${weak.title}" (${weak.id}, size=${weak.liveCount}) ` +
+              `[nearest sim=${nearest?.sim?.toFixed(3) ?? 'n/a'} < threshold=${this.WEAK_CLUSTER_MERGE_THRESHOLD}]`,
+          );
+        }
+        suppressed++;
+      } catch (err) {
+        this.logger.warn(
+          `${logPrefix} Weak cluster suppression failed for theme ${weak.id}: ${(err as Error).message}`,
+        );
+      }
+    }
+
+    this.logger.log(`${logPrefix} Weak cluster suppression: ${suppressed} clusters handled`);
+    return suppressed;
   }
 
   // ─────────────────────────────────────────────────────────────────────────
