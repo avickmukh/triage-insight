@@ -387,14 +387,16 @@ export class ThemeClusteringService {
     const N = await this.prisma.theme.count({
       where: { workspaceId, status: { not: 'ARCHIVED' } },
     });
-    const dynamicMinSupport = computeDynamicMinSupport(N);
+    // Bootstrap mode: small workspaces use minSupport=1 so single-item themes
+    // that survived suppression are promoted and become visible.
+    const dynamicMinSupport = N <= 20 ? 1 : computeDynamicMinSupport(N);
 
     this.logger.log(
       `[REFINE] Starting refinement pass for workspace ${workspaceId} ` +
         `(N=${N}, dynamicMinSupport=${dynamicMinSupport})`,
     );
 
-    // 1. Promote PROVISIONAL → STABLE
+    // 1. Promote PROVISIONAL → AI_GENERATED
     const promoted = await this._promoteProvisionalThemes(workspaceId, dynamicMinSupport);
 
     // 2. Archive weak PROVISIONAL themes (1 signal, older than 7 days)
@@ -488,11 +490,15 @@ export class ThemeClusteringService {
     // ── 4. Centroid refresh ─────────────────────────────────────────────────
     const centroidsUpdated = await this._updateAllCentroids(workspaceId);
 
-    // ── 5. Promote PROVISIONAL → STABLE ────────────────────────────────────
+    // ── 5. Promote PROVISIONAL → AI_GENERATED ──────────────────────────────
+    // Use adaptive minSupport:
+    //   - Bootstrap mode (N <= 20): minSupport = 1 so every surviving single-item
+    //     theme is promoted and becomes visible on the dashboard.
+    //   - Larger workspaces: use the logarithmic scale to require more evidence.
     const N = await this.prisma.theme.count({
       where: { workspaceId, status: { not: 'ARCHIVED' } },
     });
-    const dynamicMinSupport = computeDynamicMinSupport(N);
+    const dynamicMinSupport = N <= 20 ? 1 : computeDynamicMinSupport(N);
     const promoted = await this._promoteProvisionalThemes(workspaceId, dynamicMinSupport);
 
     // ── 6. Confidence refresh ───────────────────────────────────────────────
@@ -776,6 +782,55 @@ export class ThemeClusteringService {
     workspaceId: string,
     logPrefix: string,
   ): Promise<number> {
+    // Adaptive minimum cluster size:
+    //   - If the workspace has <= 20 active themes, a single-item cluster is
+    //     acceptable (minSize = 1 means nothing is suppressed by size alone).
+    //   - For larger workspaces, require at least 2 items to survive.
+    // This prevents over-archiving on small uploads where every topic is unique.
+    const activeThemeCount = await this.prisma.theme.count({
+      where: { workspaceId, status: { not: 'ARCHIVED' } },
+    });
+    const adaptiveMinSize = activeThemeCount <= 20 ? 1 : this.BATCH_MIN_CLUSTER_SIZE;
+
+    if (adaptiveMinSize <= 1) {
+      // In bootstrap mode (small workspace), only suppress themes that have
+      // ZERO feedback items — those are truly empty/orphaned clusters.
+      const emptyThemes = await this.prisma.$queryRaw<Array<{
+        id: string;
+        title: string;
+        liveCount: number;
+      }>>`
+        SELECT
+          t.id,
+          t.title,
+          COUNT(tf.*)::int AS "liveCount"
+        FROM "Theme" t
+        LEFT JOIN "ThemeFeedback" tf ON tf."themeId" = t.id
+        WHERE t."workspaceId" = ${workspaceId}
+          AND t.status = 'PROVISIONAL'
+        GROUP BY t.id, t.title
+        HAVING COUNT(tf.*) = 0;
+      `;
+      if (emptyThemes.length === 0) {
+        this.logger.debug(`${logPrefix} Bootstrap mode: no empty clusters to suppress`);
+        return 0;
+      }
+      // Archive truly empty clusters
+      let archived = 0;
+      for (const empty of emptyThemes) {
+        await this.prisma.theme.update({
+          where: { id: empty.id },
+          data: { status: 'ARCHIVED' },
+        });
+        this.logger.log(
+          `${logPrefix} Archived empty cluster "${empty.title}" (${empty.id}) [bootstrap mode]`,
+        );
+        archived++;
+      }
+      this.logger.log(`${logPrefix} Bootstrap suppression: ${archived} empty clusters archived`);
+      return archived;
+    }
+
     const weakThemes = await this.prisma.$queryRaw<Array<{
       id: string;
       title: string;
@@ -791,7 +846,7 @@ export class ThemeClusteringService {
         AND t.status = 'PROVISIONAL'
         AND t.embedding IS NOT NULL
       GROUP BY t.id, t.title
-      HAVING COUNT(tf.*) < ${this.BATCH_MIN_CLUSTER_SIZE};
+      HAVING COUNT(tf.*) < ${adaptiveMinSize};
     `;
 
     if (weakThemes.length === 0) {
@@ -800,7 +855,7 @@ export class ThemeClusteringService {
     }
 
     this.logger.log(
-      `${logPrefix} Found ${weakThemes.length} weak clusters (size < ${this.BATCH_MIN_CLUSTER_SIZE})`,
+      `${logPrefix} Found ${weakThemes.length} weak clusters (size < ${adaptiveMinSize}, activeThemes=${activeThemeCount})`,
     );
 
     let suppressed = 0;
@@ -1094,9 +1149,11 @@ export class ThemeClusteringService {
         bestCandidate?.status === 'PROVISIONAL' &&
         newLiveCount >= dynamicMinSupport
       ) {
-        themeUpdate.status = 'STABLE';
+        // Promote to AI_GENERATED — the correct post-AI-processing status.
+        // STABLE is reserved for human-verified themes.
+        themeUpdate.status = 'AI_GENERATED';
         this.logger.log(
-          `[CLUSTER] ↑ PROMOTED to STABLE: theme "${bestThemeTitle}" (${bestThemeId}) ` +
+          `[CLUSTER] ↑ PROMOTED to AI_GENERATED: theme "${bestThemeTitle}" (${bestThemeId}) ` +
             `reached support=${newLiveCount} >= dynamicMinSupport=${dynamicMinSupport}`,
         );
       }
@@ -1298,12 +1355,16 @@ export class ThemeClusteringService {
 
     let promoted = 0;
     for (const theme of provisionalThemes) {
+      // Promote to AI_GENERATED — the correct post-AI-processing status.
+      // STABLE is reserved for human-verified themes.
+      // AI_GENERATED is the schema default and is included in all dashboard
+      // and ranking queries (status NOT IN ['ARCHIVED', 'PROVISIONAL']).
       await this.prisma.theme.update({
         where: { id: theme.id },
-        data: { status: 'STABLE' },
+        data: { status: 'AI_GENERATED' },
       });
       this.logger.log(
-        `[REFINE] ↑ PROMOTED to STABLE: "${theme.title}" (${theme.id}) support=${theme.liveCount}`,
+        `[REFINE] ↑ PROMOTED to AI_GENERATED: "${theme.title}" (${theme.id}) support=${theme.liveCount}`,
       );
       promoted++;
     }
@@ -1376,54 +1437,65 @@ export class ThemeClusteringService {
     themeId: string,
     _newFeedbackCiqNorm?: number,
   ): Promise<void> {
+    // pgvector supports avg(embedding::vector) as a proper aggregate.
+    // We cannot use SUM(vector * scalar) because pgvector does not expose
+    // vector * integer multiplication in aggregate context.
+    //
+    // Strategy: use a two-pass approach.
+    //   Pass 1: try the pgvector avg() aggregate — works on pgvector >= 0.5.0.
+    //   Pass 2: if that fails (older pgvector), fetch all embeddings into JS
+    //           and compute the mean in application code, then write back.
     try {
-      // CIQ-weighted centroid: high-CIQ feedback contributes with weight 2
       await prisma.$executeRaw`
-        UPDATE "Theme" t
+        UPDATE "Theme"
         SET embedding = (
-          SELECT
-            CASE
-              WHEN SUM(
-                CASE WHEN COALESCE(f."priorityScore", 0) >= ${this.CIQ_HIGH_THRESHOLD} THEN 2 ELSE 1 END
-              ) > 0
-              THEN (
-                SUM(
-                  f.embedding *
-                  CASE WHEN COALESCE(f."priorityScore", 0) >= ${this.CIQ_HIGH_THRESHOLD} THEN 2 ELSE 1 END
-                ) /
-                SUM(
-                  CASE WHEN COALESCE(f."priorityScore", 0) >= ${this.CIQ_HIGH_THRESHOLD} THEN 2 ELSE 1 END
-                )
-              )
-              ELSE AVG(f.embedding)
-            END
+          SELECT avg(f.embedding::vector)
           FROM "ThemeFeedback" tf
           JOIN "Feedback" f ON f.id = tf."feedbackId"
           WHERE tf."themeId" = ${themeId}
             AND f.embedding IS NOT NULL
         ),
         "centroidUpdatedAt" = NOW()
-        WHERE t.id = ${themeId};
+        WHERE id = ${themeId};
       `;
-
-      this.logger.debug(`[Centroid] Updated CIQ-weighted centroid for theme ${themeId}`);
-    } catch (err) {
-      // pgvector does not support weighted avg via SUM(vector * scalar) in all versions.
-      // Fall back to simple average.
+      this.logger.debug(`[Centroid] Updated centroid (pgvector avg) for theme ${themeId}`);
+    } catch {
+      // Fallback: compute mean in application code and write back as a vector literal.
       try {
-        await prisma.$executeRaw`
-          UPDATE "Theme" t
-          SET embedding = (
-            SELECT avg(f.embedding)
-            FROM "ThemeFeedback" tf
-            JOIN "Feedback" f ON f.id = tf."feedbackId"
-            WHERE tf."themeId" = ${themeId}
-              AND f.embedding IS NOT NULL
-          ),
-          "centroidUpdatedAt" = NOW()
-          WHERE t.id = ${themeId};
+        const rows = await prisma.$queryRaw<Array<{ emb: string }>>`
+          SELECT f.embedding::text AS emb
+          FROM "ThemeFeedback" tf
+          JOIN "Feedback" f ON f.id = tf."feedbackId"
+          WHERE tf."themeId" = ${themeId}
+            AND f.embedding IS NOT NULL;
         `;
-        this.logger.debug(`[Centroid] Updated (fallback avg) centroid for theme ${themeId}`);
+        if (rows.length === 0) return;
+
+        // Parse each embedding string "[0.1,0.2,...]" into a number array
+        const parsed = rows
+          .map((r) => {
+            try { return JSON.parse(r.emb) as number[]; }
+            catch { return null; }
+          })
+          .filter((v): v is number[] => v !== null && v.length > 0);
+
+        if (parsed.length === 0) return;
+
+        const dim = parsed[0].length;
+        const mean = new Array<number>(dim).fill(0);
+        for (const vec of parsed) {
+          for (let i = 0; i < dim; i++) mean[i] += vec[i];
+        }
+        for (let i = 0; i < dim; i++) mean[i] /= parsed.length;
+
+        const vectorStr = `[${mean.join(',')}]`;
+        await prisma.$executeRaw`
+          UPDATE "Theme"
+          SET embedding = ${vectorStr}::vector,
+              "centroidUpdatedAt" = NOW()
+          WHERE id = ${themeId};
+        `;
+        this.logger.debug(`[Centroid] Updated centroid (JS mean fallback) for theme ${themeId}`);
       } catch (fallbackErr) {
         this.logger.warn(
           `[Centroid] Failed for theme ${themeId}: ${(fallbackErr as Error).message}`,

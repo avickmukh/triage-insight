@@ -210,7 +210,8 @@ describe('ThemeClusteringService — runBatchFinalization', () => {
         .mockResolvedValueOnce([]);  // 5. promote provisional
 
       mockPrisma.theme.findMany.mockResolvedValue([]); // _updateAllCentroids
-      mockPrisma.theme.count.mockResolvedValue(0);
+      // N=25 > 20 so standard suppression path is used (not bootstrap mode)
+      mockPrisma.theme.count.mockResolvedValue(25);
       mockPrisma.theme.update.mockResolvedValue({});
       mockPrisma.themeFeedback.findMany.mockResolvedValue([]);
 
@@ -256,7 +257,8 @@ describe('ThemeClusteringService — runBatchFinalization', () => {
         .mockResolvedValueOnce([]);  // promote provisional
 
       mockPrisma.theme.findMany.mockResolvedValue([]);
-      mockPrisma.theme.count.mockResolvedValue(0);
+      // N=25 > 20 so standard suppression path is used (not bootstrap mode)
+      mockPrisma.theme.count.mockResolvedValue(25);
       mockPrisma.theme.update.mockResolvedValue({});
       mockPrisma.themeFeedback.findMany.mockResolvedValue([]);
 
@@ -408,7 +410,7 @@ describe('ThemeClusteringService — runBatchFinalization', () => {
       expect(mockPrisma.theme.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 'prov-theme' },
-          data: expect.objectContaining({ status: 'STABLE' }),
+          data: expect.objectContaining({ status: 'AI_GENERATED' }),
         }),
       );
     });
