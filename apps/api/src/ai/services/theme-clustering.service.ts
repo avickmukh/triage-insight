@@ -1,9 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, forwardRef, Inject } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmbeddingService } from './embedding.service';
 import { CIQ_SCORING_QUEUE } from '../processors/ciq-scoring.processor';
+import { AutoMergeService } from './auto-merge.service';
 
 /**
  * ThemeClusteringService — Adaptive Product Intelligence Engine
@@ -103,6 +104,8 @@ export class ThemeClusteringService {
     private readonly prisma: PrismaService,
     private readonly embeddingService: EmbeddingService,
     @InjectQueue(CIQ_SCORING_QUEUE) private readonly ciqQueue: Queue,
+    @Inject(forwardRef(() => AutoMergeService))
+    private readonly autoMergeService: AutoMergeService,
   ) {}
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -174,6 +177,39 @@ export class ThemeClusteringService {
     // Post-transaction work (outside lock).
     if (assignedThemeId) {
       await this.recomputeClusterConfidence(assignedThemeId);
+
+      // ── AUTO_MERGE_INVOKE (hot path) ────────────────────────────────────
+      // After creating a new PROVISIONAL theme, immediately scan for a merge
+      // partner scoped to just this theme (anchorThemeId fast path).
+      // Uses autoExecute=true so duplicates are collapsed before CIQ scoring.
+      // Non-fatal: a merge failure must never block the assignment result.
+      try {
+        this.logger.log(
+          `[AUTO_MERGE_INVOKE] workspace_id=${workspaceId} ` +
+            `anchor_theme_id=${assignedThemeId} trigger=POST_PROVISIONAL_CREATE`,
+        );
+        const mergeResult = await this.autoMergeService.detectAndMerge(workspaceId, {
+          autoExecute: true,
+          anchorThemeId: assignedThemeId,
+          userId: 'system',
+        });
+        if (mergeResult.merged) {
+          this.logger.log(
+            `[AUTO_MERGE_INVOKE] workspace_id=${workspaceId} ` +
+              `anchor_theme_id=${assignedThemeId} ` +
+              `merged_count=${mergeResult.mergedCount} ` +
+              `bootstrap_mode=${mergeResult.bootstrapMode} — hot-path merge executed`,
+          );
+        }
+      } catch (mergeErr) {
+        this.logger.warn(
+          `[AUTO_MERGE_INVOKE] workspace_id=${workspaceId} ` +
+            `anchor_theme_id=${assignedThemeId} ` +
+            `reason="hot-path merge failed — non-fatal" ` +
+            `error="${(mergeErr as Error).message}"`,
+        );
+      }
+
       try {
         const jobId = `ciq:${workspaceId}:${assignedThemeId}`;
         await this.ciqQueue.add(

@@ -79,9 +79,13 @@ export class ClusterRefinementService {
       // Step 3: Archive weak PROVISIONAL themes
       const archived = await this.archiveWeakProvisionalThemes(workspaceId);
 
-      // Step 4: Convergent merge pass
-      const mergeResult = await this.autoMerge.detectAndMerge(workspaceId, { autoExecute: false });
-      const merged = mergeResult.detected;
+      // Step 4: Convergent merge pass (autoExecute=true — merges are executed immediately)
+      // The background refinement pass is the authoritative full-workspace merge sweep.
+      const mergeResult = await this.autoMerge.detectAndMerge(workspaceId, {
+        autoExecute: true,
+        userId: 'system',
+      });
+      const merged = mergeResult.mergedCount;
 
       // Step 5: Refresh stale labels
       const labelResult = await this.labelService.generateLabelsForWorkspace(workspaceId);
