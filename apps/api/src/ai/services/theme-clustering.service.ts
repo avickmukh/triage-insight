@@ -123,11 +123,17 @@ export class ThemeClusteringService {
    * 5. Re-rank using CIQ-aware hybrid score.
    * 6. Assign (strong or soft) OR create PROVISIONAL theme.
    * 7. Post-commit: recompute confidence, enqueue CIQ scoring.
+   *
+   * @param skipCiqEnqueue  When true, suppresses the per-item CIQ enqueue.
+   *   Use this during bulk reclustering (runClustering) so CIQ jobs are not
+   *   fired before the convergent merge pass completes. The caller is
+   *   responsible for bulk-enqueueing CIQ after the merge.
    */
   async assignFeedbackToTheme(
     workspaceId: string,
     feedbackId: string,
     embedding?: number[],
+    skipCiqEnqueue = false,
   ): Promise<string | null> {
     const existingLink = await this.prisma.themeFeedback.findFirst({
       where: { feedbackId },
@@ -210,16 +216,18 @@ export class ThemeClusteringService {
         );
       }
 
-      try {
-        const jobId = `ciq:${workspaceId}:${assignedThemeId}`;
-        await this.ciqQueue.add(
-          { type: 'THEME_SCORED', workspaceId, themeId: assignedThemeId },
-          { jobId, delay: 5_000 },
-        );
-      } catch (queueErr) {
-        this.logger.warn(
-          `[CIQ] Redis unavailable — re-score skipped: ${(queueErr as Error).message}`,
-        );
+      if (!skipCiqEnqueue) {
+        try {
+          const jobId = `ciq:${workspaceId}:${assignedThemeId}`;
+          await this.ciqQueue.add(
+            { type: 'THEME_SCORED', workspaceId, themeId: assignedThemeId },
+            { jobId, delay: 5_000 },
+          );
+        } catch (queueErr) {
+          this.logger.warn(
+            `[CIQ] Redis unavailable — re-score skipped: ${(queueErr as Error).message}`,
+          );
+        }
       }
     }
 
@@ -269,7 +277,10 @@ export class ThemeClusteringService {
           where: { workspaceId, status: { not: 'ARCHIVED' } },
         });
 
-        const themeId = await this.assignFeedbackToTheme(workspaceId, feedbackId);
+        // skipCiqEnqueue=true: suppress per-item CIQ jobs during bulk recluster.
+        // CIQ is bulk-enqueued after runConvergentMerge so scores reflect the
+        // final merged cluster state, not the noisy incremental state.
+        const themeId = await this.assignFeedbackToTheme(workspaceId, feedbackId, undefined, true);
 
         if (themeId) {
           const themeCountAfter = await this.prisma.theme.count({
@@ -286,6 +297,29 @@ export class ThemeClusteringService {
     }
 
     const merged = await this.runConvergentMerge(workspaceId);
+
+    // ── Bulk-enqueue CIQ re-scoring for all surviving themes ─────────────────────────────────
+    // Now that the convergent merge is complete, enqueue CIQ scoring for every
+    // active theme. This ensures scores reflect the final merged cluster state.
+    const survivingThemes = await this.prisma.theme.findMany({
+      where: { workspaceId, status: { not: 'ARCHIVED' } },
+      select: { id: true },
+    });
+    for (const { id: themeId } of survivingThemes) {
+      try {
+        await this.ciqQueue.add(
+          { type: 'THEME_SCORED', workspaceId, themeId },
+          { jobId: `ciq:${workspaceId}:${themeId}`, delay: 2_000 },
+        );
+      } catch (queueErr) {
+        this.logger.warn(
+          `[CIQ] Failed to enqueue post-recluster CIQ for theme ${themeId}: ${(queueErr as Error).message}`,
+        );
+      }
+    }
+    this.logger.log(
+      `[CLUSTER] Enqueued CIQ re-scoring for ${survivingThemes.length} themes after convergent merge`,
+    );
 
     const themesAfter = await this.prisma.theme.count({
       where: { workspaceId, status: { not: 'ARCHIVED' } },

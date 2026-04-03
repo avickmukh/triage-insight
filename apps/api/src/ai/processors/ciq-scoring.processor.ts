@@ -4,9 +4,18 @@
  * Hardening additions (vs original):
  * 1. JobLogger structured logging for all 4 job types
  * 2. JobIdempotencyService dedup guard per (type, entityId, workspaceId)
- * 3. Score overwrite protection — only persists if new score > existing score (configurable)
+ * 3. THEME_SCORED always re-scores (no overwrite guard) so post-merge CIQ is always fresh.
+ *    FEEDBACK_SCORED retains the overwrite guard (score can only increase per item).
  * 4. @OnQueueFailed DLQ handler for exhausted jobs
  * 5. Re-throw on fatal failure so Bull retries with exponential backoff
+ *
+ * Note on score overwrite protection:
+ * - FEEDBACK scores are immutable per item — once scored, a feedback item's CIQ
+ *   cannot decrease. The guard prevents accidental downgrades.
+ * - THEME scores MUST always reflect the current cluster state. After a merge,
+ *   the target theme gains more feedback but may score lower on some dimensions
+ *   (e.g. diversity). Keeping the old score would be misleading. The guard is
+ *   therefore removed for THEME_SCORED.
  */
 import { Processor, Process, OnQueueFailed } from '@nestjs/bull';
 import type { Job } from 'bull';
@@ -102,20 +111,15 @@ export class CiqScoringProcessor {
 
           const score = await this.ciqService.scoreTheme(workspaceId, themeId);
 
-          // ── Score overwrite protection ──────────────────────────────────
-          const existing = await this.prisma.theme.findUnique({
-            where: { id: themeId },
-            select: { priorityScore: true },
-          });
-          const existingScore = existing?.priorityScore ?? 0;
-          if (score.priorityScore > existingScore || existingScore === 0) {
-            await this.ciqService.persistThemeScore(themeId, score);
-            await this.ciqService.persistThemeScoreToRoadmap(workspaceId, themeId, score);
-            await this.ciqEngineService.persistThemeCiqScore(themeId, score.priorityScore);
-            this.logger.debug(ctx, 'Score persisted', { priorityScore: score.priorityScore, prev: existingScore });
-          } else {
-            this.logger.skip(ctx, `Score ${score.priorityScore} <= existing ${existingScore} — skipping overwrite`);
-          }
+          // ── Always persist theme CIQ — no overwrite guard ───────────────
+          // Theme scores MUST reflect the current cluster state at all times.
+          // After a merge or batch finalization, the target theme's membership
+          // changes and the score must be recomputed from scratch. Keeping the
+          // old score would surface stale data on the dashboard.
+          await this.ciqService.persistThemeScore(themeId, score);
+          await this.ciqService.persistThemeScoreToRoadmap(workspaceId, themeId, score);
+          await this.ciqEngineService.persistThemeCiqScore(themeId, score.priorityScore);
+          this.logger.debug(ctx, 'Score persisted', { priorityScore: score.priorityScore });
 
           // ── Stage-2: AI Narration ─────────────────────────────────────────
           // Run after scoring so narration has access to the latest priorityScore.

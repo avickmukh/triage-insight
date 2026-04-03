@@ -16,9 +16,16 @@ export class ThemeRepository {
 
   async findMany(workspaceId: string, query: QueryThemeDto) {
     const { page = 1, limit = 20, search, status, pinned, sortBy = ThemeSortBy.CREATED_AT } = query;
+    // When no status filter is provided, exclude PROVISIONAL and ARCHIVED themes from the
+    // default list view. PROVISIONAL themes are draft clusters that have not yet reached
+    // minimum support — they should not appear in the main dashboard until promoted to STABLE.
+    // Callers can pass status=PROVISIONAL explicitly to view the draft queue.
+    const statusFilter: Prisma.ThemeWhereInput['status'] = status
+      ? status
+      : { notIn: [ThemeStatus.ARCHIVED, ThemeStatus.PROVISIONAL] };
     const where: Prisma.ThemeWhereInput = {
       workspaceId,
-      status,
+      status: statusFilter,
       pinned,
       ...(search && {
         OR: [

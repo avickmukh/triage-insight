@@ -24,6 +24,7 @@ import { getQueueToken } from '@nestjs/bull';
 import { ThemeClusteringService } from './theme-clustering.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmbeddingService } from './embedding.service';
+import { AutoMergeService } from './auto-merge.service';
 import { CIQ_SCORING_QUEUE } from '../processors/ciq-scoring.processor';
 
 // ── Mock factories ────────────────────────────────────────────────────────────
@@ -95,6 +96,16 @@ describe('ThemeClusteringService — runBatchFinalization', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: EmbeddingService, useValue: { generateEmbedding: jest.fn() } },
         { provide: getQueueToken(CIQ_SCORING_QUEUE), useValue: mockCiqQueue },
+        // AutoMergeService is injected via forwardRef — provide a minimal mock
+        {
+          provide: AutoMergeService,
+          useValue: {
+            detectAndMerge: jest.fn().mockResolvedValue({
+              invoked: false, merged: false, mergedCount: 0, detectedCount: 0,
+              suggestions: [], bootstrapMode: false, effectiveThreshold: 0.85, reason: 'mock',
+            }),
+          },
+        },
       ],
     }).compile();
 

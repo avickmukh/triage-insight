@@ -235,7 +235,11 @@ export class ThemeRankingEngine {
    */
   async rankThemes(workspaceId: string): Promise<RankedTheme[]> {
     const rows = await this.prisma.theme.findMany({
-      where: { workspaceId, status: { not: 'ARCHIVED' } },
+      // Exclude PROVISIONAL themes from the Decision Ranking Score board.
+      // PROVISIONAL clusters are draft candidates that have not yet reached
+      // minimum support (minSupport = max(2, floor(log₂(N+2)))). They appear
+      // in the draft queue only and must not influence top-N rankings.
+      where: { workspaceId, status: { notIn: ['ARCHIVED', 'PROVISIONAL'] } },
       select: THEME_SELECT,
       orderBy: [
         { priorityScore: { sort: 'desc', nulls: 'last' } },

@@ -248,7 +248,7 @@ export class UnifiedAggregationService {
       FROM "Theme" t
       LEFT JOIN "CustomerSignal" cs ON cs."themeId" = t.id
       WHERE t."workspaceId" = ${workspaceId}
-        AND t.status != 'ARCHIVED'
+        AND t.status NOT IN ('ARCHIVED', 'PROVISIONAL')
       GROUP BY t.id
       ORDER BY COALESCE(t."totalSignalCount", 0) DESC,
                COALESCE(t."ciqScore", 0) DESC
@@ -326,23 +326,23 @@ export class UnifiedAggregationService {
         // Top theme by feedback count (raw SQL for new field)
         this.prisma.$queryRaw<Array<{ title: string }>>`
           SELECT title FROM "Theme"
-          WHERE "workspaceId" = ${workspaceId} AND status != 'ARCHIVED'
+          WHERE "workspaceId" = ${workspaceId} AND status NOT IN ('ARCHIVED', 'PROVISIONAL')
           ORDER BY COALESCE("feedbackCount", 0) DESC LIMIT 1
         `,
         this.prisma.$queryRaw<Array<{ title: string }>>`
           SELECT title FROM "Theme"
-          WHERE "workspaceId" = ${workspaceId} AND status != 'ARCHIVED'
+          WHERE "workspaceId" = ${workspaceId} AND status NOT IN ('ARCHIVED', 'PROVISIONAL')
           ORDER BY COALESCE("supportCount", 0) DESC LIMIT 1
         `,
         this.prisma.$queryRaw<Array<{ title: string }>>`
           SELECT title FROM "Theme"
-          WHERE "workspaceId" = ${workspaceId} AND status != 'ARCHIVED'
+          WHERE "workspaceId" = ${workspaceId} AND status NOT IN ('ARCHIVED', 'PROVISIONAL')
           ORDER BY COALESCE("voiceCount", 0) DESC LIMIT 1
         `,
         // Top theme by survey signal count
         this.prisma.$queryRaw<Array<{ title: string }>>`
           SELECT title FROM "Theme"
-          WHERE "workspaceId" = ${workspaceId} AND status != 'ARCHIVED'
+          WHERE "workspaceId" = ${workspaceId} AND status NOT IN ('ARCHIVED', 'PROVISIONAL')
           ORDER BY COALESCE("surveyCount", 0) DESC LIMIT 1
         `,
       ]);
@@ -513,7 +513,7 @@ Write one sentence that highlights the most important pattern across these sourc
       FROM "Theme" t
       LEFT JOIN "CustomerSignal" cs ON cs."themeId" = t.id
       WHERE t."workspaceId" = ${workspaceId}
-        AND t.status != 'ARCHIVED'
+        AND t.status NOT IN ('ARCHIVED', 'PROVISIONAL')
         AND COALESCE(t."totalSignalCount", 0) > 0
       GROUP BY t.id
       ORDER BY
