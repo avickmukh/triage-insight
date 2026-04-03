@@ -37,7 +37,7 @@ export class DuplicateSuggestionsService {
     workspaceId: string,
     status?: DuplicateSuggestionStatus,
   ) {
-    return this.prisma.feedbackDuplicateSuggestion.findMany({
+    const rows = await this.prisma.feedbackDuplicateSuggestion.findMany({
       where: {
         sourceFeedback: { workspaceId },
         ...(status ? { status } : { status: DuplicateSuggestionStatus.PENDING }),
@@ -55,6 +55,9 @@ export class DuplicateSuggestionsService {
       // Order by hybridScore (most confident first), fall back to similarity, then recency
       orderBy: [{ hybridScore: 'desc' }, { similarity: 'desc' }, { createdAt: 'desc' }],
     });
+    // Map Prisma field names (sourceId/targetId) to the frontend API contract
+    // (sourceFeedbackId/targetFeedbackId) while keeping the originals as aliases.
+    return rows.map(this._normaliseRow);
   }
 
   /**
@@ -69,7 +72,7 @@ export class DuplicateSuggestionsService {
     // Verify the feedback belongs to this workspace
     await this._requireFeedbackInWorkspace(workspaceId, feedbackId);
 
-    return this.prisma.feedbackDuplicateSuggestion.findMany({
+    const rows = await this.prisma.feedbackDuplicateSuggestion.findMany({
       where: {
         OR: [{ sourceId: feedbackId }, { targetId: feedbackId }],
         ...(status ? { status } : { status: DuplicateSuggestionStatus.PENDING }),
@@ -87,6 +90,7 @@ export class DuplicateSuggestionsService {
       // Order by hybridScore (most confident first), fall back to similarity
       orderBy: [{ hybridScore: 'desc' }, { similarity: 'desc' }],
     });
+    return rows.map(this._normaliseRow);
   }
 
   // ─── Accept ────────────────────────────────────────────────────────────────
@@ -207,6 +211,24 @@ export class DuplicateSuggestionsService {
   }
 
   // ─── Private helpers ───────────────────────────────────────────────────────
+
+  /**
+   * Normalise a raw Prisma FeedbackDuplicateSuggestion row to match the
+   * frontend API contract.  The schema uses `sourceId` / `targetId` as the
+   * FK column names, but the frontend type expects `sourceFeedbackId` /
+   * `targetFeedbackId`.  We add both so existing code that reads either name
+   * continues to work.
+   */
+  private _normaliseRow<T extends { sourceId: string; targetId: string }>(row: T) {
+    return {
+      ...row,
+      sourceFeedbackId: row.sourceId,
+      targetFeedbackId: row.targetId,
+      // Keep originals as aliases for any code that reads sourceId / targetId directly
+      sourceId: row.sourceId,
+      targetId: row.targetId,
+    };
+  }
 
   private async _requireFeedbackInWorkspace(workspaceId: string, feedbackId: string) {
     const feedback = await this.prisma.feedback.findFirst({

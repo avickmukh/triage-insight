@@ -1437,30 +1437,39 @@ export class ThemeClusteringService {
     themeId: string,
     _newFeedbackCiqNorm?: number,
   ): Promise<void> {
-    // pgvector supports avg(embedding::vector) as a proper aggregate.
-    // We cannot use SUM(vector * scalar) because pgvector does not expose
-    // vector * integer multiplication in aggregate context.
-    //
-    // Strategy: use a two-pass approach.
-    //   Pass 1: try the pgvector avg() aggregate — works on pgvector >= 0.5.0.
-    //   Pass 2: if that fails (older pgvector), fetch all embeddings into JS
-    //           and compute the mean in application code, then write back.
+    // Prisma 7 $executeRaw template literals do not support parameters inside
+    // correlated subqueries in a SET clause. We use a two-step approach instead:
+    //   Step 1: $queryRaw to compute avg(embedding::vector) — pgvector aggregate.
+    //   Step 2: $executeRaw to write the result back to the Theme row.
+    // If pgvector avg() is not available (older extension), fall back to JS mean.
     try {
+      // Step 1: compute centroid via pgvector avg() aggregate
+      const avgRows = await prisma.$queryRaw<Array<{ avg_emb: string | null }>>`
+        SELECT avg(f.embedding::vector)::text AS avg_emb
+        FROM "ThemeFeedback" tf
+        JOIN "Feedback" f ON f.id = tf."feedbackId"
+        WHERE tf."themeId" = ${themeId}
+          AND f.embedding IS NOT NULL;
+      `;
+
+      const avgEmbStr = avgRows[0]?.avg_emb;
+      if (!avgEmbStr) {
+        // No feedback with embeddings — retain existing centroid
+        this.logger.debug(`[Centroid] No embeddings for theme ${themeId}, centroid unchanged`);
+        return;
+      }
+
+      // Step 2: write the computed centroid back
       await prisma.$executeRaw`
         UPDATE "Theme"
-        SET embedding = (
-          SELECT avg(f.embedding::vector)
-          FROM "ThemeFeedback" tf
-          JOIN "Feedback" f ON f.id = tf."feedbackId"
-          WHERE tf."themeId" = ${themeId}
-            AND f.embedding IS NOT NULL
-        ),
-        "centroidUpdatedAt" = NOW()
+        SET embedding = ${avgEmbStr}::vector,
+            "centroidUpdatedAt" = NOW()
         WHERE id = ${themeId};
       `;
       this.logger.debug(`[Centroid] Updated centroid (pgvector avg) for theme ${themeId}`);
     } catch {
       // Fallback: compute mean in application code and write back as a vector literal.
+      // This handles older pgvector versions that do not support the avg() aggregate.
       try {
         const rows = await prisma.$queryRaw<Array<{ emb: string }>>`
           SELECT f.embedding::text AS emb

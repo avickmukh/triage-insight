@@ -66,6 +66,29 @@ export class RoadmapController {
     return this.roadmapService.findAll(workspaceId, query);
   }
 
+  /**
+   * GET /workspaces/:workspaceId/roadmap/ai-suggestions
+   * Returns AI-generated roadmap suggestions for all active themes.
+   * Computes a Roadmap Priority Score (RPS) per theme and classifies each as:
+   *   ADD_TO_ROADMAP | INCREASE_PRIORITY | DECREASE_PRIORITY | MONITOR | NO_ACTION
+   * Every suggestion includes reason, confidence, signal summary, and breakdown.
+   * AI assists decision-making — it does NOT auto-create roadmap items.
+   *
+   * NOTE: This route MUST appear before @Get(":id") so NestJS does not treat
+   * the literal string "ai-suggestions" as a dynamic :id parameter.
+   */
+  @Get("ai-suggestions")
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
+  getAiSuggestions(
+    @Param("workspaceId") workspaceId: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.roadmapIntelligenceService.getAiSuggestions(
+      workspaceId,
+      limit ? parseInt(limit, 10) : 50,
+    );
+  }
+
   @Get(":id")
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
   findOne(@Param("workspaceId") workspaceId: string, @Param("id") id: string) {
@@ -110,26 +133,6 @@ export class RoadmapController {
     @Param("id") id: string
   ) {
     return this.ciqService.scoreRoadmapItem(workspaceId, id);
-  }
-
-  /**
-   * GET /workspaces/:workspaceId/roadmap/ai-suggestions
-   * Returns AI-generated roadmap suggestions for all active themes.
-   * Computes a Roadmap Priority Score (RPS) per theme and classifies each as:
-   *   ADD_TO_ROADMAP | INCREASE_PRIORITY | DECREASE_PRIORITY | MONITOR | NO_ACTION
-   * Every suggestion includes reason, confidence, signal summary, and breakdown.
-   * AI assists decision-making — it does NOT auto-create roadmap items.
-   */
-  @Get("ai-suggestions")
-  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
-  getAiSuggestions(
-    @Param("workspaceId") workspaceId: string,
-    @Query("limit") limit?: string,
-  ) {
-    return this.roadmapIntelligenceService.getAiSuggestions(
-      workspaceId,
-      limit ? parseInt(limit, 10) : 50,
-    );
   }
 
   @Delete(":id")
