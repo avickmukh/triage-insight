@@ -169,3 +169,42 @@ export const MERGE_EMBEDDING_WEIGHT = 0.7;
 
 /** Keyword overlap weight in the auto-merge hybrid score. */
 export const MERGE_KEYWORD_WEIGHT = 0.3;
+
+// ─── Actionability scoring ────────────────────────────────────────────────────
+
+/**
+ * Weight of the actionability compatibility score in the hybrid assignment score.
+ * When this is non-zero, W_SEMANTIC must be reduced by the same amount to keep
+ * the weights summing to 1.0.
+ *
+ * Actionability score = IssueDimensionService.computeCompatibility(feedback, theme)
+ * Range: 0 (incompatible) → 1 (identical issue_type + failure_mode + affected_object)
+ */
+export const W_ACTIONABILITY = 0.10;
+
+/**
+ * Adjusted semantic weight when actionability scoring is active.
+ * W_SEMANTIC_ADJ + W_KEYWORD + W_SIZE_BIAS + W_CIQ_BIAS + W_ACTIONABILITY must = 1.0
+ * 0.60 + 0.05 + 0.10 + 0.15 + 0.10 = 1.00
+ */
+export const W_SEMANTIC_WITH_ACTIONABILITY = 0.60;
+
+/**
+ * Minimum actionability compatibility score required for the auto-merge guard.
+ * Merges where both themes have extracted dimensions AND compatibility < this
+ * threshold are blocked, even if embedding similarity is above the merge threshold.
+ * Set to 0 to disable the guard (pure embedding-based merge).
+ */
+export const MERGE_MIN_ACTIONABILITY = 0.5;
+
+/**
+ * Cluster purity threshold: clusters with purity below this are candidates for
+ * splitting by the ClusterPurityService.
+ */
+export const PURITY_SPLIT_THRESHOLD = 0.60;
+
+/**
+ * Minimum cluster size to attempt a split.
+ * Clusters smaller than this are kept as-is to avoid micro-fragmentation.
+ */
+export const PURITY_MIN_SPLIT_SIZE = 4;

@@ -1,16 +1,23 @@
 import { Injectable, Logger, forwardRef, Inject } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmbeddingService } from './embedding.service';
 import { CIQ_SCORING_QUEUE } from '../processors/ciq-scoring.processor';
 import { AutoMergeService } from './auto-merge.service';
 import { IntentClassifierService } from './intent-classifier.service';
 import {
+  IssueDimensionService,
+  IssueDimensions,
+} from './issue-dimension.service';
+import {
   W_SEMANTIC,
   W_KEYWORD,
   W_SIZE_BIAS,
   W_CIQ_BIAS,
+  W_ACTIONABILITY,
+  W_SEMANTIC_WITH_ACTIONABILITY,
   VECTOR_CANDIDATES,
   SOFT_MATCH_MULTIPLIER,
   THEME_CAP_GUARDRAIL,
@@ -39,10 +46,15 @@ import {
  *
  * ASSIGNMENT SCORE FORMULA
  * ------------------------
- *   score = semantic_similarity × 0.70
- *         + keyword_overlap     × 0.05
- *         + cluster_size_bias   × 0.10
- *         + CIQ_bias            × 0.15
+ *   score = semantic_similarity    × 0.60  (reduced from 0.70 to make room for actionability)
+ *         + keyword_overlap        × 0.05
+ *         + cluster_size_bias      × 0.10
+ *         + CIQ_bias               × 0.15
+ *         + actionability_compat   × 0.10  (IssueDimensions compatibility score)
+ *
+ * The actionability component prevents semantically similar but actionably distinct
+ * feedback from collapsing into the same theme. It is computed generically from
+ * issue_type + failure_mode + affected_object — no domain-specific logic.
  *
  * DYNAMIC THRESHOLDS
  * ------------------
@@ -61,6 +73,10 @@ export class ThemeClusteringService {
   private readonly W_KEYWORD = W_KEYWORD;
   private readonly W_SIZE_BIAS = W_SIZE_BIAS;
   private readonly W_CIQ_BIAS = W_CIQ_BIAS;
+  /** Actionability compatibility weight (reduces W_SEMANTIC by same amount). */
+  private readonly W_ACTIONABILITY = W_ACTIONABILITY;
+  /** Adjusted semantic weight when actionability scoring is active. */
+  private readonly W_SEMANTIC_ADJ = W_SEMANTIC_WITH_ACTIONABILITY;
 
   // ─── Vector search ───────────────────────────────────────────────────────
   /** Number of nearest-neighbour candidates fetched from pgvector per query. */
@@ -125,6 +141,7 @@ export class ThemeClusteringService {
     @Inject(forwardRef(() => AutoMergeService))
     private readonly autoMergeService: AutoMergeService,
     private readonly intentClassifier: IntentClassifierService,
+    private readonly issueDimensionService: IssueDimensionService,
   ) {}
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -560,7 +577,19 @@ export class ThemeClusteringService {
       await this.recomputeClusterConfidence(id);
     }
 
-    // ── 7. Enqueue CIQ re-scoring for all surviving themes ────────────────────────
+    // ── 6.5. Update dominant issue dimensions for all active themes ────────────────────────────────────────────────────────────────────────────────────
+    // Computes the dominant (issue_type, failure_mode) pair for each cluster
+    // and stores it in signalBreakdown.dominantDimensions. Run BEFORE CIQ
+    // enqueue so narration can use the dimensions for precise theme naming.
+    for (const { id } of activeThemes) {
+      this.updateThemeDominantDimensions(id).catch((err: Error) => {
+        this.logger.debug(
+          `${logPrefix} updateThemeDominantDimensions failed for ${id}: ${err.message}`,
+        );
+      });
+    }
+
+    // ── 7. Enqueue CIQ re-scoring for all surviving themes ────────────────────────────────────────────────────────────────────────────────────
     // CIQ scoring triggers ThemeNarrationService.narrate() inside the CIQ processor.
     // Running narration AFTER finalization ensures the LLM sees the final cluster
     // membership (not the noisy provisional state from incremental assignment).
@@ -1109,7 +1138,39 @@ export class ThemeClusteringService {
         `found ${candidates.length} candidates, N=${N}, noveltyThreshold=${noveltyThreshold.toFixed(3)}`,
     );
 
-    // Re-rank using CIQ-aware hybrid score
+    // ── Extract issue dimensions for this feedback (non-blocking, best-effort) ──
+    // Dimensions are extracted here and stored in Feedback.metadata so they are
+    // available for future re-clustering without re-extraction.
+    let feedbackDimensions: IssueDimensions | null = null;
+    try {
+      // Check if already extracted (stored in metadata.issueDimensions)
+      const existingMeta = (feedback as unknown as { metadata?: Record<string, unknown> }).metadata;
+      const cached = existingMeta?.issueDimensions as IssueDimensions | undefined;
+      if (cached?.actionability_signature) {
+        feedbackDimensions = cached;
+      } else {
+        feedbackDimensions = await this.issueDimensionService.extract(
+          feedback.title,
+          feedback.description ?? '',
+        );
+        // Persist dimensions into Feedback.metadata for future use
+        await prisma.feedback.update({
+          where: { id: feedbackId },
+          data: {
+            metadata: {
+              ...(existingMeta ?? {}),
+              issueDimensions: feedbackDimensions as unknown as Prisma.InputJsonValue,
+            },
+          },
+        });
+      }
+    } catch (dimErr) {
+      this.logger.debug(
+        `[CLUSTER] Issue dimension extraction failed for ${feedbackId} — proceeding without: ${(dimErr as Error).message}`,
+      );
+    }
+
+    // Re-rank using CIQ-aware + actionability hybrid score
     let bestThemeId: string | null = null;
     let bestThemeTitle = '';
     let bestScore = 0;
@@ -1118,6 +1179,7 @@ export class ThemeClusteringService {
     let bestKeywordScore = 0;
     let bestCiqBias = 0;
     let bestSizeBias = 0;
+    let bestActionabilityScore = 0;
 
     for (const candidate of candidates) {
       const embeddingScore = candidate.similarity;
@@ -1151,16 +1213,46 @@ export class ThemeClusteringService {
       // Bias is high when both feedback and cluster have aligned high CIQ
       const ciqBias = (feedbackCiqNorm + themeCiqNorm) / 2;
 
+      // ── Actionability compatibility score ─────────────────────────────────
+      // Read theme's dominant dimensions from signalBreakdown.dominantDimensions
+      // (stored by ClusterPurityService / updateThemeDominantDimensions).
+      // If not yet stored, fall back to 0.5 (neutral — don't penalise new themes).
+      let actionabilityScore = 0.5; // neutral default
+      if (feedbackDimensions) {
+        try {
+          const candidateRow = await prisma.theme.findUnique({
+            where: { id: candidate.id },
+            select: { signalBreakdown: true },
+          });
+          const breakdown = (candidateRow?.signalBreakdown ?? {}) as Record<string, unknown>;
+          const themeDims = breakdown.dominantDimensions as IssueDimensions | undefined;
+          if (themeDims?.actionability_signature) {
+            actionabilityScore = this.issueDimensionService.computeCompatibility(
+              feedbackDimensions,
+              themeDims,
+            );
+          }
+        } catch {
+          actionabilityScore = 0.5;
+        }
+      }
+
+      // Use adjusted semantic weight when actionability is active
+      const wSemantic = feedbackDimensions ? this.W_SEMANTIC_ADJ : this.W_SEMANTIC;
+      const wActionability = feedbackDimensions ? this.W_ACTIONABILITY : 0;
+
       const hybridScore =
-        embeddingScore * this.W_SEMANTIC +
+        embeddingScore * wSemantic +
         keywordScore * this.W_KEYWORD +
         sizeBias * this.W_SIZE_BIAS +
-        ciqBias * this.W_CIQ_BIAS;
+        ciqBias * this.W_CIQ_BIAS +
+        actionabilityScore * wActionability;
 
       this.logger.debug(
         `[CLUSTER] Candidate "${candidate.title}" (${candidate.id}): ` +
           `embedding=${embeddingScore.toFixed(3)}, keyword=${keywordScore.toFixed(3)}, ` +
           `sizeBias=${sizeBias.toFixed(3)}, ciqBias=${ciqBias.toFixed(3)}, ` +
+          `actionability=${actionabilityScore.toFixed(3)}, ` +
           `hybrid=${hybridScore.toFixed(3)}, size=${liveCount}`,
       );
 
@@ -1173,6 +1265,7 @@ export class ThemeClusteringService {
         bestKeywordScore = keywordScore;
         bestCiqBias = ciqBias;
         bestSizeBias = sizeBias;
+        bestActionabilityScore = actionabilityScore;
       }
     }
 
@@ -1206,6 +1299,7 @@ export class ThemeClusteringService {
         keywordScore: parseFloat(bestKeywordScore.toFixed(4)),
         sizeBias: parseFloat(bestSizeBias.toFixed(4)),
         ciqBias: parseFloat(bestCiqBias.toFixed(4)),
+        actionabilityScore: parseFloat(bestActionabilityScore.toFixed(4)),
         hybridScore: parseFloat(bestScore.toFixed(4)),
         threshold: parseFloat(noveltyThreshold.toFixed(4)),
         softThreshold: parseFloat(softThreshold.toFixed(4)),
@@ -1213,6 +1307,8 @@ export class ThemeClusteringService {
         matchedKeywords,
         assignmentMode: shouldAssignStrong ? 'strong' : 'soft_guardrail',
         feedbackCiqNorm: parseFloat(feedbackCiqNorm.toFixed(4)),
+        feedbackIssueType: feedbackDimensions?.issue_type ?? null,
+        feedbackFailureMode: feedbackDimensions?.failure_mode ?? null,
       };
 
       await prisma.themeFeedback.upsert({
@@ -1288,6 +1384,7 @@ export class ThemeClusteringService {
           `(mode=${shouldAssignStrong ? 'strong' : 'soft_guardrail'}, ` +
           `hybrid=${bestScore.toFixed(3)}, threshold=${noveltyThreshold.toFixed(3)}, ` +
           `embedding=${bestEmbeddingScore.toFixed(3)}, keyword=${bestKeywordScore.toFixed(3)}, ` +
+          `actionability=${bestActionabilityScore.toFixed(3)}, ` +
           `ciqBias=${bestCiqBias.toFixed(3)}, clusterSize=${bestClusterSize})`,
       );
 
@@ -1841,9 +1938,114 @@ export class ThemeClusteringService {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────────────────
+  // PUBLIC: DOMINANT DIMENSIONS UPDATE
+  // ─────────────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Compute and persist the dominant IssueDimensions for a theme cluster.
+   *
+   * Reads the issueDimensions from each linked feedback item's metadata,
+   * computes the dominant (issue_type, failure_mode) pair, and stores the
+   * result in Theme.signalBreakdown.dominantDimensions.
+   *
+   * This is called:
+   *   1. After batch finalization (for all themes in the workspace)
+   *   2. After a merge (for the surviving theme)
+   *
+   * The stored dominantDimensions are used by:
+   *   - _assignFeedbackToThemeInTx: actionability compatibility scoring
+   *   - AutoMergeService: merge guard
+   *   - ThemeNarrationService: precise theme name generation
+   */
+  async updateThemeDominantDimensions(themeId: string): Promise<void> {
+    try {
+      // Load all linked feedback metadata
+      const links = await this.prisma.themeFeedback.findMany({
+        where: { themeId },
+        select: {
+          feedback: {
+            select: { metadata: true, title: true, description: true },
+          },
+        },
+        take: 100,
+      });
+
+      if (links.length === 0) return;
+
+      // Extract dimensions from each feedback's metadata (or extract on-the-fly)
+      const memberDimensions: IssueDimensions[] = [];
+      for (const link of links) {
+        const meta = (link.feedback.metadata ?? {}) as Record<string, unknown>;
+        const cached = meta.issueDimensions as IssueDimensions | undefined;
+        if (cached?.actionability_signature) {
+          memberDimensions.push(cached);
+        } else {
+          // Extract on-the-fly for feedback items that predate the dimension service
+          try {
+            const dims = await this.issueDimensionService.extract(
+              link.feedback.title,
+              link.feedback.description ?? '',
+            );
+            memberDimensions.push(dims);
+          } catch {
+            // skip this item
+          }
+        }
+      }
+
+      if (memberDimensions.length === 0) return;
+
+      const { issue_type, failure_mode, purity } =
+        this.issueDimensionService.computeDominantDimensions(memberDimensions);
+
+      // Build a representative dominant dimensions object
+      const dominantDimensions: IssueDimensions = {
+        issue_type,
+        failure_mode,
+        user_intent: memberDimensions[0]?.user_intent ?? 'use feature',
+        affected_object: memberDimensions[0]?.affected_object ?? 'system feature',
+        actionability_signature: `${issue_type}:${failure_mode}:${memberDimensions[0]?.affected_object ?? 'system feature'}`,
+        extraction_confidence: purity,
+        extraction_method: 'heuristic',
+      };
+
+      // Merge into existing signalBreakdown
+      const theme = await this.prisma.theme.findUnique({
+        where: { id: themeId },
+        select: { signalBreakdown: true },
+      });
+      const existing = (theme?.signalBreakdown ?? {}) as Record<string, unknown>;
+
+      await this.prisma.theme.update({
+        where: { id: themeId },
+        data: {
+          signalBreakdown: {
+            ...existing,
+            dominantDimensions: dominantDimensions as unknown as Prisma.InputJsonValue,
+            clusterPurity: parseFloat(purity.toFixed(3)),
+            dominantIssueType: issue_type,
+            dominantFailureMode: failure_mode,
+            dimensionMemberCount: memberDimensions.length,
+          },
+        },
+      });
+
+      this.logger.debug(
+        `[DominantDimensions] Theme ${themeId}: issue_type=${issue_type}, ` +
+          `failure_mode=${failure_mode}, purity=${purity.toFixed(3)}, ` +
+          `members=${memberDimensions.length}`,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `[DominantDimensions] Failed for theme ${themeId}: ${(err as Error).message}`,
+      );
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────────────
   // PRIVATE: THEME CREATION
-  // ─────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────────────────
 
   /**
    * Create a new PROVISIONAL candidate theme from a single feedback item.

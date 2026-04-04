@@ -4,6 +4,10 @@ import type { Queue } from 'bull';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CIQ_SCORING_QUEUE } from '../processors/ciq-scoring.processor';
 import {
+  IssueDimensionService,
+  IssueDimensions,
+} from './issue-dimension.service';
+import {
   AUTO_MERGE_THRESHOLD,
   BOOTSTRAP_MERGE_THRESHOLD,
   BOOTSTRAP_THEME_COUNT,
@@ -11,6 +15,7 @@ import {
   MERGE_EMBEDDING_WEIGHT,
   MERGE_KEYWORD_WEIGHT,
   MERGE_VECTOR_CANDIDATES,
+  MERGE_MIN_ACTIONABILITY,
 } from '../config/clustering-thresholds.config';
 
 /**
@@ -88,9 +93,13 @@ export class AutoMergeService {
   /** Number of top candidates to retrieve from pgvector per theme. */
   private readonly VECTOR_CANDIDATES = MERGE_VECTOR_CANDIDATES;
 
+  /** Minimum actionability compatibility required to allow a merge. */
+  private readonly MERGE_MIN_ACTIONABILITY = MERGE_MIN_ACTIONABILITY;
+
   constructor(
     private readonly prisma: PrismaService,
     @InjectQueue(CIQ_SCORING_QUEUE) private readonly ciqQueue: Queue,
+    private readonly issueDimensionService: IssueDimensionService,
   ) {}
 
   // ─── Public API ───────────────────────────────────────────────────────────
@@ -291,7 +300,7 @@ export class AutoMergeService {
           );
 
           if (hybridScore < effectiveThreshold) {
-            // ── AUTO_MERGE_SKIP ──────────────────────────────────────────
+            // ── AUTO_MERGE_SKIP ──────────────────────────────────────────────
             this.logger.debug(
               `[AUTO_MERGE_SKIP] workspace_id=${workspaceId} ` +
                 `source_theme_id=${theme.id} source_theme_name="${theme.title}" ` +
@@ -301,6 +310,43 @@ export class AutoMergeService {
             );
             // Continue to next candidate (best is first; if best fails, all fail)
             break;
+          }
+
+          // ── Actionability guard ──────────────────────────────────────────────
+          // Even if embedding similarity is high, block the merge if the two
+          // themes have incompatible actionability dimensions. This prevents
+          // semantically related but actionably distinct themes from collapsing.
+          // Guard only applies when BOTH themes have extracted dimensions.
+          let actionabilityCompat = 1.0; // default: allow merge (no dimensions available)
+          try {
+            const [sourceBreakdown, targetBreakdown] = await Promise.all([
+              this.prisma.theme.findUnique({
+                where: { id: theme.id },
+                select: { signalBreakdown: true },
+              }),
+              this.prisma.theme.findUnique({
+                where: { id: candidate.id },
+                select: { signalBreakdown: true },
+              }),
+            ]);
+            const sourceDims = ((sourceBreakdown?.signalBreakdown ?? {}) as Record<string, unknown>).dominantDimensions as IssueDimensions | undefined;
+            const targetDims = ((targetBreakdown?.signalBreakdown ?? {}) as Record<string, unknown>).dominantDimensions as IssueDimensions | undefined;
+            if (sourceDims?.actionability_signature && targetDims?.actionability_signature) {
+              actionabilityCompat = this.issueDimensionService.computeCompatibility(sourceDims, targetDims);
+            }
+          } catch {
+            actionabilityCompat = 1.0; // fail-open: don't block merge on error
+          }
+
+          if (actionabilityCompat < this.MERGE_MIN_ACTIONABILITY) {
+            this.logger.log(
+              `[AUTO_MERGE_SKIP] workspace_id=${workspaceId} ` +
+                `source_theme_id=${theme.id} source_theme_name="${theme.title}" ` +
+                `target_theme_id=${candidate.id} target_theme_name="${candidate.title}" ` +
+                `score=${hybridScore.toFixed(4)} actionabilityCompat=${actionabilityCompat.toFixed(3)} ` +
+                `reason="actionability incompatible (${actionabilityCompat.toFixed(2)} < ${this.MERGE_MIN_ACTIONABILITY})"`,
+            );
+            continue; // Try next candidate
           }
 
           // Score meets threshold — determine merge direction
