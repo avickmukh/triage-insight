@@ -146,8 +146,9 @@ function AuthenticatedShell({ slug, pathname, children }: { slug: string; pathna
             {/* THEMES */}
             <NavGroup label="Themes" open={sidebarOpen}>
               <SideNavItem href={r.themes}               pathname={pathname} open={sidebarOpen} icon={<IconTheme/>}>All Themes</SideNavItem>
-              <SideNavItem href={r.customers}            pathname={pathname} open={sidebarOpen} icon={<IconCustomers/>}>Customers</SideNavItem>
-              <SideNavItem href={r.intelligenceCustomers} pathname={pathname} open={sidebarOpen} icon={<IconCustomerIQ/>}>Customer Ranking</SideNavItem>
+              {/* Customers and Customer Ranking temporarily hidden */}
+              {/* <SideNavItem href={r.customers}            pathname={pathname} open={sidebarOpen} icon={<IconCustomers/>}>Customers</SideNavItem> */}
+              {/* <SideNavItem href={r.intelligenceCustomers} pathname={pathname} open={sidebarOpen} icon={<IconCustomerIQ/>}>Customer Ranking</SideNavItem> */}
             </NavGroup>
 
             {/* PRIORITIZATION */}
@@ -226,8 +227,9 @@ function AuthenticatedShell({ slug, pathname, children }: { slug: string; pathna
               </NavGroupDrawer>
               <NavGroupDrawer label="Themes">
                 <DrawerNavItem href={r.themes}               pathname={pathname} icon={<IconTheme/>}>All Themes</DrawerNavItem>
-                <DrawerNavItem href={r.customers}            pathname={pathname} icon={<IconCustomers/>}>Customers</DrawerNavItem>
-                <DrawerNavItem href={r.intelligenceCustomers} pathname={pathname} icon={<IconCustomerIQ/>}>Customer Ranking</DrawerNavItem>
+                {/* Customers and Customer Ranking temporarily hidden */}
+                {/* <DrawerNavItem href={r.customers}            pathname={pathname} icon={<IconCustomers/>}>Customers</DrawerNavItem> */}
+                {/* <DrawerNavItem href={r.intelligenceCustomers} pathname={pathname} icon={<IconCustomerIQ/>}>Customer Ranking</DrawerNavItem> */}
               </NavGroupDrawer>
               <NavGroupDrawer label="Prioritization">
                 <DrawerNavItem href={r.ciq}                        pathname={pathname} icon={<IconIntelligence/>}>CIQ Scoring</DrawerNavItem>
