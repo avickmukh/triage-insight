@@ -1,24 +1,27 @@
 'use client';
 
 /**
- * AIPipelineProgress — v4 (Ghost-Pipeline Fix)
+ * AIPipelineProgress — v5 (Full Pipeline Tracking)
  *
- * Changes vs v3:
+ * Changes vs v4:
  * ─────────────────────────────────────────────────────────────────────────────
- * 1. IDLE guard: when backend returns stage === 'IDLE' or total === 0 and
- *    isRunning === false, the banner is hidden immediately and localStorage
- *    flag is cleared. Fixes the ghost "AI Pipeline Running" banner.
+ * 1. SCORING stage added: the banner now stays open during CIQ scoring
+ *    (CIQ_SCORING_THEME / CIQ_SCORING_FEEDBACK jobs) which run AFTER clustering.
+ *    Previously the banner showed "Done" as soon as embedding/clustering finished,
+ *    even though CIQ scoring, narration, and digest were still running.
  *
- * 2. Stale localStorage TTL (30 min): the pipelineRunning_<workspaceId> key
- *    is ignored if it is older than 30 minutes. Prevents ghost banners on
- *    page load hours after the last upload.
+ * 2. Extended PIPELINE_STEPS: Upload → Queue → Embed → Cluster → Score → Done
+ *    The "Score" step covers CIQ scoring + narration.
  *
- * 3. Dismiss button: a × button lets users manually dismiss the banner.
- *    Clicking it calls POST /feedback/reset-pipeline (heals stuck RUNNING
- *    records in the DB) and clears the localStorage flag.
+ * 3. isRunning check extended: SCORING stage is treated as running (not done).
  *
- * 4. Batch-status path unchanged: batchId polling still uses the batch-scoped
- *    endpoint. IDLE guard still applies.
+ * 4. pct capped at 99 until stage === COMPLETED to prevent premature 100%.
+ *
+ * Unchanged from v4:
+ * - IDLE guard (hide banner immediately when backend returns IDLE)
+ * - Stale localStorage TTL (30 min)
+ * - Dismiss button (calls POST /feedback/reset-pipeline)
+ * - Batch-status path (batchId polling)
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -48,16 +51,25 @@ const STAGE_LABELS: Record<string, string> = {
   QUEUED:     'Queued — waiting to start…',
   ANALYZING:  'Analysing feedback — generating embeddings & summaries…',
   CLUSTERING: 'Clustering — grouping similar feedback into themes…',
+  SCORING:    'Scoring — computing CIQ scores and AI narration for themes…',
   COMPLETED:  'Analysis complete ✓',
   FAILED:     'Some items failed — retrying automatically…',
 };
 
-/** Ordered pipeline steps for the step-indicator UI */
+/**
+ * Ordered pipeline steps for the step-indicator UI.
+ *
+ * Upload → Queue → Embed → Cluster → Score → Done
+ *
+ * "Score" covers CIQ scoring + narration (both happen in the ciq-scoring queue).
+ * "Done" is only reached when ALL stages are complete.
+ */
 const PIPELINE_STEPS = [
   { stage: 'UPLOADED',   label: 'Upload',   icon: '⬆' },
   { stage: 'QUEUED',     label: 'Queue',    icon: '⏳' },
   { stage: 'ANALYZING',  label: 'Embed',    icon: '🔍' },
   { stage: 'CLUSTERING', label: 'Cluster',  icon: '🧩' },
+  { stage: 'SCORING',    label: 'Score',    icon: '⚡' },
   { stage: 'COMPLETED',  label: 'Done',     icon: '✅' },
 ];
 
@@ -165,12 +177,20 @@ export function AIPipelineProgress({ workspaceId, batchId: propBatchId, onComple
       setStatus(s);
 
       const isIdle = s.stage === 'IDLE' || (s.total === 0 && !s.isRunning);
+      // COMPLETED and FAILED are terminal stages.
+      // SCORING is NOT terminal — CIQ scoring is still running.
       const isDone = s.stage === 'COMPLETED' || s.stage === 'FAILED';
-      const active = !isIdle && !isDone && (s.isRunning || s.stage === 'QUEUED' || s.stage === 'UPLOADED');
+      const active = !isIdle && !isDone && (
+        s.isRunning ||
+        s.stage === 'QUEUED' ||
+        s.stage === 'UPLOADED' ||
+        s.stage === 'ANALYZING' ||
+        s.stage === 'CLUSTERING' ||
+        s.stage === 'SCORING'
+      );
 
       if (isIdle) {
         // Backend says nothing is running — hide immediately and clear the flag.
-        // PRIMARY FIX for the ghost-pipeline bug.
         hideBanner();
       } else if (active) {
         setVisible(true);
@@ -218,7 +238,8 @@ export function AIPipelineProgress({ workspaceId, batchId: propBatchId, onComple
 
   if (!visible || !status) return null;
 
-  const pct        = status.pct ?? 0;
+  // Cap pct at 99 until COMPLETED to prevent premature "100% done" flash
+  const pct        = status.stage === 'COMPLETED' ? 100 : Math.min(99, status.pct ?? 0);
   const stage      = status.stage ?? 'QUEUED';
   const stageLabel = STAGE_LABELS[stage] ?? stage;
   const eta        = status.estimatedSecondsLeft ?? null;
@@ -226,9 +247,10 @@ export function AIPipelineProgress({ workspaceId, batchId: propBatchId, onComple
 
   const isCompleted = stage === 'COMPLETED';
   const isFailed    = stage === 'FAILED';
-  const barColor    = isCompleted ? '#2e7d32' : isFailed ? '#c62828' : 'linear-gradient(90deg, #20A4A4, #1a73e8)';
-  const bgColor     = isCompleted ? '#e8f5e9' : isFailed ? '#ffebee' : '#e3f2fd';
-  const borderColor = isCompleted ? '#a5d6a7' : isFailed ? '#ef9a9a' : '#90caf9';
+  const isScoring   = stage === 'SCORING';
+  const barColor    = isCompleted ? '#2e7d32' : isFailed ? '#c62828' : isScoring ? '#7c3aed' : 'linear-gradient(90deg, #20A4A4, #1a73e8)';
+  const bgColor     = isCompleted ? '#e8f5e9' : isFailed ? '#ffebee' : isScoring ? '#faf5ff' : '#e3f2fd';
+  const borderColor = isCompleted ? '#a5d6a7' : isFailed ? '#ef9a9a' : isScoring ? '#d8b4fe' : '#90caf9';
 
   return (
     <div
@@ -275,15 +297,21 @@ export function AIPipelineProgress({ workspaceId, batchId: propBatchId, onComple
           <svg width="20" height="20" viewBox="0 0 20 20"
             style={{ animation: 'spin 1.2s linear infinite', flexShrink: 0 }}>
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-            <circle cx="10" cy="10" r="8" fill="none" stroke="#90caf9" strokeWidth="2.5" />
-            <path d="M10 2 a8 8 0 0 1 8 8" fill="none" stroke="#1a73e8"
+            <circle cx="10" cy="10" r="8" fill="none" stroke={isScoring ? '#d8b4fe' : '#90caf9'} strokeWidth="2.5" />
+            <path d="M10 2 a8 8 0 0 1 8 8" fill="none" stroke={isScoring ? '#7c3aed' : '#1a73e8'}
               strokeWidth="2.5" strokeLinecap="round" />
           </svg>
         )}
 
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#0a2540' }}>
-            {isCompleted ? 'AI Analysis Complete' : isFailed ? 'AI Pipeline — Some Items Failed' : 'AI Pipeline Running'}
+            {isCompleted
+              ? 'AI Analysis Complete'
+              : isFailed
+              ? 'AI Pipeline — Some Items Failed'
+              : isScoring
+              ? 'AI Pipeline — Scoring Themes'
+              : 'AI Pipeline Running'}
           </div>
           <div style={{ fontSize: '0.78rem', color: '#546e7a', marginTop: '0.1rem' }}>
             {stageLabel}
@@ -296,8 +324,10 @@ export function AIPipelineProgress({ workspaceId, batchId: propBatchId, onComple
 
         {!isCompleted && (
           <span style={{
-            fontSize: '0.8rem', fontWeight: 700, color: '#1a73e8',
-            background: '#fff', border: '1px solid #90caf9',
+            fontSize: '0.8rem', fontWeight: 700,
+            color: isScoring ? '#7c3aed' : '#1a73e8',
+            background: '#fff',
+            border: `1px solid ${isScoring ? '#d8b4fe' : '#90caf9'}`,
             borderRadius: '999px', padding: '0.15rem 0.6rem', flexShrink: 0,
           }}>
             {pct}%
@@ -324,7 +354,8 @@ export function AIPipelineProgress({ workspaceId, batchId: propBatchId, onComple
             const currentStep = getStepIndex(stage);
             const isDone    = idx < currentStep;
             const isActive  = idx === currentStep;
-            const isPending = idx > currentStep;
+            const doneColor = step.stage === 'SCORING' ? '#7c3aed' : '#20A4A4';
+            const activeColor = step.stage === 'SCORING' ? '#7c3aed' : '#1a73e8';
             return (
               <div key={step.stage} style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
                 <div style={{
@@ -335,17 +366,17 @@ export function AIPipelineProgress({ workspaceId, batchId: propBatchId, onComple
                     width: 28, height: 28, borderRadius: '50%',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: '0.75rem',
-                    background: isDone ? '#20A4A4' : isActive ? '#1a73e8' : '#e9ecef',
+                    background: isDone ? doneColor : isActive ? activeColor : '#e9ecef',
                     color: isDone || isActive ? '#fff' : '#adb5bd',
                     fontWeight: 700,
-                    boxShadow: isActive ? '0 0 0 3px #90caf940' : 'none',
+                    boxShadow: isActive ? `0 0 0 3px ${activeColor}40` : 'none',
                     transition: 'all 0.3s ease',
                   }}>
                     {isDone ? '✓' : step.icon}
                   </div>
                   <span style={{
                     fontSize: '0.62rem', fontWeight: isActive ? 700 : 400,
-                    color: isDone ? '#20A4A4' : isActive ? '#1a73e8' : '#adb5bd',
+                    color: isDone ? doneColor : isActive ? activeColor : '#adb5bd',
                     whiteSpace: 'nowrap',
                   }}>
                     {step.label}
@@ -354,7 +385,7 @@ export function AIPipelineProgress({ workspaceId, batchId: propBatchId, onComple
                 {idx < PIPELINE_STEPS.length - 1 && (
                   <div style={{
                     flex: 1, height: 2, margin: '0 0.25rem', marginBottom: '1rem',
-                    background: isDone ? '#20A4A4' : '#e9ecef',
+                    background: isDone ? doneColor : '#e9ecef',
                     transition: 'background 0.3s ease',
                   }} />
                 )}

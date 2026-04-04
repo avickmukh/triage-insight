@@ -1,5 +1,14 @@
-import { Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
-import { WorkspaceStatus, FeedbackPrimarySource, FeedbackSecondarySource, FeedbackSourceType } from '@prisma/client';
+import {
+  Injectable,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
+import {
+  WorkspaceStatus,
+  FeedbackPrimarySource,
+  FeedbackSecondarySource,
+  FeedbackSourceType,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PlanLimitService } from '../billing/plan-limit.service';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
@@ -74,26 +83,28 @@ export class FeedbackService {
       (createFeedbackDto.sourceType === FeedbackSourceType.VOICE
         ? FeedbackPrimarySource.VOICE
         : createFeedbackDto.sourceType === FeedbackSourceType.SURVEY
-        ? FeedbackPrimarySource.SURVEY
-        : FeedbackPrimarySource.FEEDBACK);
+          ? FeedbackPrimarySource.SURVEY
+          : FeedbackPrimarySource.FEEDBACK);
 
     const secondarySource: FeedbackSecondarySource =
       createFeedbackDto.secondarySource ??
       (createFeedbackDto.sourceType === FeedbackSourceType.VOICE
         ? FeedbackSecondarySource.TRANSCRIPT
         : createFeedbackDto.sourceType === FeedbackSourceType.SURVEY
-        ? FeedbackSecondarySource.PORTAL
-        : createFeedbackDto.sourceType === FeedbackSourceType.EMAIL
-        ? FeedbackSecondarySource.EMAIL
-        : createFeedbackDto.sourceType === FeedbackSourceType.SLACK
-        ? FeedbackSecondarySource.SLACK
-        : createFeedbackDto.sourceType === FeedbackSourceType.PUBLIC_PORTAL
-        ? FeedbackSecondarySource.PORTAL
-        : createFeedbackDto.sourceType === FeedbackSourceType.API
-        ? FeedbackSecondarySource.API
-        : createFeedbackDto.sourceType === FeedbackSourceType.CSV_IMPORT
-        ? FeedbackSecondarySource.CSV_UPLOAD
-        : FeedbackSecondarySource.MANUAL);
+          ? FeedbackSecondarySource.PORTAL
+          : createFeedbackDto.sourceType === FeedbackSourceType.EMAIL
+            ? FeedbackSecondarySource.EMAIL
+            : createFeedbackDto.sourceType === FeedbackSourceType.SLACK
+              ? FeedbackSecondarySource.SLACK
+              : createFeedbackDto.sourceType ===
+                  FeedbackSourceType.PUBLIC_PORTAL
+                ? FeedbackSecondarySource.PORTAL
+                : createFeedbackDto.sourceType === FeedbackSourceType.API
+                  ? FeedbackSecondarySource.API
+                  : createFeedbackDto.sourceType ===
+                      FeedbackSourceType.CSV_IMPORT
+                    ? FeedbackSecondarySource.CSV_UPLOAD
+                    : FeedbackSecondarySource.MANUAL);
 
     const newFeedback = await this.prisma.feedback.create({
       data: {
@@ -115,7 +126,10 @@ export class FeedbackService {
     try {
       await this.analysisQueue.add({ feedbackId: newFeedback.id, workspaceId });
     } catch (e) {
-      console.warn('[FeedbackService] analysisQueue unavailable — skipping', (e as Error).message);
+      console.warn(
+        '[FeedbackService] analysisQueue unavailable — skipping',
+        (e as Error).message,
+      );
     }
 
     // Dispatch CIQ scoring job — wrapped so Redis unavailability doesn't 500
@@ -126,14 +140,26 @@ export class FeedbackService {
         feedbackId: newFeedback.id,
       });
     } catch (e) {
-      console.warn('[FeedbackService] ciqQueue unavailable — skipping', (e as Error).message);
+      console.warn(
+        '[FeedbackService] ciqQueue unavailable — skipping',
+        (e as Error).message,
+      );
     }
 
     return newFeedback;
   }
 
   async findAll(workspaceId: string, query: QueryFeedbackDto) {
-    const { page = 1, limit = 10, search, status, sourceType, primarySource, secondarySource, customerId } = query;
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      status,
+      sourceType,
+      primarySource,
+      secondarySource,
+      customerId,
+    } = query;
     const where: Prisma.FeedbackWhereInput = {
       workspaceId,
       status,
@@ -178,7 +204,13 @@ export class FeedbackService {
             include: {
               theme: {
                 // ciqScore + priorityScore surfaced for Inbox decision context
-                select: { id: true, title: true, shortLabel: true, ciqScore: true, priorityScore: true },
+                select: {
+                  id: true,
+                  title: true,
+                  shortLabel: true,
+                  ciqScore: true,
+                  priorityScore: true,
+                },
               },
             },
             orderBy: { confidence: 'desc' },
@@ -246,7 +278,11 @@ export class FeedbackService {
     return feedback;
   }
 
-  async update(workspaceId: string, id: string, updateFeedbackDto: UpdateFeedbackDto) {
+  async update(
+    workspaceId: string,
+    id: string,
+    updateFeedbackDto: UpdateFeedbackDto,
+  ) {
     await this.findOne(workspaceId, id); // Check existence and ownership
     return this.prisma.feedback.update({
       where: { id },
@@ -259,16 +295,32 @@ export class FeedbackService {
     return this.prisma.feedback.delete({ where: { id } });
   }
 
-  async createAttachmentPresignedUrl(workspaceId: string, feedbackId: string, fileName: string, contentType: string) {
+  async createAttachmentPresignedUrl(
+    workspaceId: string,
+    feedbackId: string,
+    fileName: string,
+    contentType: string,
+  ) {
     await this.findOne(workspaceId, feedbackId);
-    const { signedUrl, key } = await this.s3.createPresignedUrl(workspaceId, fileName, contentType);
+    const { signedUrl, key } = await this.s3.createPresignedUrl(
+      workspaceId,
+      fileName,
+      contentType,
+    );
 
     return { signedUrl, key };
   }
 
-  async confirmAttachment(workspaceId: string, feedbackId: string, key: string, fileName: string, mimeType: string, sizeBytes: number) {
+  async confirmAttachment(
+    workspaceId: string,
+    feedbackId: string,
+    key: string,
+    fileName: string,
+    mimeType: string,
+    sizeBytes: number,
+  ) {
     await this.findOne(workspaceId, feedbackId);
-    
+
     return this.prisma.feedbackAttachment.create({
       data: {
         feedbackId,
@@ -297,7 +349,9 @@ export class FeedbackService {
    * Jobs are added in batches of 50 to avoid overwhelming the queue.
    * Returns { enqueued, total }.
    */
-  async reprocessPipeline(workspaceId: string): Promise<{ enqueued: number; total: number }> {
+  async reprocessPipeline(
+    workspaceId: string,
+  ): Promise<{ enqueued: number; total: number }> {
     // Find all feedback that needs processing: no embedding OR no theme link
     const unprocessed = await this.prisma.feedback.findMany({
       where: {
@@ -315,7 +369,9 @@ export class FeedbackService {
 
     const total = unprocessed.length;
     if (total === 0) {
-      console.log(`[FeedbackService] reprocessPipeline: nothing to process for workspace ${workspaceId}`);
+      console.log(
+        `[FeedbackService] reprocessPipeline: nothing to process for workspace ${workspaceId}`,
+      );
       return { enqueued: 0, total: 0 };
     }
 
@@ -367,7 +423,10 @@ export class FeedbackService {
    * Trigger CIQ re-scoring for all themes linked to a feedback item.
    * Called after feedback is merged or its customer ARR changes.
    */
-  async triggerThemeCiqRescore(workspaceId: string, feedbackId: string): Promise<void> {
+  async triggerThemeCiqRescore(
+    workspaceId: string,
+    feedbackId: string,
+  ): Promise<void> {
     const themeLinks = await this.prisma.themeFeedback.findMany({
       where: { feedbackId },
       select: { themeId: true },
@@ -380,7 +439,10 @@ export class FeedbackService {
           themeId: link.themeId,
         });
       } catch (e) {
-        console.warn('[FeedbackService] ciqQueue unavailable — skipping rescore', (e as Error).message);
+        console.warn(
+          '[FeedbackService] ciqQueue unavailable — skipping rescore',
+          (e as Error).message,
+        );
       }
     }
   }
@@ -406,19 +468,20 @@ export class FeedbackService {
     await this.findOne(workspaceId, feedbackId);
 
     // ── Primary: AI-persisted embedding-based suggestions ─────────────────
-    const aiSuggestions = await this.prisma.feedbackDuplicateSuggestion.findMany({
-      where: {
-        sourceId: feedbackId,
-        status: 'PENDING',
-        // Tenant isolation: both source and target must belong to this workspace
-        targetFeedback: { workspaceId },
-      },
-      include: {
-        targetFeedback: { select: { id: true, title: true } },
-      },
-      orderBy: { similarity: 'desc' },
-      take: limit,
-    });
+    const aiSuggestions =
+      await this.prisma.feedbackDuplicateSuggestion.findMany({
+        where: {
+          sourceId: feedbackId,
+          status: 'PENDING',
+          // Tenant isolation: both source and target must belong to this workspace
+          targetFeedback: { workspaceId },
+        },
+        include: {
+          targetFeedback: { select: { id: true, title: true } },
+        },
+        orderBy: { similarity: 'desc' },
+        take: limit,
+      });
 
     if (aiSuggestions.length > 0) {
       return aiSuggestions.map((s) => ({
@@ -435,7 +498,9 @@ export class FeedbackService {
     });
     if (!source) return [];
 
-    const sourceText = (source.normalizedText ?? source.description).toLowerCase();
+    const sourceText = (
+      source.normalizedText ?? source.description
+    ).toLowerCase();
     const keywords = [...new Set(sourceText.match(/\b\w{4,}\b/g) ?? [])];
     if (keywords.length === 0) return [];
 
@@ -445,7 +510,12 @@ export class FeedbackService {
         id: { not: feedbackId },
         status: { notIn: ['MERGED', 'ARCHIVED'] },
       },
-      select: { id: true, title: true, normalizedText: true, description: true },
+      select: {
+        id: true,
+        title: true,
+        normalizedText: true,
+        description: true,
+      },
       orderBy: { createdAt: 'desc' },
       take: 200,
     });
@@ -453,7 +523,9 @@ export class FeedbackService {
     return candidates
       .map((c) => {
         const candidateText = (c.normalizedText ?? c.description).toLowerCase();
-        const matches = keywords.filter((kw) => candidateText.includes(kw)).length;
+        const matches = keywords.filter((kw) =>
+          candidateText.includes(kw),
+        ).length;
         return { id: c.id, title: c.title, score: matches / keywords.length };
       })
       .filter((c) => c.score > 0)
@@ -487,7 +559,9 @@ export class FeedbackService {
     }
 
     // Check whether the source item has an embedding
-    const embeddingCheck = await this.prisma.$queryRaw<{ has_embedding: boolean }[]>`
+    const embeddingCheck = await this.prisma.$queryRaw<
+      { has_embedding: boolean }[]
+    >`
       SELECT (embedding IS NOT NULL) AS has_embedding
       FROM "Feedback"
       WHERE id = ${feedbackId}
@@ -592,7 +666,9 @@ export class FeedbackService {
       where: { feedbackId, workspaceId },
       orderBy: { createdAt: 'asc' },
       include: {
-        user: { select: { id: true, firstName: true, lastName: true, email: true } },
+        user: {
+          select: { id: true, firstName: true, lastName: true, email: true },
+        },
       },
     });
   }
@@ -626,12 +702,15 @@ export class FeedbackService {
         userId,
         body: content,
         authorName: user
-          ? `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() || user.email
+          ? `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() ||
+            user.email
           : undefined,
         authorEmail: user?.email,
       },
       include: {
-        user: { select: { id: true, firstName: true, lastName: true, email: true } },
+        user: {
+          select: { id: true, firstName: true, lastName: true, email: true },
+        },
       },
     });
   }
@@ -649,7 +728,11 @@ export class FeedbackService {
    * This prevents the "ghost pipeline" bug where a crashed job leaves the
    * banner stuck at 1% forever because pending > 0 never resolves.
    *
-   * Stages: IDLE → QUEUED → ANALYZING → CLUSTERING → COMPLETED | FAILED
+   * Stages: IDLE → QUEUED → ANALYZING → CLUSTERING → SCORING → COMPLETED | FAILED
+   *
+   * SCORING stage: CIQ_SCORING_THEME / CIQ_SCORING_FEEDBACK jobs are running.
+   * These are enqueued by runBatchFinalization() after clustering completes.
+   * The banner must NOT show COMPLETED until CIQ scoring is also done.
    */
   async getPipelineStatus(workspaceId: string): Promise<{
     isRunning: boolean;
@@ -683,54 +766,80 @@ export class FeedbackService {
     });
     if (staleRecords.length > 0) {
       const staleIds = staleRecords.map((r) => r.id);
-      await this.prisma.aiJobLog.updateMany({
-        where: { id: { in: staleIds } },
-        data: {
-          status: 'FAILED',
-          completedAt: new Date(),
-          error: '[AUTO-HEALED] Job was stuck in RUNNING state for >15 minutes — marked as failed.',
-        },
-      }).catch(() => { /* non-critical */ });
+      await this.prisma.aiJobLog
+        .updateMany({
+          where: { id: { in: staleIds } },
+          data: {
+            status: 'FAILED',
+            completedAt: new Date(),
+            error:
+              '[AUTO-HEALED] Job was stuck in RUNNING state for >15 minutes — marked as failed.',
+          },
+        })
+        .catch(() => {
+          /* non-critical */
+        });
     }
 
-    const [total, completed, failed, pending, runningJobs, workspace] = await Promise.all([
-      this.prisma.aiJobLog.count({
-        where: { workspaceId, createdAt: { gte: since } },
-      }),
-      this.prisma.aiJobLog.count({
-        where: { workspaceId, status: 'COMPLETED', createdAt: { gte: since } },
-      }),
-      this.prisma.aiJobLog.count({
-        where: { workspaceId, status: { in: ['FAILED', 'DEAD_LETTERED'] }, createdAt: { gte: since } },
-      }),
-      // Count only fresh RUNNING records (post-heal, stale ones are now FAILED).
-      this.prisma.aiJobLog.count({
-        where: {
-          workspaceId,
-          status: 'RUNNING',
-          createdAt: { gte: since },
-          startedAt: { gte: staleThreshold },
-        },
-      }),
-      this.prisma.aiJobLog.findMany({
-        where: {
-          workspaceId,
-          status: 'RUNNING',
-          createdAt: { gte: since },
-          startedAt: { gte: staleThreshold },
-        },
-        select: { jobType: true },
-        take: 5,
-      }),
-      this.prisma.workspace.findUnique({
-        where: { id: workspaceId },
-        select: { pipelineStatus: true },
-      }),
-    ]);
+    const [total, completed, failed, pending, runningJobs, workspace, ciqRunning] =
+      await Promise.all([
+        this.prisma.aiJobLog.count({
+          where: { workspaceId, createdAt: { gte: since } },
+        }),
+        this.prisma.aiJobLog.count({
+          where: {
+            workspaceId,
+            status: 'COMPLETED',
+            createdAt: { gte: since },
+          },
+        }),
+        this.prisma.aiJobLog.count({
+          where: {
+            workspaceId,
+            status: { in: ['FAILED', 'DEAD_LETTERED'] },
+            createdAt: { gte: since },
+          },
+        }),
+        // Count only fresh RUNNING records (post-heal, stale ones are now FAILED).
+        this.prisma.aiJobLog.count({
+          where: {
+            workspaceId,
+            status: 'RUNNING',
+            createdAt: { gte: since },
+            startedAt: { gte: staleThreshold },
+          },
+        }),
+        this.prisma.aiJobLog.findMany({
+          where: {
+            workspaceId,
+            status: 'RUNNING',
+            createdAt: { gte: since },
+            startedAt: { gte: staleThreshold },
+          },
+          select: { jobType: true },
+          take: 10,
+        }),
+        this.prisma.workspace.findUnique({
+          where: { id: workspaceId },
+          select: { pipelineStatus: true },
+        }),
+        // CIQ scoring jobs running — these run AFTER clustering completes
+        this.prisma.aiJobLog.count({
+          where: {
+            workspaceId,
+            jobType: { in: ['CIQ_SCORING_THEME', 'CIQ_SCORING_FEEDBACK'] as any[] },
+            status: 'RUNNING',
+            createdAt: { gte: since },
+            startedAt: { gte: staleThreshold },
+          },
+        }),
+      ]);
 
     const isRunning = pending > 0;
     // If there are no jobs at all in the 2h window, the pipeline is IDLE.
-    const pct = total === 0 ? 0 : Math.round(((completed + failed) / total) * 100);
+    // Phase 1 pct: 0–70% (embedding/clustering). Phase 2 pct: 70–100% (CIQ scoring).
+    const pct =
+      total === 0 ? 0 : Math.round(((completed + failed) / total) * 70);
 
     // Derive human-readable stage from running job types
     let stage: string;
@@ -739,13 +848,18 @@ export class FeedbackService {
       stage = 'IDLE';
     } else if (isRunning) {
       const runningTypes = runningJobs.map((j) => String(j.jobType));
-      if (runningTypes.includes('THEME_CLUSTERING')) {
+      if (runningTypes.includes('CIQ_SCORING_THEME') || runningTypes.includes('CIQ_SCORING_FEEDBACK')) {
+        stage = 'SCORING';
+      } else if (runningTypes.includes('THEME_CLUSTERING')) {
         stage = 'CLUSTERING';
       } else if (runningTypes.includes('FEEDBACK_SUMMARY')) {
         stage = 'ANALYZING';
       } else {
         stage = 'QUEUED';
       }
+    } else if (ciqRunning > 0) {
+      // CIQ jobs still running even though main analysis jobs are done
+      stage = 'SCORING';
     } else {
       // pending === 0 and total > 0 → all jobs are done
       stage = failed > 0 && completed === 0 ? 'FAILED' : 'COMPLETED';
@@ -756,15 +870,19 @@ export class FeedbackService {
     // statuses (e.g. ANALYZING from a previous run) are cleared.
     const currentPersistedStatus = workspace?.pipelineStatus ?? 'IDLE';
     if (stage !== currentPersistedStatus) {
-      this.prisma.workspace.update({
-        where: { id: workspaceId },
-        data: { pipelineStatus: stage, pipelineUpdatedAt: new Date() },
-      }).catch(() => { /* non-critical */ });
+      this.prisma.workspace
+        .update({
+          where: { id: workspaceId },
+          data: { pipelineStatus: stage, pipelineUpdatedAt: new Date() },
+        })
+        .catch(() => {
+          /* non-critical */
+        });
     }
 
     // Estimate seconds remaining based on average completed job duration
     let estimatedSecondsLeft: number | null = null;
-    if (isRunning && completed > 0) {
+    if ((isRunning || ciqRunning > 0) && completed > 0) {
       const avgDuration = await this.prisma.aiJobLog.aggregate({
         where: {
           workspaceId,
@@ -778,7 +896,16 @@ export class FeedbackService {
       estimatedSecondsLeft = Math.ceil((pending * avgMs) / 1000);
     }
 
-    return { isRunning, stage, total, completed, failed, pending, pct, estimatedSecondsLeft };
+    return {
+      isRunning,
+      stage,
+      total,
+      completed,
+      failed,
+      pending,
+      pct,
+      estimatedSecondsLeft,
+    };
   }
 
   /**
@@ -786,7 +913,9 @@ export class FeedbackService {
    * Also flips any stuck RUNNING AiJobLog records to FAILED.
    * Used by the frontend "Dismiss" button on the pipeline banner.
    */
-  async resetPipelineStatus(workspaceId: string): Promise<{ reset: true; healed: number }> {
+  async resetPipelineStatus(
+    workspaceId: string,
+  ): Promise<{ reset: true; healed: number }> {
     // Flip all RUNNING records to FAILED
     const result = await this.prisma.aiJobLog.updateMany({
       where: { workspaceId, status: 'RUNNING' },
@@ -797,10 +926,14 @@ export class FeedbackService {
       },
     });
     // Reset workspace pipelineStatus to IDLE
-    await this.prisma.workspace.update({
-      where: { id: workspaceId },
-      data: { pipelineStatus: 'IDLE', pipelineUpdatedAt: new Date() },
-    }).catch(() => { /* non-critical */ });
+    await this.prisma.workspace
+      .update({
+        where: { id: workspaceId },
+        data: { pipelineStatus: 'IDLE', pipelineUpdatedAt: new Date() },
+      })
+      .catch(() => {
+        /* non-critical */
+      });
     return { reset: true, healed: result.count };
   }
 
@@ -809,10 +942,14 @@ export class FeedbackService {
    * This ensures the frontend shows the loader without waiting for the first poll cycle.
    */
   async markPipelineStarted(workspaceId: string): Promise<void> {
-    await this.prisma.workspace.update({
-      where: { id: workspaceId },
-      data: { pipelineStatus: 'QUEUED', pipelineUpdatedAt: new Date() },
-    }).catch(() => { /* non-critical */ });
+    await this.prisma.workspace
+      .update({
+        where: { id: workspaceId },
+        data: { pipelineStatus: 'QUEUED', pipelineUpdatedAt: new Date() },
+      })
+      .catch(() => {
+        /* non-critical */
+      });
   }
 
   // ── Bulk Actions (Step 3 Gap Fix) ──────────────────────────────────────────
@@ -821,7 +958,10 @@ export class FeedbackService {
    * Bulk dismiss: sets status to ARCHIVED for all given feedbackIds
    * that belong to the workspace.
    */
-  async bulkDismiss(workspaceId: string, feedbackIds: string[]): Promise<{ updated: number }> {
+  async bulkDismiss(
+    workspaceId: string,
+    feedbackIds: string[],
+  ): Promise<{ updated: number }> {
     const result = await this.prisma.feedback.updateMany({
       where: { id: { in: feedbackIds }, workspaceId },
       data: { status: 'ARCHIVED' as any },
@@ -839,7 +979,9 @@ export class FeedbackService {
     themeId: string,
   ): Promise<{ assigned: number }> {
     // Verify theme belongs to workspace
-    const theme = await this.prisma.theme.findFirst({ where: { id: themeId, workspaceId } });
+    const theme = await this.prisma.theme.findFirst({
+      where: { id: themeId, workspaceId },
+    });
     if (!theme) throw new NotFoundException('Theme not found');
 
     // Verify all feedback items belong to workspace
@@ -865,7 +1007,10 @@ export class FeedbackService {
     try {
       await this.ciqQueue.add({ type: 'THEME_SCORED', workspaceId, themeId });
     } catch (queueErr) {
-      console.warn('[Queue] Redis unavailable — CIQ re-score skipped:', (queueErr as Error).message);
+      console.warn(
+        '[Queue] Redis unavailable — CIQ re-score skipped:',
+        (queueErr as Error).message,
+      );
     }
 
     return { assigned: validIds.length };
