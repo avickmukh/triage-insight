@@ -5,6 +5,23 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { EmbeddingService } from './embedding.service';
 import { CIQ_SCORING_QUEUE } from '../processors/ciq-scoring.processor';
 import { AutoMergeService } from './auto-merge.service';
+import { IntentClassifierService } from './intent-classifier.service';
+import {
+  W_SEMANTIC,
+  W_KEYWORD,
+  W_SIZE_BIAS,
+  W_CIQ_BIAS,
+  VECTOR_CANDIDATES,
+  SOFT_MATCH_MULTIPLIER,
+  THEME_CAP_GUARDRAIL,
+  OUTLIER_THRESHOLD,
+  CIQ_MAX,
+  CIQ_HIGH_THRESHOLD,
+  BATCH_MIN_CLUSTER_SIZE,
+  BORDERLINE_SCORE_THRESHOLD,
+  BATCH_MERGE_THRESHOLD,
+  WEAK_CLUSTER_MERGE_THRESHOLD,
+} from '../config/clustering-thresholds.config';
 
 /**
  * ThemeClusteringService — Adaptive Product Intelligence Engine
@@ -39,38 +56,39 @@ export class ThemeClusteringService {
   private readonly logger = new Logger(ThemeClusteringService.name);
 
   // ─── Assignment score weights (must sum to 1.0) ──────────────────────────
-  private readonly W_SEMANTIC   = 0.70;
-  private readonly W_KEYWORD    = 0.05;
-  private readonly W_SIZE_BIAS  = 0.10;
-  private readonly W_CIQ_BIAS   = 0.15;
+  // Assignment weights — sourced from clustering-thresholds.config.ts
+  private readonly W_SEMANTIC   = W_SEMANTIC;
+  private readonly W_KEYWORD    = W_KEYWORD;
+  private readonly W_SIZE_BIAS  = W_SIZE_BIAS;
+  private readonly W_CIQ_BIAS   = W_CIQ_BIAS;
 
   // ─── Vector search ───────────────────────────────────────────────────────
   /** Number of nearest-neighbour candidates fetched from pgvector per query. */
-  private readonly VECTOR_CANDIDATES = 15;
+  private readonly VECTOR_CANDIDATES = VECTOR_CANDIDATES;
 
   // ─── Soft-match multiplier ────────────────────────────────────────────────
   /**
    * When workspace has many themes, accept a match at
    * noveltyThreshold × SOFT_MATCH_MULTIPLIER to prevent theme explosion.
    */
-  private readonly SOFT_MATCH_MULTIPLIER = 0.92;
+  private readonly SOFT_MATCH_MULTIPLIER = SOFT_MATCH_MULTIPLIER;
 
   // ─── Theme-cap guardrail ─────────────────────────────────────────────────
   /** Activate soft-match when active theme count exceeds this. */
-  private readonly THEME_CAP_GUARDRAIL = 20;
+  private readonly THEME_CAP_GUARDRAIL = THEME_CAP_GUARDRAIL;
 
   // ─── Outlier threshold ───────────────────────────────────────────────────
   /** Hybrid scores below this are flagged as potential outliers. */
-  private readonly OUTLIER_THRESHOLD = 0.45;
+  private readonly OUTLIER_THRESHOLD = OUTLIER_THRESHOLD;
 
   // ─── CIQ bias constants ──────────────────────────────────────────────────
   /** Max CIQ score stored in DB (0–100 scale). */
-  private readonly CIQ_MAX = 100;
+  private readonly CIQ_MAX = CIQ_MAX;
   /**
    * Boost applied to centroid update when feedback CIQ is above this percentile.
    * High-CIQ feedback gets weight 2× in the centroid average.
    */
-  private readonly CIQ_HIGH_THRESHOLD = 60;
+  private readonly CIQ_HIGH_THRESHOLD = CIQ_HIGH_THRESHOLD;
 
   // ─── Batch finalization thresholds (configurable) ────────────────────────
   /**
@@ -78,27 +96,27 @@ export class ThemeClusteringService {
    * finalization to survive. Themes below this are merged or archived.
    * Default: 2 — a single-item cluster is treated as noise.
    */
-  private readonly BATCH_MIN_CLUSTER_SIZE = 2;
+  private readonly BATCH_MIN_CLUSTER_SIZE = BATCH_MIN_CLUSTER_SIZE;
   /**
    * Confidence score below which a ThemeFeedback link is considered
    * borderline and eligible for reassignment during batch finalization.
    * Default: 0.60
    */
-  private readonly BORDERLINE_SCORE_THRESHOLD = 0.60;
+  private readonly BORDERLINE_SCORE_THRESHOLD = BORDERLINE_SCORE_THRESHOLD;
   /**
    * Cosine similarity threshold used during the batch merge pass.
    * More aggressive than the incremental merge threshold so draft clusters
    * collapse before becoming visible.
    * Default: 0.78
    */
-  private readonly BATCH_MERGE_THRESHOLD = 0.78;
+  private readonly BATCH_MERGE_THRESHOLD = BATCH_MERGE_THRESHOLD;
   /**
    * Cosine similarity threshold for merging a weak cluster into its nearest
    * neighbour during weak-cluster suppression.
    * If no neighbour exceeds this, the cluster is archived.
    * Default: 0.65
    */
-  private readonly WEAK_CLUSTER_MERGE_THRESHOLD = 0.65;
+  private readonly WEAK_CLUSTER_MERGE_THRESHOLD = WEAK_CLUSTER_MERGE_THRESHOLD;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -106,6 +124,7 @@ export class ThemeClusteringService {
     @InjectQueue(CIQ_SCORING_QUEUE) private readonly ciqQueue: Queue,
     @Inject(forwardRef(() => AutoMergeService))
     private readonly autoMergeService: AutoMergeService,
+    private readonly intentClassifier: IntentClassifierService,
   ) {}
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -183,6 +202,8 @@ export class ThemeClusteringService {
     // Post-transaction work (outside lock).
     if (assignedThemeId) {
       await this.recomputeClusterConfidence(assignedThemeId);
+      // Update intent domain classification (non-blocking, non-fatal)
+      this.updateThemeIntentDomain(assignedThemeId).catch(() => {/* non-fatal */});
 
       // ── AUTO_MERGE_INVOKE (hot path) ────────────────────────────────────
       // After creating a new PROVISIONAL theme, immediately scan for a merge
@@ -1600,6 +1621,63 @@ export class ThemeClusteringService {
     } catch (err) {
       this.logger.warn(
         `[Confidence] Failed for theme ${themeId}: ${(err as Error).message}`,
+      );
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PUBLIC: INTENT DOMAIN CLASSIFICATION
+  // ─────────────────────────────────────────────────────────────────────────
+  /**
+   * Classify a theme's intent domain using the IntentClassifierService.
+   *
+   * Reads topKeywords + dominantSignal from the theme row, runs the
+   * two-stage classifier (keyword → LLM fallback), and persists the result
+   * into signalBreakdown.intentDomain.
+   *
+   * Non-fatal: classification failures are logged as warnings.
+   */
+  async updateThemeIntentDomain(themeId: string): Promise<void> {
+    try {
+      const theme = await this.prisma.theme.findUnique({
+        where: { id: themeId },
+        select: { topKeywords: true, dominantSignal: true, title: true, signalBreakdown: true },
+      });
+      if (!theme) return;
+
+      const keywords: string[] = Array.isArray(theme.topKeywords)
+        ? (theme.topKeywords as string[])
+        : [];
+      const text = [
+        theme.title,
+        theme.dominantSignal ?? '',
+        keywords.join(' '),
+      ].filter(Boolean).join(' ');
+
+      const classification = await this.intentClassifier.classify(text);
+
+      // Merge into existing signalBreakdown JSON
+      const existing = (theme.signalBreakdown ?? {}) as Record<string, unknown>;
+      await this.prisma.theme.update({
+        where: { id: themeId },
+        data: {
+          signalBreakdown: {
+            ...existing,
+            intentDomain: classification.domain,
+            intentConfidence: classification.confidence,
+            intentMethod: classification.method,
+            intentImpactWeight: classification.impactWeight,
+            intentSecondaryDomain: classification.secondaryDomain ?? null,
+          },
+        },
+      });
+      this.logger.debug(
+        `[IntentClassifier] Theme ${themeId}: domain=${classification.domain} ` +
+          `confidence=${classification.confidence.toFixed(2)} method=${classification.method}`,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `[IntentClassifier] Failed for theme ${themeId}: ${(err as Error).message}`,
       );
     }
   }

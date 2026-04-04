@@ -479,6 +479,67 @@ export class AggregationService {
       this.prisma.prioritizationSettings.findUnique({ where: { workspaceId } }),
     ]);
 
+    // ── Fallback: synthesize virtual roadmap items from top-scored themes ──────
+    // When no RoadmapItem rows exist (workspace hasn't used the roadmap feature),
+    // return the top-N themes as virtual backlog items so the page is never empty.
+    if (roadmapItems.length === 0) {
+      const topThemes = await this.prisma.theme.findMany({
+        where: { workspaceId, status: { not: ThemeStatus.ARCHIVED } },
+        select: {
+          id: true, title: true, priorityScore: true, ciqScore: true,
+          revenueScore: true, urgencyScore: true, revenueInfluence: true,
+          strategicTag: true, feedbackCount: true,
+        },
+        orderBy: { ciqScore: { sort: 'desc', nulls: 'last' } },
+        take: limit,
+      });
+      return topThemes.map((theme) => {
+        const score = clamp100(theme.ciqScore ?? (theme.priorityScore ?? 0) * 100);
+        const urgencyNorm = clamp100(theme.urgencyScore ?? 0);
+        const revenueNorm = clamp100(theme.revenueScore ?? 0);
+        const demandNorm  = clamp100(countNorm(theme.feedbackCount ?? 0, 20));
+        const strategicNorm = clamp100(
+          theme.strategicTag === 'strategic' ? 100 :
+          theme.strategicTag === 'core' ? 70 : 50,
+        );
+        let recommendation: RoadmapRecommendationItem['recommendation'];
+        let rationale: string;
+        if (score >= 75) {
+          recommendation = 'promote_to_committed';
+          rationale = `High CIQ score (${score.toFixed(0)}/100) — recommend committing to roadmap.`;
+        } else if (score >= 50) {
+          recommendation = 'promote_to_planned';
+          rationale = `Moderate-high CIQ score (${score.toFixed(0)}/100) — recommend planning.`;
+        } else if (score < 25) {
+          recommendation = 'deprioritise';
+          rationale = `Low CIQ score (${score.toFixed(0)}/100) — consider deprioritising.`;
+        } else {
+          recommendation = 'keep_current';
+          rationale = `CIQ score (${score.toFixed(0)}/100) — monitor for changes.`;
+        }
+        const breakdown: PrioritizationScoreBreakdown = {
+          demandStrength:      { raw: demandNorm,    normalised: demandNorm,    weight: 0.30, contribution: demandNorm * 0.30,    label: 'Demand Strength',     factors: { feedbackCount: theme.feedbackCount ?? 0 } },
+          revenueImpact:       { raw: revenueNorm,   normalised: revenueNorm,   weight: 0.35, contribution: revenueNorm * 0.35,   label: 'Revenue Impact',      factors: { revenueInfluence: theme.revenueInfluence ?? 0 } },
+          strategicImportance: { raw: strategicNorm, normalised: strategicNorm, weight: 0.20, contribution: strategicNorm * 0.20, label: 'Strategic Importance', factors: { tagMultiplier: theme.strategicTag === 'strategic' ? 1.5 : theme.strategicTag === 'core' ? 1.2 : 1.0 } },
+          urgencySignal:       { raw: urgencyNorm,   normalised: urgencyNorm,   weight: 0.15, contribution: urgencyNorm * 0.15,   label: 'Urgency Signals',     factors: {} },
+        };
+        return {
+          roadmapItemId: `virtual:${theme.id}`,
+          title: theme.title,
+          status: RoadmapStatus.BACKLOG,
+          themeId: theme.id,
+          themeTitle: theme.title,
+          roadmapRecommendationScore: parseFloat(score.toFixed(2)),
+          urgencyScore: parseFloat(urgencyNorm.toFixed(2)),
+          revenueOpportunityScore: parseFloat(revenueNorm.toFixed(2)),
+          priorityScore: parseFloat(score.toFixed(2)),
+          recommendation,
+          rationale,
+          breakdown,
+        } satisfies RoadmapRecommendationItem;
+      });
+    }
+    // ── Normal path: RoadmapItem rows exist ─────────────────────────────────
     const weights: DimensionWeights = settings ? {
       demandStrengthWeight:      settings.demandStrengthWeight,
       revenueImpactWeight:       settings.revenueImpactWeight,
@@ -600,7 +661,8 @@ export class AggregationService {
         (theme.urgencyScore ?? 0) * 0.30 +
         logNorm(arrAtRisk, 7) * 0.20,
       );
-      if (opportunityScore >= 30) {
+      // Lower threshold to 15 so signal-only workspaces (no ARR data) also show results
+      if (opportunityScore >= 15) {
         opportunities.push({
           type: 'theme', entityId: theme.id, title: theme.title,
           opportunityScore: parseFloat(opportunityScore.toFixed(2)),
@@ -628,6 +690,37 @@ export class AggregationService {
       }
     }
 
+    // ── Signal-only fallback: if no opportunities found (no ARR/urgency data),
+    // surface the top themes by CIQ score so the page is never empty.
+    if (opportunities.length === 0) {
+      const topThemes = await this.prisma.theme.findMany({
+        where: { workspaceId, status: { not: ThemeStatus.ARCHIVED } },
+        select: {
+          id: true, title: true, ciqScore: true, priorityScore: true,
+          revenueInfluence: true, feedbackCount: true,
+          roadmapItems: { select: { status: true }, take: 1 },
+        },
+        orderBy: { ciqScore: { sort: 'desc', nulls: 'last' } },
+        take: limit,
+      });
+      for (const theme of topThemes) {
+        const roadmapStatus = theme.roadmapItems[0]?.status;
+        if (roadmapStatus === RoadmapStatus.COMMITTED || roadmapStatus === RoadmapStatus.SHIPPED) continue;
+        const score = clamp100(theme.ciqScore ?? 0);
+        if (score < 10) continue;
+        opportunities.push({
+          type: 'theme',
+          entityId: theme.id,
+          title: theme.title,
+          opportunityScore: parseFloat(score.toFixed(2)),
+          revenueOpportunityScore: 0,
+          urgencyScore: 0,
+          reason: `High-signal theme (CIQ score: ${score.toFixed(0)}/100, ${theme.feedbackCount ?? 0} feedback items) — not yet committed to roadmap. Connect your CRM to unlock revenue-weighted scoring.`,
+          arrAtRisk: 0,
+          dealCount: 0,
+        });
+      }
+    }
     return opportunities
       .sort((a, b) => b.opportunityScore - a.opportunityScore)
       .slice(0, limit);

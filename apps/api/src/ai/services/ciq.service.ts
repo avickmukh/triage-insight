@@ -98,7 +98,61 @@ export interface CiqScoreOutput {
    * Indicates whether the score was computed in signal-only mode (no CRM data)
    * or in full mode (ARR + deal pipeline + customer data contributed).
    */
-  scoringMode?: 'signal-only' | 'full';
+   scoringMode?: 'signal-only' | 'full';
+  /** 7-class friction taxonomy for this theme */
+  frictionClass?: FrictionClass;
+  /** Priority band derived from score: low | medium | high | critical */
+  priorityBand?: 'low' | 'medium' | 'high' | 'critical';
+  /** Structured factor breakdown compatible with ThemePriorityResult */
+  breakdown?: ThemePriorityBreakdown[];
+}
+
+// ─── ThemePriorityResult ───────────────────────────────────────────────────────────────────────────────
+/**
+ * Strongly-typed factor name for the 5-factor CIQ formula.
+ */
+export type ThemePriorityFactor =
+  | 'volume'
+  | 'severity'
+  | 'frequency'
+  | 'friction'
+  | 'recency';
+
+/**
+ * Per-factor breakdown entry returned in ThemePriorityResult.
+ * Mirrors the spec interface for UI consumption.
+ */
+export interface ThemePriorityBreakdown {
+  factor: ThemePriorityFactor;
+  /** Raw 0–100 score before weighting */
+  raw: number;
+  /** Normalised 0–1 value */
+  normalized: number;
+  /** Weighted contribution: raw × weight */
+  weightedContribution: number;
+  /** Human-readable explanation of this factor's contribution */
+  explanation: string;
+}
+
+/**
+ * Rich typed result returned by scoreTheme.
+ * Compatible with the spec's ThemePriorityResult interface.
+ */
+export interface ThemePriorityResult {
+  /** Final 0–100 priority score */
+  score100: number;
+  /** Priority band: low (0–24) | medium (25–49) | high (50–74) | critical (75–100) */
+  priorityBand: 'low' | 'medium' | 'high' | 'critical';
+  /** Confidence 0–1 */
+  confidence: number;
+  /** Factor with the highest weighted contribution */
+  dominantDriver: ThemePriorityFactor;
+  /** 7-class friction taxonomy */
+  frictionClass: FrictionClass;
+  /** Human-readable explanation sentence */
+  scoreExplanation: string;
+  /** Per-factor breakdown array */
+  breakdown: ThemePriorityBreakdown[];
 }
 
 /** Lightweight feedback-level score (no theme aggregation needed) */
@@ -247,50 +301,113 @@ function computeSeverityScore(texts: string[]): number {
   return 40;
 }
 
-// ─── Friction scoring ─────────────────────────────────────────────────────────
-
+// ─── Friction classes ────────────────────────────────────────────────────────
 /**
- * Friction tiers based on theme topKeywords and dominantSignal.
- * Higher friction = more impact on core workflow = higher priority.
+ * 7 friction classes with business-impact weights (0–1).
+ * Weights are tuned to reflect how severely each class blocks user workflows.
  *
- *   CORE_WORKFLOW (1.0): login, auth, payment, data, export, import, api, sync
- *   NAVIGATION   (0.8):  navigation, search, filter, load, performance, speed
- *   FEATURE_LIMIT (0.6): limit, quota, plan, upgrade, missing feature, integration
- *   MINOR_UX     (0.4):  ui, design, color, layout, tooltip, label
+ *   core_workflow_blocked  (1.00): login, auth, payment, data, export, api, sync
+ *   permissions_access     (0.90): permission, role, access, forbidden, unauthorized
+ *   performance_latency    (0.85): slow, timeout, latency, load, crash, freeze
+ *   navigation_confusion   (0.80): navigation, search, filter, dashboard, report
+ *   reporting_visibility   (0.70): report, analytics, chart, metric, visibility
+ *   missing_configuration  (0.65): limit, quota, plan, upgrade, missing, feature
+ *   minor_ux               (0.40): ui, design, color, layout, tooltip, label
  */
-const FRICTION_CORE = [
-  'login', 'auth', 'authentication', 'payment', 'billing', 'data', 'export',
-  'import', 'api', 'sync', 'integration', 'webhook', 'security', 'access',
-  'permission', 'crash', 'error', 'fail',
-];
-const FRICTION_NAVIGATION = [
-  'navigation', 'search', 'filter', 'load', 'loading', 'performance', 'speed',
-  'slow', 'timeout', 'latency', 'dashboard', 'report',
-];
-const FRICTION_FEATURE = [
-  'limit', 'quota', 'plan', 'upgrade', 'missing', 'feature', 'integration',
-  'connect', 'support', 'add', 'request',
+export type FrictionClass =
+  | 'core_workflow_blocked'
+  | 'permissions_access'
+  | 'performance_latency'
+  | 'navigation_confusion'
+  | 'reporting_visibility'
+  | 'missing_configuration'
+  | 'minor_ux';
+
+export const FRICTION_CLASS_WEIGHTS: Record<FrictionClass, number> = {
+  core_workflow_blocked:  1.00,
+  permissions_access:     0.90,
+  performance_latency:    0.85,
+  navigation_confusion:   0.80,
+  reporting_visibility:   0.70,
+  missing_configuration:  0.65,
+  minor_ux:               0.40,
+};
+
+const FRICTION_KEYWORDS: Array<{ class: FrictionClass; keywords: string[] }> = [
+  {
+    class: 'core_workflow_blocked',
+    keywords: [
+      'login', 'logout', 'auth', 'authentication', 'payment', 'billing', 'checkout',
+      'data', 'export', 'import', 'api', 'sync', 'webhook', 'integration',
+      'crash', 'broken', 'error', 'fail', 'blocked', 'cannot', 'unable',
+    ],
+  },
+  {
+    class: 'permissions_access',
+    keywords: [
+      'permission', 'role', 'access', 'forbidden', 'unauthorized', 'denied',
+      'admin', 'privilege', 'visibility', 'share', 'invite', 'sso',
+    ],
+  },
+  {
+    class: 'performance_latency',
+    keywords: [
+      'slow', 'timeout', 'latency', 'load', 'loading', 'freeze', 'hang',
+      'performance', 'speed', 'lag', 'delay', 'unresponsive',
+    ],
+  },
+  {
+    class: 'navigation_confusion',
+    keywords: [
+      'navigation', 'menu', 'sidebar', 'search', 'filter', 'sort', 'find',
+      'confusing', 'unclear', 'hard to find', 'lost', 'dashboard',
+    ],
+  },
+  {
+    class: 'reporting_visibility',
+    keywords: [
+      'report', 'analytics', 'chart', 'graph', 'metric', 'insight',
+      'visibility', 'tracking', 'audit', 'log', 'history',
+    ],
+  },
+  {
+    class: 'missing_configuration',
+    keywords: [
+      'limit', 'quota', 'plan', 'upgrade', 'missing', 'feature', 'request',
+      'configure', 'setting', 'customise', 'customize', 'option', 'support',
+    ],
+  },
 ];
 
 /**
- * Compute a friction score (0–100) from theme topKeywords and dominantSignal.
+ * Classify a set of keywords into one of the 7 friction classes.
+ * Returns the class and its 0–100 score.
  */
-function computeFrictionScore(
+function classifyFriction(
   topKeywords: unknown,
   dominantSignal: string | null | undefined,
-): number {
+): { frictionClass: FrictionClass; frictionScore: number } {
   const keywords: string[] = [];
   if (Array.isArray(topKeywords)) {
     keywords.push(...topKeywords.map((k) => String(k).toLowerCase()));
   }
-  if (dominantSignal) {
-    keywords.push(dominantSignal.toLowerCase());
-  }
+  if (dominantSignal) keywords.push(dominantSignal.toLowerCase());
   const combined = keywords.join(' ');
-  if (FRICTION_CORE.some((kw) => combined.includes(kw)))       return 100;
-  if (FRICTION_NAVIGATION.some((kw) => combined.includes(kw))) return 80;
-  if (FRICTION_FEATURE.some((kw) => combined.includes(kw)))    return 60;
-  return 40; // minor UX / unknown
+
+  for (const { class: fc, keywords: kws } of FRICTION_KEYWORDS) {
+    if (kws.some((kw) => combined.includes(kw))) {
+      return { frictionClass: fc, frictionScore: FRICTION_CLASS_WEIGHTS[fc] * 100 };
+    }
+  }
+  return { frictionClass: 'minor_ux', frictionScore: FRICTION_CLASS_WEIGHTS.minor_ux * 100 };
+}
+
+/** @deprecated Use classifyFriction instead */
+function computeFrictionScore(
+  topKeywords: unknown,
+  dominantSignal: string | null | undefined,
+): number {
+  return classifyFriction(topKeywords, dominantSignal).frictionScore;
 }
 
 @Injectable()
@@ -517,14 +634,12 @@ export class CiqService {
     // More distinct customers = higher frequency score.
     // Adaptive cap same as volume so small workspaces score well.
     const frequencyScore = adaptiveCountNorm(uniqueCustomerCount, totalSignalCount);
-
-    // ── Factor 4: Friction (15%) ───────────────────────────────────────────
-    // Theme impact type from topKeywords + dominantSignal
-    const frictionScore = computeFrictionScore(
+    // ── Factor 4: Friction (15%) ─────────────────────────────────────────────────────
+    // Theme impact type from topKeywords + dominantSignal (7-class taxonomy)
+    const { frictionClass, frictionScore } = classifyFriction(
       themeRow?.topKeywords,
       themeRow?.dominantSignal,
     );
-
     // ── Factor 5: Recency (10%) ────────────────────────────────────────────
     // 3-tier time-decay: ≤30d=1.0, 31–90d=0.6, >90d=0.2
     const now30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -629,7 +744,7 @@ export class CiqService {
         value:        frictionScore,
         weight:       WEIGHT_FRICTION,
         contribution: frictionScore * WEIGHT_FRICTION,
-        label:        `Friction (${frictionScore >= 100 ? 'Core workflow' : frictionScore >= 80 ? 'Navigation' : frictionScore >= 60 ? 'Feature limit' : 'Minor UX'})`,
+        label:        `Friction (class: ${frictionClass}, score: ${frictionScore.toFixed(0)})`,
       },
       recency: {
         value:        recencyScore,
@@ -699,7 +814,12 @@ export class CiqService {
       recency:   (v) => `${recentFeedbackCount} recent signal${recentFeedbackCount !== 1 ? 's' : ''} in last 30 days`,
     };
 
-    const band = priorityScore >= 70 ? 'High' : priorityScore >= 40 ? 'Moderate' : 'Low';
+    // 4-tier priority band (aligns with ThemePriorityResult spec)
+    const priorityBand: 'low' | 'medium' | 'high' | 'critical' =
+      priorityScore >= 75 ? 'critical' :
+      priorityScore >= 50 ? 'high' :
+      priorityScore >= 25 ? 'medium' : 'low';
+    const band = priorityBand === 'critical' ? 'Critical' : priorityBand === 'high' ? 'High' : priorityBand === 'medium' ? 'Moderate' : 'Low';
     const driverPhrase = dominantDriver && DRIVER_PHRASES[dominantDriver]
       ? DRIVER_PHRASES[dominantDriver](topFactors[0]?.[1].value ?? 0)
       : 'multiple signals';
@@ -757,9 +877,18 @@ export class CiqService {
       sourceDiversityCount: activeSources,
       velocityDelta,
       scoringMode,
+      frictionClass,
+      priorityBand,
+      // Structured breakdown array for ThemePriorityResult consumers
+      breakdown: [
+        { factor: 'volume'    as const, raw: volumeScore,    normalized: volumeScore / 100,    weightedContribution: volumeScore * 0.30,    explanation: explanation.volume?.label    ?? '' },
+        { factor: 'severity'  as const, raw: severityScore,  normalized: severityScore / 100,  weightedContribution: severityScore * 0.25,  explanation: explanation.severity?.label  ?? '' },
+        { factor: 'frequency' as const, raw: frequencyScore, normalized: frequencyScore / 100, weightedContribution: frequencyScore * 0.20, explanation: explanation.frequency?.label ?? '' },
+        { factor: 'friction'  as const, raw: frictionScore,  normalized: frictionScore / 100,  weightedContribution: frictionScore * 0.15,  explanation: explanation.friction?.label  ?? '' },
+        { factor: 'recency'   as const, raw: recencyScore,   normalized: recencyScore / 100,   weightedContribution: recencyScore * 0.10,   explanation: explanation.recency?.label   ?? '' },
+      ],
     };
   }
-
   // ─── Feedback-level scoring ─────────────────────────────────────────────────
 
   /**

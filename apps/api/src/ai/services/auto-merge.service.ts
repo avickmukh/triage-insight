@@ -3,6 +3,15 @@ import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CIQ_SCORING_QUEUE } from '../processors/ciq-scoring.processor';
+import {
+  AUTO_MERGE_THRESHOLD,
+  BOOTSTRAP_MERGE_THRESHOLD,
+  BOOTSTRAP_THEME_COUNT,
+  BOOTSTRAP_SIZE1_RATIO,
+  MERGE_EMBEDDING_WEIGHT,
+  MERGE_KEYWORD_WEIGHT,
+  MERGE_VECTOR_CANDIDATES,
+} from '../config/clustering-thresholds.config';
 
 /**
  * AutoMergeService
@@ -54,29 +63,30 @@ export class AutoMergeService {
   // ─── Thresholds ───────────────────────────────────────────────────────────
 
   /** Normal hybrid similarity threshold (production datasets). */
-  private readonly AUTO_MERGE_THRESHOLD = 0.85;
+  // Merge thresholds — sourced from clustering-thresholds.config.ts
+  private readonly AUTO_MERGE_THRESHOLD = AUTO_MERGE_THRESHOLD;
 
   /**
    * Relaxed threshold for bootstrap / small datasets.
    * Activates when workspace has <= BOOTSTRAP_THEME_COUNT active themes
    * OR >= BOOTSTRAP_SIZE1_RATIO of themes are size-1.
    */
-  private readonly BOOTSTRAP_MERGE_THRESHOLD = 0.72;
+  private readonly BOOTSTRAP_MERGE_THRESHOLD = BOOTSTRAP_MERGE_THRESHOLD;
 
   /** Max active theme count below which bootstrap mode activates. */
-  private readonly BOOTSTRAP_THEME_COUNT = 10;
+  private readonly BOOTSTRAP_THEME_COUNT = BOOTSTRAP_THEME_COUNT;
 
   /** Min fraction of size-1 themes that triggers bootstrap mode. */
-  private readonly BOOTSTRAP_SIZE1_RATIO = 0.6;
+  private readonly BOOTSTRAP_SIZE1_RATIO = BOOTSTRAP_SIZE1_RATIO;
 
   /** Embedding weight in hybrid similarity. */
-  private readonly EMBEDDING_WEIGHT = 0.7;
+  private readonly EMBEDDING_WEIGHT = MERGE_EMBEDDING_WEIGHT;
 
   /** Keyword overlap weight in hybrid similarity. */
-  private readonly KEYWORD_WEIGHT = 0.3;
+  private readonly KEYWORD_WEIGHT = MERGE_KEYWORD_WEIGHT;
 
   /** Number of top candidates to retrieve from pgvector per theme. */
-  private readonly VECTOR_CANDIDATES = 5;
+  private readonly VECTOR_CANDIDATES = MERGE_VECTOR_CANDIDATES;
 
   constructor(
     private readonly prisma: PrismaService,

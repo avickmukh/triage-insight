@@ -4,6 +4,8 @@ import { ThemeClusteringService } from './theme-clustering.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmbeddingService } from './embedding.service';
 import { CIQ_SCORING_QUEUE } from '../processors/ciq-scoring.processor';
+import { IntentClassifierService } from './intent-classifier.service';
+import { AutoMergeService } from './auto-merge.service';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
@@ -24,16 +26,78 @@ const mockPrismaService = {
     findFirst: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
-    count: jest.fn(),
+    count: jest.fn().mockResolvedValue(5),  // default: 5 active themes
+    findMany: jest.fn().mockResolvedValue([]),
+    findUnique: jest.fn(),
+  },
+  roadmapItem: {
+    findFirst: jest.fn().mockResolvedValue(null),
   },
   $queryRaw: jest.fn(),
   $executeRaw: jest.fn(),
+  // $transaction executes the callback with the same mock as the tx object
+  $transaction: jest.fn().mockImplementation((cb: (tx: unknown) => unknown) => {
+    const tx = {
+      themeFeedback: {
+        findFirst: jest.fn(),
+        findMany: jest.fn(),
+        upsert: jest.fn(),
+        create: jest.fn(),
+        count: jest.fn(),
+      },
+      feedback: {
+        findUnique: jest.fn(),
+        findMany: jest.fn(),
+        update: jest.fn(),
+      },
+      theme: {
+        findFirst: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+        count: jest.fn(),
+      },
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      $executeRaw: jest.fn().mockResolvedValue(1),
+    };
+    // Delegate to the outer mock methods so individual tests can set up expectations
+    tx.themeFeedback.findFirst = mockPrismaService.themeFeedback.findFirst;
+    tx.themeFeedback.findMany  = mockPrismaService.themeFeedback.findMany;
+    tx.themeFeedback.upsert    = mockPrismaService.themeFeedback.upsert;
+    tx.themeFeedback.create    = mockPrismaService.themeFeedback.create;
+    tx.themeFeedback.count     = mockPrismaService.themeFeedback.count;
+    tx.feedback.findUnique     = mockPrismaService.feedback.findUnique;
+    tx.feedback.findMany       = mockPrismaService.feedback.findMany;
+    tx.feedback.update         = mockPrismaService.feedback.update;
+    tx.theme.findFirst         = mockPrismaService.theme.findFirst;
+    tx.theme.create            = mockPrismaService.theme.create;
+    tx.theme.update            = mockPrismaService.theme.update;
+    tx.theme.count             = mockPrismaService.theme.count;
+    tx.$queryRaw               = mockPrismaService.$queryRaw;
+    tx.$executeRaw             = mockPrismaService.$executeRaw;
+    // Add roadmapItem to the tx object
+    (tx as Record<string, unknown>).roadmapItem = mockPrismaService.roadmapItem;
+    return cb(tx);
+  }),
 };
 
 const mockEmbeddingService = {
   generateEmbedding: jest.fn(),
 };
 
+const mockAutoMergeService = {
+  detectAndMerge: jest.fn().mockResolvedValue({ merged: 0, skipped: 0 }),
+  isBootstrapMode: jest.fn().mockResolvedValue(false),
+};
+const mockIntentClassifier = {
+  classify: jest.fn().mockResolvedValue({
+    domain: 'minor_ux',
+    confidence: 0.70,
+    method: 'keyword',
+    impactWeight: 0.10,
+    secondaryDomain: null,
+  }),
+  classifyBatch: jest.fn().mockResolvedValue(new Map()),
+};
 const mockCiqQueue = {
   add: jest.fn(),
 };
@@ -50,6 +114,8 @@ describe('ThemeClusteringService', () => {
         { provide: PrismaService, useValue: mockPrismaService },
         { provide: EmbeddingService, useValue: mockEmbeddingService },
         { provide: getQueueToken(CIQ_SCORING_QUEUE), useValue: mockCiqQueue },
+        { provide: IntentClassifierService, useValue: mockIntentClassifier },
+        { provide: AutoMergeService, useValue: mockAutoMergeService },
       ],
     }).compile();
 
@@ -109,9 +175,10 @@ describe('ThemeClusteringService', () => {
 
       // Simulate a matching theme above the 0.8 threshold
       mockPrismaService.$queryRaw.mockResolvedValue([
-        { id: 'existing-theme-id', similarity: 0.92 },
+        { id: 'existing-theme-id', title: 'Test feedback', similarity: 0.92, topKeywords: null, liveCount: 3, ciqScore: 50, status: 'STABLE' },
       ]);
       mockPrismaService.themeFeedback.upsert.mockResolvedValue({});
+      mockPrismaService.theme.findFirst.mockResolvedValue({ id: 'existing-theme-id', ciqScore: 50 });
       // recomputeClusterConfidence calls
       mockPrismaService.themeFeedback.findMany
         .mockResolvedValueOnce([{ confidence: 0.92 }])   // AI-assigned links
@@ -147,7 +214,7 @@ describe('ThemeClusteringService', () => {
 
       expect(mockPrismaService.theme.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ status: 'AI_GENERATED', workspaceId: 'ws-id' }),
+          data: expect.objectContaining({ status: 'PROVISIONAL', workspaceId: 'ws-id' }),
         }),
       );
       expect(result).toBe('ai-generated-theme-id');
@@ -188,8 +255,9 @@ describe('ThemeClusteringService', () => {
         workspaceId: 'ws-1',
       });
       const embedding = Array.from({ length: 1536 }, () => 0.2);
-      mockPrismaService.$queryRaw.mockResolvedValue([{ id: 'theme-perf', similarity: 0.88 }]);
+      mockPrismaService.$queryRaw.mockResolvedValue([{ id: 'theme-perf', title: 'Performance', similarity: 0.88, topKeywords: null, liveCount: 2, ciqScore: 40, status: 'STABLE' }]);
       mockPrismaService.themeFeedback.upsert.mockResolvedValue({});
+      mockPrismaService.theme.findFirst.mockResolvedValue({ id: 'theme-perf', ciqScore: 40 });
 
       // Simulate 3 AI-assigned feedback items with high similarity
       mockPrismaService.themeFeedback.findMany
@@ -223,7 +291,7 @@ describe('ThemeClusteringService', () => {
         }),
       );
 
-      const updateCall = mockPrismaService.theme.update.mock.calls[0][0];
+      const updateCall = mockPrismaService.theme.update.mock.calls[1][0];
       // avgSimilarity ≈ 0.88 → confidence should be reasonably high
       expect(updateCall.data.clusterConfidence).toBeGreaterThan(50);
     });
@@ -237,15 +305,16 @@ describe('ThemeClusteringService', () => {
         workspaceId: 'ws-1',
       });
       const embedding = Array.from({ length: 1536 }, () => 0.3);
-      mockPrismaService.$queryRaw.mockResolvedValue([{ id: 'theme-mixed', similarity: 0.82 }]);
+      mockPrismaService.$queryRaw.mockResolvedValue([{ id: 'theme-mixed', title: 'Mixed', similarity: 0.82, topKeywords: null, liveCount: 3, ciqScore: 30, status: 'STABLE' }]);
+      mockPrismaService.theme.findFirst.mockResolvedValue({ id: 'theme-mixed', ciqScore: 30 });
       mockPrismaService.themeFeedback.upsert.mockResolvedValue({});
 
-      // 2 of 4 items have similarity below 0.75 → outlierCount = 2
+      // 2 of 4 items have similarity below OUTLIER_THRESHOLD (0.45) → outlierCount = 2
       mockPrismaService.themeFeedback.findMany
         .mockResolvedValueOnce([
           { confidence: 0.82 },
-          { confidence: 0.70 }, // outlier
-          { confidence: 0.68 }, // outlier
+          { confidence: 0.40 }, // outlier (below OUTLIER_THRESHOLD=0.45)
+          { confidence: 0.38 }, // outlier (below OUTLIER_THRESHOLD=0.45)
           { confidence: 0.85 },
         ])
         .mockResolvedValueOnce([
@@ -259,7 +328,8 @@ describe('ThemeClusteringService', () => {
 
       await service.assignFeedbackToTheme('ws-1', 'fb-3', embedding);
 
-      const updateCall = mockPrismaService.theme.update.mock.calls[0][0];
+      // The second update call is from recomputeClusterConfidence
+      const updateCall = mockPrismaService.theme.update.mock.calls[1][0];
       expect(updateCall.data.outlierCount).toBe(2);
     });
 
