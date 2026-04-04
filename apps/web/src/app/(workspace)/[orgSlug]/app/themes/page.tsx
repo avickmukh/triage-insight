@@ -490,10 +490,10 @@ export default function ThemesPage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       {/* ── Header ── */}
       <PageHeader
-        stage="insights"
-        title="Theme Intelligence"
-        description="AI-clustered feedback themes — automatically grouped from feedback, voice, and support signals."
-        nextAction="Click a theme to view its CIQ breakdown, then promote high-priority themes to your roadmap."
+        stage="themes"
+        title="All Themes"
+        description="AI-clustered problems automatically grouped from feedback, voice, support, and survey signals. This is where raw signals become named, trackable issues."
+        nextAction="Click a theme to see its evidence and CIQ score. Use CIQ Scoring in Prioritization to rank by business impact."
       />
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
         {canEdit && (

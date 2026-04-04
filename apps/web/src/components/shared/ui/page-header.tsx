@@ -4,20 +4,20 @@
  * PageHeader — shared page header component
  *
  * Renders:
- *  1. Flow indicator bar: Signals → Insights → Impact → Decisions (current stage highlighted)
+ *  1. Flow indicator bar: Signals → Themes → Prioritization → Decisions (current stage highlighted)
  *  2. Page title + one-line description
  *  3. Optional "next action" guidance text
  */
 
 import React from 'react';
 
-export type FlowStage = 'signals' | 'insights' | 'impact' | 'decisions';
+export type FlowStage = 'signals' | 'themes' | 'prioritization' | 'decisions';
 
 const FLOW_STAGES: { id: FlowStage; label: string }[] = [
-  { id: 'signals',   label: 'Signals' },
-  { id: 'insights',  label: 'Insights' },
-  { id: 'impact',    label: 'Impact' },
-  { id: 'decisions', label: 'Decisions' },
+  { id: 'signals',        label: 'Signals' },
+  { id: 'themes',         label: 'Themes' },
+  { id: 'prioritization', label: 'Prioritization' },
+  { id: 'decisions',      label: 'Decisions' },
 ];
 
 interface PageHeaderProps {

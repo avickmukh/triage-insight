@@ -403,10 +403,10 @@ export default function IntelligencePage() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <PageHeader
-            stage="insights"
-            title="Unified Intelligence Hub"
-            description="Cross-source analysis combining feedback, voice, and support signals into ranked themes."
-            nextAction="Review CIQ scores on the Impact Dashboard to understand business priority."
+            stage="themes"
+            title="Theme Intelligence"
+            description="AI-grouped problems enriched with cross-source signals — feedback, voice, support, and surveys unified into ranked themes."
+            nextAction="Go to CIQ Scoring to see business priority scores, or Theme Ranking for the full CIQ-ranked table."
           />
           <p style={{ color: '#6C757D', margin: '0.25rem 0 0', fontSize: '0.875rem' }}>
             Cross-source signals from feedback, support tickets, voice, and surveys — unified into a single intelligence layer

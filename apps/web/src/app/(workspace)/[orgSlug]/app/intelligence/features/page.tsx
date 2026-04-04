@@ -47,16 +47,14 @@ export default function IntelligenceFeaturesPage() {
 
   return (
     <div style={{ padding: '2rem', maxWidth: 1400, margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-        <Link href={routes.intelligence} style={{ color: '#20A4A4', textDecoration: 'none', fontSize: '0.875rem' }}>
-          ← Intelligence Hub
-        </Link>
-        <div style={{ flex: 1 }}>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0a2540', margin: 0 }}>Feature CIQ Ranking</h1>
-          <p style={{ color: '#6C757D', margin: '0.25rem 0 0', fontSize: '0.875rem' }}>
-            Feedback items ranked by composite CIQ score — ARR weight, vote count, sentiment, recency, and deal influence
-          </p>
-        </div>
+      <div style={{ marginBottom: '1.5rem' }}>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0a2540', margin: '0 0 0.25rem' }}>Feature Ranking</h1>
+        <p style={{ color: '#6C757D', margin: 0, fontSize: '0.875rem' }}>
+          Feedback items ranked by composite CIQ score — ARR weight, vote count, sentiment, recency, and deal influence.
+        </p>
+        <p style={{ fontSize: '0.8rem', color: '#1a73e8', margin: '0.4rem 0 0' }}>
+          <span style={{ fontWeight: 600 }}>Next:</span> Promote top features to the Roadmap, or view Revenue Opps for monetisation context.
+        </p>
       </div>
 
       {isLoading ? (

@@ -221,10 +221,10 @@ export default function CiqDashboardPage() {
 
       {/* ── Header ── */}
       <PageHeader
-        stage="impact"
-        title="Impact Dashboard"
-        description="Customer Intelligence Quotient — unified scoring based on feedback, support tickets, and voice signals."
-        nextAction="Run Recompute CIQ to score all active themes, then explore Prioritization Engine for action."
+        stage="prioritization"
+        title="CIQ Scoring"
+        description="Customer Intelligence Quotient — composite business score across feedback volume, ARR exposure, voice urgency, support pressure, and strategic signals."
+        nextAction="Run Recompute CIQ to score all active themes, then review Theme Ranking and Revenue Opps for action."
       />
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>

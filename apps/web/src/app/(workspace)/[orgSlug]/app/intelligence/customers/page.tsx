@@ -50,16 +50,11 @@ export default function IntelligenceCustomersPage() {
 
   return (
     <div style={{ padding: '2rem', maxWidth: 1400, margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-        <Link href={routes.intelligence} style={{ color: '#20A4A4', textDecoration: 'none', fontSize: '0.875rem' }}>
-          ← Intelligence Hub
-        </Link>
-        <div style={{ flex: 1 }}>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0a2540', margin: 0 }}>Customer CIQ Ranking</h1>
-          <p style={{ color: '#6C757D', margin: '0.25rem 0 0', fontSize: '0.875rem' }}>
-            Customers ranked by CIQ influence — ARR weight, feature demand, support intensity, and health score
-          </p>
-        </div>
+      <div style={{ marginBottom: '1.5rem' }}>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0a2540', margin: '0 0 0.25rem' }}>Customer Ranking</h1>
+        <p style={{ color: '#6C757D', margin: 0, fontSize: '0.875rem' }}>
+          Customers ranked by CIQ influence — ARR weight, feature demand, support intensity, and health score.
+        </p>
       </div>
 
       {isLoading ? (
