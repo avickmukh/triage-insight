@@ -25,6 +25,7 @@ import { ThemeClusteringService } from './theme-clustering.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmbeddingService } from './embedding.service';
 import { AutoMergeService } from './auto-merge.service';
+import { IntentClassifierService } from './intent-classifier.service';
 import { CIQ_SCORING_QUEUE } from '../processors/ciq-scoring.processor';
 
 // ── Mock factories ────────────────────────────────────────────────────────────
@@ -103,6 +104,18 @@ describe('ThemeClusteringService — runBatchFinalization', () => {
             detectAndMerge: jest.fn().mockResolvedValue({
               invoked: false, merged: false, mergedCount: 0, detectedCount: 0,
               suggestions: [], bootstrapMode: false, effectiveThreshold: 0.85, reason: 'mock',
+            }),
+            isBootstrapMode: jest.fn().mockResolvedValue(false),
+          },
+        },
+        {
+          provide: IntentClassifierService,
+          useValue: {
+            classify: jest.fn().mockResolvedValue({
+              domain: 'minor_ux',
+              problem: 'confusion',
+              confidence: 0.7,
+              method: 'keyword',
             }),
           },
         },
