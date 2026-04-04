@@ -17,7 +17,10 @@ import { ConfigService } from '@nestjs/config';
  * Usage: @UseGuards(PortalJwtAuthGuard) on portal-authenticated routes.
  */
 @Injectable()
-export class PortalJwtStrategy extends PassportStrategy(Strategy, 'portal-jwt') {
+export class PortalJwtStrategy extends PassportStrategy(
+  Strategy,
+  'portal-jwt',
+) {
   constructor(
     private readonly prisma: PrismaService,
     configService: ConfigService,

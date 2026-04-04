@@ -6,9 +6,21 @@ import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TranscriptionService } from '../services/transcription.service';
 import { SummarizationService } from '../../ai/services/summarization.service';
-import { VoiceTranscriptionJobPayload, VOICE_TRANSCRIPTION_QUEUE } from '../services/voice.service';
-import { AiJobStatus, FeedbackSourceType, FeedbackPrimarySource, FeedbackSecondarySource, FeedbackStatus } from '@prisma/client';
-import { VOICE_EXTRACTION_QUEUE, VoiceExtractionJobPayload } from './voice-extraction.processor';
+import {
+  VoiceTranscriptionJobPayload,
+  VOICE_TRANSCRIPTION_QUEUE,
+} from '../services/voice.service';
+import {
+  AiJobStatus,
+  FeedbackSourceType,
+  FeedbackPrimarySource,
+  FeedbackSecondarySource,
+  FeedbackStatus,
+} from '@prisma/client';
+import {
+  VOICE_EXTRACTION_QUEUE,
+  VoiceExtractionJobPayload,
+} from './voice-extraction.processor';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -34,16 +46,32 @@ export class VoiceTranscriptionProcessor {
       region: this.configService.get<string>('AWS_S3_REGION', 'us-east-1'),
       credentials: {
         accessKeyId: this.configService.get<string>('AWS_ACCESS_KEY_ID', ''),
-        secretAccessKey: this.configService.get<string>('AWS_SECRET_ACCESS_KEY', ''),
+        secretAccessKey: this.configService.get<string>(
+          'AWS_SECRET_ACCESS_KEY',
+          '',
+        ),
       },
     });
   }
 
   @Process()
   async handleTranscription(job: Job<VoiceTranscriptionJobPayload>) {
-    const { uploadAssetId, aiJobLogId, workspaceId, s3Key, s3Bucket, mimeType, label, portalUserId, submittedText, anonymousId } = job.data;
+    const {
+      uploadAssetId,
+      aiJobLogId,
+      workspaceId,
+      s3Key,
+      s3Bucket,
+      mimeType,
+      label,
+      portalUserId,
+      submittedText,
+      anonymousId,
+    } = job.data;
 
-    this.logger.log(`Starting transcription job ${aiJobLogId} for asset ${uploadAssetId}`);
+    this.logger.log(
+      `Starting transcription job ${aiJobLogId} for asset ${uploadAssetId}`,
+    );
 
     await this.prisma.aiJobLog.update({
       where: { id: aiJobLogId },
@@ -54,7 +82,10 @@ export class VoiceTranscriptionProcessor {
 
     try {
       tempFilePath = await this.downloadFromS3(s3Bucket, s3Key, mimeType);
-      const transcript = await this.transcriptionService.transcribeFile(tempFilePath, mimeType);
+      const transcript = await this.transcriptionService.transcribeFile(
+        tempFilePath,
+        mimeType,
+      );
 
       if (!transcript || transcript.trim().length === 0) {
         throw new Error('Transcription returned empty result');
@@ -64,7 +95,9 @@ export class VoiceTranscriptionProcessor {
       try {
         title = await this.summarizationService.summarize(transcript);
       } catch (err) {
-        this.logger.warn(`Summarization failed, using label/default: ${(err as Error).message}`);
+        this.logger.warn(
+          `Summarization failed, using label/default: ${(err as Error).message}`,
+        );
       }
 
       // Combine submitted text with the transcript for a full record
@@ -92,16 +125,22 @@ export class VoiceTranscriptionProcessor {
         });
         batchId = batch.id;
       } catch (batchErr) {
-        this.logger.warn(`Failed to create ImportBatch for voice upload ${uploadAssetId}: ${(batchErr as Error).message}`);
+        this.logger.warn(
+          `Failed to create ImportBatch for voice upload ${uploadAssetId}: ${(batchErr as Error).message}`,
+        );
       }
 
       const feedback = await this.prisma.feedback.create({
         data: {
           workspaceId,
           // If portalUserId is present, this came from the public portal voice upload
-          sourceType:      isPortalVoice ? FeedbackSourceType.PUBLIC_PORTAL : FeedbackSourceType.VOICE,
-          primarySource:   FeedbackPrimarySource.VOICE,
-          secondarySource: isPortalVoice ? FeedbackSecondarySource.PORTAL : FeedbackSecondarySource.TRANSCRIPT,
+          sourceType: isPortalVoice
+            ? FeedbackSourceType.PUBLIC_PORTAL
+            : FeedbackSourceType.VOICE,
+          primarySource: FeedbackPrimarySource.VOICE,
+          secondarySource: isPortalVoice
+            ? FeedbackSecondarySource.PORTAL
+            : FeedbackSecondarySource.TRANSCRIPT,
           sourceRef: uploadAssetId,
           title,
           description: fullDescription,
@@ -160,7 +199,9 @@ export class VoiceTranscriptionProcessor {
       );
     } catch (err) {
       const errorMessage = (err as Error).message ?? 'Unknown error';
-      this.logger.error(`Transcription job ${aiJobLogId} failed: ${errorMessage}`);
+      this.logger.error(
+        `Transcription job ${aiJobLogId} failed: ${errorMessage}`,
+      );
 
       await this.prisma.aiJobLog.update({
         where: { id: aiJobLogId },
@@ -182,10 +223,17 @@ export class VoiceTranscriptionProcessor {
     }
   }
 
-  private async downloadFromS3(bucket: string, key: string, mimeType: string): Promise<string> {
+  private async downloadFromS3(
+    bucket: string,
+    key: string,
+    mimeType: string,
+  ): Promise<string> {
     const ext = this.mimeToExt(mimeType);
     const tempDir = os.tmpdir();
-    const tempFile = path.join(tempDir, `voice-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+    const tempFile = path.join(
+      tempDir,
+      `voice-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`,
+    );
 
     const command = new GetObjectCommand({ Bucket: bucket, Key: key });
     const response = await this.s3Client.send(command);

@@ -40,38 +40,38 @@ export type ExecActionType =
   | 'WATCH_DECLINE';
 
 export interface ExecDashboardItem {
-  themeId:    string;
-  themeName:  string;
+  themeId: string;
+  themeName: string;
   shortLabel: string | null;
-  ciqScore:   number;
+  ciqScore: number;
   /** Decision Ranking Score — the composite score used for Recommended Actions. */
-  drs:        number;
-  reason:     string;
-  action:     ExecActionType;
+  drs: number;
+  reason: string;
+  action: ExecActionType;
   /** Signal quality labels for UI explainability chips. */
   signalLabels: SignalQualityLabel[];
   signals: {
     totalSignalCount: number;
-    trendDelta:       number | null;
-    resurfaceCount:   number;
+    trendDelta: number | null;
+    resurfaceCount: number;
     revenueInfluence: number | null;
-    feedbackCount:    number;
-    supportCount:     number;
-    voiceCount:       number;
-    surveyCount:      number;
-    sourceDiversity:  number;
-    lastEvidenceAt:   Date | null;
-    negativePct:      number | null;
+    feedbackCount: number;
+    supportCount: number;
+    voiceCount: number;
+    surveyCount: number;
+    sourceDiversity: number;
+    lastEvidenceAt: Date | null;
+    negativePct: number | null;
   };
 }
 
 export interface ExecutiveDashboardResponse {
-  generatedAt:        string;
-  topProblems:        ExecDashboardItem[];
-  risingIssues:       ExecDashboardItem[];
-  decliningThemes:    ExecDashboardItem[];
+  generatedAt: string;
+  topProblems: ExecDashboardItem[];
+  risingIssues: ExecDashboardItem[];
+  decliningThemes: ExecDashboardItem[];
   recommendedActions: ExecDashboardItem[];
-  revenueImpact:      ExecDashboardItem[];
+  revenueImpact: ExecDashboardItem[];
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -85,8 +85,8 @@ function pickAction(
 ): ExecActionType {
   if (isDecline) return 'WATCH_DECLINE';
   if (!onRoadmap && drs >= 60) return 'ADD_TO_ROADMAP';
-  if (onRoadmap && delta > 20)  return 'INCREASE_PRIORITY';
-  if (resurfaceCount > 0)       return 'INVESTIGATE';
+  if (onRoadmap && delta > 20) return 'INCREASE_PRIORITY';
+  if (resurfaceCount > 0) return 'INVESTIGATE';
   return 'MONITOR';
 }
 
@@ -109,12 +109,12 @@ export class ExecutiveDashboardService {
     if (eligible.length === 0) {
       const empty: ExecDashboardItem[] = [];
       return {
-        generatedAt:        new Date().toISOString(),
-        topProblems:        empty,
-        risingIssues:       empty,
-        decliningThemes:    empty,
+        generatedAt: new Date().toISOString(),
+        topProblems: empty,
+        risingIssues: empty,
+        decliningThemes: empty,
         recommendedActions: empty,
-        revenueImpact:      empty,
+        revenueImpact: empty,
       };
     }
 
@@ -123,33 +123,43 @@ export class ExecutiveDashboardService {
     const roadmapSet = await this.fetchRoadmapSet(workspaceId, themeIds);
 
     // ── 3. Build converter ────────────────────────────────────────────────────
-    const toItem = (ranked: RankedTheme, isDecline = false): ExecDashboardItem => {
+    const toItem = (
+      ranked: RankedTheme,
+      isDecline = false,
+    ): ExecDashboardItem => {
       const delta = ranked.signals.trendDelta ?? 0;
       const onRoadmap = roadmapSet.has(ranked.themeId);
       const action = pickAction(
-        ranked.drs, delta, ranked.signals.resurfaceCount, onRoadmap, isDecline,
+        ranked.drs,
+        delta,
+        ranked.signals.resurfaceCount,
+        onRoadmap,
+        isDecline,
       );
       return {
-        themeId:      ranked.themeId,
-        themeName:    ranked.title,
-        shortLabel:   ranked.shortLabel,
-        ciqScore:     ranked.ciqScore,
-        drs:          Math.round(ranked.drs),
-        reason:       ranked.reason,
+        themeId: ranked.themeId,
+        themeName: ranked.title,
+        shortLabel: ranked.shortLabel,
+        ciqScore: ranked.ciqScore,
+        drs: Math.round(ranked.drs),
+        reason: ranked.reason,
         action,
         signalLabels: ranked.signalLabels,
         signals: {
           totalSignalCount: ranked.signals.totalSignalCount,
-          trendDelta:       ranked.signals.trendDelta,
-          resurfaceCount:   ranked.signals.resurfaceCount,
-          revenueInfluence: ranked.signals.revenueInfluence > 0 ? ranked.signals.revenueInfluence : null,
-          feedbackCount:    ranked.signals.feedbackCount,
-          supportCount:     ranked.signals.supportCount,
-          voiceCount:       ranked.signals.voiceCount,
-          surveyCount:      ranked.signals.surveyCount,
-          sourceDiversity:  ranked.signals.sourceDiversity,
-          lastEvidenceAt:   ranked.signals.lastEvidenceAt,
-          negativePct:      ranked.signals.negativePct,
+          trendDelta: ranked.signals.trendDelta,
+          resurfaceCount: ranked.signals.resurfaceCount,
+          revenueInfluence:
+            ranked.signals.revenueInfluence > 0
+              ? ranked.signals.revenueInfluence
+              : null,
+          feedbackCount: ranked.signals.feedbackCount,
+          supportCount: ranked.signals.supportCount,
+          voiceCount: ranked.signals.voiceCount,
+          surveyCount: ranked.signals.surveyCount,
+          sourceDiversity: ranked.signals.sourceDiversity,
+          lastEvidenceAt: ranked.signals.lastEvidenceAt,
+          negativePct: ranked.signals.negativePct,
         },
       };
     };
@@ -158,7 +168,8 @@ export class ExecutiveDashboardService {
     const topProblems = [...eligible]
       .sort((a, b) => {
         const diff = b.ciqScore - a.ciqScore;
-        if (Math.abs(diff) < 0.5) return (b.aiConfidence ?? 0) - (a.aiConfidence ?? 0);
+        if (Math.abs(diff) < 0.5)
+          return (b.aiConfidence ?? 0) - (a.aiConfidence ?? 0);
         return diff;
       })
       .slice(0, 5)
@@ -180,9 +191,7 @@ export class ExecutiveDashboardService {
 
     // ── Section 4: 🧠 Recommended Actions — highest DRS (with all penalties) ──
     // eligible is already sorted by DRS desc from ThemeRankingEngine
-    const recommendedActions = eligible
-      .slice(0, 5)
-      .map((e) => toItem(e));
+    const recommendedActions = eligible.slice(0, 5).map((e) => toItem(e));
 
     // ── Section 5: 💰 Revenue Impact — highest ARR exposure ──────────────────
     const revenueImpact = [...eligible]
@@ -193,13 +202,13 @@ export class ExecutiveDashboardService {
 
     this.logger.log(
       `[ExecutiveDashboard] Generated for workspace ${workspaceId}: ` +
-      `topProblems=${topProblems.length}, rising=${risingIssues.length}, ` +
-      `declining=${decliningThemes.length}, actions=${recommendedActions.length}, ` +
-      `revenue=${revenueImpact.length}`,
+        `topProblems=${topProblems.length}, rising=${risingIssues.length}, ` +
+        `declining=${decliningThemes.length}, actions=${recommendedActions.length}, ` +
+        `revenue=${revenueImpact.length}`,
     );
 
     return {
-      generatedAt:        new Date().toISOString(),
+      generatedAt: new Date().toISOString(),
       topProblems,
       risingIssues,
       decliningThemes,
@@ -217,8 +226,8 @@ export class ExecutiveDashboardService {
     const items = await this.prisma.roadmapItem.findMany({
       where: {
         themeId: { in: themeIds },
-        theme:   { workspaceId },
-        status:  { not: 'SHIPPED' },
+        theme: { workspaceId },
+        status: { not: 'SHIPPED' },
       },
       select: { themeId: true },
     });

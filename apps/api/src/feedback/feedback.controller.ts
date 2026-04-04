@@ -23,7 +23,10 @@ import { SemanticSearchDto } from './dto/semantic-search.dto';
 import { CreateAttachmentDto } from './dto/create-attachment.dto';
 import { ConfirmAttachmentDto } from './dto/confirm-attachment.dto';
 import { PublicFeedbackDto } from './dto/public-feedback.dto';
-import { BulkDismissFeedbackDto, BulkAssignFeedbackDto } from './dto/bulk-feedback.dto';
+import {
+  BulkDismissFeedbackDto,
+  BulkAssignFeedbackDto,
+} from './dto/bulk-feedback.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../workspace/guards/roles.guard';
 import { Roles } from '../workspace/decorators/roles.decorator';
@@ -111,9 +114,7 @@ export class FeedbackController {
    */
   @Post('reprocess-pipeline')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
-  reprocessPipeline(
-    @Param('workspaceId') workspaceId: string,
-  ) {
+  reprocessPipeline(@Param('workspaceId') workspaceId: string) {
     return this.feedbackService.reprocessPipeline(workspaceId);
   }
 
@@ -157,7 +158,11 @@ export class FeedbackController {
     file: Express.Multer.File,
     @Body('mapping') rawMapping?: string,
   ) {
-    const mapping = rawMapping ? (JSON.parse(rawMapping) as import('./ingestion/csv-import.service').CsvColumnMapping) : undefined;
+    const mapping = rawMapping
+      ? (JSON.parse(
+          rawMapping,
+        ) as import('./ingestion/csv-import.service').CsvColumnMapping)
+      : undefined;
     return this.csvImportService.import(workspaceId, file.buffer, mapping);
   }
 
@@ -211,7 +216,11 @@ export class FeedbackController {
     @Param('workspaceId') workspaceId: string,
     @Body() dto: BulkAssignFeedbackDto,
   ) {
-    return this.feedbackService.bulkAssignToTheme(workspaceId, dto.feedbackIds, dto.themeId);
+    return this.feedbackService.bulkAssignToTheme(
+      workspaceId,
+      dto.feedbackIds,
+      dto.themeId,
+    );
   }
 
   // ─── Item routes (:id segment) ──────────────────────────────────────────────
@@ -299,7 +308,12 @@ export class FeedbackController {
     @Body() body: { content: string },
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.feedbackService.addComment(workspaceId, id, body.content, req.user.sub);
+    return this.feedbackService.addComment(
+      workspaceId,
+      id,
+      body.content,
+      req.user.sub,
+    );
   }
 
   // --- Related Feedback ---

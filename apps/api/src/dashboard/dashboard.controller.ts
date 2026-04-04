@@ -9,7 +9,15 @@
  *   GET  /workspaces/:id/dashboard/roadmap-health   — roadmap health panel
  *   POST /workspaces/:id/dashboard/refresh          — trigger async refresh
  */
-import { Controller, Get, Post, Param, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Param,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -19,7 +27,10 @@ import { WorkspaceRole } from '@prisma/client';
 import { DashboardAggregationService } from './services/dashboard-aggregation.service';
 import { ExecutiveInsightService } from './services/executive-insight.service';
 import { DashboardCacheService } from './services/dashboard-cache.service';
-import { DASHBOARD_QUEUE, DASHBOARD_JOB_TYPES } from './workers/dashboard-refresh.worker';
+import {
+  DASHBOARD_QUEUE,
+  DASHBOARD_JOB_TYPES,
+} from './workers/dashboard-refresh.worker';
 
 @Controller('workspaces/:workspaceId/dashboard')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -27,8 +38,8 @@ import { DASHBOARD_QUEUE, DASHBOARD_JOB_TYPES } from './workers/dashboard-refres
 export class DashboardController {
   constructor(
     private readonly aggregation: DashboardAggregationService,
-    private readonly insight:     ExecutiveInsightService,
-    private readonly cache:       DashboardCacheService,
+    private readonly insight: ExecutiveInsightService,
+    private readonly cache: DashboardCacheService,
     @InjectQueue(DASHBOARD_QUEUE) private readonly dashboardQueue: Queue,
   ) {}
 
@@ -51,15 +62,15 @@ export class DashboardController {
     const executiveSummary = this.insight.synthesise(pd, et, rr, vs, sp, rh);
 
     const result = {
-      productDirection:  pd,
-      emergingThemes:    et,
-      revenueRisk:       rr,
-      voiceSentiment:    vs,
-      supportPressure:   sp,
-      roadmapHealth:     rh,
+      productDirection: pd,
+      emergingThemes: et,
+      revenueRisk: rr,
+      voiceSentiment: vs,
+      supportPressure: sp,
+      roadmapHealth: rh,
       executiveSummary,
-      refreshedAt:       new Date().toISOString(),
-      cached:            false,
+      refreshedAt: new Date().toISOString(),
+      cached: false,
     };
 
     this.cache.set(workspaceId, 'executive', result);
@@ -116,12 +127,19 @@ export class DashboardController {
   async triggerRefresh(@Param('workspaceId') workspaceId: string) {
     this.cache.invalidate(workspaceId);
     try {
-    await this.dashboardQueue.add(DASHBOARD_JOB_TYPES.REFRESH_ALL, { workspaceId }, {
-      attempts: 3,
-      backoff: { type: 'exponential', delay: 5000 },
-    });
+      await this.dashboardQueue.add(
+        DASHBOARD_JOB_TYPES.REFRESH_ALL,
+        { workspaceId },
+        {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 5000 },
+        },
+      );
     } catch (queueErr) {
-      console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+      console.warn(
+        '[Queue] Redis unavailable — job skipped:',
+        (queueErr as Error).message,
+      );
     }
     return { message: 'Dashboard refresh queued.', workspaceId };
   }

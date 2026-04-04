@@ -13,7 +13,10 @@ import { PortalCreateFeedbackDto } from './dto/portal-create-feedback.dto';
 import { PublicFeedbackQueryDto } from '../public/dto/public-feedback-query.dto';
 import { PublicVoteDto } from '../public/dto/public-vote.dto';
 import { PublicCommentDto } from '../public/dto/public-comment.dto';
-import { PortalVoicePresignedUrlDto, PortalFinalizeVoiceUploadDto } from './dto/portal-voice.dto';
+import {
+  PortalVoicePresignedUrlDto,
+  PortalFinalizeVoiceUploadDto,
+} from './dto/portal-voice.dto';
 
 /**
  * Workspace-scoped public portal endpoints — no authentication required.

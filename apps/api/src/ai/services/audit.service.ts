@@ -6,7 +6,12 @@ import { AuditLogAction } from '@prisma/client';
 export class AuditService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async logAction(workspaceId: string, userId: string | null, action: AuditLogAction, details: any) {
+  async logAction(
+    workspaceId: string,
+    userId: string | null,
+    action: AuditLogAction,
+    details: any,
+  ) {
     return this.prisma.auditLog.create({
       data: {
         workspaceId,
@@ -42,7 +47,9 @@ export class AuditService {
         skip,
         take: limit,
         include: {
-          user: { select: { id: true, email: true, firstName: true, lastName: true } },
+          user: {
+            select: { id: true, email: true, firstName: true, lastName: true },
+          },
         },
       }),
       this.prisma.auditLog.count({ where }),
@@ -50,13 +57,15 @@ export class AuditService {
 
     return {
       data: data.map((log: any) => ({
-        id:          log.id,
-        action:      log.action,
-        details:     log.details,
-        createdAt:   log.createdAt,
-        userId:      log.userId,
-        userEmail:   log.user?.email ?? null,
-        userName:    log.user ? `${log.user.firstName} ${log.user.lastName}`.trim() : null,
+        id: log.id,
+        action: log.action,
+        details: log.details,
+        createdAt: log.createdAt,
+        userId: log.userId,
+        userEmail: log.user?.email ?? null,
+        userName: log.user
+          ? `${log.user.firstName} ${log.user.lastName}`.trim()
+          : null,
       })),
       total,
       page,

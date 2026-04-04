@@ -48,16 +48,23 @@ export class SurveyEvidenceService {
    * List raw SurveyEvidence rows for a workspace, with optional filters.
    */
   async listEvidence(workspaceId: string, query: SurveyEvidenceQuery = {}) {
-    const { surveyId, questionId, questionType, responseId, skip = 0, take = 50 } = query;
+    const {
+      surveyId,
+      questionId,
+      questionType,
+      responseId,
+      skip = 0,
+      take = 50,
+    } = query;
 
     const [rows, total] = await Promise.all([
       this.prisma.surveyEvidence.findMany({
         where: {
           workspaceId,
-          ...(surveyId     ? { surveyId }     : {}),
-          ...(questionId   ? { questionId }   : {}),
+          ...(surveyId ? { surveyId } : {}),
+          ...(questionId ? { questionId } : {}),
           ...(questionType ? { questionType } : {}),
-          ...(responseId   ? { responseId }   : {}),
+          ...(responseId ? { responseId } : {}),
         },
         orderBy: { createdAt: 'desc' },
         skip,
@@ -66,10 +73,10 @@ export class SurveyEvidenceService {
       this.prisma.surveyEvidence.count({
         where: {
           workspaceId,
-          ...(surveyId     ? { surveyId }     : {}),
-          ...(questionId   ? { questionId }   : {}),
+          ...(surveyId ? { surveyId } : {}),
+          ...(questionId ? { questionId } : {}),
           ...(questionType ? { questionType } : {}),
-          ...(responseId   ? { responseId }   : {}),
+          ...(responseId ? { responseId } : {}),
         },
       }),
     ]);
@@ -81,7 +88,10 @@ export class SurveyEvidenceService {
    * Aggregate SurveyEvidence for a survey into per-question summaries.
    * Useful for survey analytics dashboards and theme evidence panels.
    */
-  async getSurveySummary(workspaceId: string, surveyId: string): Promise<SurveyEvidenceSummary[]> {
+  async getSurveySummary(
+    workspaceId: string,
+    surveyId: string,
+  ): Promise<SurveyEvidenceSummary[]> {
     // Verify the survey belongs to this workspace
     const survey = await this.prisma.survey.findFirst({
       where: { id: surveyId, workspaceId },
@@ -127,7 +137,9 @@ export class SurveyEvidenceService {
         // Build a tally of each selected option
         const tally: Record<string, number> = {};
         for (const answer of answers) {
-          const choices = Array.isArray(answer.choiceValues) ? (answer.choiceValues as string[]) : [];
+          const choices = Array.isArray(answer.choiceValues)
+            ? (answer.choiceValues as string[])
+            : [];
           for (const choice of choices) {
             tally[choice] = (tally[choice] ?? 0) + 1;
           }
@@ -140,12 +152,16 @@ export class SurveyEvidenceService {
         const numericAnswers = answers.filter((a) => a.numericValue !== null);
         if (numericAnswers.length > 0) {
           summary.avgRawValue =
-            numericAnswers.reduce((sum, a) => sum + (a.numericValue ?? 0), 0) / numericAnswers.length;
+            numericAnswers.reduce((sum, a) => sum + (a.numericValue ?? 0), 0) /
+            numericAnswers.length;
         }
         const scoredAnswers = answers.filter((a) => a.normalisedScore !== null);
         if (scoredAnswers.length > 0) {
           summary.avgNormalisedScore =
-            scoredAnswers.reduce((sum, a) => sum + (a.normalisedScore ?? 0), 0) / scoredAnswers.length;
+            scoredAnswers.reduce(
+              (sum, a) => sum + (a.normalisedScore ?? 0),
+              0,
+            ) / scoredAnswers.length;
         }
       }
 

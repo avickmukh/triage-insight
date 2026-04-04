@@ -19,7 +19,10 @@ import { EmbeddingService } from './embedding.service';
 import { ConfigService } from '@nestjs/config';
 
 // ─── Mock OpenAI client ───────────────────────────────────────────────────────
-const MOCK_EMBEDDING = Array.from({ length: 1536 }, (_, i) => Math.sin(i) * 0.001);
+const MOCK_EMBEDDING = Array.from(
+  { length: 1536 },
+  (_, i) => Math.sin(i) * 0.001,
+);
 
 const mockOpenAICreate = jest.fn();
 
@@ -71,7 +74,9 @@ describe('EmbeddingService', () => {
 
   describe('generateEmbedding', () => {
     it('should return a 1536-dimensional float array', async () => {
-      const result = await service.generateEmbedding('WiFi keeps disconnecting');
+      const result = await service.generateEmbedding(
+        'WiFi keeps disconnecting',
+      );
 
       expect(result).toBeInstanceOf(Array);
       expect(result).toHaveLength(1536);
@@ -91,11 +96,13 @@ describe('EmbeddingService', () => {
     });
 
     it('should throw ServiceUnavailableException when OpenAI returns an error', async () => {
-      mockOpenAICreate.mockRejectedValueOnce(new Error('OpenAI API error: rate limit exceeded'));
-
-      await expect(service.generateEmbedding('Some feedback text')).rejects.toThrow(
-        ServiceUnavailableException,
+      mockOpenAICreate.mockRejectedValueOnce(
+        new Error('OpenAI API error: rate limit exceeded'),
       );
+
+      await expect(
+        service.generateEmbedding('Some feedback text'),
+      ).rejects.toThrow(ServiceUnavailableException);
     });
 
     it('should throw ServiceUnavailableException when API key is missing', async () => {
@@ -117,7 +124,10 @@ describe('EmbeddingService', () => {
     });
 
     it('should return the exact embedding values from the OpenAI response', async () => {
-      const specificEmbedding = Array.from({ length: 1536 }, (_, i) => i * 0.0001);
+      const specificEmbedding = Array.from(
+        { length: 1536 },
+        (_, i) => i * 0.0001,
+      );
       mockOpenAICreate.mockResolvedValueOnce({
         data: [{ embedding: specificEmbedding }],
       });

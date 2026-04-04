@@ -7,6 +7,7 @@ import {
   useThemeDetail,
   useUpdateTheme,
   useRemoveFeedbackFromTheme,
+  useArchiveTheme,
 } from '@/hooks/use-themes';
 import { useCurrentMemberRole, useWorkspace } from '@/hooks/use-workspace';
 import { useThemeCiqScore, useRecalculateThemeCiq, useThemeRevenueIntelligence } from '@/hooks/use-ciq';
@@ -193,7 +194,7 @@ function EditThemeModal({
               >
                 <option value={ThemeStatus.AI_GENERATED}>AI Generated</option>
                 <option value={ThemeStatus.VERIFIED}>Verified</option>
-                <option value={ThemeStatus.ARCHIVED}>Archived</option>
+                {/* ARCHIVED is not available here — use the Archive Theme button instead */}
               </select>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', paddingBottom: '0.125rem' }}>
@@ -448,10 +449,13 @@ export default function ThemeDetailPage() {
   const aiSuggestion = aiSuggestions?.data?.find((s) => s.themeId === themeId);
   const recalculate = useRecalculateThemeCiq();
   const updateTheme = useUpdateTheme(themeId);
+  const archiveTheme = useArchiveTheme(themeId);
   const [rescoreToast, setRescoreToast] = useState<string | null>(null);
   const [actionToast, setActionToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [removeToast, setRemoveToast] = useState<string | null>(null);
   const [promoteModalOpen, setPromoteModalOpen] = useState(false);
+  const [showArchiveModal, setShowArchiveModal] = useState(false);
+  const [archiveReason, setArchiveReason] = useState<string>('Other');
 
   const handleFeedbackRemoved = (title: string) => {
     setRemoveToast(`“${title}” removed from this theme.`);
@@ -713,17 +717,33 @@ export default function ThemeDetailPage() {
             </div>
           </div>
           {canEdit && (
-            <button
-              onClick={() => setShowEdit(true)}
-              style={{
-                padding: '0.5rem 1.125rem', borderRadius: '0.5rem',
-                border: '1px solid #ced4da', background: '#fff',
-                fontSize: '0.875rem', cursor: 'pointer', color: '#495057',
-                fontWeight: 500, flexShrink: 0,
-              }}
-            >
-              Edit
-            </button>
+            <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+              <button
+                onClick={() => setShowEdit(true)}
+                style={{
+                  padding: '0.5rem 1.125rem', borderRadius: '0.5rem',
+                  border: '1px solid #ced4da', background: '#fff',
+                  fontSize: '0.875rem', cursor: 'pointer', color: '#495057',
+                  fontWeight: 500,
+                }}
+              >
+                Edit
+              </button>
+              {theme.status !== ThemeStatus.ARCHIVED && (
+                <button
+                  onClick={() => setShowArchiveModal(true)}
+                  style={{
+                    padding: '0.5rem 1.125rem', borderRadius: '0.5rem',
+                    border: '1px solid #f5c6cb', background: '#fff5f5',
+                    fontSize: '0.875rem', cursor: 'pointer', color: '#c0392b',
+                    fontWeight: 500,
+                  }}
+                  title="Archive this theme — removes it from all intelligence views"
+                >
+                  Archive
+                </button>
+              )}
+            </div>
           )}
         </div>
 
@@ -784,8 +804,51 @@ export default function ThemeDetailPage() {
         </div>
       </div>
 
+      {/* ── Archive explainability banner ── */}
+      {theme.status === ThemeStatus.ARCHIVED && (
+        <div style={{
+          background: '#fff5f5',
+          border: '1px solid #f5c6cb',
+          borderRadius: '0.75rem',
+          padding: '1rem 1.25rem',
+          display: 'flex',
+          gap: '0.875rem',
+          alignItems: 'flex-start',
+        }}>
+          <span style={{ fontSize: '1.25rem', flexShrink: 0 }}>&#x1F4E6;</span>
+          <div>
+            <p style={{ fontSize: '0.875rem', fontWeight: 700, color: '#c0392b', margin: '0 0 0.25rem' }}>
+              This theme is archived
+              {theme.archivedBy === 'MANUAL' ? ' — manually by a team member' : ' — automatically by the AI pipeline'}
+            </p>
+            {theme.archiveExplanation && (
+              <p style={{ fontSize: '0.825rem', color: '#6C757D', margin: '0 0 0.25rem', lineHeight: 1.5 }}>
+                {theme.archiveExplanation}
+              </p>
+            )}
+            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginTop: '0.375rem' }}>
+              {theme.archiveReason && (
+                <span style={{ fontSize: '0.75rem', background: '#f5c6cb', color: '#c0392b', borderRadius: '0.375rem', padding: '0.2rem 0.5rem', fontWeight: 600 }}>
+                  Reason: {theme.archiveReason}
+                </span>
+              )}
+              {theme.archivedAt && (
+                <span style={{ fontSize: '0.75rem', color: '#adb5bd' }}>
+                  Archived {new Date(theme.archivedAt).toLocaleDateString()}
+                </span>
+              )}
+              {theme.archiveConfidence != null && (
+                <span style={{ fontSize: '0.75rem', color: '#adb5bd' }}>
+                  AI confidence: {Math.round(theme.archiveConfidence * 100)}%
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Next Steps action bar ── */}
-      {canEdit && (
+      {canEdit && theme.status !== ThemeStatus.ARCHIVED && (
         <div style={{
           background: '#f8fafc',
           border: '1px solid #e2e8f0',
@@ -1817,6 +1880,85 @@ export default function ThemeDetailPage() {
           onClose={() => setPromoteModalOpen(false)}
           onSuccess={handlePromoteSuccess}
         />
+      )}
+      {/* ── Archive Confirmation Modal ── */}
+      {showArchiveModal && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 60,
+            background: 'rgba(10,37,64,0.4)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+          onClick={(e) => e.target === e.currentTarget && setShowArchiveModal(false)}
+        >
+          <div style={{ ...CARD, width: '100%', maxWidth: '26rem', padding: '2rem' }}>
+            <h2 style={{ fontSize: '1.125rem', fontWeight: 700, color: '#c0392b', marginBottom: '0.75rem' }}>
+              Archive this theme?
+            </h2>
+            <p style={{ fontSize: '0.875rem', color: '#495057', marginBottom: '1.25rem', lineHeight: 1.6 }}>
+              Archiving removes this theme from all intelligence views, CIQ rankings, and the roadmap.
+              The theme and its signals are preserved for audit purposes.
+            </p>
+            <div style={{ marginBottom: '1.25rem' }}>
+              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#495057', display: 'block', marginBottom: '0.375rem' }}>
+                Reason for archiving
+              </label>
+              <select
+                value={archiveReason}
+                onChange={(e) => setArchiveReason(e.target.value)}
+                style={{
+                  width: '100%', padding: '0.625rem 0.875rem',
+                  border: '1px solid #ced4da', borderRadius: '0.5rem',
+                  fontSize: '0.9rem', outline: 'none', background: '#fff',
+                }}
+              >
+                <option value="Duplicate">Duplicate — overlaps with another theme</option>
+                <option value="Noise">Noise — low-quality or irrelevant signals</option>
+                <option value="Wrong clustering">Wrong clustering — AI grouped incorrectly</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            {archiveTheme.isError && (
+              <p style={{ color: '#e63946', fontSize: '0.8rem', marginBottom: '0.75rem' }}>
+                {(archiveTheme.error as Error)?.message || 'Failed to archive theme.'}
+              </p>
+            )}
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setShowArchiveModal(false)}
+                style={{
+                  padding: '0.5rem 1.125rem', borderRadius: '0.5rem',
+                  border: '1px solid #ced4da', background: '#fff',
+                  fontSize: '0.875rem', cursor: 'pointer', color: '#495057', fontWeight: 500,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={archiveTheme.isPending}
+                onClick={() => {
+                  archiveTheme.mutate(archiveReason, {
+                    onSuccess: () => {
+                      setShowArchiveModal(false);
+                      setActionToast({ message: 'Theme archived. It is now hidden from all intelligence views.', type: 'success' });
+                      setTimeout(() => setActionToast(null), 6000);
+                    },
+                  });
+                }}
+                style={{
+                  padding: '0.5rem 1.125rem', borderRadius: '0.5rem',
+                  border: 'none', background: archiveTheme.isPending ? '#e9ecef' : '#c0392b',
+                  fontSize: '0.875rem', cursor: archiveTheme.isPending ? 'not-allowed' : 'pointer',
+                  color: archiveTheme.isPending ? '#6C757D' : '#fff', fontWeight: 600,
+                }}
+              >
+                {archiveTheme.isPending ? 'Archiving…' : 'Archive Theme'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       <style>{`@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
     </div>

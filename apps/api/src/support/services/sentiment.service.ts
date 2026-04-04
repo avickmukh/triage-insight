@@ -22,28 +22,105 @@ import { PrismaService } from '../../prisma/prisma.service';
 // ─── Lexicon ─────────────────────────────────────────────────────────────────
 
 const POSITIVE_WORDS = new Set([
-  'great', 'good', 'excellent', 'awesome', 'love', 'perfect', 'thanks',
-  'thank', 'helpful', 'resolved', 'fixed', 'working', 'fast', 'quick',
-  'easy', 'smooth', 'happy', 'pleased', 'satisfied', 'appreciate',
-  'wonderful', 'fantastic', 'brilliant', 'superb', 'outstanding',
-  'impressive', 'reliable', 'efficient', 'clear', 'simple', 'intuitive',
+  'great',
+  'good',
+  'excellent',
+  'awesome',
+  'love',
+  'perfect',
+  'thanks',
+  'thank',
+  'helpful',
+  'resolved',
+  'fixed',
+  'working',
+  'fast',
+  'quick',
+  'easy',
+  'smooth',
+  'happy',
+  'pleased',
+  'satisfied',
+  'appreciate',
+  'wonderful',
+  'fantastic',
+  'brilliant',
+  'superb',
+  'outstanding',
+  'impressive',
+  'reliable',
+  'efficient',
+  'clear',
+  'simple',
+  'intuitive',
 ]);
 
 const NEGATIVE_WORDS = new Set([
-  'broken', 'bug', 'error', 'fail', 'failed', 'failure', 'crash',
-  'crashing', 'slow', 'terrible', 'awful', 'horrible', 'bad', 'worst',
-  'useless', 'frustrating', 'frustrated', 'annoying', 'annoyed',
-  'disappointed', 'disappointing', 'confusing', 'confused', 'stuck',
-  'unable', 'cannot', 'cant', 'wont', 'doesnt', 'wrong',
-  'issue', 'problem', 'urgent', 'critical', 'blocker', 'blocking',
-  'down', 'outage', 'unavailable', 'missing', 'lost', 'deleted',
-  'corrupt', 'corrupted', 'timeout', 'hang', 'hanging', 'freeze',
-  'frozen', 'unacceptable', 'ridiculous', 'hate', 'waste', 'refund',
+  'broken',
+  'bug',
+  'error',
+  'fail',
+  'failed',
+  'failure',
+  'crash',
+  'crashing',
+  'slow',
+  'terrible',
+  'awful',
+  'horrible',
+  'bad',
+  'worst',
+  'useless',
+  'frustrating',
+  'frustrated',
+  'annoying',
+  'annoyed',
+  'disappointed',
+  'disappointing',
+  'confusing',
+  'confused',
+  'stuck',
+  'unable',
+  'cannot',
+  'cant',
+  'wont',
+  'doesnt',
+  'wrong',
+  'issue',
+  'problem',
+  'urgent',
+  'critical',
+  'blocker',
+  'blocking',
+  'down',
+  'outage',
+  'unavailable',
+  'missing',
+  'lost',
+  'deleted',
+  'corrupt',
+  'corrupted',
+  'timeout',
+  'hang',
+  'hanging',
+  'freeze',
+  'frozen',
+  'unacceptable',
+  'ridiculous',
+  'hate',
+  'waste',
+  'refund',
   'cancel',
 ]);
 
 const NEGATION_WORDS = new Set([
-  'not', 'no', 'never', 'neither', 'nor', "n't", 'without',
+  'not',
+  'no',
+  'never',
+  'neither',
+  'nor',
+  "n't",
+  'without',
 ]);
 
 // ─── Service ─────────────────────────────────────────────────────────────────
@@ -103,7 +180,9 @@ export class SentimentService {
    * Score all tickets in a workspace and persist the results via raw SQL.
    * Returns the count of tickets scored.
    */
-  async scoreWorkspaceTickets(workspaceId: string): Promise<{ scored: number }> {
+  async scoreWorkspaceTickets(
+    workspaceId: string,
+  ): Promise<{ scored: number }> {
     this.logger.log(`[Sentiment] Scoring tickets for workspace ${workspaceId}`);
 
     const tickets = await this.prisma.supportTicket.findMany({
@@ -131,8 +210,12 @@ export class SentimentService {
    * Aggregate sentiment scores from tickets into their parent clusters via raw SQL.
    * Updates avgSentiment, negativeTicketPct, and hasActiveSpike on each cluster.
    */
-  async aggregateClusterSentiment(workspaceId: string): Promise<{ updated: number }> {
-    this.logger.log(`[Sentiment] Aggregating cluster sentiment for workspace ${workspaceId}`);
+  async aggregateClusterSentiment(
+    workspaceId: string,
+  ): Promise<{ updated: number }> {
+    this.logger.log(
+      `[Sentiment] Aggregating cluster sentiment for workspace ${workspaceId}`,
+    );
 
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
@@ -165,7 +248,9 @@ export class SentimentService {
         AND c."workspaceId" = ${workspaceId}
     `;
 
-    const count = await this.prisma.supportIssueCluster.count({ where: { workspaceId } });
+    const count = await this.prisma.supportIssueCluster.count({
+      where: { workspaceId },
+    });
     this.logger.log(`[Sentiment] Updated ${count} clusters`);
     return { updated: count };
   }
@@ -178,7 +263,8 @@ export class SentimentService {
     clustersUpdated: number;
   }> {
     const { scored } = await this.scoreWorkspaceTickets(workspaceId);
-    const { updated: clustersUpdated } = await this.aggregateClusterSentiment(workspaceId);
+    const { updated: clustersUpdated } =
+      await this.aggregateClusterSentiment(workspaceId);
     return { scored, clustersUpdated };
   }
 
@@ -202,16 +288,18 @@ export class SentimentService {
       themeTitle: string | null;
     }>
   > {
-    const rows = await this.prisma.$queryRaw<Array<{
-      id: string;
-      title: string;
-      avgSentiment: number | null;
-      negativeTicketPct: number | null;
-      ticketCount: number;
-      arrExposure: number;
-      hasActiveSpike: boolean;
-      themeId: string | null;
-    }>>`
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        title: string;
+        avgSentiment: number | null;
+        negativeTicketPct: number | null;
+        ticketCount: number;
+        arrExposure: number;
+        hasActiveSpike: boolean;
+        themeId: string | null;
+      }>
+    >`
       SELECT id, title, "avgSentiment", "negativeTicketPct",
              "ticketCount", "arrExposure", "hasActiveSpike", "themeId"
       FROM "SupportIssueCluster"
@@ -237,7 +325,8 @@ export class SentimentService {
       id: r.id,
       title: r.title,
       avgSentiment: r.avgSentiment != null ? Number(r.avgSentiment) : null,
-      negativeTicketPct: r.negativeTicketPct != null ? Number(r.negativeTicketPct) : null,
+      negativeTicketPct:
+        r.negativeTicketPct != null ? Number(r.negativeTicketPct) : null,
       ticketCount: Number(r.ticketCount),
       arrExposure: Number(r.arrExposure),
       hasActiveSpike: Boolean(r.hasActiveSpike),

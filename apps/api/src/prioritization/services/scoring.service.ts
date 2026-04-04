@@ -1,6 +1,6 @@
-import { Injectable, Logger } from "@nestjs/common";
-import { PrioritizationSettings } from "@prisma/client";
-import { ThemeData } from "./aggregation.service";
+import { Injectable, Logger } from '@nestjs/common';
+import { PrioritizationSettings } from '@prisma/client';
+import { ThemeData } from './aggregation.service';
 
 export interface ScoreComponent {
   /** Raw input value before weighting (e.g., number of requests, ARR in dollars) */
@@ -95,43 +95,43 @@ export class ScoringService {
       configuredWeight: number;
     }> = [
       {
-        key: "requestFrequencyWeight",
-        label: "Request frequency",
+        key: 'requestFrequencyWeight',
+        label: 'Request frequency',
         rawValue: data.requestFrequency,
         normalisedValue: linearNorm(data.requestFrequency, 200),
         configuredWeight: settings.requestFrequencyWeight,
       },
       {
-        key: "customerCountWeight",
-        label: "Unique customers",
+        key: 'customerCountWeight',
+        label: 'Unique customers',
         rawValue: data.uniqueCustomerCount,
         normalisedValue: linearNorm(data.uniqueCustomerCount, 100),
         configuredWeight: settings.customerCountWeight,
       },
       {
-        key: "arrValueWeight",
-        label: "ARR at stake",
+        key: 'arrValueWeight',
+        label: 'ARR at stake',
         rawValue: data.arrValue,
         normalisedValue: logNorm(data.arrValue, 1_000_000),
         configuredWeight: settings.arrValueWeight,
       },
       {
-        key: "accountPriorityWeight",
-        label: "Account priority",
+        key: 'accountPriorityWeight',
+        label: 'Account priority',
         rawValue: data.accountPriorityValue,
         normalisedValue: linearNorm(data.accountPriorityValue, 500),
         configuredWeight: settings.accountPriorityWeight,
       },
       {
-        key: "dealValueWeight",
-        label: "Deal influence",
+        key: 'dealValueWeight',
+        label: 'Deal influence',
         rawValue: data.dealInfluenceValue,
         normalisedValue: logNorm(data.dealInfluenceValue, 500_000),
         configuredWeight: settings.dealValueWeight,
       },
       {
-        key: "strategicWeight",
-        label: "Strategic alignment",
+        key: 'strategicWeight',
+        label: 'Strategic alignment',
         rawValue: strategicWeight,
         normalisedValue: clamp(strategicWeight * 100),
         configuredWeight: settings.strategicWeight,
@@ -140,10 +140,14 @@ export class ScoringService {
 
     // ── 2. Normalise weights to sum to 1.0 ────────────────────────────────────
 
-    const totalWeight = dimensions.reduce((sum, d) => sum + d.configuredWeight, 0);
-    const normalisedWeights = totalWeight > 0
-      ? dimensions.map((d) => d.configuredWeight / totalWeight)
-      : dimensions.map(() => 1 / dimensions.length);
+    const totalWeight = dimensions.reduce(
+      (sum, d) => sum + d.configuredWeight,
+      0,
+    );
+    const normalisedWeights =
+      totalWeight > 0
+        ? dimensions.map((d) => d.configuredWeight / totalWeight)
+        : dimensions.map(() => 1 / dimensions.length);
 
     // ── 3. Build explanation and compute total score ──────────────────────────
 

@@ -144,7 +144,9 @@ describe('UnifiedAggregationService', () => {
     const THEME_ID = 'theme-abc';
 
     beforeEach(() => {
-      mockPrisma.theme.findUnique.mockResolvedValue({ title: 'Checkout Delay' });
+      mockPrisma.theme.findUnique.mockResolvedValue({
+        title: 'Checkout Delay',
+      });
       mockPrisma.themeFeedback.findMany.mockResolvedValue([
         { feedback: { sourceType: 'FEEDBACK', sentiment: 0.5 } },
         { feedback: { sourceType: 'VOICE', sentiment: -0.8 } },
@@ -160,7 +162,7 @@ describe('UnifiedAggregationService', () => {
     it('should compute correct source counts', async () => {
       const result = await service.aggregateTheme(THEME_ID);
       expect(result.feedbackCount).toBe(4); // all ThemeFeedback rows
-      expect(result.voiceCount).toBe(1);    // only VOICE sourceType
+      expect(result.voiceCount).toBe(1); // only VOICE sourceType
       expect(result.supportCount).toBe(12); // from cluster aggregate
       expect(result.totalSignalCount).toBe(17); // 4 + 12 + 1
     });
@@ -245,7 +247,11 @@ describe('UnifiedAggregationService', () => {
       expect(result[0].feedbackCount).toBe(10);
       expect(result[0].voiceCount).toBe(3);
       expect(result[0].supportCount).toBe(12);
-      expect(result[0].sentimentDistribution).toEqual({ positive: 5, neutral: 3, negative: 2 });
+      expect(result[0].sentimentDistribution).toEqual({
+        positive: 5,
+        neutral: 3,
+        negative: 2,
+      });
     });
 
     it('should handle null sentimentDistribution gracefully', async () => {
@@ -315,9 +321,42 @@ describe('UnifiedAggregationService', () => {
 
     it('should assign priorityRank sequentially starting from 1', async () => {
       mockPrisma.$queryRaw.mockResolvedValue([
-        { id: 'a', title: 'A', shortLabel: null, ciqScore: 90, trendDirection: 'UP', trendDelta: 30, impactSentence: null, revenueInfluence: null, totalSignalCount: 50, customerCount: BigInt(10) },
-        { id: 'b', title: 'B', shortLabel: null, ciqScore: 70, trendDirection: 'STABLE', trendDelta: 0, impactSentence: null, revenueInfluence: null, totalSignalCount: 30, customerCount: BigInt(5) },
-        { id: 'c', title: 'C', shortLabel: null, ciqScore: 50, trendDirection: 'DOWN', trendDelta: -20, impactSentence: null, revenueInfluence: null, totalSignalCount: 10, customerCount: BigInt(2) },
+        {
+          id: 'a',
+          title: 'A',
+          shortLabel: null,
+          ciqScore: 90,
+          trendDirection: 'UP',
+          trendDelta: 30,
+          impactSentence: null,
+          revenueInfluence: null,
+          totalSignalCount: 50,
+          customerCount: BigInt(10),
+        },
+        {
+          id: 'b',
+          title: 'B',
+          shortLabel: null,
+          ciqScore: 70,
+          trendDirection: 'STABLE',
+          trendDelta: 0,
+          impactSentence: null,
+          revenueInfluence: null,
+          totalSignalCount: 30,
+          customerCount: BigInt(5),
+        },
+        {
+          id: 'c',
+          title: 'C',
+          shortLabel: null,
+          ciqScore: 50,
+          trendDirection: 'DOWN',
+          trendDelta: -20,
+          impactSentence: null,
+          revenueInfluence: null,
+          totalSignalCount: 10,
+          customerCount: BigInt(2),
+        },
       ]);
 
       const result = await service.getTopPriorityThemes('ws-1', 3);
@@ -329,7 +368,18 @@ describe('UnifiedAggregationService', () => {
 
     it('should default trendDirection to STABLE when null', async () => {
       mockPrisma.$queryRaw.mockResolvedValue([
-        { id: 'x', title: 'X', shortLabel: null, ciqScore: 60, trendDirection: null, trendDelta: null, impactSentence: null, revenueInfluence: null, totalSignalCount: 20, customerCount: BigInt(0) },
+        {
+          id: 'x',
+          title: 'X',
+          shortLabel: null,
+          ciqScore: 60,
+          trendDirection: null,
+          trendDelta: null,
+          impactSentence: null,
+          revenueInfluence: null,
+          totalSignalCount: 20,
+          customerCount: BigInt(0),
+        },
       ]);
 
       const result = await service.getTopPriorityThemes('ws-1', 3);
@@ -359,8 +409,8 @@ describe('UnifiedAggregationService', () => {
       mockPrisma.theme.aggregate.mockResolvedValue({ _count: { id: 15 } });
       mockPrisma.theme.count.mockResolvedValue(8);
       mockPrisma.$queryRaw
-        .mockResolvedValueOnce([{ title: 'Checkout Delay' }])  // topByFeedback
-        .mockResolvedValueOnce([{ title: 'Login Issues' }])    // topBySupport
+        .mockResolvedValueOnce([{ title: 'Checkout Delay' }]) // topByFeedback
+        .mockResolvedValueOnce([{ title: 'Login Issues' }]) // topBySupport
         .mockResolvedValueOnce([{ title: 'Onboarding Confusion' }]); // topByVoice
     });
 
@@ -375,9 +425,9 @@ describe('UnifiedAggregationService', () => {
 
     it('should compute correct percentages', async () => {
       const result = await service.getWorkspaceSourceSummary('ws-1');
-      expect(result.feedbackPct).toBe(64);  // 70/110 ≈ 63.6 → 64
-      expect(result.voicePct).toBe(9);      // 10/110 ≈ 9.1 → 9
-      expect(result.supportPct).toBe(27);   // 30/110 ≈ 27.3 → 27
+      expect(result.feedbackPct).toBe(64); // 70/110 ≈ 63.6 → 64
+      expect(result.voicePct).toBe(9); // 10/110 ≈ 9.1 → 9
+      expect(result.supportPct).toBe(27); // 30/110 ≈ 27.3 → 27
     });
 
     it('should return top theme titles per source', async () => {
@@ -395,7 +445,9 @@ describe('UnifiedAggregationService', () => {
 
     it('should handle zero total signals without division by zero', async () => {
       mockPrisma.feedback.groupBy.mockResolvedValue([]);
-      mockPrisma.supportIssueCluster.aggregate.mockResolvedValue({ _sum: { ticketCount: null } });
+      mockPrisma.supportIssueCluster.aggregate.mockResolvedValue({
+        _sum: { ticketCount: null },
+      });
       const result = await service.getWorkspaceSourceSummary('ws-empty');
       expect(result.totalSignals).toBe(0);
       expect(result.feedbackPct).toBe(0);

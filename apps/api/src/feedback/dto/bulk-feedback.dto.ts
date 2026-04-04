@@ -1,4 +1,11 @@
-import { IsArray, IsString, IsNotEmpty, ArrayMinSize, ArrayMaxSize, IsOptional } from 'class-validator';
+import {
+  IsArray,
+  IsString,
+  IsNotEmpty,
+  ArrayMinSize,
+  ArrayMaxSize,
+  IsOptional,
+} from 'class-validator';
 
 /**
  * DTO for bulk feedback actions (Step 3 Gap Fix — Bulk Inbox Actions).

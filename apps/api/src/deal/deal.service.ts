@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
 import { PrismaService } from '../prisma/prisma.service';
@@ -56,18 +60,21 @@ export class DealService {
       where: { id: dto.customerId, workspaceId },
     });
     if (!customer) {
-      throw new NotFoundException(`Customer ${dto.customerId} not found in this workspace.`);
+      throw new NotFoundException(
+        `Customer ${dto.customerId} not found in this workspace.`,
+      );
     }
 
     const deal = await this.prisma.deal.create({
       data: {
         workspaceId,
         ...dealData,
-        ...(themeIds && themeIds.length > 0 && {
-          themeLinks: {
-            create: themeIds.map((themeId) => ({ themeId })),
-          },
-        }),
+        ...(themeIds &&
+          themeIds.length > 0 && {
+            themeLinks: {
+              create: themeIds.map((themeId) => ({ themeId })),
+            },
+          }),
       },
       include: DEAL_INCLUDE,
     });
@@ -78,17 +85,29 @@ export class DealService {
         await this.revenueSignalQueue
           .add(
             { type: 'RECOMPUTE_THEME_REVENUE', workspaceId, themeId },
-            { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, delay: 2000 },
+            {
+              attempts: 3,
+              backoff: { type: 'exponential', delay: 2000 },
+              delay: 2000,
+            },
           )
-          .catch(() => { /* non-critical */ });
+          .catch(() => {
+            /* non-critical */
+          });
 
         // Also trigger CIQ re-scoring for each linked theme
         await this.ciqQueue
           .add(
             { type: 'THEME_SCORED', workspaceId, themeId },
-            { attempts: 3, backoff: { type: 'exponential', delay: 3000 }, delay: 3000 },
+            {
+              attempts: 3,
+              backoff: { type: 'exponential', delay: 3000 },
+              delay: 3000,
+            },
           )
-          .catch(() => { /* non-critical */ });
+          .catch(() => {
+            /* non-critical */
+          });
       }
     }
 
@@ -96,9 +115,15 @@ export class DealService {
     await this.ciqQueue
       .add(
         { type: 'DEAL_SCORED', workspaceId, dealId: deal.id },
-        { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, delay: 1000 },
+        {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 2000 },
+          delay: 1000,
+        },
       )
-      .catch(() => { /* non-critical */ });
+      .catch(() => {
+        /* non-critical */
+      });
 
     return deal;
   }
@@ -117,8 +142,14 @@ export class DealService {
       limit = 50,
     } = query;
 
-    const allowedSort: DealSortField[] = ['createdAt', 'updatedAt', 'annualValue'];
-    const resolvedSort: DealSortField = allowedSort.includes(sortBy as DealSortField)
+    const allowedSort: DealSortField[] = [
+      'createdAt',
+      'updatedAt',
+      'annualValue',
+    ];
+    const resolvedSort: DealSortField = allowedSort.includes(
+      sortBy as DealSortField,
+    )
       ? (sortBy as DealSortField)
       : 'createdAt';
 
@@ -195,26 +226,44 @@ export class DealService {
         await this.revenueSignalQueue
           .add(
             { type: 'RECOMPUTE_THEME_REVENUE', workspaceId, themeId },
-            { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, delay: 2000 },
+            {
+              attempts: 3,
+              backoff: { type: 'exponential', delay: 2000 },
+              delay: 2000,
+            },
           )
-          .catch(() => { /* non-critical */ });
+          .catch(() => {
+            /* non-critical */
+          });
 
         // CIQ re-score the theme too
         await this.ciqQueue
           .add(
             { type: 'THEME_SCORED', workspaceId, themeId },
-            { attempts: 3, backoff: { type: 'exponential', delay: 3000 }, delay: 3000 },
+            {
+              attempts: 3,
+              backoff: { type: 'exponential', delay: 3000 },
+              delay: 3000,
+            },
           )
-          .catch(() => { /* non-critical */ });
+          .catch(() => {
+            /* non-critical */
+          });
       }
 
       // Re-score the deal itself
       await this.ciqQueue
         .add(
           { type: 'DEAL_SCORED', workspaceId, dealId: deal.id },
-          { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, delay: 1000 },
+          {
+            attempts: 3,
+            backoff: { type: 'exponential', delay: 2000 },
+            delay: 1000,
+          },
         )
-        .catch(() => { /* non-critical */ });
+        .catch(() => {
+          /* non-critical */
+        });
     }
 
     return deal;
@@ -230,18 +279,34 @@ export class DealService {
     for (const tl of deal.themeLinks) {
       await this.revenueSignalQueue
         .add(
-          { type: 'RECOMPUTE_THEME_REVENUE', workspaceId, themeId: tl.theme.id },
-          { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, delay: 2000 },
+          {
+            type: 'RECOMPUTE_THEME_REVENUE',
+            workspaceId,
+            themeId: tl.theme.id,
+          },
+          {
+            attempts: 3,
+            backoff: { type: 'exponential', delay: 2000 },
+            delay: 2000,
+          },
         )
-        .catch(() => { /* non-critical */ });
+        .catch(() => {
+          /* non-critical */
+        });
 
       // CIQ re-score the theme after deal removal
       await this.ciqQueue
         .add(
           { type: 'THEME_SCORED', workspaceId, themeId: tl.theme.id },
-          { attempts: 3, backoff: { type: 'exponential', delay: 3000 }, delay: 3000 },
+          {
+            attempts: 3,
+            backoff: { type: 'exponential', delay: 3000 },
+            delay: 3000,
+          },
         )
-        .catch(() => { /* non-critical */ });
+        .catch(() => {
+          /* non-critical */
+        });
     }
 
     return { success: true };
@@ -252,7 +317,9 @@ export class DealService {
   async linkTheme(workspaceId: string, dealId: string, themeId: string) {
     await this.findOne(workspaceId, dealId);
 
-    const theme = await this.prisma.theme.findFirst({ where: { id: themeId, workspaceId } });
+    const theme = await this.prisma.theme.findFirst({
+      where: { id: themeId, workspaceId },
+    });
     if (!theme) throw new NotFoundException(`Theme ${themeId} not found`);
 
     await this.prisma.dealThemeLink.upsert({
@@ -265,17 +332,29 @@ export class DealService {
     await this.revenueSignalQueue
       .add(
         { type: 'RECOMPUTE_THEME_REVENUE', workspaceId, themeId },
-        { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, delay: 1000 },
+        {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 2000 },
+          delay: 1000,
+        },
       )
-      .catch(() => { /* non-critical */ });
+      .catch(() => {
+        /* non-critical */
+      });
 
     // CIQ re-score the theme
     await this.ciqQueue
       .add(
         { type: 'THEME_SCORED', workspaceId, themeId },
-        { attempts: 3, backoff: { type: 'exponential', delay: 3000 }, delay: 2000 },
+        {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 3000 },
+          delay: 2000,
+        },
       )
-      .catch(() => { /* non-critical */ });
+      .catch(() => {
+        /* non-critical */
+      });
 
     return { success: true };
   }
@@ -286,7 +365,8 @@ export class DealService {
     const existing = await this.prisma.dealThemeLink.findUnique({
       where: { dealId_themeId: { dealId, themeId } },
     });
-    if (!existing) throw new BadRequestException('Deal is not linked to this theme');
+    if (!existing)
+      throw new BadRequestException('Deal is not linked to this theme');
 
     await this.prisma.dealThemeLink.delete({
       where: { dealId_themeId: { dealId, themeId } },
@@ -296,17 +376,29 @@ export class DealService {
     await this.revenueSignalQueue
       .add(
         { type: 'RECOMPUTE_THEME_REVENUE', workspaceId, themeId },
-        { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, delay: 1000 },
+        {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 2000 },
+          delay: 1000,
+        },
       )
-      .catch(() => { /* non-critical */ });
+      .catch(() => {
+        /* non-critical */
+      });
 
     // CIQ re-score the theme
     await this.ciqQueue
       .add(
         { type: 'THEME_SCORED', workspaceId, themeId },
-        { attempts: 3, backoff: { type: 'exponential', delay: 3000 }, delay: 2000 },
+        {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 3000 },
+          delay: 2000,
+        },
       )
-      .catch(() => { /* non-critical */ });
+      .catch(() => {
+        /* non-critical */
+      });
 
     return { success: true };
   }
@@ -314,7 +406,9 @@ export class DealService {
   // ─── Deals by theme (revenue influence) ───────────────────────────────────
 
   async findByTheme(workspaceId: string, themeId: string) {
-    const theme = await this.prisma.theme.findFirst({ where: { id: themeId, workspaceId } });
+    const theme = await this.prisma.theme.findFirst({
+      where: { id: themeId, workspaceId },
+    });
     if (!theme) throw new NotFoundException('Theme not found');
 
     const links = await this.prisma.dealThemeLink.findMany({
@@ -402,7 +496,9 @@ export class DealService {
     }
 
     const topCustomers = Array.from(customerMap.values())
-      .sort((a, b) => b.arrValue - a.arrValue || b.feedbackCount - a.feedbackCount)
+      .sort(
+        (a, b) => b.arrValue - a.arrValue || b.feedbackCount - a.feedbackCount,
+      )
       .slice(0, 10);
 
     return {

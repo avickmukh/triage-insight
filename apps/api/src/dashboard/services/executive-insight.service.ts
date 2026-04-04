@@ -26,11 +26,11 @@ export class ExecutiveInsightService {
    */
   synthesise(
     productDirection: ProductDirectionSummary,
-    emergingThemes:   EmergingThemeRadar,
-    revenueRisk:      RevenueRiskIndicator,
-    voiceSentiment:   VoiceSentimentSignal,
-    supportPressure:  SupportPressureIndicator,
-    roadmapHealth:    RoadmapHealthPanel,
+    emergingThemes: EmergingThemeRadar,
+    revenueRisk: RevenueRiskIndicator,
+    voiceSentiment: VoiceSentimentSignal,
+    supportPressure: SupportPressureIndicator,
+    roadmapHealth: RoadmapHealthPanel,
   ): ExecutiveSummary {
     const keyInsights: string[] = [];
     let riskAlert: string | null = null;
@@ -62,9 +62,10 @@ export class ExecutiveInsightService {
 
     // ── Revenue risk insight ───────────────────────────────────────────────
     if (revenueRisk.totalArrAtRisk > 0) {
-      const arrFormatted = revenueRisk.totalArrAtRisk >= 1_000_000
-        ? `$${(revenueRisk.totalArrAtRisk / 1_000_000).toFixed(1)}M`
-        : `$${Math.round(revenueRisk.totalArrAtRisk / 1000)}k`;
+      const arrFormatted =
+        revenueRisk.totalArrAtRisk >= 1_000_000
+          ? `$${(revenueRisk.totalArrAtRisk / 1_000_000).toFixed(1)}M`
+          : `$${Math.round(revenueRisk.totalArrAtRisk / 1000)}k`;
       keyInsights.push(
         `${revenueRisk.totalCustomersAtRisk} customers at churn risk representing ${arrFormatted} ARR.`,
       );
@@ -79,7 +80,9 @@ export class ExecutiveInsightService {
         `Negative sentiment is ${voiceSentiment.sentimentTrend} — ${Math.round(voiceSentiment.negativeFraction * 100)}% of recent feedback is negative.`,
       );
     } else if (voiceSentiment.sentimentTrend === 'improving') {
-      keyInsights.push(`Customer sentiment is improving — overall score ${voiceSentiment.overallSentimentScore.toFixed(0)}/100.`);
+      keyInsights.push(
+        `Customer sentiment is improving — overall score ${voiceSentiment.overallSentimentScore.toFixed(0)}/100.`,
+      );
     }
 
     // ── Support pressure insight ───────────────────────────────────────────
@@ -91,32 +94,44 @@ export class ExecutiveInsightService {
 
     // ── Roadmap health insight ─────────────────────────────────────────────
     if (roadmapHealth.healthLabel === 'critical') {
-      keyInsights.push(`Roadmap health is critical (score: ${roadmapHealth.healthScore}/100). ${roadmapHealth.delayedCriticalItems.length} delayed items require attention.`);
+      keyInsights.push(
+        `Roadmap health is critical (score: ${roadmapHealth.healthScore}/100). ${roadmapHealth.delayedCriticalItems.length} delayed items require attention.`,
+      );
     } else if (roadmapHealth.opportunityGaps.length > 0) {
-      keyInsights.push(`${roadmapHealth.opportunityGaps.length} high-priority themes have no roadmap commitment.`);
+      keyInsights.push(
+        `${roadmapHealth.opportunityGaps.length} high-priority themes have no roadmap commitment.`,
+      );
     }
 
     // ── Week summary (narrative) ───────────────────────────────────────────
     const weekSummary = this.buildWeekSummary(
-      productDirection, emergingThemes, revenueRisk, voiceSentiment, supportPressure, roadmapHealth,
+      productDirection,
+      emergingThemes,
+      revenueRisk,
+      voiceSentiment,
+      supportPressure,
+      roadmapHealth,
     );
 
     // ── Momentum signal ────────────────────────────────────────────────────
     const momentumSignal = this.buildMomentumSignal(
-      emergingThemes, voiceSentiment, roadmapHealth,
+      emergingThemes,
+      voiceSentiment,
+      roadmapHealth,
     );
 
     // ── Product direction note ─────────────────────────────────────────────
-    const productDirectionNote = productDirection.topFeatures.length >= 3
-      ? `Three features are ready for roadmap commitment: ${productDirection.topFeatures.map((f) => `"${f.title}"`).join(', ')}.`
-      : productDirection.topFeatures.length === 1
-      ? `One feature stands out for immediate roadmap consideration: "${productDirection.topFeatures[0].title}".`
-      : 'Insufficient CIQ data for product direction. Run a full recompute.';
+    const productDirectionNote =
+      productDirection.topFeatures.length >= 3
+        ? `Three features are ready for roadmap commitment: ${productDirection.topFeatures.map((f) => `"${f.title}"`).join(', ')}.`
+        : productDirection.topFeatures.length === 1
+          ? `One feature stands out for immediate roadmap consideration: "${productDirection.topFeatures[0].title}".`
+          : 'Insufficient CIQ data for product direction. Run a full recompute.';
 
     return {
-      generatedAt:          new Date().toISOString(),
+      generatedAt: new Date().toISOString(),
       weekSummary,
-      keyInsights:          keyInsights.slice(0, 5),
+      keyInsights: keyInsights.slice(0, 5),
       topAction,
       riskAlert,
       momentumSignal,
@@ -136,7 +151,9 @@ export class ExecutiveInsightService {
 
     // Product
     if (pd.topFeatures.length > 0) {
-      parts.push(`Product intelligence identified ${pd.scoredFeedbackCount} scored requests, with "${pd.topFeatures[0].title}" leading the CIQ ranking.`);
+      parts.push(
+        `Product intelligence identified ${pd.scoredFeedbackCount} scored requests, with "${pd.topFeatures[0].title}" leading the CIQ ranking.`,
+      );
     }
 
     // Emerging
@@ -151,20 +168,27 @@ export class ExecutiveInsightService {
 
     // Revenue
     if (rr.totalArrAtRisk > 0) {
-      const arr = rr.totalArrAtRisk >= 1_000_000
-        ? `$${(rr.totalArrAtRisk / 1_000_000).toFixed(1)}M`
-        : `$${Math.round(rr.totalArrAtRisk / 1000)}k`;
-      parts.push(`Revenue risk stands at ${arr} across ${rr.totalCustomersAtRisk} at-risk accounts.`);
+      const arr =
+        rr.totalArrAtRisk >= 1_000_000
+          ? `$${(rr.totalArrAtRisk / 1_000_000).toFixed(1)}M`
+          : `$${Math.round(rr.totalArrAtRisk / 1000)}k`;
+      parts.push(
+        `Revenue risk stands at ${arr} across ${rr.totalCustomersAtRisk} at-risk accounts.`,
+      );
     }
 
     // Sentiment
     if (vs.sentimentTrend !== 'stable') {
-      parts.push(`Customer sentiment is ${vs.sentimentTrend} (${vs.overallSentimentScore.toFixed(0)}/100).`);
+      parts.push(
+        `Customer sentiment is ${vs.sentimentTrend} (${vs.overallSentimentScore.toFixed(0)}/100).`,
+      );
     }
 
     // Support
     if (sp.ticketTrend === 'increasing' || sp.activeSpikeCount > 0) {
-      parts.push(`Support pressure is elevated with ${sp.openTicketCount} open tickets.`);
+      parts.push(
+        `Support pressure is elevated with ${sp.openTicketCount} open tickets.`,
+      );
     }
 
     // Roadmap

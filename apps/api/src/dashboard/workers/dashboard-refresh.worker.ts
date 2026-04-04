@@ -15,8 +15,8 @@ import { DashboardCacheService } from '../services/dashboard-cache.service';
 export const DASHBOARD_QUEUE = 'dashboard-refresh';
 
 export const DASHBOARD_JOB_TYPES = {
-  REFRESH_ALL:      'REFRESH_ALL',
-  REFRESH_SURFACE:  'REFRESH_SURFACE',
+  REFRESH_ALL: 'REFRESH_ALL',
+  REFRESH_SURFACE: 'REFRESH_SURFACE',
 } as const;
 
 export type DashboardSurface =
@@ -34,14 +34,16 @@ export class DashboardRefreshWorker {
 
   constructor(
     private readonly aggregation: DashboardAggregationService,
-    private readonly insight:     ExecutiveInsightService,
-    private readonly cache:       DashboardCacheService,
+    private readonly insight: ExecutiveInsightService,
+    private readonly cache: DashboardCacheService,
   ) {}
 
   @Process(DASHBOARD_JOB_TYPES.REFRESH_ALL)
   async handleRefreshAll(job: Job<{ workspaceId: string }>): Promise<void> {
     const { workspaceId } = job.data;
-    this.logger.log(`[DASHBOARD] Refreshing all surfaces for workspace ${workspaceId}`);
+    this.logger.log(
+      `[DASHBOARD] Refreshing all surfaces for workspace ${workspaceId}`,
+    );
 
     try {
       const [pd, et, rr, vs, sp, rh] = await Promise.all([
@@ -55,25 +57,33 @@ export class DashboardRefreshWorker {
 
       const summary = this.insight.synthesise(pd, et, rr, vs, sp, rh);
 
-      this.cache.set(workspaceId, 'productDirection',  pd);
-      this.cache.set(workspaceId, 'emergingThemes',    et);
-      this.cache.set(workspaceId, 'revenueRisk',       rr);
-      this.cache.set(workspaceId, 'voiceSentiment',    vs);
-      this.cache.set(workspaceId, 'supportPressure',   sp);
-      this.cache.set(workspaceId, 'roadmapHealth',     rh);
-      this.cache.set(workspaceId, 'executiveSummary',  summary);
+      this.cache.set(workspaceId, 'productDirection', pd);
+      this.cache.set(workspaceId, 'emergingThemes', et);
+      this.cache.set(workspaceId, 'revenueRisk', rr);
+      this.cache.set(workspaceId, 'voiceSentiment', vs);
+      this.cache.set(workspaceId, 'supportPressure', sp);
+      this.cache.set(workspaceId, 'roadmapHealth', rh);
+      this.cache.set(workspaceId, 'executiveSummary', summary);
 
-      this.logger.log(`[DASHBOARD] All surfaces refreshed for workspace ${workspaceId}`);
+      this.logger.log(
+        `[DASHBOARD] All surfaces refreshed for workspace ${workspaceId}`,
+      );
     } catch (err) {
-      this.logger.error(`[DASHBOARD] Refresh failed for workspace ${workspaceId}: ${err}`);
+      this.logger.error(
+        `[DASHBOARD] Refresh failed for workspace ${workspaceId}: ${err}`,
+      );
       throw err;
     }
   }
 
   @Process(DASHBOARD_JOB_TYPES.REFRESH_SURFACE)
-  async handleRefreshSurface(job: Job<{ workspaceId: string; surface: DashboardSurface }>): Promise<void> {
+  async handleRefreshSurface(
+    job: Job<{ workspaceId: string; surface: DashboardSurface }>,
+  ): Promise<void> {
     const { workspaceId, surface } = job.data;
-    this.logger.log(`[DASHBOARD] Refreshing surface "${surface}" for workspace ${workspaceId}`);
+    this.logger.log(
+      `[DASHBOARD] Refreshing surface "${surface}" for workspace ${workspaceId}`,
+    );
 
     try {
       switch (surface) {
@@ -122,7 +132,9 @@ export class DashboardRefreshWorker {
         }
       }
     } catch (err) {
-      this.logger.error(`[DASHBOARD] Surface refresh failed for ${surface}: ${err}`);
+      this.logger.error(
+        `[DASHBOARD] Surface refresh failed for ${surface}: ${err}`,
+      );
       throw err;
     }
   }

@@ -26,7 +26,11 @@ export interface ThemeSourceBreakdown {
   voiceCount: number;
   supportCount: number;
   totalSignalCount: number;
-  sentimentDistribution: { positive: number; neutral: number; negative: number };
+  sentimentDistribution: {
+    positive: number;
+    neutral: number;
+    negative: number;
+  };
   crossSourceInsight: string | null;
   lastAggregatedAt: Date;
 }
@@ -140,7 +144,9 @@ export class UnifiedAggregationService {
     processed: number;
     themes: ThemeSourceBreakdown[];
   }> {
-    this.logger.log(`[Unified] Aggregating all themes for workspace ${workspaceId}`);
+    this.logger.log(
+      `[Unified] Aggregating all themes for workspace ${workspaceId}`,
+    );
 
     const themes = await this.prisma.theme.findMany({
       where: { workspaceId },
@@ -153,11 +159,15 @@ export class UnifiedAggregationService {
         const result = await this.aggregateTheme(theme.id);
         results.push(result);
       } catch (err) {
-        this.logger.warn(`[Unified] Failed to aggregate theme ${theme.id}: ${(err as Error).message}`);
+        this.logger.warn(
+          `[Unified] Failed to aggregate theme ${theme.id}: ${(err as Error).message}`,
+        );
       }
     }
 
-    this.logger.log(`[Unified] Aggregated ${results.length}/${themes.length} themes`);
+    this.logger.log(
+      `[Unified] Aggregated ${results.length}/${themes.length} themes`,
+    );
     return { processed: results.length, themes: results };
   }
 
@@ -184,7 +194,11 @@ export class UnifiedAggregationService {
       surveyCount: number;
       clusterConfidence: number | null;
       outlierCount: number | null;
-      sentimentDistribution: { positive: number; neutral: number; negative: number } | null;
+      sentimentDistribution: {
+        positive: number;
+        neutral: number;
+        negative: number;
+      } | null;
       crossSourceInsight: string | null;
       aiRecommendation: string | null;
       lastAggregatedAt: Date | null;
@@ -266,12 +280,17 @@ export class UnifiedAggregationService {
       voiceCount: Number(r.voiceCount ?? 0),
       supportCount: Number(r.supportCount ?? 0),
       surveyCount: Number(r.surveyCount ?? 0),
-      clusterConfidence: r.clusterConfidence != null ? Number(r.clusterConfidence) : null,
+      clusterConfidence:
+        r.clusterConfidence != null ? Number(r.clusterConfidence) : null,
       outlierCount: r.outlierCount != null ? Number(r.outlierCount) : 0,
       sentimentDistribution: r.sentimentDistribution
-        ? (typeof r.sentimentDistribution === 'string'
+        ? ((typeof r.sentimentDistribution === 'string'
             ? JSON.parse(r.sentimentDistribution)
-            : r.sentimentDistribution) as { positive: number; neutral: number; negative: number }
+            : r.sentimentDistribution) as {
+            positive: number;
+            neutral: number;
+            negative: number;
+          })
         : null,
       crossSourceInsight: r.crossSourceInsight,
       aiRecommendation: r.aiRecommendation,
@@ -280,7 +299,8 @@ export class UnifiedAggregationService {
       trendDelta: r.trendDelta != null ? Number(r.trendDelta) : 0,
       shortLabel: r.shortLabel ?? null,
       impactSentence: r.impactSentence ?? null,
-      revenueInfluence: r.revenueInfluence != null ? Number(r.revenueInfluence) : null,
+      revenueInfluence:
+        r.revenueInfluence != null ? Number(r.revenueInfluence) : null,
       customerCount: Number(r.customerCount ?? 0),
     }));
   }
@@ -308,44 +328,51 @@ export class UnifiedAggregationService {
     topThemeByVoice: string | null;
     topThemeBySurvey: string | null;
   }> {
-    const [feedbackBySource, supportAgg, themeStats, topByFeedback, topBySupport, topByVoice, topBySurvey] =
-      await Promise.all([
-        this.prisma.feedback.groupBy({
-          by: ['sourceType'],
-          where: { workspaceId },
-          _count: { id: true },
-        }),
-        this.prisma.supportIssueCluster.aggregate({
-          where: { workspaceId },
-          _sum: { ticketCount: true },
-        }),
-        this.prisma.theme.aggregate({
-          where: { workspaceId },
-          _count: { id: true },
-        }),
-        // Top theme by feedback count (raw SQL for new field)
-        this.prisma.$queryRaw<Array<{ title: string }>>`
+    const [
+      feedbackBySource,
+      supportAgg,
+      themeStats,
+      topByFeedback,
+      topBySupport,
+      topByVoice,
+      topBySurvey,
+    ] = await Promise.all([
+      this.prisma.feedback.groupBy({
+        by: ['sourceType'],
+        where: { workspaceId },
+        _count: { id: true },
+      }),
+      this.prisma.supportIssueCluster.aggregate({
+        where: { workspaceId },
+        _sum: { ticketCount: true },
+      }),
+      this.prisma.theme.aggregate({
+        where: { workspaceId },
+        _count: { id: true },
+      }),
+      // Top theme by feedback count (raw SQL for new field)
+      this.prisma.$queryRaw<Array<{ title: string }>>`
           SELECT title FROM "Theme"
           WHERE "workspaceId" = ${workspaceId} AND status NOT IN ('ARCHIVED', 'PROVISIONAL')
           ORDER BY COALESCE("feedbackCount", 0) DESC LIMIT 1
         `,
-        this.prisma.$queryRaw<Array<{ title: string }>>`
+      this.prisma.$queryRaw<Array<{ title: string }>>`
           SELECT title FROM "Theme"
           WHERE "workspaceId" = ${workspaceId} AND status NOT IN ('ARCHIVED', 'PROVISIONAL')
           ORDER BY COALESCE("supportCount", 0) DESC LIMIT 1
         `,
-        this.prisma.$queryRaw<Array<{ title: string }>>`
+      this.prisma.$queryRaw<Array<{ title: string }>>`
           SELECT title FROM "Theme"
           WHERE "workspaceId" = ${workspaceId} AND status NOT IN ('ARCHIVED', 'PROVISIONAL')
           ORDER BY COALESCE("voiceCount", 0) DESC LIMIT 1
         `,
-        // Top theme by survey signal count
-        this.prisma.$queryRaw<Array<{ title: string }>>`
+      // Top theme by survey signal count
+      this.prisma.$queryRaw<Array<{ title: string }>>`
           SELECT title FROM "Theme"
           WHERE "workspaceId" = ${workspaceId} AND status NOT IN ('ARCHIVED', 'PROVISIONAL')
           ORDER BY COALESCE("surveyCount", 0) DESC LIMIT 1
         `,
-      ]);
+    ]);
 
     const scoredThemeCount = await this.prisma.theme.count({
       where: { workspaceId, ciqScore: { not: null } },
@@ -360,7 +387,8 @@ export class UnifiedAggregationService {
       .filter((r) => r.sourceType !== 'VOICE' && r.sourceType !== 'SURVEY')
       .reduce((sum, r) => sum + r._count.id, 0);
     const totalSupport = supportAgg._sum.ticketCount ?? 0;
-    const totalSignals = totalFeedback + totalVoice + totalSupport + totalSurvey;
+    const totalSignals =
+      totalFeedback + totalVoice + totalSupport + totalSurvey;
 
     const pct = (n: number) =>
       totalSignals > 0 ? Math.round((n / totalSignals) * 100) : 0;
@@ -400,9 +428,19 @@ export class UnifiedAggregationService {
     feedbackCount: number;
     voiceCount: number;
     supportCount: number;
-    sentimentDistribution: { positive: number; neutral: number; negative: number };
+    sentimentDistribution: {
+      positive: number;
+      neutral: number;
+      negative: number;
+    };
   }): Promise<string | null> {
-    const { themeTitle, feedbackCount, voiceCount, supportCount, sentimentDistribution } = params;
+    const {
+      themeTitle,
+      feedbackCount,
+      voiceCount,
+      supportCount,
+      sentimentDistribution,
+    } = params;
     const total = feedbackCount + voiceCount + supportCount;
     if (total === 0) return null;
 
@@ -411,19 +449,27 @@ export class UnifiedAggregationService {
     if (apiKey && themeTitle) {
       try {
         const totalSentiment =
-          sentimentDistribution.positive + sentimentDistribution.neutral + sentimentDistribution.negative;
+          sentimentDistribution.positive +
+          sentimentDistribution.neutral +
+          sentimentDistribution.negative;
         const negativePct =
           totalSentiment > 0
-            ? Math.round((sentimentDistribution.negative / totalSentiment) * 100)
+            ? Math.round(
+                (sentimentDistribution.negative / totalSentiment) * 100,
+              )
             : 0;
         const positivePct =
           totalSentiment > 0
-            ? Math.round((sentimentDistribution.positive / totalSentiment) * 100)
+            ? Math.round(
+                (sentimentDistribution.positive / totalSentiment) * 100,
+              )
             : 0;
 
         const activeSources: string[] = [];
-        if (feedbackCount > 0) activeSources.push(`${feedbackCount} feedback entries`);
-        if (supportCount > 0) activeSources.push(`${supportCount} support tickets`);
+        if (feedbackCount > 0)
+          activeSources.push(`${feedbackCount} feedback entries`);
+        if (supportCount > 0)
+          activeSources.push(`${supportCount} support tickets`);
         if (voiceCount > 0) activeSources.push(`${voiceCount} voice reports`);
 
         const prompt = `You are a product intelligence analyst. Generate a single concise insight sentence (max 20 words) for a product theme.
@@ -451,7 +497,9 @@ Write one sentence that highlights the most important pattern across these sourc
           return sentence;
         }
       } catch (err) {
-        this.logger.warn(`[Unified] LLM insight generation failed, using rule-based fallback: ${(err as Error).message}`);
+        this.logger.warn(
+          `[Unified] LLM insight generation failed, using rule-based fallback: ${(err as Error).message}`,
+        );
       }
     }
 
@@ -474,31 +522,35 @@ Write one sentence that highlights the most important pattern across these sourc
   async getTopPriorityThemes(
     workspaceId: string,
     limit = 3,
-  ): Promise<Array<{
-    id: string;
-    title: string;
-    shortLabel: string | null;
-    ciqScore: number | null;
-    trendDirection: string;
-    trendDelta: number;
-    impactSentence: string | null;
-    revenueInfluence: number | null;
-    customerCount: number;
-    totalSignalCount: number;
-    priorityRank: number;
-  }>> {
-    const rows = await this.prisma.$queryRaw<Array<{
+  ): Promise<
+    Array<{
       id: string;
       title: string;
       shortLabel: string | null;
       ciqScore: number | null;
-      trendDirection: string | null;
-      trendDelta: number | null;
+      trendDirection: string;
+      trendDelta: number;
       impactSentence: string | null;
       revenueInfluence: number | null;
-      totalSignalCount: number | null;
-      customerCount: bigint;
-    }>>`
+      customerCount: number;
+      totalSignalCount: number;
+      priorityRank: number;
+    }>
+  > {
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        title: string;
+        shortLabel: string | null;
+        ciqScore: number | null;
+        trendDirection: string | null;
+        trendDelta: number | null;
+        impactSentence: string | null;
+        revenueInfluence: number | null;
+        totalSignalCount: number | null;
+        customerCount: bigint;
+      }>
+    >`
       SELECT
         t.id,
         t.title,
@@ -537,7 +589,8 @@ Write one sentence that highlights the most important pattern across these sourc
       trendDirection: r.trendDirection ?? 'STABLE',
       trendDelta: r.trendDelta != null ? Number(r.trendDelta) : 0,
       impactSentence: r.impactSentence ?? null,
-      revenueInfluence: r.revenueInfluence != null ? Number(r.revenueInfluence) : null,
+      revenueInfluence:
+        r.revenueInfluence != null ? Number(r.revenueInfluence) : null,
       customerCount: Number(r.customerCount ?? 0),
       totalSignalCount: Number(r.totalSignalCount ?? 0),
       priorityRank: idx + 1,
@@ -551,19 +604,32 @@ Write one sentence that highlights the most important pattern across these sourc
     feedbackCount: number;
     voiceCount: number;
     supportCount: number;
-    sentimentDistribution: { positive: number; neutral: number; negative: number };
+    sentimentDistribution: {
+      positive: number;
+      neutral: number;
+      negative: number;
+    };
   }): string | null {
-    const { feedbackCount, voiceCount, supportCount, sentimentDistribution } = params;
+    const { feedbackCount, voiceCount, supportCount, sentimentDistribution } =
+      params;
     const total = feedbackCount + voiceCount + supportCount;
     if (total === 0) return null;
 
     const activeSources: string[] = [];
     if (feedbackCount > 0) activeSources.push(`${feedbackCount} feedback`);
-    if (supportCount > 0) activeSources.push(`${supportCount} support ticket${supportCount !== 1 ? 's' : ''}`);
-    if (voiceCount > 0) activeSources.push(`${voiceCount} voice report${voiceCount !== 1 ? 's' : ''}`);
+    if (supportCount > 0)
+      activeSources.push(
+        `${supportCount} support ticket${supportCount !== 1 ? 's' : ''}`,
+      );
+    if (voiceCount > 0)
+      activeSources.push(
+        `${voiceCount} voice report${voiceCount !== 1 ? 's' : ''}`,
+      );
 
     const totalSentiment =
-      sentimentDistribution.positive + sentimentDistribution.neutral + sentimentDistribution.negative;
+      sentimentDistribution.positive +
+      sentimentDistribution.neutral +
+      sentimentDistribution.negative;
     const negativePct =
       totalSentiment > 0
         ? Math.round((sentimentDistribution.negative / totalSentiment) * 100)
@@ -571,10 +637,16 @@ Write one sentence that highlights the most important pattern across these sourc
 
     const sourceStr =
       activeSources.length > 1
-        ? activeSources.slice(0, -1).join(', ') + ' and ' + activeSources[activeSources.length - 1]
+        ? activeSources.slice(0, -1).join(', ') +
+          ' and ' +
+          activeSources[activeSources.length - 1]
         : activeSources[0];
 
-    const sourceCount = [feedbackCount > 0, supportCount > 0, voiceCount > 0].filter(Boolean).length;
+    const sourceCount = [
+      feedbackCount > 0,
+      supportCount > 0,
+      voiceCount > 0,
+    ].filter(Boolean).length;
 
     if (negativePct >= 60) {
       return `High negative sentiment (${negativePct}%) across ${sourceStr}.`;

@@ -392,7 +392,18 @@ export interface Theme {
   autoMergeTargetId?: string | null;
   /** Auto-merge similarity score (0–1) */
   autoMergeSimilarity?: number | null;
-  // ─── Pipeline processing state (detail endpoint only) ─────────────────────────────────────────────────────────────────────────────────────────────────
+  // ─── Archive explainability metadata ────────────────────────────────────────────────────────────────────────────────────────
+  /** Human or AI label for why the theme was archived */
+  archiveReason?: string | null;
+  /** AI confidence in the archive decision (0–1); null for manual archives */
+  archiveConfidence?: number | null;
+  /** Human-readable explanation of why the theme was archived */
+  archiveExplanation?: string | null;
+  /** Who triggered the archive: 'AI' or 'MANUAL' */
+  archivedBy?: string | null;
+  /** Timestamp of the archive action */
+  archivedAt?: string | null;
+  // ─── Pipeline processing state (detail endpoint only) ────────────────────────────────────────────────────────────────────────────────────────
   pipelineState?: {
     clustered: boolean;
     scored: boolean;
@@ -2581,7 +2592,16 @@ export interface AiSuggestionBreakdown {
   sourceScore:          number;
   recencyScore:         number;
   resurfacingBonus:     number;
+  confidenceScore:      number;
   roadmapPriorityScore: number;
+  scoreBreakdown:       AiSuggestionScoreBreakdownItem[];
+}
+
+export interface AiSuggestionScoreBreakdownItem {
+  factor: string;
+  rawScore: number;
+  weight: number;
+  contribution: number;
 }
 
 export interface AiRoadmapSuggestion {

@@ -19,7 +19,13 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
-import { BillingPlan, BillingStatus, TrialStatus, WorkspaceRole, WorkspaceStatus } from '@prisma/client';
+import {
+  BillingPlan,
+  BillingStatus,
+  TrialStatus,
+  WorkspaceRole,
+  WorkspaceStatus,
+} from '@prisma/client';
 
 /**
  * bcrypt cost factor.
@@ -101,9 +107,12 @@ export class AuthService {
    * We store bcrypt(sha256Input) and set passwordVersion=1.
    */
   async signUp(signUpDto: SignUpDto) {
-    const { email, password, firstName, lastName, organizationName, planType } = signUpDto;
+    const { email, password, firstName, lastName, organizationName, planType } =
+      signUpDto;
 
-    const existingUser = await this.prisma.user.findUnique({ where: { email } });
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email },
+    });
     if (existingUser) {
       throw new ConflictException('This email is already registered.');
     }
@@ -117,7 +126,9 @@ export class AuthService {
       .replace(/^-+|-+$/g, '');
 
     if (!rawSlug) {
-      throw new BadRequestException('Organization name could not be converted to a valid URL slug.');
+      throw new BadRequestException(
+        'Organization name could not be converted to a valid URL slug.',
+      );
     }
 
     const [nameConflict, slugConflict] = await Promise.all([
@@ -127,23 +138,30 @@ export class AuthService {
       this.prisma.workspace.findFirst({ where: { slug: rawSlug } }),
     ]);
     if (nameConflict || slugConflict) {
-      throw new ConflictException('This organization already exists. Please check with your admin.');
+      throw new ConflictException(
+        'This organization already exists. Please check with your admin.',
+      );
     }
 
     // password is sha256(rawPassword) from the frontend — bcrypt it for storage
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
     const selectedPlan = planType ?? BillingPlan.FREE;
-    const planConfig = await this.prisma.plan.findUnique({ where: { planType: selectedPlan } });
+    const planConfig = await this.prisma.plan.findUnique({
+      where: { planType: selectedPlan },
+    });
     const trialDays = planConfig?.trialDays ?? 0;
     const trialApplies =
       trialDays > 0 &&
-      (selectedPlan === BillingPlan.PRO || selectedPlan === BillingPlan.BUSINESS);
+      (selectedPlan === BillingPlan.PRO ||
+        selectedPlan === BillingPlan.BUSINESS);
     const now = new Date();
     const trialEndsAt = trialApplies
       ? new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000)
       : null;
-    const initialBillingStatus = trialApplies ? BillingStatus.TRIALING : BillingStatus.ACTIVE;
+    const initialBillingStatus = trialApplies
+      ? BillingStatus.TRIALING
+      : BillingStatus.ACTIVE;
 
     const { user } = await this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
@@ -233,7 +251,9 @@ export class AuthService {
       throw new ForbiddenException('This account has been disabled.');
     }
     if (user.status === 'INVITED') {
-      throw new ForbiddenException('Please set up your password using the invite link before logging in.');
+      throw new ForbiddenException(
+        'Please set up your password using the invite link before logging in.',
+      );
     }
 
     // Silently upgrade legacy hash to new format (bcrypt(sha256(raw)))
@@ -246,19 +266,27 @@ export class AuthService {
     }
 
     if (orgSlug) {
-      const workspace = await this.prisma.workspace.findUnique({ where: { slug: orgSlug } });
-      if (!workspace) throw new NotFoundException(`Workspace '${orgSlug}' not found.`);
+      const workspace = await this.prisma.workspace.findUnique({
+        where: { slug: orgSlug },
+      });
+      if (!workspace)
+        throw new NotFoundException(`Workspace '${orgSlug}' not found.`);
       if (workspace.status === WorkspaceStatus.SUSPENDED)
-        throw new ForbiddenException('This workspace has been suspended. Please contact support.');
+        throw new ForbiddenException(
+          'This workspace has been suspended. Please contact support.',
+        );
       if (workspace.status === WorkspaceStatus.DISABLED)
         throw new ForbiddenException('This workspace has been disabled.');
       if (workspace.status === WorkspaceStatus.PENDING)
         throw new ForbiddenException('This workspace is not yet active.');
       // Cross-tenant isolation: user must be a member of this specific workspace
       const membership = await this.prisma.workspaceMember.findUnique({
-        where: { userId_workspaceId: { userId: user.id, workspaceId: workspace.id } },
+        where: {
+          userId_workspaceId: { userId: user.id, workspaceId: workspace.id },
+        },
       });
-      if (!membership) throw new ForbiddenException('You are not a member of this workspace.');
+      if (!membership)
+        throw new ForbiddenException('You are not a member of this workspace.');
     }
 
     return this.generateTokens(user.id, user.email);
@@ -278,12 +306,16 @@ export class AuthService {
       include: { workspace: { select: { name: true, slug: true } } },
     });
     if (!invite) throw new NotFoundException('Invite token not found.');
-    if (invite.usedAt) throw new BadRequestException('This invite link has already been used.');
-    if (invite.expiresAt < new Date()) throw new BadRequestException('This invite link has expired.');
+    if (invite.usedAt)
+      throw new BadRequestException('This invite link has already been used.');
+    if (invite.expiresAt < new Date())
+      throw new BadRequestException('This invite link has expired.');
 
     // dto.password is sha256(rawPassword) from the frontend
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
-    let user = await this.prisma.user.findUnique({ where: { email: invite.email } });
+    let user = await this.prisma.user.findUnique({
+      where: { email: invite.email },
+    });
 
     if (user) {
       user = await this.prisma.user.update({
@@ -292,8 +324,10 @@ export class AuthService {
           passwordHash,
           passwordVersion: 1,
           status: 'ACTIVE',
-          ...(invite.firstName && !user.firstName && { firstName: invite.firstName }),
-          ...(invite.lastName && !user.lastName && { lastName: invite.lastName }),
+          ...(invite.firstName &&
+            !user.firstName && { firstName: invite.firstName }),
+          ...(invite.lastName &&
+            !user.lastName && { lastName: invite.lastName }),
         } as any,
       });
     } else {
@@ -310,7 +344,12 @@ export class AuthService {
     }
 
     await this.prisma.workspaceMember.upsert({
-      where: { userId_workspaceId: { userId: user.id, workspaceId: invite.workspaceId } },
+      where: {
+        userId_workspaceId: {
+          userId: user.id,
+          workspaceId: invite.workspaceId,
+        },
+      },
       create: {
         userId: user.id,
         workspaceId: invite.workspaceId,
@@ -341,7 +380,8 @@ export class AuthService {
    * the raw refresh token is NOT a JWT and cannot be decoded with jwtService.
    */
   async refreshTokenByRaw(rawRefreshToken: string) {
-    if (!rawRefreshToken) throw new UnauthorizedException('Refresh token is required.');
+    if (!rawRefreshToken)
+      throw new UnauthorizedException('Refresh token is required.');
 
     const tokenHash = hashToken(rawRefreshToken);
     const rt = await this.prisma.refreshToken.findFirst({
@@ -354,7 +394,10 @@ export class AuthService {
     }
 
     // Rotation: revoke the old token before issuing a new pair
-    await this.prisma.refreshToken.update({ where: { id: rt.id }, data: { revoked: true } });
+    await this.prisma.refreshToken.update({
+      where: { id: rt.id },
+      data: { revoked: true },
+    });
     return this.generateTokens(rt.user.id, rt.user.email);
   }
 
@@ -364,7 +407,8 @@ export class AuthService {
    */
   async refreshToken(userId: string, rawRefreshToken: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user) throw new UnauthorizedException('Invalid or expired refresh token.');
+    if (!user)
+      throw new UnauthorizedException('Invalid or expired refresh token.');
 
     const tokenHash = hashToken(rawRefreshToken);
     const rt = await this.prisma.refreshToken.findFirst({
@@ -374,7 +418,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired refresh token.');
     }
     // Rotation: revoke old token before issuing new one
-    await this.prisma.refreshToken.update({ where: { id: rt.id }, data: { revoked: true } });
+    await this.prisma.refreshToken.update({
+      where: { id: rt.id },
+      data: { revoked: true },
+    });
     return this.generateTokens(user.id, user.email);
   }
 
@@ -431,7 +478,8 @@ export class AuthService {
       valid = await bcrypt.compare(dto.currentPassword, user.passwordHash);
     }
 
-    if (!valid) throw new UnauthorizedException('Current password is incorrect.');
+    if (!valid)
+      throw new UnauthorizedException('Current password is incorrect.');
 
     // newPassword is sha256(rawNewPassword) from the frontend
     const passwordHash = await bcrypt.hash(dto.newPassword, BCRYPT_ROUNDS);
@@ -457,10 +505,17 @@ export class AuthService {
    * In production, the raw token must be delivered via email (e.g. SendGrid/Resend).
    * During development, the raw token is returned in the response body for testing.
    */
-  async forgotPassword(dto: ForgotPasswordDto): Promise<{ message: string; resetToken?: string }> {
-    const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
+  async forgotPassword(
+    dto: ForgotPasswordDto,
+  ): Promise<{ message: string; resetToken?: string }> {
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
     if (!user) {
-      return { message: 'If an account with that email exists, a reset link has been sent.' };
+      return {
+        message:
+          'If an account with that email exists, a reset link has been sent.',
+      };
     }
 
     // Invalidate any existing unused reset tokens for this user
@@ -489,7 +544,8 @@ export class AuthService {
     });
 
     return {
-      message: 'If an account with that email exists, a reset link has been sent.',
+      message:
+        'If an account with that email exists, a reset link has been sent.',
     };
   }
 
@@ -502,10 +558,15 @@ export class AuthService {
    */
   async resetPassword(dto: ResetPasswordDto): Promise<{ message: string }> {
     const tokenHash = hashToken(dto.token);
-    const resetToken = await this.prisma.passwordResetToken.findUnique({ where: { tokenHash } });
-    if (!resetToken) throw new BadRequestException('Invalid or expired reset token.');
-    if (resetToken.usedAt) throw new BadRequestException('This reset link has already been used.');
-    if (resetToken.expiresAt < new Date()) throw new BadRequestException('This reset link has expired.');
+    const resetToken = await this.prisma.passwordResetToken.findUnique({
+      where: { tokenHash },
+    });
+    if (!resetToken)
+      throw new BadRequestException('Invalid or expired reset token.');
+    if (resetToken.usedAt)
+      throw new BadRequestException('This reset link has already been used.');
+    if (resetToken.expiresAt < new Date())
+      throw new BadRequestException('This reset link has expired.');
 
     // dto.password is sha256(rawPassword) from the frontend
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
@@ -525,7 +586,10 @@ export class AuthService {
         data: { revoked: true },
       }),
     ]);
-    return { message: 'Password reset successfully. Please log in with your new password.' };
+    return {
+      message:
+        'Password reset successfully. Please log in with your new password.',
+    };
   }
 
   /**
@@ -538,8 +602,10 @@ export class AuthService {
       include: { workspace: { select: { name: true, slug: true } } },
     });
     if (!invite) throw new NotFoundException('Invite token not found.');
-    if (invite.usedAt) throw new BadRequestException('This invite link has already been used.');
-    if (invite.expiresAt < new Date()) throw new BadRequestException('This invite link has expired.');
+    if (invite.usedAt)
+      throw new BadRequestException('This invite link has already been used.');
+    if (invite.expiresAt < new Date())
+      throw new BadRequestException('This invite link has expired.');
     return {
       email: invite.email,
       role: invite.role,
@@ -558,16 +624,26 @@ export class AuthService {
    * dto.password is sha256(rawPassword) from the frontend.
    * We store bcrypt(sha256(raw)) and set passwordVersion=1.
    */
-  async portalSignUp(workspaceSlug: string, dto: { email: string; name?: string; password: string }) {
-    const workspace = await this.prisma.workspace.findUnique({ where: { slug: workspaceSlug } });
+  async portalSignUp(
+    workspaceSlug: string,
+    dto: { email: string; name?: string; password: string },
+  ) {
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { slug: workspaceSlug },
+    });
     if (!workspace) throw new NotFoundException('Workspace not found.');
     if (workspace.status !== WorkspaceStatus.ACTIVE)
       throw new ForbiddenException('This portal is not currently available.');
 
     const existing = await this.prisma.portalUser.findUnique({
-      where: { workspaceId_email: { workspaceId: workspace.id, email: dto.email } },
+      where: {
+        workspaceId_email: { workspaceId: workspace.id, email: dto.email },
+      },
     });
-    if (existing) throw new ConflictException('An account with this email already exists for this portal.');
+    if (existing)
+      throw new ConflictException(
+        'An account with this email already exists for this portal.',
+      );
 
     // dto.password is sha256(rawPassword) from the frontend
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
@@ -581,7 +657,11 @@ export class AuthService {
         verified: false,
       } as any,
     });
-    return this.generatePortalTokens(portalUser.id, portalUser.email!, workspace.id);
+    return this.generatePortalTokens(
+      portalUser.id,
+      portalUser.email!,
+      workspace.id,
+    );
   }
 
   /**
@@ -589,20 +669,28 @@ export class AuthService {
    * Dual-mode password verification — same strategy as workspace login.
    * dto.password is sha256(rawPassword) from the frontend.
    */
-  async portalLogin(workspaceSlug: string, dto: { email: string; password: string }) {
-    const workspace = await this.prisma.workspace.findUnique({ where: { slug: workspaceSlug } });
+  async portalLogin(
+    workspaceSlug: string,
+    dto: { email: string; password: string },
+  ) {
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { slug: workspaceSlug },
+    });
     if (!workspace) throw new NotFoundException('Workspace not found.');
     if (workspace.status !== WorkspaceStatus.ACTIVE)
       throw new ForbiddenException('This portal is not currently available.');
 
     const portalUser = await this.prisma.portalUser.findUnique({
-      where: { workspaceId_email: { workspaceId: workspace.id, email: dto.email } },
+      where: {
+        workspaceId_email: { workspaceId: workspace.id, email: dto.email },
+      },
     });
 
     let valid = false;
     if (portalUser) {
       const version = (portalUser as any).passwordVersion ?? 0;
-      const storedHash = portalUser.passwordHash ?? '$2b$12$invalidhashfortimingattackx';
+      const storedHash =
+        portalUser.passwordHash ?? '$2b$12$invalidhashfortimingattackx';
       if (version === 1) {
         // New format: input is sha256(raw), stored is bcrypt(sha256(raw))
         valid = await bcrypt.compare(dto.password, storedHash);
@@ -623,14 +711,19 @@ export class AuthService {
       await bcrypt.compare(dto.password, '$2b$12$invalidhashfortimingattackx');
     }
 
-    if (!portalUser || !valid) throw new UnauthorizedException('Invalid credentials.');
-    return this.generatePortalTokens(portalUser.id, portalUser.email!, workspace.id);
+    if (!portalUser || !valid)
+      throw new UnauthorizedException('Invalid credentials.');
+    return this.generatePortalTokens(
+      portalUser.id,
+      portalUser.email!,
+      workspace.id,
+    );
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
   decodeToken(token: string): { sub: string; email: string } {
-    return this.jwtService.decode(token) as { sub: string; email: string };
+    return this.jwtService.decode(token);
   }
 
   /**
@@ -643,7 +736,10 @@ export class AuthService {
     const jwtSecret = this.configService.get<string>('JWT_SECRET');
     // Access token: 1 hour (was 15m — increased to reduce refresh frequency and improve UX).
     // The silent refresh interceptor on the frontend will renew it automatically on 401.
-    const accessToken = this.jwtService.sign(payload, { secret: jwtSecret, expiresIn: '1h' });
+    const accessToken = this.jwtService.sign(payload, {
+      secret: jwtSecret,
+      expiresIn: '1h',
+    });
 
     // Opaque refresh token — 48 random bytes = 384 bits of entropy
     const rawRefreshToken = crypto.randomBytes(48).toString('hex');
@@ -652,7 +748,7 @@ export class AuthService {
     // Refresh token valid for 30 days (was 7d — extended for better session persistence)
     await this.prisma.refreshToken.create({
       data: {
-        token: rawRefreshToken,   // kept for backward compat; hash is the canonical lookup key
+        token: rawRefreshToken, // kept for backward compat; hash is the canonical lookup key
         tokenHash,
         userId,
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
@@ -665,10 +761,17 @@ export class AuthService {
    * Portal tokens use a separate `type: 'portal'` claim so they cannot be used
    * to access workspace-internal APIs protected by JwtAuthGuard.
    */
-  private generatePortalTokens(portalUserId: string, email: string, workspaceId: string) {
+  private generatePortalTokens(
+    portalUserId: string,
+    email: string,
+    workspaceId: string,
+  ) {
     const payload = { sub: portalUserId, email, workspaceId, type: 'portal' };
     const jwtSecret = this.configService.get<string>('JWT_SECRET');
-    const accessToken = this.jwtService.sign(payload, { secret: jwtSecret, expiresIn: '24h' });
+    const accessToken = this.jwtService.sign(payload, {
+      secret: jwtSecret,
+      expiresIn: '24h',
+    });
     return { accessToken, portalUserId, email };
   }
 }

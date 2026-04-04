@@ -125,7 +125,8 @@ export class IntegrationService {
   ): Promise<IntegrationStatusDto> {
     const all = await this.listAll(workspaceId);
     const found = all.find((s) => s.provider === provider);
-    if (!found) throw new NotFoundException(`Integration ${provider} not found`);
+    if (!found)
+      throw new NotFoundException(`Integration ${provider} not found`);
     return found;
   }
 
@@ -179,7 +180,10 @@ export class IntegrationService {
 
   // ── Disconnect a provider ──────────────────────────────────────────────────
 
-  async disconnect(workspaceId: string, provider: IntegrationProvider): Promise<void> {
+  async disconnect(
+    workspaceId: string,
+    provider: IntegrationProvider,
+  ): Promise<void> {
     await this.prisma.integrationConnection.deleteMany({
       where: { workspaceId, provider },
     });
@@ -190,7 +194,10 @@ export class IntegrationService {
 
   // ── Health state transitions ───────────────────────────────────────────────
 
-  async markSyncing(workspaceId: string, provider: IntegrationProvider): Promise<void> {
+  async markSyncing(
+    workspaceId: string,
+    provider: IntegrationProvider,
+  ): Promise<void> {
     await this.prisma.integrationConnection.updateMany({
       where: { workspaceId, provider },
       data: {
@@ -200,7 +207,10 @@ export class IntegrationService {
     });
   }
 
-  async markHealthy(workspaceId: string, provider: IntegrationProvider): Promise<void> {
+  async markHealthy(
+    workspaceId: string,
+    provider: IntegrationProvider,
+  ): Promise<void> {
     await this.prisma.integrationConnection.updateMany({
       where: { workspaceId, provider },
       data: {
@@ -256,7 +266,10 @@ export class IntegrationService {
     const connection = await this.getConnection(workspaceId, provider);
     switch (provider) {
       case IntegrationProvider.ZENDESK:
-        return new ZendeskService(connection.accessToken, connection.subdomain ?? '');
+        return new ZendeskService(
+          connection.accessToken,
+          connection.subdomain ?? '',
+        );
       case IntegrationProvider.INTERCOM:
         return new IntercomService(connection.accessToken);
       default:
@@ -278,7 +291,8 @@ export class IntegrationService {
     for (const [k, v] of Object.entries(raw)) {
       if (SECRET_KEY_PATTERN.test(k)) continue;
       if (typeof v === 'string') safe[k] = v;
-      else if (typeof v === 'number' || typeof v === 'boolean') safe[k] = String(v);
+      else if (typeof v === 'number' || typeof v === 'boolean')
+        safe[k] = String(v);
     }
     if (subdomain) safe['subdomain'] = subdomain;
 

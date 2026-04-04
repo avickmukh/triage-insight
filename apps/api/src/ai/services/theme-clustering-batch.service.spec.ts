@@ -51,7 +51,9 @@ function buildMockPrisma() {
     theme: {
       findFirst: jest.fn(),
       findMany: jest.fn().mockResolvedValue([]),
-      create: jest.fn().mockResolvedValue({ id: 'new-theme', title: 'New Theme' }),
+      create: jest
+        .fn()
+        .mockResolvedValue({ id: 'new-theme', title: 'New Theme' }),
       update: jest.fn().mockResolvedValue({}),
       updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       count: jest.fn().mockResolvedValue(0),
@@ -72,7 +74,9 @@ function buildMockPrisma() {
         feedback: { findUnique: jest.fn() },
         theme: {
           findFirst: jest.fn().mockResolvedValue(null),
-          create: jest.fn().mockResolvedValue({ id: 'new-theme', title: 'New Theme' }),
+          create: jest
+            .fn()
+            .mockResolvedValue({ id: 'new-theme', title: 'New Theme' }),
           count: jest.fn().mockResolvedValue(0),
         },
       }),
@@ -95,15 +99,24 @@ describe('ThemeClusteringService — runBatchFinalization', () => {
       providers: [
         ThemeClusteringService,
         { provide: PrismaService, useValue: mockPrisma },
-        { provide: EmbeddingService, useValue: { generateEmbedding: jest.fn() } },
+        {
+          provide: EmbeddingService,
+          useValue: { generateEmbedding: jest.fn() },
+        },
         { provide: getQueueToken(CIQ_SCORING_QUEUE), useValue: mockCiqQueue },
         // AutoMergeService is injected via forwardRef — provide a minimal mock
         {
           provide: AutoMergeService,
           useValue: {
             detectAndMerge: jest.fn().mockResolvedValue({
-              invoked: false, merged: false, mergedCount: 0, detectedCount: 0,
-              suggestions: [], bootstrapMode: false, effectiveThreshold: 0.85, reason: 'mock',
+              invoked: false,
+              merged: false,
+              mergedCount: 0,
+              detectedCount: 0,
+              suggestions: [],
+              bootstrapMode: false,
+              effectiveThreshold: 0.85,
+              reason: 'mock',
             }),
             isBootstrapMode: jest.fn().mockResolvedValue(false),
           },
@@ -141,7 +154,10 @@ describe('ThemeClusteringService — runBatchFinalization', () => {
     });
 
     it('should return zero counts when workspace has no themes', async () => {
-      const result = await service.runBatchFinalization('ws-empty', 'batch-empty');
+      const result = await service.runBatchFinalization(
+        'ws-empty',
+        'batch-empty',
+      );
 
       expect(result).toEqual({
         reassigned: 0,
@@ -179,11 +195,19 @@ describe('ThemeClusteringService — runBatchFinalization', () => {
       // CIQ should be enqueued for each active theme
       expect(mockCiqQueue.add).toHaveBeenCalledTimes(activeThemes.length);
       expect(mockCiqQueue.add).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'THEME_SCORED', themeId: 'theme-a', workspaceId: 'ws-test' }),
+        expect.objectContaining({
+          type: 'THEME_SCORED',
+          themeId: 'theme-a',
+          workspaceId: 'ws-test',
+        }),
         expect.any(Object),
       );
       expect(mockCiqQueue.add).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'THEME_SCORED', themeId: 'theme-b', workspaceId: 'ws-test' }),
+        expect.objectContaining({
+          type: 'THEME_SCORED',
+          themeId: 'theme-b',
+          workspaceId: 'ws-test',
+        }),
         expect.any(Object),
       );
     });
@@ -216,11 +240,13 @@ describe('ThemeClusteringService — runBatchFinalization', () => {
       //   4. _suppressWeakClusters → nearest neighbour (none above threshold)
       //   5. _promoteProvisionalThemes → provisional themes (empty)
       mockPrisma.$queryRaw
-        .mockResolvedValueOnce([])   // 1. borderline items
-        .mockResolvedValueOnce([])   // 2. merge pass themes
-        .mockResolvedValueOnce([{ id: 'weak-theme', title: 'Weak Theme', liveCount: 1 }]) // 3. weak themes
-        .mockResolvedValueOnce([])   // 4. nearest neighbour (none)
-        .mockResolvedValueOnce([]);  // 5. promote provisional
+        .mockResolvedValueOnce([]) // 1. borderline items
+        .mockResolvedValueOnce([]) // 2. merge pass themes
+        .mockResolvedValueOnce([
+          { id: 'weak-theme', title: 'Weak Theme', liveCount: 1 },
+        ]) // 3. weak themes
+        .mockResolvedValueOnce([]) // 4. nearest neighbour (none)
+        .mockResolvedValueOnce([]); // 5. promote provisional
 
       mockPrisma.theme.findMany.mockResolvedValue([]); // _updateAllCentroids
       // N=25 > 20 so standard suppression path is used (not bootstrap mode)
@@ -228,7 +254,10 @@ describe('ThemeClusteringService — runBatchFinalization', () => {
       mockPrisma.theme.update.mockResolvedValue({});
       mockPrisma.themeFeedback.findMany.mockResolvedValue([]);
 
-      const result = await service.runBatchFinalization('ws-test', 'batch-suppress');
+      const result = await service.runBatchFinalization(
+        'ws-test',
+        'batch-suppress',
+      );
 
       expect(result.suppressed).toBe(1);
       // The weak theme should be archived
@@ -243,31 +272,41 @@ describe('ThemeClusteringService — runBatchFinalization', () => {
     it('should NOT suppress a theme with enough members', async () => {
       // _suppressWeakClusters returns empty (no weak themes)
       mockPrisma.$queryRaw
-        .mockResolvedValueOnce([])   // borderline items
-        .mockResolvedValueOnce([])   // merge pass
-        .mockResolvedValueOnce([])   // weak themes — empty (theme has 3 items, above threshold)
-        .mockResolvedValueOnce([]);  // promote provisional
+        .mockResolvedValueOnce([]) // borderline items
+        .mockResolvedValueOnce([]) // merge pass
+        .mockResolvedValueOnce([]) // weak themes — empty (theme has 3 items, above threshold)
+        .mockResolvedValueOnce([]); // promote provisional
 
       mockPrisma.theme.findMany.mockResolvedValue([]);
       mockPrisma.theme.count.mockResolvedValue(0);
       mockPrisma.themeFeedback.findMany.mockResolvedValue([]);
 
-      const result = await service.runBatchFinalization('ws-test', 'batch-no-suppress');
+      const result = await service.runBatchFinalization(
+        'ws-test',
+        'batch-no-suppress',
+      );
 
       expect(result.suppressed).toBe(0);
       // theme.update should NOT have been called with ARCHIVED
-      const archiveCalls = (mockPrisma.theme.update.mock.calls as Array<[{ data: { status?: string } }]>)
-        .filter((call) => call[0]?.data?.status === 'ARCHIVED');
+      const archiveCalls = (
+        mockPrisma.theme.update.mock.calls as Array<
+          [{ data: { status?: string } }]
+        >
+      ).filter((call) => call[0]?.data?.status === 'ARCHIVED');
       expect(archiveCalls).toHaveLength(0);
     });
 
     it('should merge a weak theme into its nearest neighbour when similarity is high enough', async () => {
       mockPrisma.$queryRaw
-        .mockResolvedValueOnce([])   // borderline items
-        .mockResolvedValueOnce([])   // merge pass
-        .mockResolvedValueOnce([{ id: 'weak-theme', title: 'Weak Theme', liveCount: 1 }]) // weak themes
-        .mockResolvedValueOnce([{ id: 'strong-theme', title: 'Strong Theme', sim: 0.80 }]) // nearest neighbour (sim >= 0.65)
-        .mockResolvedValueOnce([]);  // promote provisional
+        .mockResolvedValueOnce([]) // borderline items
+        .mockResolvedValueOnce([]) // merge pass
+        .mockResolvedValueOnce([
+          { id: 'weak-theme', title: 'Weak Theme', liveCount: 1 },
+        ]) // weak themes
+        .mockResolvedValueOnce([
+          { id: 'strong-theme', title: 'Strong Theme', sim: 0.8 },
+        ]) // nearest neighbour (sim >= 0.65)
+        .mockResolvedValueOnce([]); // promote provisional
 
       mockPrisma.theme.findMany.mockResolvedValue([]);
       // N=25 > 20 so standard suppression path is used (not bootstrap mode)
@@ -275,7 +314,10 @@ describe('ThemeClusteringService — runBatchFinalization', () => {
       mockPrisma.theme.update.mockResolvedValue({});
       mockPrisma.themeFeedback.findMany.mockResolvedValue([]);
 
-      const result = await service.runBatchFinalization('ws-test', 'batch-merge-weak');
+      const result = await service.runBatchFinalization(
+        'ws-test',
+        'batch-merge-weak',
+      );
 
       expect(result.suppressed).toBe(1);
       // Should have archived the weak theme (after merging its items)
@@ -293,36 +335,45 @@ describe('ThemeClusteringService — runBatchFinalization', () => {
   describe('_runBatchMergePass', () => {
     it('should return 0 when fewer than 2 themes exist', async () => {
       mockPrisma.$queryRaw
-        .mockResolvedValueOnce([])   // borderline items
-        .mockResolvedValueOnce([{ id: 't1', title: 'Only Theme', liveCount: 3, ciqScore: 50 }]) // only 1 theme
-        .mockResolvedValueOnce([])   // weak themes
-        .mockResolvedValueOnce([]);  // promote provisional
+        .mockResolvedValueOnce([]) // borderline items
+        .mockResolvedValueOnce([
+          { id: 't1', title: 'Only Theme', liveCount: 3, ciqScore: 50 },
+        ]) // only 1 theme
+        .mockResolvedValueOnce([]) // weak themes
+        .mockResolvedValueOnce([]); // promote provisional
 
       mockPrisma.theme.findMany.mockResolvedValue([]);
       mockPrisma.theme.count.mockResolvedValue(0);
       mockPrisma.themeFeedback.findMany.mockResolvedValue([]);
 
-      const result = await service.runBatchFinalization('ws-test', 'batch-single-theme');
+      const result = await service.runBatchFinalization(
+        'ws-test',
+        'batch-single-theme',
+      );
 
       expect(result.merged).toBe(0);
     });
 
     it('should not merge themes when similarity is below BATCH_MERGE_THRESHOLD (0.78)', async () => {
       mockPrisma.$queryRaw
-        .mockResolvedValueOnce([])   // borderline items
-        .mockResolvedValueOnce([     // merge pass: 2 themes
+        .mockResolvedValueOnce([]) // borderline items
+        .mockResolvedValueOnce([
+          // merge pass: 2 themes
           { id: 't1', title: 'Theme A', liveCount: 3, ciqScore: 60 },
           { id: 't2', title: 'Theme B', liveCount: 2, ciqScore: 40 },
         ])
         .mockResolvedValueOnce({ sim: 0.65 }) // pair similarity — below 0.78
-        .mockResolvedValueOnce([])   // weak themes
-        .mockResolvedValueOnce([]);  // promote provisional
+        .mockResolvedValueOnce([]) // weak themes
+        .mockResolvedValueOnce([]); // promote provisional
 
       mockPrisma.theme.findMany.mockResolvedValue([]);
       mockPrisma.theme.count.mockResolvedValue(0);
       mockPrisma.themeFeedback.findMany.mockResolvedValue([]);
 
-      const result = await service.runBatchFinalization('ws-test', 'batch-no-merge');
+      const result = await service.runBatchFinalization(
+        'ws-test',
+        'batch-no-merge',
+      );
 
       expect(result.merged).toBe(0);
     });
@@ -333,39 +384,51 @@ describe('ThemeClusteringService — runBatchFinalization', () => {
   describe('_reassignBorderlineItems', () => {
     it('should return 0 when no borderline items exist', async () => {
       mockPrisma.$queryRaw
-        .mockResolvedValueOnce([])   // borderline items — empty
-        .mockResolvedValueOnce([])   // merge pass
-        .mockResolvedValueOnce([])   // weak themes
-        .mockResolvedValueOnce([]);  // promote provisional
+        .mockResolvedValueOnce([]) // borderline items — empty
+        .mockResolvedValueOnce([]) // merge pass
+        .mockResolvedValueOnce([]) // weak themes
+        .mockResolvedValueOnce([]); // promote provisional
 
       mockPrisma.theme.findMany.mockResolvedValue([]);
       mockPrisma.theme.count.mockResolvedValue(0);
       mockPrisma.themeFeedback.findMany.mockResolvedValue([]);
 
-      const result = await service.runBatchFinalization('ws-test', 'batch-no-borderline');
+      const result = await service.runBatchFinalization(
+        'ws-test',
+        'batch-no-borderline',
+      );
 
       expect(result.reassigned).toBe(0);
     });
 
     it('should reassign a borderline item when a meaningfully better cluster exists', async () => {
       // Borderline item with confidence 0.55 (below BORDERLINE_SCORE_THRESHOLD=0.60)
-      const borderlineItem = { themeId: 'theme-old', feedbackId: 'fb-1', confidence: 0.55 };
+      const borderlineItem = {
+        themeId: 'theme-old',
+        feedbackId: 'fb-1',
+        confidence: 0.55,
+      };
       // Embedding for the feedback
       const embeddingStr = JSON.stringify(Array.from({ length: 8 }, () => 0.5));
 
       mockPrisma.$queryRaw
-        .mockResolvedValueOnce([borderlineItem])  // 1. borderline items
+        .mockResolvedValueOnce([borderlineItem]) // 1. borderline items
         .mockResolvedValueOnce([{ embedding: embeddingStr }]) // 2. fetch embedding
-        .mockResolvedValueOnce([{ id: 'theme-better', title: 'Better Theme', similarity: 0.85 }]) // 3. alternatives
-        .mockResolvedValueOnce([])   // 4. merge pass
-        .mockResolvedValueOnce([])   // 5. weak themes
-        .mockResolvedValueOnce([]);  // 6. promote provisional
+        .mockResolvedValueOnce([
+          { id: 'theme-better', title: 'Better Theme', similarity: 0.85 },
+        ]) // 3. alternatives
+        .mockResolvedValueOnce([]) // 4. merge pass
+        .mockResolvedValueOnce([]) // 5. weak themes
+        .mockResolvedValueOnce([]); // 6. promote provisional
 
       mockPrisma.theme.findMany.mockResolvedValue([]);
       mockPrisma.theme.count.mockResolvedValue(0);
       mockPrisma.themeFeedback.findMany.mockResolvedValue([]);
 
-      const result = await service.runBatchFinalization('ws-test', 'batch-reassign');
+      const result = await service.runBatchFinalization(
+        'ws-test',
+        'batch-reassign',
+      );
 
       expect(result.reassigned).toBe(1);
       // The INSERT ON CONFLICT should have been called
@@ -379,22 +442,31 @@ describe('ThemeClusteringService — runBatchFinalization', () => {
     });
 
     it('should NOT reassign when improvement is below 0.08', async () => {
-      const borderlineItem = { themeId: 'theme-old', feedbackId: 'fb-2', confidence: 0.55 };
+      const borderlineItem = {
+        themeId: 'theme-old',
+        feedbackId: 'fb-2',
+        confidence: 0.55,
+      };
       const embeddingStr = JSON.stringify(Array.from({ length: 8 }, () => 0.5));
 
       mockPrisma.$queryRaw
-        .mockResolvedValueOnce([borderlineItem])  // borderline items
+        .mockResolvedValueOnce([borderlineItem]) // borderline items
         .mockResolvedValueOnce([{ embedding: embeddingStr }]) // fetch embedding
-        .mockResolvedValueOnce([{ id: 'theme-marginal', title: 'Marginal', similarity: 0.60 }]) // alternatives (improvement = 0.05 < 0.08)
-        .mockResolvedValueOnce([])   // merge pass
-        .mockResolvedValueOnce([])   // weak themes
-        .mockResolvedValueOnce([]);  // promote provisional
+        .mockResolvedValueOnce([
+          { id: 'theme-marginal', title: 'Marginal', similarity: 0.6 },
+        ]) // alternatives (improvement = 0.05 < 0.08)
+        .mockResolvedValueOnce([]) // merge pass
+        .mockResolvedValueOnce([]) // weak themes
+        .mockResolvedValueOnce([]); // promote provisional
 
       mockPrisma.theme.findMany.mockResolvedValue([]);
       mockPrisma.theme.count.mockResolvedValue(0);
       mockPrisma.themeFeedback.findMany.mockResolvedValue([]);
 
-      const result = await service.runBatchFinalization('ws-test', 'batch-no-reassign');
+      const result = await service.runBatchFinalization(
+        'ws-test',
+        'batch-no-reassign',
+      );
 
       expect(result.reassigned).toBe(0);
       // No INSERT should have been called for reassignment
@@ -407,17 +479,22 @@ describe('ThemeClusteringService — runBatchFinalization', () => {
   describe('_promoteProvisionalThemes', () => {
     it('should promote a PROVISIONAL theme that meets dynamicMinSupport', async () => {
       mockPrisma.$queryRaw
-        .mockResolvedValueOnce([])   // borderline items
-        .mockResolvedValueOnce([])   // merge pass
-        .mockResolvedValueOnce([])   // weak themes
-        .mockResolvedValueOnce([{ id: 'prov-theme', title: 'Provisional Theme', liveCount: 3 }]); // promote
+        .mockResolvedValueOnce([]) // borderline items
+        .mockResolvedValueOnce([]) // merge pass
+        .mockResolvedValueOnce([]) // weak themes
+        .mockResolvedValueOnce([
+          { id: 'prov-theme', title: 'Provisional Theme', liveCount: 3 },
+        ]); // promote
 
       mockPrisma.theme.findMany.mockResolvedValue([]);
       mockPrisma.theme.count.mockResolvedValue(5); // N=5, dynamicMinSupport=max(2, floor(log2(7)))=2
       mockPrisma.theme.update.mockResolvedValue({});
       mockPrisma.themeFeedback.findMany.mockResolvedValue([]);
 
-      const result = await service.runBatchFinalization('ws-test', 'batch-promote');
+      const result = await service.runBatchFinalization(
+        'ws-test',
+        'batch-promote',
+      );
 
       expect(result.promoted).toBe(1);
       expect(mockPrisma.theme.update).toHaveBeenCalledWith(

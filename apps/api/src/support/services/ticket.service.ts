@@ -15,7 +15,10 @@ export class TicketService {
   ) {
     const where: Prisma.SupportTicketWhereInput = { workspaceId };
 
-    if (status && Object.values(SupportTicketStatus).includes(status as SupportTicketStatus)) {
+    if (
+      status &&
+      Object.values(SupportTicketStatus).includes(status as SupportTicketStatus)
+    ) {
       where.status = status as SupportTicketStatus;
     }
 
@@ -35,7 +38,9 @@ export class TicketService {
         orderBy: { createdAt: 'desc' },
         include: {
           clusterMaps: {
-            include: { cluster: { select: { id: true, title: true, themeId: true } } },
+            include: {
+              cluster: { select: { id: true, title: true, themeId: true } },
+            },
             take: 1,
           },
         },

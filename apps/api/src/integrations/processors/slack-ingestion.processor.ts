@@ -29,7 +29,8 @@ export class SlackIngestionProcessor {
     this.logger.log(`Starting Slack ingestion for workspace ${workspaceId}`);
 
     try {
-      const result = await this.slackIngestionService.ingestWorkspace(workspaceId);
+      const result =
+        await this.slackIngestionService.ingestWorkspace(workspaceId);
       this.logger.log(
         `Slack ingestion complete for ${workspaceId}: ` +
           `ingested=${result.ingested}, skipped=${result.skipped}, errors=${result.errors}, ` +
@@ -37,7 +38,9 @@ export class SlackIngestionProcessor {
       );
       return result;
     } catch (err) {
-      this.logger.error(`Slack ingestion failed for workspace ${workspaceId}: ${String(err)}`);
+      this.logger.error(
+        `Slack ingestion failed for workspace ${workspaceId}: ${String(err)}`,
+      );
       throw err;
     }
   }

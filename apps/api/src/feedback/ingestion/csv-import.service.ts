@@ -52,16 +52,16 @@ export interface CsvColumnMapping {
 
 /** Legacy sourceType string → FeedbackSourceType enum */
 const SOURCE_TYPE_MAP: Record<string, FeedbackSourceType> = {
-  email:       FeedbackSourceType.EMAIL,
-  slack:       FeedbackSourceType.SLACK,
-  api:         FeedbackSourceType.API,
-  csv:         FeedbackSourceType.CSV_IMPORT,
-  csv_import:  FeedbackSourceType.CSV_IMPORT,
-  web:         FeedbackSourceType.API,
-  app:         FeedbackSourceType.API,
-  support:     FeedbackSourceType.EMAIL,
-  portal:      FeedbackSourceType.PUBLIC_PORTAL,
-  voice:       FeedbackSourceType.VOICE,
+  email: FeedbackSourceType.EMAIL,
+  slack: FeedbackSourceType.SLACK,
+  api: FeedbackSourceType.API,
+  csv: FeedbackSourceType.CSV_IMPORT,
+  csv_import: FeedbackSourceType.CSV_IMPORT,
+  web: FeedbackSourceType.API,
+  app: FeedbackSourceType.API,
+  support: FeedbackSourceType.EMAIL,
+  portal: FeedbackSourceType.PUBLIC_PORTAL,
+  voice: FeedbackSourceType.VOICE,
 };
 
 /**
@@ -74,40 +74,74 @@ function resolveUnifiedSources(sourceType: FeedbackSourceType): {
 } {
   switch (sourceType) {
     case FeedbackSourceType.VOICE:
-      return { primarySource: FeedbackPrimarySource.VOICE,    secondarySource: FeedbackSecondarySource.TRANSCRIPT };
+      return {
+        primarySource: FeedbackPrimarySource.VOICE,
+        secondarySource: FeedbackSecondarySource.TRANSCRIPT,
+      };
     case FeedbackSourceType.SURVEY:
-      return { primarySource: FeedbackPrimarySource.SURVEY,   secondarySource: FeedbackSecondarySource.PORTAL };
+      return {
+        primarySource: FeedbackPrimarySource.SURVEY,
+        secondarySource: FeedbackSecondarySource.PORTAL,
+      };
     case FeedbackSourceType.EMAIL:
-      return { primarySource: FeedbackPrimarySource.FEEDBACK, secondarySource: FeedbackSecondarySource.EMAIL };
+      return {
+        primarySource: FeedbackPrimarySource.FEEDBACK,
+        secondarySource: FeedbackSecondarySource.EMAIL,
+      };
     case FeedbackSourceType.SLACK:
-      return { primarySource: FeedbackPrimarySource.FEEDBACK, secondarySource: FeedbackSecondarySource.SLACK };
+      return {
+        primarySource: FeedbackPrimarySource.FEEDBACK,
+        secondarySource: FeedbackSecondarySource.SLACK,
+      };
     case FeedbackSourceType.PUBLIC_PORTAL:
-      return { primarySource: FeedbackPrimarySource.FEEDBACK, secondarySource: FeedbackSecondarySource.PORTAL };
+      return {
+        primarySource: FeedbackPrimarySource.FEEDBACK,
+        secondarySource: FeedbackSecondarySource.PORTAL,
+      };
     case FeedbackSourceType.API:
-      return { primarySource: FeedbackPrimarySource.FEEDBACK, secondarySource: FeedbackSecondarySource.API };
+      return {
+        primarySource: FeedbackPrimarySource.FEEDBACK,
+        secondarySource: FeedbackSecondarySource.API,
+      };
     case FeedbackSourceType.MANUAL:
-      return { primarySource: FeedbackPrimarySource.FEEDBACK, secondarySource: FeedbackSecondarySource.MANUAL };
+      return {
+        primarySource: FeedbackPrimarySource.FEEDBACK,
+        secondarySource: FeedbackSecondarySource.MANUAL,
+      };
     case FeedbackSourceType.CSV_IMPORT:
     default:
-      return { primarySource: FeedbackPrimarySource.FEEDBACK, secondarySource: FeedbackSecondarySource.CSV_UPLOAD };
+      return {
+        primarySource: FeedbackPrimarySource.FEEDBACK,
+        secondarySource: FeedbackSecondarySource.CSV_UPLOAD,
+      };
   }
 }
 
-function resolveColumn(record: Record<string, string>, candidates: string[]): string | undefined {
+function resolveColumn(
+  record: Record<string, string>,
+  candidates: string[],
+): string | undefined {
   for (const key of candidates) {
     // Exact match first
     if (record[key] !== undefined) return record[key];
     // Case-insensitive match
-    const found = Object.keys(record).find((k) => k.toLowerCase() === key.toLowerCase());
+    const found = Object.keys(record).find(
+      (k) => k.toLowerCase() === key.toLowerCase(),
+    );
     if (found !== undefined) return record[found];
   }
   return undefined;
 }
 
 /** Resolve a single column by exact name (used when an explicit mapping is provided). */
-function resolveExact(record: Record<string, string>, col: string): string | undefined {
+function resolveExact(
+  record: Record<string, string>,
+  col: string,
+): string | undefined {
   if (record[col] !== undefined) return record[col];
-  const found = Object.keys(record).find((k) => k.toLowerCase() === col.toLowerCase());
+  const found = Object.keys(record).find(
+    (k) => k.toLowerCase() === col.toLowerCase(),
+  );
   return found !== undefined ? record[found] : undefined;
 }
 
@@ -167,7 +201,7 @@ export class CsvImportService {
         if (!colExists) {
           throw new BadRequestException(
             `Column mapping error: column "${mapping.feedbackText}" was not found in the CSV file. ` +
-            `Available columns: ${Object.keys(firstRow).join(', ')}`,
+              `Available columns: ${Object.keys(firstRow).join(', ')}`,
           );
         }
       }
@@ -181,8 +215,22 @@ export class CsvImportService {
         return !!(text && text.trim());
       }
       // Without mapping: fall back to auto-detection aliases
-      const rawTitle = resolveColumn(r, ['title', 'text', 'feedback', 'subject', 'summary']);
-      const rawDescription = resolveColumn(r, ['description', 'body', 'content', 'detail', 'details', 'message', 'comment']);
+      const rawTitle = resolveColumn(r, [
+        'title',
+        'text',
+        'feedback',
+        'subject',
+        'summary',
+      ]);
+      const rawDescription = resolveColumn(r, [
+        'description',
+        'body',
+        'content',
+        'detail',
+        'details',
+        'message',
+        'comment',
+      ]);
       return !!(rawTitle || rawDescription);
     });
 
@@ -198,7 +246,9 @@ export class CsvImportService {
       },
     });
 
-    this.logger.log(`[CsvImport] Created batch ${batch.id} with ${validRecords.length} valid rows for workspace ${workspaceId}`);
+    this.logger.log(
+      `[CsvImport] Created batch ${batch.id} with ${validRecords.length} valid rows for workspace ${workspaceId}`,
+    );
 
     let importedCount = 0;
     let failedCount = 0;
@@ -213,21 +263,57 @@ export class CsvImportService {
         if (mapping) {
           // ── Explicit mapping path ──────────────────────────────────────────
           rawDescription = resolveExact(record, mapping.feedbackText);
-          rawTitle = mapping.title ? resolveExact(record, mapping.title) : undefined;
-          rawSource = mapping.source ? resolveExact(record, mapping.source) : undefined;
-          const emailCol = mapping.customerEmail ? resolveExact(record, mapping.customerEmail) : undefined;
+          rawTitle = mapping.title
+            ? resolveExact(record, mapping.title)
+            : undefined;
+          rawSource = mapping.source
+            ? resolveExact(record, mapping.source)
+            : undefined;
+          const emailCol = mapping.customerEmail
+            ? resolveExact(record, mapping.customerEmail)
+            : undefined;
           customerId = emailCol || undefined;
         } else {
           // ── Auto-detection path (legacy) ──────────────────────────────────
-          rawTitle = resolveColumn(record, ['title', 'text', 'feedback', 'subject', 'summary']);
-          rawDescription = resolveColumn(record, ['description', 'body', 'content', 'detail', 'details', 'message', 'comment']);
-          rawSource = resolveColumn(record, ['source', 'sourceType', 'source_type', 'channel', 'type']);
-          customerId = resolveColumn(record, ['customerId', 'customer_id', 'customer', 'account', 'accountId', 'account_id']) || undefined;
+          rawTitle = resolveColumn(record, [
+            'title',
+            'text',
+            'feedback',
+            'subject',
+            'summary',
+          ]);
+          rawDescription = resolveColumn(record, [
+            'description',
+            'body',
+            'content',
+            'detail',
+            'details',
+            'message',
+            'comment',
+          ]);
+          rawSource = resolveColumn(record, [
+            'source',
+            'sourceType',
+            'source_type',
+            'channel',
+            'type',
+          ]);
+          customerId =
+            resolveColumn(record, [
+              'customerId',
+              'customer_id',
+              'customer',
+              'account',
+              'accountId',
+              'account_id',
+            ]) || undefined;
         }
 
         // Skip rows with no usable text at all
         if (!rawTitle && !rawDescription) {
-          this.logger.warn(`[CsvImport] Skipping row with no title or description: ${JSON.stringify(record)}`);
+          this.logger.warn(
+            `[CsvImport] Skipping row with no title or description: ${JSON.stringify(record)}`,
+          );
           continue;
         }
 
@@ -237,7 +323,8 @@ export class CsvImportService {
           FeedbackSourceType.CSV_IMPORT;
 
         // ── Derive unified primary/secondary source from sourceType ──────────
-        const { primarySource, secondarySource } = resolveUnifiedSources(sourceType);
+        const { primarySource, secondarySource } =
+          resolveUnifiedSources(sourceType);
 
         // ── Resolve sentiment ────────────────────────────────────────────────
         const rawSentiment = resolveColumn(record, ['sentiment', 'score']);
@@ -246,19 +333,22 @@ export class CsvImportService {
           : undefined;
 
         await this.feedbackService.create(workspaceId, {
-          title:           (rawTitle ?? rawDescription ?? '').trim() || 'Untitled',
-          description:     (rawDescription ?? '').trim(),
+          title: (rawTitle ?? rawDescription ?? '').trim() || 'Untitled',
+          description: (rawDescription ?? '').trim(),
           customerId,
           sourceType,
           primarySource,
           secondarySource,
-          importBatchId:   batch.id,
+          importBatchId: batch.id,
           ...(sentiment !== undefined && { sentiment }),
         });
         importedCount++;
       } catch (error) {
         failedCount++;
-        this.logger.error(`[CsvImport] Failed to import row: ${JSON.stringify(record)}`, error);
+        this.logger.error(
+          `[CsvImport] Failed to import row: ${JSON.stringify(record)}`,
+          error,
+        );
       }
     }
 
@@ -266,14 +356,16 @@ export class CsvImportService {
     await this.prisma.importBatch.update({
       where: { id: batch.id },
       data: {
-        totalRows:     importedCount + failedCount,
-        failedRows:    failedCount,
-        stage:         'ANALYZING',
-        status:        'PROCESSING',
+        totalRows: importedCount + failedCount,
+        failedRows: failedCount,
+        stage: 'ANALYZING',
+        status: 'PROCESSING',
       },
     });
 
-    this.logger.log(`[CsvImport] Batch ${batch.id}: imported=${importedCount}, failed=${failedCount}`);
+    this.logger.log(
+      `[CsvImport] Batch ${batch.id}: imported=${importedCount}, failed=${failedCount}`,
+    );
 
     return { importedCount, total: records.length, batchId: batch.id };
   }
@@ -281,9 +373,9 @@ export class CsvImportService {
   private parseCsv(buffer: Buffer): Promise<Record<string, string>[]> {
     return new Promise((resolve, reject) => {
       const parser = parse({
-        columns:           true,
-        skip_empty_lines:  true,
-        trim:              true,
+        columns: true,
+        skip_empty_lines: true,
+        trim: true,
         relax_column_count: true,
       });
       const records: Record<string, string>[] = [];

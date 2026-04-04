@@ -35,13 +35,18 @@ import { AuditService } from '../src/ai/services/audit.service';
 import { getQueueToken } from '@nestjs/bull';
 import { AI_ANALYSIS_QUEUE } from '../src/ai/processors/analysis.processor';
 import { CIQ_SCORING_QUEUE } from '../src/ai/processors/ciq-scoring.processor';
-import { RoadmapStatus, AccountPriority, DealStage, DealStatus } from '@prisma/client';
+import {
+  RoadmapStatus,
+  AccountPriority,
+  DealStage,
+  DealStatus,
+} from '@prisma/client';
 
 // ─── Workspace / User fixtures ────────────────────────────────────────────────
 
-const WS_ID   = 'ws-fullflow-001';
+const WS_ID = 'ws-fullflow-001';
 const USER_ID = 'user-fullflow-001';
-const TOKEN   = 'Bearer test-token-fullflow';
+const TOKEN = 'Bearer test-token-fullflow';
 
 // ─── Customer fixtures (realistic SaaS accounts) ──────────────────────────────
 
@@ -86,9 +91,9 @@ const CUSTOMERS = {
 
 // ─── Theme fixtures ───────────────────────────────────────────────────────────
 
-const THEME_CHECKOUT_ID   = 'theme-checkout-001';
+const THEME_CHECKOUT_ID = 'theme-checkout-001';
 const THEME_ONBOARDING_ID = 'theme-onboarding-001';
-const THEME_DARKMODE_ID   = 'theme-darkmode-001';
+const THEME_DARKMODE_ID = 'theme-darkmode-001';
 
 const THEMES = {
   checkout: {
@@ -100,15 +105,28 @@ const THEMES = {
     priorityScore: 84.5,
     urgencyScore: 78.0,
     revenueInfluence: 660000,
-    aiSummary: 'Checkout latency is degrading conversion rates across 12 enterprise accounts.',
-    aiExplanation: 'This is a critical revenue path. Delays here directly cause cart abandonment and churn risk for high-ARR customers.',
-    aiRecommendation: 'Prioritise server-side rendering of the checkout page and add CDN caching for static assets.',
+    aiSummary:
+      'Checkout latency is degrading conversion rates across 12 enterprise accounts.',
+    aiExplanation:
+      'This is a critical revenue path. Delays here directly cause cart abandonment and churn risk for high-ARR customers.',
+    aiRecommendation:
+      'Prioritise server-side rendering of the checkout page and add CDN caching for static assets.',
     aiConfidence: 0.91,
     aiNarratedAt: new Date('2026-03-20').toISOString(),
     lastScoredAt: new Date('2026-03-20').toISOString(),
     signalBreakdown: {
-      requestFrequency: { value: 12, weight: 0.1538, contribution: 18.46, label: 'Feedback frequency' },
-      arrValue: { value: 660000, weight: 0.1538, contribution: 14.2, label: 'Customer ARR' },
+      requestFrequency: {
+        value: 12,
+        weight: 0.1538,
+        contribution: 18.46,
+        label: 'Feedback frequency',
+      },
+      arrValue: {
+        value: 660000,
+        weight: 0.1538,
+        contribution: 14.2,
+        label: 'Customer ARR',
+      },
     },
     _count: { feedbacks: 12 },
     pinned: false,
@@ -124,14 +142,22 @@ const THEMES = {
     priorityScore: 54.2,
     urgencyScore: 42.0,
     revenueInfluence: 145000,
-    aiSummary: 'New users struggle with the onboarding flow, causing activation drop-off.',
-    aiExplanation: 'Onboarding friction reduces trial-to-paid conversion. 5 customers have flagged this as a blocker.',
-    aiRecommendation: 'Simplify the first-run wizard to 3 steps and add contextual tooltips.',
+    aiSummary:
+      'New users struggle with the onboarding flow, causing activation drop-off.',
+    aiExplanation:
+      'Onboarding friction reduces trial-to-paid conversion. 5 customers have flagged this as a blocker.',
+    aiRecommendation:
+      'Simplify the first-run wizard to 3 steps and add contextual tooltips.',
     aiConfidence: 0.74,
     aiNarratedAt: new Date('2026-03-18').toISOString(),
     lastScoredAt: new Date('2026-03-18').toISOString(),
     signalBreakdown: {
-      requestFrequency: { value: 5, weight: 0.1538, contribution: 7.69, label: 'Feedback frequency' },
+      requestFrequency: {
+        value: 5,
+        weight: 0.1538,
+        contribution: 7.69,
+        label: 'Feedback frequency',
+      },
     },
     _count: { feedbacks: 5 },
     pinned: false,
@@ -148,13 +174,20 @@ const THEMES = {
     urgencyScore: 12.0,
     revenueInfluence: 0,
     aiSummary: 'A small number of users have requested a dark mode interface.',
-    aiExplanation: 'This is a cosmetic enhancement with low revenue impact. No churn risk identified.',
-    aiRecommendation: 'Add to the backlog. Consider implementing after higher-priority items are shipped.',
+    aiExplanation:
+      'This is a cosmetic enhancement with low revenue impact. No churn risk identified.',
+    aiRecommendation:
+      'Add to the backlog. Consider implementing after higher-priority items are shipped.',
     aiConfidence: 0.55,
     aiNarratedAt: new Date('2026-03-15').toISOString(),
     lastScoredAt: new Date('2026-03-15').toISOString(),
     signalBreakdown: {
-      requestFrequency: { value: 2, weight: 0.1538, contribution: 2.31, label: 'Feedback frequency' },
+      requestFrequency: {
+        value: 2,
+        weight: 0.1538,
+        contribution: 2.31,
+        label: 'Feedback frequency',
+      },
     },
     _count: { feedbacks: 2 },
     pinned: false,
@@ -165,9 +198,9 @@ const THEMES = {
 
 // ─── Roadmap item fixtures ────────────────────────────────────────────────────
 
-const ROADMAP_CHECKOUT_ID   = 'roadmap-checkout-001';
+const ROADMAP_CHECKOUT_ID = 'roadmap-checkout-001';
 const ROADMAP_ONBOARDING_ID = 'roadmap-onboarding-001';
-const ROADMAP_DARKMODE_ID   = 'roadmap-darkmode-001';
+const ROADMAP_DARKMODE_ID = 'roadmap-darkmode-001';
 
 const ROADMAP_ITEMS = {
   checkout: {
@@ -175,7 +208,8 @@ const ROADMAP_ITEMS = {
     workspaceId: WS_ID,
     themeId: THEME_CHECKOUT_ID,
     title: 'Optimise checkout performance',
-    description: 'Checkout latency is degrading conversion rates across 12 enterprise accounts.\n\nWhy it matters: This is a critical revenue path.',
+    description:
+      'Checkout latency is degrading conversion rates across 12 enterprise accounts.\n\nWhy it matters: This is a critical revenue path.',
     status: RoadmapStatus.COMMITTED,
     priorityScore: 84.5,
     confidenceScore: 0.91,
@@ -198,7 +232,8 @@ const ROADMAP_ITEMS = {
     workspaceId: WS_ID,
     themeId: THEME_ONBOARDING_ID,
     title: 'Streamline onboarding wizard',
-    description: 'New users struggle with the onboarding flow, causing activation drop-off.',
+    description:
+      'New users struggle with the onboarding flow, causing activation drop-off.',
     status: RoadmapStatus.PLANNED,
     priorityScore: 54.2,
     confidenceScore: 0.74,
@@ -221,7 +256,8 @@ const ROADMAP_ITEMS = {
     workspaceId: WS_ID,
     themeId: THEME_DARKMODE_ID,
     title: 'Add dark mode support',
-    description: 'A small number of users have requested a dark mode interface.',
+    description:
+      'A small number of users have requested a dark mode interface.',
     status: RoadmapStatus.BACKLOG,
     priorityScore: 18.3,
     confidenceScore: 0.55,
@@ -245,18 +281,128 @@ const ROADMAP_ITEMS = {
 
 const FEEDBACK_ITEMS = [
   // Checkout theme — 12 items, high ARR customers
-  { id: 'fb-co-1', workspaceId: WS_ID, title: 'Checkout takes 10 seconds', description: 'Very slow checkout.', status: 'OPEN', sentiment: -0.8, impactScore: 85, customerId: CUSTOMERS.acme.id, customer: CUSTOMERS.acme, createdAt: new Date('2026-03-01') },
-  { id: 'fb-co-2', workspaceId: WS_ID, title: 'Payment page hangs', description: 'Payment page freezes.', status: 'OPEN', sentiment: -0.7, impactScore: 80, customerId: CUSTOMERS.acme.id, customer: CUSTOMERS.acme, createdAt: new Date('2026-03-02') },
-  { id: 'fb-co-3', workspaceId: WS_ID, title: 'Checkout timeout errors', description: 'Timeout on checkout.', status: 'OPEN', sentiment: -0.6, impactScore: 78, customerId: CUSTOMERS.globex.id, customer: CUSTOMERS.globex, createdAt: new Date('2026-03-03') },
-  { id: 'fb-co-4', workspaceId: WS_ID, title: 'Slow cart loading', description: 'Cart takes forever.', status: 'OPEN', sentiment: -0.5, impactScore: 72, customerId: CUSTOMERS.globex.id, customer: CUSTOMERS.globex, createdAt: new Date('2026-03-04') },
-  { id: 'fb-co-5', workspaceId: WS_ID, title: 'Checkout UX is broken', description: 'Checkout is unusable.', status: 'OPEN', sentiment: -0.9, impactScore: 90, customerId: CUSTOMERS.initech.id, customer: CUSTOMERS.initech, createdAt: new Date('2026-03-05') },
+  {
+    id: 'fb-co-1',
+    workspaceId: WS_ID,
+    title: 'Checkout takes 10 seconds',
+    description: 'Very slow checkout.',
+    status: 'OPEN',
+    sentiment: -0.8,
+    impactScore: 85,
+    customerId: CUSTOMERS.acme.id,
+    customer: CUSTOMERS.acme,
+    createdAt: new Date('2026-03-01'),
+  },
+  {
+    id: 'fb-co-2',
+    workspaceId: WS_ID,
+    title: 'Payment page hangs',
+    description: 'Payment page freezes.',
+    status: 'OPEN',
+    sentiment: -0.7,
+    impactScore: 80,
+    customerId: CUSTOMERS.acme.id,
+    customer: CUSTOMERS.acme,
+    createdAt: new Date('2026-03-02'),
+  },
+  {
+    id: 'fb-co-3',
+    workspaceId: WS_ID,
+    title: 'Checkout timeout errors',
+    description: 'Timeout on checkout.',
+    status: 'OPEN',
+    sentiment: -0.6,
+    impactScore: 78,
+    customerId: CUSTOMERS.globex.id,
+    customer: CUSTOMERS.globex,
+    createdAt: new Date('2026-03-03'),
+  },
+  {
+    id: 'fb-co-4',
+    workspaceId: WS_ID,
+    title: 'Slow cart loading',
+    description: 'Cart takes forever.',
+    status: 'OPEN',
+    sentiment: -0.5,
+    impactScore: 72,
+    customerId: CUSTOMERS.globex.id,
+    customer: CUSTOMERS.globex,
+    createdAt: new Date('2026-03-04'),
+  },
+  {
+    id: 'fb-co-5',
+    workspaceId: WS_ID,
+    title: 'Checkout UX is broken',
+    description: 'Checkout is unusable.',
+    status: 'OPEN',
+    sentiment: -0.9,
+    impactScore: 90,
+    customerId: CUSTOMERS.initech.id,
+    customer: CUSTOMERS.initech,
+    createdAt: new Date('2026-03-05'),
+  },
   // Onboarding theme — 5 items, medium ARR
-  { id: 'fb-ob-1', workspaceId: WS_ID, title: 'Onboarding is confusing', description: 'First run wizard is hard.', status: 'OPEN', sentiment: -0.4, impactScore: 55, customerId: CUSTOMERS.globex.id, customer: CUSTOMERS.globex, createdAt: new Date('2026-02-15') },
-  { id: 'fb-ob-2', workspaceId: WS_ID, title: 'Setup steps unclear', description: 'Cannot complete setup.', status: 'OPEN', sentiment: -0.3, impactScore: 50, customerId: CUSTOMERS.initech.id, customer: CUSTOMERS.initech, createdAt: new Date('2026-02-18') },
-  { id: 'fb-ob-3', workspaceId: WS_ID, title: 'Onboarding docs missing', description: 'No documentation.', status: 'OPEN', sentiment: -0.2, impactScore: 45, customerId: CUSTOMERS.umbrella.id, customer: CUSTOMERS.umbrella, createdAt: new Date('2026-02-20') },
+  {
+    id: 'fb-ob-1',
+    workspaceId: WS_ID,
+    title: 'Onboarding is confusing',
+    description: 'First run wizard is hard.',
+    status: 'OPEN',
+    sentiment: -0.4,
+    impactScore: 55,
+    customerId: CUSTOMERS.globex.id,
+    customer: CUSTOMERS.globex,
+    createdAt: new Date('2026-02-15'),
+  },
+  {
+    id: 'fb-ob-2',
+    workspaceId: WS_ID,
+    title: 'Setup steps unclear',
+    description: 'Cannot complete setup.',
+    status: 'OPEN',
+    sentiment: -0.3,
+    impactScore: 50,
+    customerId: CUSTOMERS.initech.id,
+    customer: CUSTOMERS.initech,
+    createdAt: new Date('2026-02-18'),
+  },
+  {
+    id: 'fb-ob-3',
+    workspaceId: WS_ID,
+    title: 'Onboarding docs missing',
+    description: 'No documentation.',
+    status: 'OPEN',
+    sentiment: -0.2,
+    impactScore: 45,
+    customerId: CUSTOMERS.umbrella.id,
+    customer: CUSTOMERS.umbrella,
+    createdAt: new Date('2026-02-20'),
+  },
   // Dark mode theme — 2 items, low ARR
-  { id: 'fb-dm-1', workspaceId: WS_ID, title: 'Please add dark mode', description: 'Would love dark mode.', status: 'OPEN', sentiment: 0.2, impactScore: 20, customerId: CUSTOMERS.umbrella.id, customer: CUSTOMERS.umbrella, createdAt: new Date('2026-03-10') },
-  { id: 'fb-dm-2', workspaceId: WS_ID, title: 'Dark theme option needed', description: 'Eyes hurt in bright mode.', status: 'OPEN', sentiment: 0.1, impactScore: 18, customerId: CUSTOMERS.umbrella.id, customer: CUSTOMERS.umbrella, createdAt: new Date('2026-03-12') },
+  {
+    id: 'fb-dm-1',
+    workspaceId: WS_ID,
+    title: 'Please add dark mode',
+    description: 'Would love dark mode.',
+    status: 'OPEN',
+    sentiment: 0.2,
+    impactScore: 20,
+    customerId: CUSTOMERS.umbrella.id,
+    customer: CUSTOMERS.umbrella,
+    createdAt: new Date('2026-03-10'),
+  },
+  {
+    id: 'fb-dm-2',
+    workspaceId: WS_ID,
+    title: 'Dark theme option needed',
+    description: 'Eyes hurt in bright mode.',
+    status: 'OPEN',
+    sentiment: 0.1,
+    impactScore: 18,
+    customerId: CUSTOMERS.umbrella.id,
+    customer: CUSTOMERS.umbrella,
+    createdAt: new Date('2026-03-12'),
+  },
 ];
 
 // ─── Mock Prisma ──────────────────────────────────────────────────────────────
@@ -266,50 +412,161 @@ function buildMockPrisma() {
     [WS_ID]: { id: WS_ID, slug: 'fullflow-org', name: 'FullFlow Org' },
   };
   const userStore: Record<string, any> = {
-    [USER_ID]: { id: USER_ID, email: 'pm@fullflow.io', workspaceId: WS_ID, role: 'ADMIN', passwordHash: 'x', passwordVersion: 1 },
+    [USER_ID]: {
+      id: USER_ID,
+      email: 'pm@fullflow.io',
+      workspaceId: WS_ID,
+      role: 'ADMIN',
+      passwordHash: 'x',
+      passwordVersion: 1,
+    },
   };
-  const feedbackStore: Record<string, any> = Object.fromEntries(FEEDBACK_ITEMS.map((f) => [f.id, f]));
-  const themeStore: Record<string, any> = Object.fromEntries(Object.values(THEMES).map((t) => [t.id, t]));
-  const roadmapStore: Record<string, any> = Object.fromEntries(Object.values(ROADMAP_ITEMS).map((r) => [r.id, r]));
+  const feedbackStore: Record<string, any> = Object.fromEntries(
+    FEEDBACK_ITEMS.map((f) => [f.id, f]),
+  );
+  const themeStore: Record<string, any> = Object.fromEntries(
+    Object.values(THEMES).map((t) => [t.id, t]),
+  );
+  const roadmapStore: Record<string, any> = Object.fromEntries(
+    Object.values(ROADMAP_ITEMS).map((r) => [r.id, r]),
+  );
   const themeFeedbackStore: Record<string, any> = {
     // Checkout theme feedback links
-    'tf-co-1': { themeId: THEME_CHECKOUT_ID, feedbackId: 'fb-co-1', feedback: feedbackStore['fb-co-1'], assignedAt: new Date(), confidence: 0.95 },
-    'tf-co-2': { themeId: THEME_CHECKOUT_ID, feedbackId: 'fb-co-2', feedback: feedbackStore['fb-co-2'], assignedAt: new Date(), confidence: 0.92 },
-    'tf-co-3': { themeId: THEME_CHECKOUT_ID, feedbackId: 'fb-co-3', feedback: feedbackStore['fb-co-3'], assignedAt: new Date(), confidence: 0.88 },
-    'tf-co-4': { themeId: THEME_CHECKOUT_ID, feedbackId: 'fb-co-4', feedback: feedbackStore['fb-co-4'], assignedAt: new Date(), confidence: 0.85 },
-    'tf-co-5': { themeId: THEME_CHECKOUT_ID, feedbackId: 'fb-co-5', feedback: feedbackStore['fb-co-5'], assignedAt: new Date(), confidence: 0.90 },
+    'tf-co-1': {
+      themeId: THEME_CHECKOUT_ID,
+      feedbackId: 'fb-co-1',
+      feedback: feedbackStore['fb-co-1'],
+      assignedAt: new Date(),
+      confidence: 0.95,
+    },
+    'tf-co-2': {
+      themeId: THEME_CHECKOUT_ID,
+      feedbackId: 'fb-co-2',
+      feedback: feedbackStore['fb-co-2'],
+      assignedAt: new Date(),
+      confidence: 0.92,
+    },
+    'tf-co-3': {
+      themeId: THEME_CHECKOUT_ID,
+      feedbackId: 'fb-co-3',
+      feedback: feedbackStore['fb-co-3'],
+      assignedAt: new Date(),
+      confidence: 0.88,
+    },
+    'tf-co-4': {
+      themeId: THEME_CHECKOUT_ID,
+      feedbackId: 'fb-co-4',
+      feedback: feedbackStore['fb-co-4'],
+      assignedAt: new Date(),
+      confidence: 0.85,
+    },
+    'tf-co-5': {
+      themeId: THEME_CHECKOUT_ID,
+      feedbackId: 'fb-co-5',
+      feedback: feedbackStore['fb-co-5'],
+      assignedAt: new Date(),
+      confidence: 0.9,
+    },
     // Onboarding theme feedback links
-    'tf-ob-1': { themeId: THEME_ONBOARDING_ID, feedbackId: 'fb-ob-1', feedback: feedbackStore['fb-ob-1'], assignedAt: new Date(), confidence: 0.80 },
-    'tf-ob-2': { themeId: THEME_ONBOARDING_ID, feedbackId: 'fb-ob-2', feedback: feedbackStore['fb-ob-2'], assignedAt: new Date(), confidence: 0.75 },
-    'tf-ob-3': { themeId: THEME_ONBOARDING_ID, feedbackId: 'fb-ob-3', feedback: feedbackStore['fb-ob-3'], assignedAt: new Date(), confidence: 0.70 },
+    'tf-ob-1': {
+      themeId: THEME_ONBOARDING_ID,
+      feedbackId: 'fb-ob-1',
+      feedback: feedbackStore['fb-ob-1'],
+      assignedAt: new Date(),
+      confidence: 0.8,
+    },
+    'tf-ob-2': {
+      themeId: THEME_ONBOARDING_ID,
+      feedbackId: 'fb-ob-2',
+      feedback: feedbackStore['fb-ob-2'],
+      assignedAt: new Date(),
+      confidence: 0.75,
+    },
+    'tf-ob-3': {
+      themeId: THEME_ONBOARDING_ID,
+      feedbackId: 'fb-ob-3',
+      feedback: feedbackStore['fb-ob-3'],
+      assignedAt: new Date(),
+      confidence: 0.7,
+    },
     // Dark mode theme feedback links
-    'tf-dm-1': { themeId: THEME_DARKMODE_ID, feedbackId: 'fb-dm-1', feedback: feedbackStore['fb-dm-1'], assignedAt: new Date(), confidence: 0.65 },
-    'tf-dm-2': { themeId: THEME_DARKMODE_ID, feedbackId: 'fb-dm-2', feedback: feedbackStore['fb-dm-2'], assignedAt: new Date(), confidence: 0.60 },
+    'tf-dm-1': {
+      themeId: THEME_DARKMODE_ID,
+      feedbackId: 'fb-dm-1',
+      feedback: feedbackStore['fb-dm-1'],
+      assignedAt: new Date(),
+      confidence: 0.65,
+    },
+    'tf-dm-2': {
+      themeId: THEME_DARKMODE_ID,
+      feedbackId: 'fb-dm-2',
+      feedback: feedbackStore['fb-dm-2'],
+      assignedAt: new Date(),
+      confidence: 0.6,
+    },
   };
 
   return {
-    _stores: { workspaceStore, userStore, feedbackStore, themeStore, roadmapStore, themeFeedbackStore },
+    _stores: {
+      workspaceStore,
+      userStore,
+      feedbackStore,
+      themeStore,
+      roadmapStore,
+      themeFeedbackStore,
+    },
     workspace: {
-      findFirst: jest.fn().mockImplementation(({ where }) => Promise.resolve(workspaceStore[where?.id] ?? workspaceStore[WS_ID])),
-      findUnique: jest.fn().mockImplementation(({ where }) => Promise.resolve(workspaceStore[where?.id])),
+      findFirst: jest
+        .fn()
+        .mockImplementation(({ where }) =>
+          Promise.resolve(workspaceStore[where?.id] ?? workspaceStore[WS_ID]),
+        ),
+      findUnique: jest
+        .fn()
+        .mockImplementation(({ where }) =>
+          Promise.resolve(workspaceStore[where?.id]),
+        ),
     },
     user: {
-      findUnique: jest.fn().mockImplementation(({ where }) => Promise.resolve(userStore[where?.id] ?? Object.values(userStore)[0])),
-      findFirst: jest.fn().mockImplementation(() => Promise.resolve(Object.values(userStore)[0])),
-      create: jest.fn().mockImplementation(({ data }) => Promise.resolve({ ...data, id: USER_ID })),
+      findUnique: jest
+        .fn()
+        .mockImplementation(({ where }) =>
+          Promise.resolve(userStore[where?.id] ?? Object.values(userStore)[0]),
+        ),
+      findFirst: jest
+        .fn()
+        .mockImplementation(() => Promise.resolve(Object.values(userStore)[0])),
+      create: jest
+        .fn()
+        .mockImplementation(({ data }) =>
+          Promise.resolve({ ...data, id: USER_ID }),
+        ),
     },
     feedback: {
-      findUnique: jest.fn().mockImplementation(({ where }) => Promise.resolve(feedbackStore[where?.id])),
+      findUnique: jest
+        .fn()
+        .mockImplementation(({ where }) =>
+          Promise.resolve(feedbackStore[where?.id]),
+        ),
       findFirst: jest.fn().mockImplementation(({ where }) => {
-        const items = Object.values(feedbackStore).filter((f: any) => f.workspaceId === (where?.workspaceId ?? WS_ID));
+        const items = Object.values(feedbackStore).filter(
+          (f: any) => f.workspaceId === (where?.workspaceId ?? WS_ID),
+        );
         return Promise.resolve(items[0] ?? null);
       }),
       findMany: jest.fn().mockImplementation(({ where }) => {
-        const items = Object.values(feedbackStore).filter((f: any) => f.workspaceId === (where?.workspaceId ?? WS_ID));
+        const items = Object.values(feedbackStore).filter(
+          (f: any) => f.workspaceId === (where?.workspaceId ?? WS_ID),
+        );
         return Promise.resolve(items);
       }),
       create: jest.fn().mockImplementation(({ data }) => {
-        const fb = { ...data, id: data.id ?? `fb-new-${Date.now()}`, createdAt: new Date(), updatedAt: new Date() };
+        const fb = {
+          ...data,
+          id: data.id ?? `fb-new-${Date.now()}`,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
         feedbackStore[fb.id] = fb;
         return Promise.resolve(fb);
       }),
@@ -317,25 +574,51 @@ function buildMockPrisma() {
         feedbackStore[where.id] = { ...feedbackStore[where.id], ...data };
         return Promise.resolve(feedbackStore[where.id]);
       }),
-      count: jest.fn().mockImplementation(() => Promise.resolve(Object.keys(feedbackStore).length)),
+      count: jest
+        .fn()
+        .mockImplementation(() =>
+          Promise.resolve(Object.keys(feedbackStore).length),
+        ),
       aggregate: jest.fn().mockResolvedValue({ _avg: { sentiment: -0.4 } }),
     },
     theme: {
-      findUnique: jest.fn().mockImplementation(({ where }) => Promise.resolve(themeStore[where?.id])),
+      findUnique: jest
+        .fn()
+        .mockImplementation(({ where }) =>
+          Promise.resolve(themeStore[where?.id]),
+        ),
       findFirst: jest.fn().mockImplementation(({ where }) => {
-        const t = where?.id ? themeStore[where.id] : Object.values(themeStore).find((t: any) => t.workspaceId === (where?.workspaceId ?? WS_ID));
+        const t = where?.id
+          ? themeStore[where.id]
+          : Object.values(themeStore).find(
+              (t: any) => t.workspaceId === (where?.workspaceId ?? WS_ID),
+            );
         return Promise.resolve(t ?? null);
       }),
-      findMany: jest.fn().mockImplementation(({ where, orderBy, skip = 0, take = 20, select }) => {
-        let items = Object.values(themeStore).filter((t: any) => t.workspaceId === (where?.workspaceId ?? WS_ID));
-        // Apply ordering
-        if (orderBy?.[0]?.priorityScore) {
-          items = items.sort((a: any, b: any) => (b.priorityScore ?? 0) - (a.priorityScore ?? 0));
-        }
-        return Promise.resolve(items.slice(skip, skip + take));
-      }),
+      findMany: jest
+        .fn()
+        .mockImplementation(
+          ({ where, orderBy, skip = 0, take = 20, select }) => {
+            let items = Object.values(themeStore).filter(
+              (t: any) => t.workspaceId === (where?.workspaceId ?? WS_ID),
+            );
+            // Apply ordering
+            if (orderBy?.[0]?.priorityScore) {
+              items = items.sort(
+                (a: any, b: any) =>
+                  (b.priorityScore ?? 0) - (a.priorityScore ?? 0),
+              );
+            }
+            return Promise.resolve(items.slice(skip, skip + take));
+          },
+        ),
       create: jest.fn().mockImplementation(({ data }) => {
-        const t = { ...data, id: data.id ?? `theme-new-${Date.now()}`, createdAt: new Date(), updatedAt: new Date() };
+        const t = {
+          ...data,
+          id: data.id ?? `theme-new-${Date.now()}`,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
         themeStore[t.id] = t;
         return Promise.resolve(t);
       }),
@@ -343,12 +626,18 @@ function buildMockPrisma() {
         themeStore[where.id] = { ...themeStore[where.id], ...data };
         return Promise.resolve(themeStore[where.id]);
       }),
-      count: jest.fn().mockImplementation(() => Promise.resolve(Object.keys(themeStore).length)),
+      count: jest
+        .fn()
+        .mockImplementation(() =>
+          Promise.resolve(Object.keys(themeStore).length),
+        ),
     },
     themeFeedback: {
       findMany: jest.fn().mockImplementation(({ where }) => {
         const themeId = where?.themeId;
-        const items = Object.values(themeFeedbackStore).filter((tf: any) => tf.themeId === themeId);
+        const items = Object.values(themeFeedbackStore).filter(
+          (tf: any) => tf.themeId === themeId,
+        );
         return Promise.resolve(items);
       }),
       create: jest.fn().mockImplementation(({ data }) => {
@@ -356,31 +645,51 @@ function buildMockPrisma() {
         themeFeedbackStore[`tf-${data.themeId}-${data.feedbackId}`] = tf;
         return Promise.resolve(tf);
       }),
-      upsert: jest.fn().mockImplementation(({ create }) => Promise.resolve(create)),
+      upsert: jest
+        .fn()
+        .mockImplementation(({ create }) => Promise.resolve(create)),
     },
     roadmapItem: {
-      findUnique: jest.fn().mockImplementation(({ where }) => Promise.resolve(roadmapStore[where?.id])),
+      findUnique: jest
+        .fn()
+        .mockImplementation(({ where }) =>
+          Promise.resolve(roadmapStore[where?.id]),
+        ),
       findFirst: jest.fn().mockImplementation(({ where }) => {
-        const item = where?.id ? roadmapStore[where.id] : Object.values(roadmapStore).find((r: any) => r.workspaceId === (where?.workspaceId ?? WS_ID));
+        const item = where?.id
+          ? roadmapStore[where.id]
+          : Object.values(roadmapStore).find(
+              (r: any) => r.workspaceId === (where?.workspaceId ?? WS_ID),
+            );
         return Promise.resolve(item ?? null);
       }),
-      findMany: jest.fn().mockImplementation(({ where, orderBy, skip = 0, take = 1000 }) => {
-        let items = Object.values(roadmapStore).filter((r: any) => r.workspaceId === (where?.workspaceId ?? WS_ID));
-        // Apply ordering
-        if (orderBy?.priorityScore) {
-          items = items.sort((a: any, b: any) => (b.priorityScore ?? 0) - (a.priorityScore ?? 0));
-        } else if (orderBy?.feedbackCount) {
-          items = items.sort((a: any, b: any) => (b.feedbackCount ?? 0) - (a.feedbackCount ?? 0));
-        } else if (orderBy?.manualRank) {
-          items = items.sort((a: any, b: any) => {
-            if (a.manualRank == null && b.manualRank == null) return 0;
-            if (a.manualRank == null) return 1;
-            if (b.manualRank == null) return -1;
-            return a.manualRank - b.manualRank;
-          });
-        }
-        return Promise.resolve(items.slice(skip, skip + take));
-      }),
+      findMany: jest
+        .fn()
+        .mockImplementation(({ where, orderBy, skip = 0, take = 1000 }) => {
+          let items = Object.values(roadmapStore).filter(
+            (r: any) => r.workspaceId === (where?.workspaceId ?? WS_ID),
+          );
+          // Apply ordering
+          if (orderBy?.priorityScore) {
+            items = items.sort(
+              (a: any, b: any) =>
+                (b.priorityScore ?? 0) - (a.priorityScore ?? 0),
+            );
+          } else if (orderBy?.feedbackCount) {
+            items = items.sort(
+              (a: any, b: any) =>
+                (b.feedbackCount ?? 0) - (a.feedbackCount ?? 0),
+            );
+          } else if (orderBy?.manualRank) {
+            items = items.sort((a: any, b: any) => {
+              if (a.manualRank == null && b.manualRank == null) return 0;
+              if (a.manualRank == null) return 1;
+              if (b.manualRank == null) return -1;
+              return a.manualRank - b.manualRank;
+            });
+          }
+          return Promise.resolve(items.slice(skip, skip + take));
+        }),
       create: jest.fn().mockImplementation(({ data, include }) => {
         const item = {
           ...data,
@@ -395,11 +704,16 @@ function buildMockPrisma() {
       update: jest.fn().mockImplementation(({ where, data, include }) => {
         roadmapStore[where.id] = { ...roadmapStore[where.id], ...data };
         if (include?.theme) {
-          roadmapStore[where.id].theme = themeStore[roadmapStore[where.id].themeId];
+          roadmapStore[where.id].theme =
+            themeStore[roadmapStore[where.id].themeId];
         }
         return Promise.resolve(roadmapStore[where.id]);
       }),
-      count: jest.fn().mockImplementation(() => Promise.resolve(Object.keys(roadmapStore).length)),
+      count: jest
+        .fn()
+        .mockImplementation(() =>
+          Promise.resolve(Object.keys(roadmapStore).length),
+        ),
     },
     customerSignal: {
       findMany: jest.fn().mockResolvedValue([]),
@@ -428,18 +742,24 @@ function buildMockPrisma() {
         dealStageProposal: 0.6,
         dealStageNegotiation: 0.8,
         dealStageClosedWon: 1.0,
-        demandStrengthWeight: 0.30,
+        demandStrengthWeight: 0.3,
         revenueImpactWeight: 0.35,
-        strategicImportanceWeight: 0.20,
+        strategicImportanceWeight: 0.2,
         urgencySignalWeight: 0.15,
         updatedAt: new Date(),
       }),
-      create: jest.fn().mockImplementation(({ data }) => Promise.resolve({ ...data, updatedAt: new Date() })),
+      create: jest
+        .fn()
+        .mockImplementation(({ data }) =>
+          Promise.resolve({ ...data, updatedAt: new Date() }),
+        ),
     },
     auditLog: {
       create: jest.fn().mockResolvedValue({}),
     },
-    $transaction: jest.fn().mockImplementation((queries: Promise<any>[]) => Promise.all(queries)),
+    $transaction: jest
+      .fn()
+      .mockImplementation((queries: Promise<any>[]) => Promise.all(queries)),
     $queryRaw: jest.fn().mockResolvedValue([]),
     $executeRaw: jest.fn().mockResolvedValue(1),
   };
@@ -472,7 +792,9 @@ describe('Full-Flow: Feedback Intelligence & Decision Layer', () => {
 
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix('api/v1');
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, transform: true }),
+    );
     await app.init();
   });
 
@@ -484,13 +806,19 @@ describe('Full-Flow: Feedback Intelligence & Decision Layer', () => {
     jest.clearAllMocks();
     // Re-wire mocks after clearAllMocks
     mockPrisma.workspace.findFirst.mockImplementation(({ where }: any) =>
-      Promise.resolve(mockPrisma._stores.workspaceStore[where?.id] ?? mockPrisma._stores.workspaceStore[WS_ID]),
+      Promise.resolve(
+        mockPrisma._stores.workspaceStore[where?.id] ??
+          mockPrisma._stores.workspaceStore[WS_ID],
+      ),
     );
     mockPrisma.user.findFirst.mockImplementation(() =>
       Promise.resolve(Object.values(mockPrisma._stores.userStore)[0]),
     );
     mockPrisma.user.findUnique.mockImplementation(({ where }: any) =>
-      Promise.resolve(mockPrisma._stores.userStore[where?.id] ?? Object.values(mockPrisma._stores.userStore)[0]),
+      Promise.resolve(
+        mockPrisma._stores.userStore[where?.id] ??
+          Object.values(mockPrisma._stores.userStore)[0],
+      ),
     );
   });
 
@@ -528,7 +856,10 @@ describe('Full-Flow: Feedback Intelligence & Decision Layer', () => {
       const res = await request(app.getHttpServer())
         .post(`/api/v1/workspaces/${WS_ID}/feedback`)
         .set('Authorization', TOKEN)
-        .send({ title: 'New checkout bug', description: 'Checkout fails on mobile devices.' });
+        .send({
+          title: 'New checkout bug',
+          description: 'Checkout fails on mobile devices.',
+        });
 
       expect(res.status).toBe(201);
       expect(res.body.title).toBe('New checkout bug');
@@ -543,7 +874,11 @@ describe('Full-Flow: Feedback Intelligence & Decision Layer', () => {
 
   describe('2. Theme Intelligence', () => {
     it('should return all themes sorted by CIQ priority score (descending)', async () => {
-      const sortedThemes = [THEMES.checkout, THEMES.onboarding, THEMES.darkMode];
+      const sortedThemes = [
+        THEMES.checkout,
+        THEMES.onboarding,
+        THEMES.darkMode,
+      ];
       mockPrisma.theme.findMany.mockResolvedValueOnce(sortedThemes);
       mockPrisma.theme.count.mockResolvedValueOnce(3);
 
@@ -555,8 +890,12 @@ describe('Full-Flow: Feedback Intelligence & Decision Layer', () => {
       const themes = res.body.data;
       expect(themes).toHaveLength(3);
       // Verify descending order
-      expect(themes[0].priorityScore).toBeGreaterThanOrEqual(themes[1].priorityScore);
-      expect(themes[1].priorityScore).toBeGreaterThanOrEqual(themes[2].priorityScore);
+      expect(themes[0].priorityScore).toBeGreaterThanOrEqual(
+        themes[1].priorityScore,
+      );
+      expect(themes[1].priorityScore).toBeGreaterThanOrEqual(
+        themes[2].priorityScore,
+      );
     });
 
     it('should return AI narration fields on the theme list', async () => {
@@ -579,8 +918,18 @@ describe('Full-Flow: Feedback Intelligence & Decision Layer', () => {
       mockPrisma.theme.findFirst.mockResolvedValueOnce({
         ...THEMES.checkout,
         feedbacks: [
-          { feedback: { ...FEEDBACK_ITEMS[0], customer: CUSTOMERS.acme }, assignedAt: new Date(), assignedBy: 'AI', confidence: 0.95 },
-          { feedback: { ...FEEDBACK_ITEMS[1], customer: CUSTOMERS.acme }, assignedAt: new Date(), assignedBy: 'AI', confidence: 0.92 },
+          {
+            feedback: { ...FEEDBACK_ITEMS[0], customer: CUSTOMERS.acme },
+            assignedAt: new Date(),
+            assignedBy: 'AI',
+            confidence: 0.95,
+          },
+          {
+            feedback: { ...FEEDBACK_ITEMS[1], customer: CUSTOMERS.acme },
+            assignedAt: new Date(),
+            assignedBy: 'AI',
+            confidence: 0.92,
+          },
         ],
         _count: { feedbacks: 12 },
       });
@@ -599,7 +948,12 @@ describe('Full-Flow: Feedback Intelligence & Decision Layer', () => {
       mockPrisma.theme.findFirst.mockResolvedValueOnce({
         ...THEMES.darkMode,
         feedbacks: [
-          { feedback: { ...FEEDBACK_ITEMS[8], customer: CUSTOMERS.umbrella }, assignedAt: new Date(), assignedBy: 'AI', confidence: 0.65 },
+          {
+            feedback: { ...FEEDBACK_ITEMS[8], customer: CUSTOMERS.umbrella },
+            assignedAt: new Date(),
+            assignedBy: 'AI',
+            confidence: 0.65,
+          },
         ],
         _count: { feedbacks: 2 },
       });
@@ -621,7 +975,9 @@ describe('Full-Flow: Feedback Intelligence & Decision Layer', () => {
   describe('3. CIQ Scoring Formula', () => {
     it('should produce a score in the 0–100 range for any input', () => {
       // Validate the normalisation logic directly
-      const weights = [0.1538, 0.1538, 0.1538, 0.0769, 0.1538, 0.0769, 0.1154, 0.0769, 0.0385];
+      const weights = [
+        0.1538, 0.1538, 0.1538, 0.0769, 0.1538, 0.0769, 0.1154, 0.0769, 0.0385,
+      ];
       const weightSum = weights.reduce((a, b) => a + b, 0);
       expect(weightSum).toBeCloseTo(1.0, 2);
     });
@@ -629,7 +985,9 @@ describe('Full-Flow: Feedback Intelligence & Decision Layer', () => {
     it('should produce a higher score for checkout theme than dark mode theme', () => {
       // Checkout: 12 feedbacks, high ARR, critical customers
       // Dark mode: 2 feedbacks, low ARR, low-priority customers
-      expect(THEMES.checkout.priorityScore).toBeGreaterThan(THEMES.darkMode.priorityScore);
+      expect(THEMES.checkout.priorityScore).toBeGreaterThan(
+        THEMES.darkMode.priorityScore,
+      );
     });
 
     it('should rank themes correctly: checkout > onboarding > dark mode', () => {
@@ -646,9 +1004,14 @@ describe('Full-Flow: Feedback Intelligence & Decision Layer', () => {
 
     it('should include all 9 CIQ weight factors in the score breakdown', () => {
       const expectedFactors = [
-        'requestFrequency', 'customerCount', 'arrValue',
-        'accountPriority', 'dealInfluence', 'signalStrength',
-        'voteSignal', 'recencySignal',
+        'requestFrequency',
+        'customerCount',
+        'arrValue',
+        'accountPriority',
+        'dealInfluence',
+        'signalStrength',
+        'voteSignal',
+        'recencySignal',
       ];
       // The signalBreakdown in the theme fixture contains the key factors
       const breakdown = THEMES.checkout.signalBreakdown as Record<string, any>;
@@ -675,27 +1038,42 @@ describe('Full-Flow: Feedback Intelligence & Decision Layer', () => {
         roadmapItems: [],
       });
       mockPrisma.themeFeedback.findMany.mockResolvedValueOnce(
-        FEEDBACK_ITEMS.slice(0, 5).map((f) => ({ feedback: { ...f, customer: CUSTOMERS.acme } })),
+        FEEDBACK_ITEMS.slice(0, 5).map((f) => ({
+          feedback: { ...f, customer: CUSTOMERS.acme },
+        })),
       );
       mockPrisma.dealThemeLink.findMany.mockResolvedValueOnce([]);
       mockPrisma.customerSignal.findMany.mockResolvedValueOnce([]);
       mockPrisma.feedbackVote.findMany.mockResolvedValueOnce([]);
       mockPrisma.prioritizationSettings.findUnique.mockResolvedValueOnce({
         workspaceId: WS_ID,
-        requestFrequencyWeight: 0.1538, customerCountWeight: 0.1538, arrValueWeight: 0.1538,
-        accountPriorityWeight: 0.0769, dealValueWeight: 0.1538, strategicWeight: 0.0769,
-        voteWeight: 0.1154, sentimentWeight: 0.0769, recencyWeight: 0.0385,
-        dealStageProspecting: 0.1, dealStageQualifying: 0.3, dealStageProposal: 0.6,
-        dealStageNegotiation: 0.8, dealStageClosedWon: 1.0,
-        demandStrengthWeight: 0.30, revenueImpactWeight: 0.35,
-        strategicImportanceWeight: 0.20, urgencySignalWeight: 0.15,
+        requestFrequencyWeight: 0.1538,
+        customerCountWeight: 0.1538,
+        arrValueWeight: 0.1538,
+        accountPriorityWeight: 0.0769,
+        dealValueWeight: 0.1538,
+        strategicWeight: 0.0769,
+        voteWeight: 0.1154,
+        sentimentWeight: 0.0769,
+        recencyWeight: 0.0385,
+        dealStageProspecting: 0.1,
+        dealStageQualifying: 0.3,
+        dealStageProposal: 0.6,
+        dealStageNegotiation: 0.8,
+        dealStageClosedWon: 1.0,
+        demandStrengthWeight: 0.3,
+        revenueImpactWeight: 0.35,
+        strategicImportanceWeight: 0.2,
+        urgencySignalWeight: 0.15,
         updatedAt: new Date(),
       });
       const createdItem = { ...ROADMAP_ITEMS.checkout };
       mockPrisma.roadmapItem.create.mockResolvedValueOnce(createdItem);
 
       const res = await request(app.getHttpServer())
-        .post(`/api/v1/workspaces/${WS_ID}/roadmap/from-theme/${THEME_CHECKOUT_ID}`)
+        .post(
+          `/api/v1/workspaces/${WS_ID}/roadmap/from-theme/${THEME_CHECKOUT_ID}`,
+        )
         .set('Authorization', TOKEN);
 
       expect(res.status).toBe(201);
@@ -707,7 +1085,9 @@ describe('Full-Flow: Feedback Intelligence & Decision Layer', () => {
       mockPrisma.theme.findFirst.mockResolvedValueOnce(null);
 
       const res = await request(app.getHttpServer())
-        .post(`/api/v1/workspaces/${WS_ID}/roadmap/from-theme/theme-nonexistent`)
+        .post(
+          `/api/v1/workspaces/${WS_ID}/roadmap/from-theme/theme-nonexistent`,
+        )
         .set('Authorization', TOKEN);
 
       expect(res.status).toBe(404);
@@ -733,39 +1113,63 @@ describe('Full-Flow: Feedback Intelligence & Decision Layer', () => {
     });
 
     it('should sort by priorityScore descending by default', async () => {
-      const sortedItems = [ROADMAP_ITEMS.checkout, ROADMAP_ITEMS.onboarding, ROADMAP_ITEMS.darkMode];
+      const sortedItems = [
+        ROADMAP_ITEMS.checkout,
+        ROADMAP_ITEMS.onboarding,
+        ROADMAP_ITEMS.darkMode,
+      ];
       mockPrisma.roadmapItem.findMany.mockResolvedValueOnce(sortedItems);
 
       const res = await request(app.getHttpServer())
-        .get(`/api/v1/workspaces/${WS_ID}/roadmap?flat=true&sortBy=priorityScore`)
+        .get(
+          `/api/v1/workspaces/${WS_ID}/roadmap?flat=true&sortBy=priorityScore`,
+        )
         .set('Authorization', TOKEN);
 
       expect(res.status).toBe(200);
       const items = res.body.data;
-      expect(items[0].priorityScore).toBeGreaterThanOrEqual(items[1].priorityScore);
-      expect(items[1].priorityScore).toBeGreaterThanOrEqual(items[2].priorityScore);
+      expect(items[0].priorityScore).toBeGreaterThanOrEqual(
+        items[1].priorityScore,
+      );
+      expect(items[1].priorityScore).toBeGreaterThanOrEqual(
+        items[2].priorityScore,
+      );
     });
 
     it('should sort by feedbackCount descending', async () => {
       // feedbackCount sort is in-memory after enrichment
-      const items = [ROADMAP_ITEMS.checkout, ROADMAP_ITEMS.onboarding, ROADMAP_ITEMS.darkMode];
+      const items = [
+        ROADMAP_ITEMS.checkout,
+        ROADMAP_ITEMS.onboarding,
+        ROADMAP_ITEMS.darkMode,
+      ];
       mockPrisma.roadmapItem.findMany.mockResolvedValueOnce(items);
 
       const res = await request(app.getHttpServer())
-        .get(`/api/v1/workspaces/${WS_ID}/roadmap?flat=true&sortBy=feedbackCount`)
+        .get(
+          `/api/v1/workspaces/${WS_ID}/roadmap?flat=true&sortBy=feedbackCount`,
+        )
         .set('Authorization', TOKEN);
 
       expect(res.status).toBe(200);
       const sorted = res.body.data;
-      expect(sorted[0].feedbackCount).toBeGreaterThanOrEqual(sorted[1].feedbackCount ?? 0);
+      expect(sorted[0].feedbackCount).toBeGreaterThanOrEqual(
+        sorted[1].feedbackCount ?? 0,
+      );
     });
 
     it('should sort by manualRank ascending (nulls last)', async () => {
-      const items = [ROADMAP_ITEMS.checkout, ROADMAP_ITEMS.onboarding, ROADMAP_ITEMS.darkMode];
+      const items = [
+        ROADMAP_ITEMS.checkout,
+        ROADMAP_ITEMS.onboarding,
+        ROADMAP_ITEMS.darkMode,
+      ];
       mockPrisma.roadmapItem.findMany.mockResolvedValueOnce(items);
 
       const res = await request(app.getHttpServer())
-        .get(`/api/v1/workspaces/${WS_ID}/roadmap?flat=true&sortBy=manualRank&sortOrder=asc`)
+        .get(
+          `/api/v1/workspaces/${WS_ID}/roadmap?flat=true&sortBy=manualRank&sortOrder=asc`,
+        )
         .set('Authorization', TOKEN);
 
       expect(res.status).toBe(200);
@@ -775,7 +1179,9 @@ describe('Full-Flow: Feedback Intelligence & Decision Layer', () => {
       const withoutRank = sorted.filter((i: any) => i.manualRank == null);
       expect(withRank.length).toBeGreaterThan(0);
       if (withRank.length > 1) {
-        expect(withRank[0].manualRank).toBeLessThanOrEqual(withRank[1].manualRank);
+        expect(withRank[0].manualRank).toBeLessThanOrEqual(
+          withRank[1].manualRank,
+        );
       }
       // Null-ranked items come after ranked items
       const rankIndex = sorted.findIndex((i: any) => i.manualRank != null);
@@ -786,7 +1192,9 @@ describe('Full-Flow: Feedback Intelligence & Decision Layer', () => {
     });
 
     it('should include theme.aiRecommendation in the flat list response', async () => {
-      mockPrisma.roadmapItem.findMany.mockResolvedValueOnce([ROADMAP_ITEMS.checkout]);
+      mockPrisma.roadmapItem.findMany.mockResolvedValueOnce([
+        ROADMAP_ITEMS.checkout,
+      ]);
 
       const res = await request(app.getHttpServer())
         .get(`/api/v1/workspaces/${WS_ID}/roadmap?flat=true`)
@@ -800,7 +1208,9 @@ describe('Full-Flow: Feedback Intelligence & Decision Layer', () => {
     });
 
     it('should include theme.aiConfidence in the flat list response', async () => {
-      mockPrisma.roadmapItem.findMany.mockResolvedValueOnce([ROADMAP_ITEMS.checkout]);
+      mockPrisma.roadmapItem.findMany.mockResolvedValueOnce([
+        ROADMAP_ITEMS.checkout,
+      ]);
 
       const res = await request(app.getHttpServer())
         .get(`/api/v1/workspaces/${WS_ID}/roadmap?flat=true`)
@@ -812,7 +1222,9 @@ describe('Full-Flow: Feedback Intelligence & Decision Layer', () => {
     });
 
     it('should filter items by search query', async () => {
-      mockPrisma.roadmapItem.findMany.mockResolvedValueOnce([ROADMAP_ITEMS.checkout]);
+      mockPrisma.roadmapItem.findMany.mockResolvedValueOnce([
+        ROADMAP_ITEMS.checkout,
+      ]);
 
       const res = await request(app.getHttpServer())
         .get(`/api/v1/workspaces/${WS_ID}/roadmap?flat=true&search=checkout`)
@@ -831,7 +1243,9 @@ describe('Full-Flow: Feedback Intelligence & Decision Layer', () => {
   describe('6. Manual Rank Override', () => {
     it('should set manualRank on a roadmap item', async () => {
       const updatedItem = { ...ROADMAP_ITEMS.darkMode, manualRank: 3 };
-      mockPrisma.roadmapItem.findFirst.mockResolvedValueOnce(ROADMAP_ITEMS.darkMode);
+      mockPrisma.roadmapItem.findFirst.mockResolvedValueOnce(
+        ROADMAP_ITEMS.darkMode,
+      );
       mockPrisma.roadmapItem.update.mockResolvedValueOnce(updatedItem);
 
       const res = await request(app.getHttpServer())
@@ -845,7 +1259,9 @@ describe('Full-Flow: Feedback Intelligence & Decision Layer', () => {
 
     it('should clear manualRank when set to null', async () => {
       const updatedItem = { ...ROADMAP_ITEMS.checkout, manualRank: null };
-      mockPrisma.roadmapItem.findFirst.mockResolvedValueOnce(ROADMAP_ITEMS.checkout);
+      mockPrisma.roadmapItem.findFirst.mockResolvedValueOnce(
+        ROADMAP_ITEMS.checkout,
+      );
       mockPrisma.roadmapItem.update.mockResolvedValueOnce(updatedItem);
 
       const res = await request(app.getHttpServer())
@@ -874,16 +1290,21 @@ describe('Full-Flow: Feedback Intelligence & Decision Layer', () => {
       expect(THEMES.checkout.aiRecommendation).toBeTruthy();
       expect(THEMES.checkout.aiRecommendation.length).toBeGreaterThan(30);
       // Should not be a generic fallback
-      expect(THEMES.checkout.aiRecommendation).not.toBe('No recommendation available.');
+      expect(THEMES.checkout.aiRecommendation).not.toBe(
+        'No recommendation available.',
+      );
     });
 
     it('should have higher aiConfidence for themes with more feedback', () => {
       // Checkout (12 feedbacks) should have higher confidence than dark mode (2 feedbacks)
-      expect(THEMES.checkout.aiConfidence).toBeGreaterThan(THEMES.darkMode.aiConfidence);
+      expect(THEMES.checkout.aiConfidence).toBeGreaterThan(
+        THEMES.darkMode.aiConfidence,
+      );
     });
 
     it('should correctly classify confidence tiers', () => {
-      const classify = (c: number) => c >= 0.75 ? 'high' : c >= 0.45 ? 'medium' : 'low';
+      const classify = (c: number) =>
+        c >= 0.75 ? 'high' : c >= 0.45 ? 'medium' : 'low';
       expect(classify(THEMES.checkout.aiConfidence)).toBe('high');
       expect(classify(THEMES.onboarding.aiConfidence)).toBe('medium');
       // Dark mode at 0.55 is medium

@@ -17,7 +17,9 @@ export class DigestProcessor {
 
   @Process()
   async handleDigest(job: Job<DigestJobData>) {
-    this.logger.log(`Processing digest job for workspace ${job.data.workspaceId}`);
+    this.logger.log(
+      `Processing digest job for workspace ${job.data.workspaceId}`,
+    );
     await this.digestService.generateDigest(job.data.workspaceId);
   }
 }

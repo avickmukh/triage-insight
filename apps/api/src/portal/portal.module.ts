@@ -5,10 +5,7 @@ import { PortalService } from './portal.service';
 import { VoiceModule } from '../voice/voice.module';
 
 @Module({
-  imports: [
-    PrismaModule,
-    VoiceModule,
-  ],
+  imports: [PrismaModule, VoiceModule],
   controllers: [PortalController],
   providers: [PortalService],
 })

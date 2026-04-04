@@ -1,4 +1,10 @@
-import { IsArray, IsUUID, ArrayMinSize, IsOptional, IsString } from 'class-validator';
+import {
+  IsArray,
+  IsUUID,
+  ArrayMinSize,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 export class MoveFeedbackDto {
   @IsArray()

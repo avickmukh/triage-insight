@@ -15,7 +15,11 @@ describe('FeedbackController (e2e)', () => {
     queues = setup.queues;
 
     // Get a token for authenticated requests
-    prisma.user.findUnique.mockResolvedValue({ id: 'user-1', email: 'test@example.com', password: 'hashed_password' });
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      email: 'test@example.com',
+      password: 'hashed_password',
+    });
     const loginRes = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
       .send({ email: 'test@example.com', password: 'password123' });
@@ -32,23 +36,35 @@ describe('FeedbackController (e2e)', () => {
 
   describe('POST /workspaces/:workspaceId/feedback', () => {
     it('should create feedback and enqueue an analysis job', async () => {
-      prisma.feedback.create.mockResolvedValueOnce({ id: 'fb-1', title: 'New Feedback' });
+      prisma.feedback.create.mockResolvedValueOnce({
+        id: 'fb-1',
+        title: 'New Feedback',
+      });
 
       await request(app.getHttpServer())
         .post('/api/v1/workspaces/ws-1/feedback')
         .set('Authorization', `Bearer ${token}`)
-        .send({ title: 'New Feedback', description: 'Details', sourceType: 'MANUAL' })
+        .send({
+          title: 'New Feedback',
+          description: 'Details',
+          sourceType: 'MANUAL',
+        })
         .expect(201)
         .then((res) => {
           expect(res.body.title).toBe('New Feedback');
-          expect(queues.analysisQueue.add).toHaveBeenCalledWith('analyse-feedback', { feedbackId: 'fb-1', workspaceId: 'ws-1' });
+          expect(queues.analysisQueue.add).toHaveBeenCalledWith(
+            'analyse-feedback',
+            { feedbackId: 'fb-1', workspaceId: 'ws-1' },
+          );
         });
     });
   });
 
   describe('GET /workspaces/:workspaceId/feedback', () => {
     it('should return a list of feedback', async () => {
-      prisma.feedback.findMany.mockResolvedValueOnce([{ id: 'fb-1', title: 'Feedback 1' }]);
+      prisma.feedback.findMany.mockResolvedValueOnce([
+        { id: 'fb-1', title: 'Feedback 1' },
+      ]);
       prisma.feedback.count.mockResolvedValueOnce(1);
 
       await request(app.getHttpServer())
@@ -64,7 +80,9 @@ describe('FeedbackController (e2e)', () => {
 
   describe('GET /workspaces/:workspaceId/feedback/semantic-search', () => {
     it('should return semantic search results', async () => {
-      prisma.$queryRaw.mockResolvedValueOnce([{ id: 'fb-1', title: 'Similar Feedback', similarity: 0.9 }]);
+      prisma.$queryRaw.mockResolvedValueOnce([
+        { id: 'fb-1', title: 'Similar Feedback', similarity: 0.9 },
+      ]);
 
       await request(app.getHttpServer())
         .get('/api/v1/workspaces/ws-1/feedback/semantic-search?q=test')

@@ -17,7 +17,7 @@ import { PrioritizationService } from '../src/prioritization/services/prioritiza
 
 // ─── Shared constants ─────────────────────────────────────────────────────────
 const WORKSPACE_ID = 'ws-ciq-ep-001';
-const USER_ID      = 'user-ciq-ep-001';
+const USER_ID = 'user-ciq-ep-001';
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
 const MOCK_FEATURE_RANKING = [
@@ -70,15 +70,13 @@ const MOCK_RECOMPUTE_RESULT = {
   processed: 5,
   failed: 0,
   duration: 1234,
-  scores: [
-    { themeId: 'theme-001', priorityScore: 85, confidenceScore: 0.9 },
-  ],
+  scores: [{ themeId: 'theme-001', priorityScore: 85, confidenceScore: 0.9 }],
 };
 
 // ─── Mock services ────────────────────────────────────────────────────────────
 const mockCiqEngine = {
   getFeatureRanking: jest.fn().mockResolvedValue(MOCK_FEATURE_RANKING),
-  getThemeRanking:   jest.fn().mockResolvedValue(MOCK_THEME_RANKING),
+  getThemeRanking: jest.fn().mockResolvedValue(MOCK_THEME_RANKING),
 };
 
 const mockPrioritizationService = {
@@ -86,8 +84,14 @@ const mockPrioritizationService = {
 };
 
 const mockPrisma = {
-  workspace:       { findUnique: jest.fn().mockResolvedValue({ id: WORKSPACE_ID, slug: 'test-org' }) },
-  workspaceMember: { findFirst: jest.fn().mockResolvedValue({ role: 'ADMIN', userId: USER_ID }) },
+  workspace: {
+    findUnique: jest
+      .fn()
+      .mockResolvedValue({ id: WORKSPACE_ID, slug: 'test-org' }),
+  },
+  workspaceMember: {
+    findFirst: jest.fn().mockResolvedValue({ role: 'ADMIN', userId: USER_ID }),
+  },
 };
 
 // ─── Auth mock helper ─────────────────────────────────────────────────────────
@@ -112,7 +116,9 @@ describe('CIQ Endpoints (e2e)', () => {
       .compile();
 
     app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, transform: true }),
+    );
     await app.init();
   });
 
@@ -202,7 +208,10 @@ describe('CIQ Endpoints (e2e)', () => {
     });
 
     it('returns 403 for non-admin users', async () => {
-      mockPrisma.workspaceMember.findFirst.mockResolvedValueOnce({ role: 'MEMBER', userId: USER_ID });
+      mockPrisma.workspaceMember.findFirst.mockResolvedValueOnce({
+        role: 'MEMBER',
+        userId: USER_ID,
+      });
       await request(app.getHttpServer())
         .post(`/workspaces/${WORKSPACE_ID}/ciq/recompute`)
         .set('Authorization', mockJwt(app))

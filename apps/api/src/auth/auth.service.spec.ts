@@ -4,7 +4,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { EmailService } from '../email/email.service';
-import { ConflictException, UnauthorizedException, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  ConflictException,
+  UnauthorizedException,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
@@ -84,26 +89,44 @@ describe('AuthService', () => {
 
   describe('signUp', () => {
     it('should throw ConflictException if email is already registered', async () => {
-      mockPrismaService.user.findUnique.mockResolvedValue({ id: 'existing-user-id' });
+      mockPrismaService.user.findUnique.mockResolvedValue({
+        id: 'existing-user-id',
+      });
 
       await expect(
-        service.signUp({ email: 'test@example.com', password: 'hashed-password', firstName: 'Test', lastName: 'User', organizationName: 'Test Org' }),
+        service.signUp({
+          email: 'test@example.com',
+          password: 'hashed-password',
+          firstName: 'Test',
+          lastName: 'User',
+          organizationName: 'Test Org',
+        }),
       ).rejects.toThrow(ConflictException);
     });
 
     it('should create a new user and workspace on successful sign-up', async () => {
       mockPrismaService.user.findUnique.mockResolvedValue(null);
-      const mockUser = { id: 'new-user-id', email: 'test@example.com', firstName: 'Test', lastName: 'User', passwordVersion: 1 };
+      const mockUser = {
+        id: 'new-user-id',
+        email: 'test@example.com',
+        firstName: 'Test',
+        lastName: 'User',
+        passwordVersion: 1,
+      };
       const mockWorkspace = { id: 'new-workspace-id', slug: 'test-user' };
       const mockMembership = { id: 'membership-id' };
 
       mockPrismaService.$transaction.mockImplementation(async (fn) => {
         mockPrismaService.user.create.mockResolvedValue(mockUser);
         mockPrismaService.workspace.create.mockResolvedValue(mockWorkspace);
-        mockPrismaService.workspaceMember.create.mockResolvedValue(mockMembership);
+        mockPrismaService.workspaceMember.create.mockResolvedValue(
+          mockMembership,
+        );
         return fn(mockPrismaService);
       });
-      mockPrismaService.refreshToken.create.mockResolvedValue({ token: 'hashed-refresh-token' });
+      mockPrismaService.refreshToken.create.mockResolvedValue({
+        token: 'hashed-refresh-token',
+      });
 
       const result = await service.signUp({
         email: 'test@example.com',
@@ -138,11 +161,16 @@ describe('AuthService', () => {
         passwordHash: hashedPassword,
         passwordVersion: 1,
         status: 'ACTIVE',
-        workspaceMemberships: [{ workspaceId: 'ws-id', workspace: { slug: 'test' } }],
+        workspaceMemberships: [
+          { workspaceId: 'ws-id', workspace: { slug: 'test' } },
+        ],
       });
 
       await expect(
-        service.login({ email: 'test@example.com', password: 'wrong-password' }),
+        service.login({
+          email: 'test@example.com',
+          password: 'wrong-password',
+        }),
       ).rejects.toThrow(UnauthorizedException);
     });
 
@@ -154,11 +182,18 @@ describe('AuthService', () => {
         passwordHash: hashedPassword,
         passwordVersion: 1,
         status: 'ACTIVE',
-        workspaceMemberships: [{ workspaceId: 'ws-id', workspace: { slug: 'test' } }],
+        workspaceMemberships: [
+          { workspaceId: 'ws-id', workspace: { slug: 'test' } },
+        ],
       });
-      mockPrismaService.refreshToken.create.mockResolvedValue({ token: 'hashed-refresh' });
+      mockPrismaService.refreshToken.create.mockResolvedValue({
+        token: 'hashed-refresh',
+      });
 
-      const result = await service.login({ email: 'test@example.com', password: 'correct-password' });
+      const result = await service.login({
+        email: 'test@example.com',
+        password: 'correct-password',
+      });
 
       expect(result).toHaveProperty('accessToken');
       expect(result).toHaveProperty('refreshToken');
@@ -171,7 +206,9 @@ describe('AuthService', () => {
     it('should return a generic message even when user is not found (security)', async () => {
       mockPrismaService.user.findUnique.mockResolvedValue(null);
 
-      const result = await service.forgotPassword({ email: 'notfound@example.com' });
+      const result = await service.forgotPassword({
+        email: 'notfound@example.com',
+      });
 
       expect(result).toHaveProperty('message');
       // Should NOT throw — prevents user enumeration
@@ -184,7 +221,9 @@ describe('AuthService', () => {
         email: 'test@example.com',
         status: 'ACTIVE',
       });
-      mockPrismaService.passwordResetToken.create.mockResolvedValue({ token: 'hashed-token' });
+      mockPrismaService.passwordResetToken.create.mockResolvedValue({
+        token: 'hashed-token',
+      });
 
       await service.forgotPassword({ email: 'test@example.com' });
 
@@ -205,7 +244,10 @@ describe('AuthService', () => {
       mockPrismaService.passwordResetToken.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.resetPassword({ token: 'invalid-token', password: 'new-password' }),
+        service.resetPassword({
+          token: 'invalid-token',
+          password: 'new-password',
+        }),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -220,12 +262,17 @@ describe('AuthService', () => {
       mockPrismaService.passwordResetToken.delete.mockResolvedValue({});
       mockPrismaService.refreshToken.deleteMany.mockResolvedValue({});
 
-      await service.resetPassword({ token: 'valid-token', password: 'new-password' });
+      await service.resetPassword({
+        token: 'valid-token',
+        password: 'new-password',
+      });
 
       expect(mockPrismaService.user.update).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: 'user-id' } }),
       );
-      expect(mockPrismaService.passwordResetToken.delete).toHaveBeenCalledTimes(1);
+      expect(mockPrismaService.passwordResetToken.delete).toHaveBeenCalledTimes(
+        1,
+      );
     });
   });
 
@@ -233,7 +280,9 @@ describe('AuthService', () => {
 
   describe('logout', () => {
     it('should delete the refresh token on logout', async () => {
-      mockPrismaService.refreshToken.findFirst.mockResolvedValue({ id: 'rt-id' });
+      mockPrismaService.refreshToken.findFirst.mockResolvedValue({
+        id: 'rt-id',
+      });
       mockPrismaService.refreshToken.delete.mockResolvedValue({});
 
       await service.logout('user-id', 'raw-refresh-token');

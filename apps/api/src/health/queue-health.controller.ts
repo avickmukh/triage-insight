@@ -43,7 +43,9 @@ export class QueueHealthController {
   async check(@Res() res: Response): Promise<void> {
     const report: QueueHealthReport = await this.queueHealthService.getReport();
     const statusCode =
-      report.overall === 'error' ? HttpStatus.SERVICE_UNAVAILABLE : HttpStatus.OK;
+      report.overall === 'error'
+        ? HttpStatus.SERVICE_UNAVAILABLE
+        : HttpStatus.OK;
     res.status(statusCode).json(report);
   }
 }

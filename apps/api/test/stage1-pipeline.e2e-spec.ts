@@ -46,7 +46,8 @@ import { CIQ_SCORING_QUEUE } from '../src/ai/processors/ciq-scoring.processor';
 function deterministicEmbedding(seed: string): number[] {
   const vec: number[] = [];
   for (let i = 0; i < 1536; i++) {
-    const val = Math.sin(seed.charCodeAt(i % seed.length) * (i + 1)) * 0.5 + 0.5;
+    const val =
+      Math.sin(seed.charCodeAt(i % seed.length) * (i + 1)) * 0.5 + 0.5;
     vec.push(val);
   }
   // Normalise to unit length
@@ -67,49 +68,57 @@ const SAMPLE_FEEDBACK = {
   wifi_1: {
     id: 'fb-wifi-1',
     title: 'WiFi keeps disconnecting in the office',
-    description: 'The office WiFi drops every 30 minutes and I have to reconnect manually.',
+    description:
+      'The office WiFi drops every 30 minutes and I have to reconnect manually.',
     workspaceId: 'ws-tenant-a',
   },
   wifi_2: {
     id: 'fb-wifi-2',
     title: 'Network connection unstable on 5GHz band',
-    description: 'Constant network drops on the 5GHz WiFi. Very disruptive during video calls.',
+    description:
+      'Constant network drops on the 5GHz WiFi. Very disruptive during video calls.',
     workspaceId: 'ws-tenant-a',
   },
   wifi_3: {
     id: 'fb-wifi-3',
     title: 'Internet drops out randomly throughout the day',
-    description: 'WiFi disconnects multiple times per day. Network is unreliable.',
+    description:
+      'WiFi disconnects multiple times per day. Network is unreliable.',
     workspaceId: 'ws-tenant-a',
   },
   dashboard_1: {
     id: 'fb-dash-1',
     title: 'Dashboard takes 10 seconds to load',
-    description: 'The main dashboard is extremely slow. Charts take forever to render.',
+    description:
+      'The main dashboard is extremely slow. Charts take forever to render.',
     workspaceId: 'ws-tenant-a',
   },
   dashboard_2: {
     id: 'fb-dash-2',
     title: 'Slow performance on analytics page',
-    description: 'The analytics dashboard is very slow and unresponsive. Loading spinner shows for 8+ seconds.',
+    description:
+      'The analytics dashboard is very slow and unresponsive. Loading spinner shows for 8+ seconds.',
     workspaceId: 'ws-tenant-a',
   },
   billing_1: {
     id: 'fb-bill-1',
     title: 'Charged twice for the same subscription',
-    description: 'I see two identical charges on my credit card for this month subscription.',
+    description:
+      'I see two identical charges on my credit card for this month subscription.',
     workspaceId: 'ws-tenant-a',
   },
   billing_2: {
     id: 'fb-bill-2',
     title: 'Duplicate billing charge on my account',
-    description: 'My account was billed twice this month. Please refund the duplicate charge.',
+    description:
+      'My account was billed twice this month. Please refund the duplicate charge.',
     workspaceId: 'ws-tenant-a',
   },
   roadmap_1: {
     id: 'fb-road-1',
     title: 'Cannot see the product roadmap',
-    description: 'I would like to see what features are planned. The roadmap is not visible to customers.',
+    description:
+      'I would like to see what features are planned. The roadmap is not visible to customers.',
     workspaceId: 'ws-tenant-a',
   },
   unrelated_1: {
@@ -138,7 +147,9 @@ function makeMockQueue() {
 
 function makeMockIdempotencyService() {
   return {
-    checkOrCreate: jest.fn().mockResolvedValue({ logId: 'mock-log-id', alreadyProcessed: false }),
+    checkOrCreate: jest
+      .fn()
+      .mockResolvedValue({ logId: 'mock-log-id', alreadyProcessed: false }),
     markCompleted: jest.fn().mockResolvedValue(undefined),
     markFailed: jest.fn().mockResolvedValue(undefined),
   };
@@ -167,11 +178,20 @@ function makeMockPrismaService() {
   const duplicateSuggestionStore: Array<any> = [];
 
   return {
-    _stores: { feedbackStore, themeStore, themeFeedbackStore, duplicateSuggestionStore },
+    _stores: {
+      feedbackStore,
+      themeStore,
+      themeFeedbackStore,
+      duplicateSuggestionStore,
+    },
 
     feedback: {
       create: jest.fn().mockImplementation(({ data }) => {
-        const record = { ...data, id: data.id ?? `fb-${Date.now()}`, createdAt: new Date() };
+        const record = {
+          ...data,
+          id: data.id ?? `fb-${Date.now()}`,
+          createdAt: new Date(),
+        };
         feedbackStore[record.id] = record;
         return Promise.resolve(record);
       }),
@@ -181,14 +201,16 @@ function makeMockPrismaService() {
       findFirst: jest.fn().mockImplementation(({ where }) => {
         const items = Object.values(feedbackStore).filter((f: any) => {
           if (where.id && f.id !== where.id) return false;
-          if (where.workspaceId && f.workspaceId !== where.workspaceId) return false;
+          if (where.workspaceId && f.workspaceId !== where.workspaceId)
+            return false;
           return true;
         });
         return Promise.resolve(items[0] ?? null);
       }),
       findMany: jest.fn().mockImplementation(({ where }) => {
         const items = Object.values(feedbackStore).filter((f: any) => {
-          if (where?.workspaceId && f.workspaceId !== where.workspaceId) return false;
+          if (where?.workspaceId && f.workspaceId !== where.workspaceId)
+            return false;
           if (where?.id?.not && f.id === where.id.not) return false;
           return true;
         });
@@ -201,8 +223,9 @@ function makeMockPrismaService() {
         return Promise.resolve(feedbackStore[where.id] ?? null);
       }),
       count: jest.fn().mockImplementation(({ where }) => {
-        const items = Object.values(feedbackStore).filter((f: any) =>
-          !where?.workspaceId || f.workspaceId === where.workspaceId,
+        const items = Object.values(feedbackStore).filter(
+          (f: any) =>
+            !where?.workspaceId || f.workspaceId === where.workspaceId,
         );
         return Promise.resolve(items.length);
       }),
@@ -210,13 +233,18 @@ function makeMockPrismaService() {
 
     theme: {
       create: jest.fn().mockImplementation(({ data }) => {
-        const record = { ...data, id: data.id ?? `theme-${Date.now()}`, createdAt: new Date() };
+        const record = {
+          ...data,
+          id: data.id ?? `theme-${Date.now()}`,
+          createdAt: new Date(),
+        };
         themeStore[record.id] = record;
         return Promise.resolve(record);
       }),
       findFirst: jest.fn().mockImplementation(({ where }) => {
         const items = Object.values(themeStore).filter((t: any) => {
-          if (where?.workspaceId && t.workspaceId !== where.workspaceId) return false;
+          if (where?.workspaceId && t.workspaceId !== where.workspaceId)
+            return false;
           return true;
         });
         return Promise.resolve(items[0] ?? null);
@@ -245,7 +273,8 @@ function makeMockPrismaService() {
     feedbackDuplicateSuggestion: {
       upsert: jest.fn().mockImplementation(({ create }) => {
         const existing = duplicateSuggestionStore.findIndex(
-          (s) => s.sourceId === create.sourceId && s.targetId === create.targetId,
+          (s) =>
+            s.sourceId === create.sourceId && s.targetId === create.targetId,
         );
         if (existing >= 0) {
           duplicateSuggestionStore[existing] = create;
@@ -256,13 +285,17 @@ function makeMockPrismaService() {
       }),
       findMany: jest.fn().mockImplementation(({ where }) => {
         return Promise.resolve(
-          duplicateSuggestionStore.filter((s) => s.sourceId === where?.sourceId),
+          duplicateSuggestionStore.filter(
+            (s) => s.sourceId === where?.sourceId,
+          ),
         );
       }),
     },
 
     workspace: {
-      findUnique: jest.fn().mockResolvedValue({ id: 'ws-tenant-a', name: 'Tenant A' }),
+      findUnique: jest
+        .fn()
+        .mockResolvedValue({ id: 'ws-tenant-a', name: 'Tenant A' }),
     },
 
     aiJobLog: {
@@ -297,12 +330,16 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
     mockIdempotency = makeMockIdempotencyService();
 
     const mockEmbeddingService = {
-      generateEmbedding: jest.fn().mockImplementation((text: string) =>
-        Promise.resolve(deterministicEmbedding(text)),
-      ),
-      embed: jest.fn().mockImplementation((text: string) =>
-        Promise.resolve(deterministicEmbedding(text)),
-      ),
+      generateEmbedding: jest
+        .fn()
+        .mockImplementation((text: string) =>
+          Promise.resolve(deterministicEmbedding(text)),
+        ),
+      embed: jest
+        .fn()
+        .mockImplementation((text: string) =>
+          Promise.resolve(deterministicEmbedding(text)),
+        ),
     };
 
     const mockSentimentService = {
@@ -324,13 +361,22 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
         AiAnalysisProcessor,
         { provide: EmbeddingService, useValue: mockEmbeddingService },
         { provide: SentimentService, useValue: mockSentimentService },
-        { provide: ThemeClusteringService, useValue: mockThemeClusteringService },
-        { provide: DuplicateDetectionService, useValue: mockDuplicateDetectionService },
+        {
+          provide: ThemeClusteringService,
+          useValue: mockThemeClusteringService,
+        },
+        {
+          provide: DuplicateDetectionService,
+          useValue: mockDuplicateDetectionService,
+        },
         { provide: 'PrismaService', useValue: mockPrisma },
         { provide: 'PlanLimitService', useValue: makeMockPlanLimit() },
         { provide: 'S3Service', useValue: makeMockS3() },
         { provide: 'JobIdempotencyService', useValue: mockIdempotency },
-        { provide: getQueueToken(AI_ANALYSIS_QUEUE), useValue: mockAnalysisQueue },
+        {
+          provide: getQueueToken(AI_ANALYSIS_QUEUE),
+          useValue: mockAnalysisQueue,
+        },
         { provide: getQueueToken(CIQ_SCORING_QUEUE), useValue: mockCiqQueue },
       ],
     }).compile();
@@ -338,8 +384,12 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
     feedbackService = module.get<FeedbackService>(FeedbackService);
     analysisProcessor = module.get<AiAnalysisProcessor>(AiAnalysisProcessor);
     embeddingService = module.get<EmbeddingService>(EmbeddingService);
-    themeClusteringService = module.get<ThemeClusteringService>(ThemeClusteringService);
-    duplicateDetectionService = module.get<DuplicateDetectionService>(DuplicateDetectionService);
+    themeClusteringService = module.get<ThemeClusteringService>(
+      ThemeClusteringService,
+    );
+    duplicateDetectionService = module.get<DuplicateDetectionService>(
+      DuplicateDetectionService,
+    );
 
     jest.clearAllMocks();
   });
@@ -351,7 +401,10 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
   describe('1. Feedback Ingestion and Job Enqueue', () => {
     it('should persist feedback and enqueue ai-analysis job with workspaceId', async () => {
       const fb = SAMPLE_FEEDBACK.wifi_1;
-      mockPrisma.feedback.create.mockResolvedValueOnce({ ...fb, createdAt: new Date() });
+      mockPrisma.feedback.create.mockResolvedValueOnce({
+        ...fb,
+        createdAt: new Date(),
+      });
 
       await feedbackService.create(fb.workspaceId, {
         title: fb.title,
@@ -370,7 +423,10 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
 
     it('should enqueue ciq-scoring job with FEEDBACK_SCORED type', async () => {
       const fb = SAMPLE_FEEDBACK.dashboard_1;
-      mockPrisma.feedback.create.mockResolvedValueOnce({ ...fb, createdAt: new Date() });
+      mockPrisma.feedback.create.mockResolvedValueOnce({
+        ...fb,
+        createdAt: new Date(),
+      });
 
       await feedbackService.create(fb.workspaceId, {
         title: fb.title,
@@ -388,8 +444,12 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
     });
 
     it('should not throw if queues are unavailable (graceful degradation)', async () => {
-      mockAnalysisQueue.add.mockRejectedValueOnce(new Error('Redis connection refused'));
-      mockCiqQueue.add.mockRejectedValueOnce(new Error('Redis connection refused'));
+      mockAnalysisQueue.add.mockRejectedValueOnce(
+        new Error('Redis connection refused'),
+      );
+      mockCiqQueue.add.mockRejectedValueOnce(
+        new Error('Redis connection refused'),
+      );
       mockPrisma.feedback.create.mockResolvedValueOnce({
         ...SAMPLE_FEEDBACK.roadmap_1,
         createdAt: new Date(),
@@ -453,7 +513,10 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
     });
 
     it('should call EmbeddingService.generateEmbedding with the feedback text', async () => {
-      const job = makeJob({ feedbackId: 'fb-wifi-1', workspaceId: 'ws-tenant-a' });
+      const job = makeJob({
+        feedbackId: 'fb-wifi-1',
+        workspaceId: 'ws-tenant-a',
+      });
 
       await analysisProcessor.handleAnalysis(job);
 
@@ -464,7 +527,10 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
     });
 
     it('should persist the embedding vector via $executeRaw', async () => {
-      const job = makeJob({ feedbackId: 'fb-wifi-1', workspaceId: 'ws-tenant-a' });
+      const job = makeJob({
+        feedbackId: 'fb-wifi-1',
+        workspaceId: 'ws-tenant-a',
+      });
 
       await analysisProcessor.handleAnalysis(job);
 
@@ -475,7 +541,10 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
     });
 
     it('should call ThemeClusteringService.assignFeedbackToTheme', async () => {
-      const job = makeJob({ feedbackId: 'fb-wifi-1', workspaceId: 'ws-tenant-a' });
+      const job = makeJob({
+        feedbackId: 'fb-wifi-1',
+        workspaceId: 'ws-tenant-a',
+      });
 
       await analysisProcessor.handleAnalysis(job);
 
@@ -487,11 +556,16 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
     });
 
     it('should call DuplicateDetectionService.generateSuggestions', async () => {
-      const job = makeJob({ feedbackId: 'fb-wifi-1', workspaceId: 'ws-tenant-a' });
+      const job = makeJob({
+        feedbackId: 'fb-wifi-1',
+        workspaceId: 'ws-tenant-a',
+      });
 
       await analysisProcessor.handleAnalysis(job);
 
-      expect(duplicateDetectionService.generateSuggestions).toHaveBeenCalledWith(
+      expect(
+        duplicateDetectionService.generateSuggestions,
+      ).toHaveBeenCalledWith(
         'ws-tenant-a',
         'fb-wifi-1',
         expect.any(Array), // the generated embedding
@@ -499,13 +573,20 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
     });
 
     it('should skip processing if feedback is not found', async () => {
-      const job = makeJob({ feedbackId: 'fb-nonexistent', workspaceId: 'ws-tenant-a' });
+      const job = makeJob({
+        feedbackId: 'fb-nonexistent',
+        workspaceId: 'ws-tenant-a',
+      });
 
       // Should not throw — gracefully skip
-      await expect(analysisProcessor.handleAnalysis(job)).resolves.not.toThrow();
+      await expect(
+        analysisProcessor.handleAnalysis(job),
+      ).resolves.not.toThrow();
 
       expect(embeddingService.generateEmbedding).not.toHaveBeenCalled();
-      expect(themeClusteringService.assignFeedbackToTheme).not.toHaveBeenCalled();
+      expect(
+        themeClusteringService.assignFeedbackToTheme,
+      ).not.toHaveBeenCalled();
     });
 
     it('should skip processing if job was already processed (idempotency)', async () => {
@@ -514,14 +595,20 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
         alreadyProcessed: true,
       });
 
-      const job = makeJob({ feedbackId: 'fb-wifi-1', workspaceId: 'ws-tenant-a' });
+      const job = makeJob({
+        feedbackId: 'fb-wifi-1',
+        workspaceId: 'ws-tenant-a',
+      });
       await analysisProcessor.handleAnalysis(job);
 
       expect(embeddingService.generateEmbedding).not.toHaveBeenCalled();
     });
 
     it('should mark job as completed in idempotency log on success', async () => {
-      const job = makeJob({ feedbackId: 'fb-wifi-1', workspaceId: 'ws-tenant-a' });
+      const job = makeJob({
+        feedbackId: 'fb-wifi-1',
+        workspaceId: 'ws-tenant-a',
+      });
 
       await analysisProcessor.handleAnalysis(job);
 
@@ -545,8 +632,12 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
     });
 
     it('should produce different vectors for semantically different texts', async () => {
-      const wifiEmbedding = deterministicEmbedding('WiFi disconnects constantly');
-      const billingEmbedding = deterministicEmbedding('Charged twice on my credit card');
+      const wifiEmbedding = deterministicEmbedding(
+        'WiFi disconnects constantly',
+      );
+      const billingEmbedding = deterministicEmbedding(
+        'Charged twice on my credit card',
+      );
 
       const similarity = cosineSimilarity(wifiEmbedding, billingEmbedding);
       // Unrelated topics should have low cosine similarity
@@ -554,9 +645,15 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
     });
 
     it('should produce similar vectors for semantically related texts', async () => {
-      const wifi1 = deterministicEmbedding('WiFi keeps disconnecting in the office');
-      const wifi2 = deterministicEmbedding('Network connection unstable on 5GHz band');
-      const billing = deterministicEmbedding('Charged twice for the same subscription');
+      const wifi1 = deterministicEmbedding(
+        'WiFi keeps disconnecting in the office',
+      );
+      const wifi2 = deterministicEmbedding(
+        'Network connection unstable on 5GHz band',
+      );
+      const billing = deterministicEmbedding(
+        'Charged twice for the same subscription',
+      );
 
       const wifiSimilarity = cosineSimilarity(wifi1, wifi2);
       const crossSimilarity = cosineSimilarity(wifi1, billing);
@@ -582,7 +679,11 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
         createdAt: new Date(),
       };
 
-      const job = { id: 'j1', data: { feedbackId: 'fb-wifi-1', workspaceId: 'ws-tenant-a' }, attemptsMade: 0 } as any;
+      const job = {
+        id: 'j1',
+        data: { feedbackId: 'fb-wifi-1', workspaceId: 'ws-tenant-a' },
+        attemptsMade: 0,
+      } as any;
       await analysisProcessor.handleAnalysis(job);
 
       expect(themeClusteringService.assignFeedbackToTheme).toHaveBeenCalledWith(
@@ -609,12 +710,18 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
       }
 
       for (const fb of feedbackItems) {
-        const job = { id: `j-${fb.id}`, data: { feedbackId: fb.id, workspaceId: fb.workspaceId }, attemptsMade: 0 } as any;
+        const job = {
+          id: `j-${fb.id}`,
+          data: { feedbackId: fb.id, workspaceId: fb.workspaceId },
+          attemptsMade: 0,
+        } as any;
         await analysisProcessor.handleAnalysis(job);
       }
 
       // Theme clustering should have been called once per feedback item
-      expect(themeClusteringService.assignFeedbackToTheme).toHaveBeenCalledTimes(3);
+      expect(
+        themeClusteringService.assignFeedbackToTheme,
+      ).toHaveBeenCalledTimes(3);
     });
   });
 
@@ -631,19 +738,25 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
         createdAt: new Date(),
       };
 
-      const job = { id: 'j1', data: { feedbackId: 'fb-bill-1', workspaceId: 'ws-tenant-a' }, attemptsMade: 0 } as any;
+      const job = {
+        id: 'j1',
+        data: { feedbackId: 'fb-bill-1', workspaceId: 'ws-tenant-a' },
+        attemptsMade: 0,
+      } as any;
       await analysisProcessor.handleAnalysis(job);
 
-      expect(duplicateDetectionService.generateSuggestions).toHaveBeenCalledWith(
-        'ws-tenant-a',
-        'fb-bill-1',
-        expect.any(Array),
-      );
+      expect(
+        duplicateDetectionService.generateSuggestions,
+      ).toHaveBeenCalledWith('ws-tenant-a', 'fb-bill-1', expect.any(Array));
     });
 
     it('should pass the generated embedding to generateSuggestions', async () => {
-      const expectedEmbedding = deterministicEmbedding(SAMPLE_FEEDBACK.billing_1.description);
-      (embeddingService.generateEmbedding as jest.Mock).mockResolvedValueOnce(expectedEmbedding);
+      const expectedEmbedding = deterministicEmbedding(
+        SAMPLE_FEEDBACK.billing_1.description,
+      );
+      (embeddingService.generateEmbedding as jest.Mock).mockResolvedValueOnce(
+        expectedEmbedding,
+      );
 
       mockPrisma._stores.feedbackStore['fb-bill-1'] = {
         ...SAMPLE_FEEDBACK.billing_1,
@@ -652,10 +765,16 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
         createdAt: new Date(),
       };
 
-      const job = { id: 'j1', data: { feedbackId: 'fb-bill-1', workspaceId: 'ws-tenant-a' }, attemptsMade: 0 } as any;
+      const job = {
+        id: 'j1',
+        data: { feedbackId: 'fb-bill-1', workspaceId: 'ws-tenant-a' },
+        attemptsMade: 0,
+      } as any;
       await analysisProcessor.handleAnalysis(job);
 
-      const callArgs = (duplicateDetectionService.generateSuggestions as jest.Mock).mock.calls[0];
+      const callArgs = (
+        duplicateDetectionService.generateSuggestions as jest.Mock
+      ).mock.calls[0];
       expect(callArgs[2]).toEqual(expectedEmbedding);
     });
   });
@@ -668,11 +787,29 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
     it('should enqueue jobs with the correct workspaceId for each tenant', async () => {
       // Tenant A feedback
       mockPrisma.feedback.create
-        .mockResolvedValueOnce({ id: 'fb-a', workspaceId: 'ws-tenant-a', title: 'WiFi issue', createdAt: new Date() })
-        .mockResolvedValueOnce({ id: 'fb-b', workspaceId: 'ws-tenant-b', title: 'WiFi issue', createdAt: new Date() });
+        .mockResolvedValueOnce({
+          id: 'fb-a',
+          workspaceId: 'ws-tenant-a',
+          title: 'WiFi issue',
+          createdAt: new Date(),
+        })
+        .mockResolvedValueOnce({
+          id: 'fb-b',
+          workspaceId: 'ws-tenant-b',
+          title: 'WiFi issue',
+          createdAt: new Date(),
+        });
 
-      await feedbackService.create('ws-tenant-a', { title: 'WiFi issue', description: 'WiFi drops', source: 'MANUAL' } as any);
-      await feedbackService.create('ws-tenant-b', { title: 'WiFi issue', description: 'WiFi drops', source: 'MANUAL' } as any);
+      await feedbackService.create('ws-tenant-a', {
+        title: 'WiFi issue',
+        description: 'WiFi drops',
+        source: 'MANUAL',
+      } as any);
+      await feedbackService.create('ws-tenant-b', {
+        title: 'WiFi issue',
+        description: 'WiFi drops',
+        source: 'MANUAL',
+      } as any);
 
       const calls = mockAnalysisQueue.add.mock.calls;
       expect(calls[0][0].workspaceId).toBe('ws-tenant-a');
@@ -707,11 +844,9 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
       );
 
       // DuplicateDetectionService must receive tenant-b's workspaceId
-      expect(duplicateDetectionService.generateSuggestions).toHaveBeenCalledWith(
-        'ws-tenant-b',
-        'fb-tenb-1',
-        expect.any(Array),
-      );
+      expect(
+        duplicateDetectionService.generateSuggestions,
+      ).toHaveBeenCalledWith('ws-tenant-b', 'fb-tenb-1', expect.any(Array));
     });
 
     it('should not process tenant-a feedback with tenant-b workspaceId', async () => {
@@ -753,7 +888,11 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
         createdAt: new Date(),
       };
 
-      const job = { id: 'j1', data: { feedbackId: 'fb-wifi-1', workspaceId: 'ws-tenant-a' }, attemptsMade: 0 } as any;
+      const job = {
+        id: 'j1',
+        data: { feedbackId: 'fb-wifi-1', workspaceId: 'ws-tenant-a' },
+        attemptsMade: 0,
+      } as any;
 
       // First run — processes normally
       await analysisProcessor.handleAnalysis(job);
@@ -762,7 +901,10 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
       jest.clearAllMocks();
 
       // Second run — idempotency guard blocks re-processing
-      mockIdempotency.checkOrCreate.mockResolvedValueOnce({ logId: 'log-id', alreadyProcessed: true });
+      mockIdempotency.checkOrCreate.mockResolvedValueOnce({
+        logId: 'log-id',
+        alreadyProcessed: true,
+      });
       await analysisProcessor.handleAnalysis(job);
       expect(embeddingService.generateEmbedding).not.toHaveBeenCalled();
     });
@@ -779,14 +921,22 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
         new Error('OpenAI API rate limit exceeded'),
       );
 
-      const job = { id: 'j1', data: { feedbackId: 'fb-wifi-1', workspaceId: 'ws-tenant-a' }, attemptsMade: 0 } as any;
+      const job = {
+        id: 'j1',
+        data: { feedbackId: 'fb-wifi-1', workspaceId: 'ws-tenant-a' },
+        attemptsMade: 0,
+      } as any;
 
       // Processor should re-throw so Bull can retry with backoff
-      await expect(analysisProcessor.handleAnalysis(job)).rejects.toThrow('OpenAI API rate limit exceeded');
+      await expect(analysisProcessor.handleAnalysis(job)).rejects.toThrow(
+        'OpenAI API rate limit exceeded',
+      );
     });
 
     it('should not enqueue jobs when feedback creation fails', async () => {
-      mockPrisma.feedback.create.mockRejectedValueOnce(new Error('Unique constraint violation'));
+      mockPrisma.feedback.create.mockRejectedValueOnce(
+        new Error('Unique constraint violation'),
+      );
 
       await expect(
         feedbackService.create('ws-tenant-a', {
@@ -812,10 +962,16 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
         createdAt: new Date(),
       };
 
-      const job = { id: 'j1', data: { feedbackId: 'fb-title-only', workspaceId: 'ws-tenant-a' }, attemptsMade: 0 } as any;
+      const job = {
+        id: 'j1',
+        data: { feedbackId: 'fb-title-only', workspaceId: 'ws-tenant-a' },
+        attemptsMade: 0,
+      } as any;
 
       // Should not throw — processor should use title as fallback text
-      await expect(analysisProcessor.handleAnalysis(job)).resolves.not.toThrow();
+      await expect(
+        analysisProcessor.handleAnalysis(job),
+      ).resolves.not.toThrow();
     });
   });
 
@@ -830,27 +986,41 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
 
     it('should persist a non-null sentiment score after processing', async () => {
       const fb = SAMPLE_FEEDBACK.billing_1;
-      mockPrisma._stores.feedbackStore[fb.id] = { ...fb, embedding: null, sentiment: null, createdAt: new Date() };
+      mockPrisma._stores.feedbackStore[fb.id] = {
+        ...fb,
+        embedding: null,
+        sentiment: null,
+        createdAt: new Date(),
+      };
 
       const job = makeJob({ feedbackId: fb.id, workspaceId: fb.workspaceId });
       await analysisProcessor.handleAnalysis(job);
 
       // Verify that feedback.update was called with a sentiment value
       const updateCalls = mockPrisma.feedback.update.mock.calls;
-      const sentimentCall = updateCalls.find((c: any[]) => c[0]?.data?.sentiment !== undefined);
+      const sentimentCall = updateCalls.find(
+        (c: any[]) => c[0]?.data?.sentiment !== undefined,
+      );
       expect(sentimentCall).toBeDefined();
       expect(typeof sentimentCall[0].data.sentiment).toBe('number');
     });
 
     it('should persist sentiment in the range [-1, 1]', async () => {
       const fb = SAMPLE_FEEDBACK.wifi_2;
-      mockPrisma._stores.feedbackStore[fb.id] = { ...fb, embedding: null, sentiment: null, createdAt: new Date() };
+      mockPrisma._stores.feedbackStore[fb.id] = {
+        ...fb,
+        embedding: null,
+        sentiment: null,
+        createdAt: new Date(),
+      };
 
       const job = makeJob({ feedbackId: fb.id, workspaceId: fb.workspaceId });
       await analysisProcessor.handleAnalysis(job);
 
       const updateCalls = mockPrisma.feedback.update.mock.calls;
-      const sentimentCall = updateCalls.find((c: any[]) => c[0]?.data?.sentiment !== undefined);
+      const sentimentCall = updateCalls.find(
+        (c: any[]) => c[0]?.data?.sentiment !== undefined,
+      );
       const score: number = sentimentCall[0].data.sentiment;
       expect(score).toBeGreaterThanOrEqual(-1);
       expect(score).toBeLessThanOrEqual(1);
@@ -858,7 +1028,12 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
 
     it('should fall back to sentiment 0 when SentimentService throws', async () => {
       const fb = SAMPLE_FEEDBACK.dashboard_2;
-      mockPrisma._stores.feedbackStore[fb.id] = { ...fb, embedding: null, sentiment: null, createdAt: new Date() };
+      mockPrisma._stores.feedbackStore[fb.id] = {
+        ...fb,
+        embedding: null,
+        sentiment: null,
+        createdAt: new Date(),
+      };
 
       // Override the SentimentService mock to throw for this test
       const sentimentSvc = (analysisProcessor as any).sentimentService;
@@ -867,10 +1042,14 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
       }
 
       const job = makeJob({ feedbackId: fb.id, workspaceId: fb.workspaceId });
-      await expect(analysisProcessor.handleAnalysis(job)).resolves.not.toThrow();
+      await expect(
+        analysisProcessor.handleAnalysis(job),
+      ).resolves.not.toThrow();
 
       const updateCalls = mockPrisma.feedback.update.mock.calls;
-      const sentimentCall = updateCalls.find((c: any[]) => c[0]?.data?.sentiment !== undefined);
+      const sentimentCall = updateCalls.find(
+        (c: any[]) => c[0]?.data?.sentiment !== undefined,
+      );
       // Fallback: sentiment should be 0 (neutral)
       if (sentimentCall) {
         expect(sentimentCall[0].data.sentiment).toBe(0);
@@ -896,7 +1075,10 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
       // $queryRaw returns has_embedding = false
       mockPrisma.$queryRaw.mockResolvedValueOnce([{ has_embedding: false }]);
 
-      const result = await feedbackService.findRelated('ws-tenant-a', 'fb-no-embed');
+      const result = await feedbackService.findRelated(
+        'ws-tenant-a',
+        'fb-no-embed',
+      );
       expect(result.sourceId).toBe('fb-no-embed');
       expect(result.data).toEqual([]);
     });
@@ -912,8 +1094,26 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
       };
 
       const mockRelated: any[] = [
-        { id: 'fb-wifi-2', title: 'Network unstable', description: null, status: 'NEW', sourceType: 'MANUAL', sentiment: -0.4, createdAt: new Date(), similarity: 0.92 },
-        { id: 'fb-wifi-3', title: 'Internet drops', description: null, status: 'NEW', sourceType: 'MANUAL', sentiment: -0.7, createdAt: new Date(), similarity: 0.88 },
+        {
+          id: 'fb-wifi-2',
+          title: 'Network unstable',
+          description: null,
+          status: 'NEW',
+          sourceType: 'MANUAL',
+          sentiment: -0.4,
+          createdAt: new Date(),
+          similarity: 0.92,
+        },
+        {
+          id: 'fb-wifi-3',
+          title: 'Internet drops',
+          description: null,
+          status: 'NEW',
+          sourceType: 'MANUAL',
+          sentiment: -0.7,
+          createdAt: new Date(),
+          similarity: 0.88,
+        },
       ];
 
       // First $queryRaw: has_embedding check; second: the similarity query
@@ -921,10 +1121,15 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
         .mockResolvedValueOnce([{ has_embedding: true }])
         .mockResolvedValueOnce(mockRelated);
 
-      const result = await feedbackService.findRelated('ws-tenant-a', 'fb-has-embed');
+      const result = await feedbackService.findRelated(
+        'ws-tenant-a',
+        'fb-has-embed',
+      );
       expect(result.sourceId).toBe('fb-has-embed');
       expect(result.data).toHaveLength(2);
-      expect(result.data[0].similarity).toBeGreaterThanOrEqual(result.data[1].similarity);
+      expect(result.data[0].similarity).toBeGreaterThanOrEqual(
+        result.data[1].similarity,
+      );
     });
 
     it('should throw NotFoundException for feedback belonging to a different workspace', async () => {
@@ -975,15 +1180,19 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
         where: { id: themeId },
         data: {
           aiSummary: 'Users are experiencing frequent WiFi disconnections.',
-          aiExplanation: 'This affects 12 users and correlates with high churn risk accounts.',
-          aiRecommendation: 'Escalate to infrastructure team and investigate the 5GHz band configuration.',
+          aiExplanation:
+            'This affects 12 users and correlates with high churn risk accounts.',
+          aiRecommendation:
+            'Escalate to infrastructure team and investigate the 5GHz band configuration.',
           aiConfidence: 0.87,
           aiNarratedAt: new Date(),
         },
       });
 
       const stored = mockPrisma._stores.themeStore[themeId];
-      expect(stored.aiSummary).toBe('Users are experiencing frequent WiFi disconnections.');
+      expect(stored.aiSummary).toBe(
+        'Users are experiencing frequent WiFi disconnections.',
+      );
       expect(stored.aiExplanation).toContain('churn risk');
       expect(stored.aiRecommendation).toContain('infrastructure');
       expect(stored.aiConfidence).toBe(0.87);
@@ -996,10 +1205,10 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
 
       expect(classify(0.87)).toBe('high');
       expect(classify(0.75)).toBe('high');
-      expect(classify(0.60)).toBe('medium');
+      expect(classify(0.6)).toBe('medium');
       expect(classify(0.45)).toBe('medium');
       expect(classify(0.44)).toBe('low');
-      expect(classify(0.10)).toBe('low');
+      expect(classify(0.1)).toBe('low');
     });
 
     it('should allow null AI narration fields (theme not yet scored)', () => {
@@ -1021,4 +1230,3 @@ describe('Stage-1 Semantic Intelligence — E2E Pipeline', () => {
     });
   });
 });
-

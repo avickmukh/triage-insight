@@ -8,17 +8,9 @@ import { VoiceIntelligenceService } from './services/voice-intelligence.service'
 import { AiModule } from '../ai/ai.module';
 
 @Module({
-  imports: [
-    PrismaModule,
-    UploadsModule,
-    AiModule,
-  ],
+  imports: [PrismaModule, UploadsModule, AiModule],
   controllers: [VoiceController],
-  providers: [
-    VoiceService,
-    TranscriptionService,
-    VoiceIntelligenceService,
-  ],
+  providers: [VoiceService, TranscriptionService, VoiceIntelligenceService],
   // TranscriptionService exported so VoiceTranscriptionProcessor (in WorkerProcessorsModule) can resolve it
   exports: [VoiceService, TranscriptionService, VoiceIntelligenceService],
 })

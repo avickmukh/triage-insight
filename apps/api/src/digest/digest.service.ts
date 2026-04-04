@@ -36,9 +36,9 @@ import { DigestFrequency } from '@prisma/client';
 import OpenAI from 'openai';
 
 interface DigestNarration {
-  topIssues:        string[];
-  emergingTrends:   string[];
-  recommendations:  string[];
+  topIssues: string[];
+  emergingTrends: string[];
+  recommendations: string[];
   narrativeSummary: string;
   // Index signature required for Prisma Json field compatibility
   [key: string]: unknown;
@@ -59,8 +59,13 @@ export class DigestService {
     });
   }
 
-  async generateDigest(workspaceId: string, frequency: DigestFrequency = DigestFrequency.WEEKLY) {
-    this.logger.log(`Generating ${frequency} digest for workspace ${workspaceId}`);
+  async generateDigest(
+    workspaceId: string,
+    frequency: DigestFrequency = DigestFrequency.WEEKLY,
+  ) {
+    this.logger.log(
+      `Generating ${frequency} digest for workspace ${workspaceId}`,
+    );
 
     const periodDays = frequency === DigestFrequency.WEEKLY ? 7 : 30;
     const since = new Date();
@@ -69,59 +74,82 @@ export class DigestService {
     prevSince.setDate(prevSince.getDate() - periodDays);
 
     // ── 1. Gather context ────────────────────────────────────────────────────
-    const [topThemes, sentimentAgg, prevSentimentAgg, currentCount, prevCount, spikeEvents] =
-      await Promise.all([
-        // Top 5 themes by feedback volume in the period
-        this.prisma.theme.findMany({
-          where: {
-            workspaceId,
-            feedbacks: { some: { assignedAt: { gte: since } } },
-          },
-          select: {
-            id: true,
-            title: true,
-            description: true,
-            priorityScore: true,
-            ciqScore: true,
-            urgencyScore: true,
-            revenueScore: true,
-            totalSignalCount: true,
-            feedbackCount: true,
-            supportCount: true,
-            voiceCount: true,
-            crossSourceInsight: true,
-            aiSummary: true,
-            aiExplanation: true,
-            aiRecommendation: true,
-            aiConfidence: true,
-            _count: { select: { feedbacks: true } },
-          },
-          orderBy: { feedbacks: { _count: 'desc' } },
-          take: 5,
-        }),
-        // Sentiment this period
-        this.prisma.feedback.aggregate({
-          where: { workspaceId, createdAt: { gte: since }, sentiment: { not: null } },
-          _avg: { sentiment: true },
-          _count: { id: true },
-        }),
-        // Sentiment previous period (for trend)
-        this.prisma.feedback.aggregate({
-          where: { workspaceId, createdAt: { gte: prevSince, lt: since }, sentiment: { not: null } },
-          _avg: { sentiment: true },
-        }),
-        // Feedback volume this period
-        this.prisma.feedback.count({ where: { workspaceId, createdAt: { gte: since } } }),
-        // Feedback volume previous period
-        this.prisma.feedback.count({ where: { workspaceId, createdAt: { gte: prevSince, lt: since } } }),
-        // Active spike events
-        this.prisma.issueSpikeEvent.findMany({
-          where: { workspaceId, windowStart: { gte: since } },
-          select: { id: true, ticketCount: true, zScore: true, cluster: { select: { title: true } } },
-          orderBy: { zScore: 'desc' },
-          take: 3,
-        }),
-      ]);
+    const [
+      topThemes,
+      sentimentAgg,
+      prevSentimentAgg,
+      currentCount,
+      prevCount,
+      spikeEvents,
+    ] = await Promise.all([
+      // Top 5 themes by feedback volume in the period
+      this.prisma.theme.findMany({
+        where: {
+          workspaceId,
+          feedbacks: { some: { assignedAt: { gte: since } } },
+        },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          priorityScore: true,
+          ciqScore: true,
+          urgencyScore: true,
+          revenueScore: true,
+          totalSignalCount: true,
+          feedbackCount: true,
+          supportCount: true,
+          voiceCount: true,
+          crossSourceInsight: true,
+          aiSummary: true,
+          aiExplanation: true,
+          aiRecommendation: true,
+          aiConfidence: true,
+          _count: { select: { feedbacks: true } },
+        },
+        orderBy: { feedbacks: { _count: 'desc' } },
+        take: 5,
+      }),
+      // Sentiment this period
+      this.prisma.feedback.aggregate({
+        where: {
+          workspaceId,
+          createdAt: { gte: since },
+          sentiment: { not: null },
+        },
+        _avg: { sentiment: true },
+        _count: { id: true },
+      }),
+      // Sentiment previous period (for trend)
+      this.prisma.feedback.aggregate({
+        where: {
+          workspaceId,
+          createdAt: { gte: prevSince, lt: since },
+          sentiment: { not: null },
+        },
+        _avg: { sentiment: true },
+      }),
+      // Feedback volume this period
+      this.prisma.feedback.count({
+        where: { workspaceId, createdAt: { gte: since } },
+      }),
+      // Feedback volume previous period
+      this.prisma.feedback.count({
+        where: { workspaceId, createdAt: { gte: prevSince, lt: since } },
+      }),
+      // Active spike events
+      this.prisma.issueSpikeEvent.findMany({
+        where: { workspaceId, windowStart: { gte: since } },
+        select: {
+          id: true,
+          ticketCount: true,
+          zScore: true,
+          cluster: { select: { title: true } },
+        },
+        orderBy: { zScore: 'desc' },
+        take: 3,
+      }),
+    ]);
 
     const avgSentiment = sentimentAgg._avg.sentiment;
     const prevAvgSentiment = prevSentimentAgg._avg.sentiment;
@@ -130,8 +158,8 @@ export class DigestService {
         ? avgSentiment > prevAvgSentiment + 0.05
           ? 'improving'
           : avgSentiment < prevAvgSentiment - 0.05
-          ? 'declining'
-          : 'stable'
+            ? 'declining'
+            : 'stable'
         : 'unknown';
     const volumeDelta = currentCount - prevCount;
 
@@ -139,7 +167,8 @@ export class DigestService {
     let narration: DigestNarration | null = null;
     try {
       narration = await this.callLlm({
-        periodLabel: frequency === DigestFrequency.WEEKLY ? 'last 7 days' : 'last 30 days',
+        periodLabel:
+          frequency === DigestFrequency.WEEKLY ? 'last 7 days' : 'last 30 days',
         topThemes,
         avgSentiment,
         sentimentTrend,
@@ -148,20 +177,24 @@ export class DigestService {
         spikeEvents,
       });
     } catch (err) {
-      this.logger.warn(`LLM digest generation failed — using fallback: ${(err as Error).message}`);
+      this.logger.warn(
+        `LLM digest generation failed — using fallback: ${(err as Error).message}`,
+      );
     }
 
     // ── 3. Fallback to rule-based if LLM failed ──────────────────────────────
-    const summaryText = narration?.narrativeSummary ?? this.buildFallbackSummary({
-      topThemes,
-      avgSentiment,
-      sentimentTrend,
-      currentCount,
-      volumeDelta,
-    });
+    const summaryText =
+      narration?.narrativeSummary ??
+      this.buildFallbackSummary({
+        topThemes,
+        avgSentiment,
+        sentimentTrend,
+        currentCount,
+        volumeDelta,
+      });
 
     // ── 4. Persist digest run ────────────────────────────────────────────────
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     const summaryPayload: any = {
       topThemes: topThemes.map((t) => ({
         id: t.id,
@@ -183,7 +216,11 @@ export class DigestService {
         _avg: { sentiment: avgSentiment },
         trend: sentimentTrend,
       },
-      feedbackVolume: { current: currentCount, previous: prevCount, delta: volumeDelta },
+      feedbackVolume: {
+        current: currentCount,
+        previous: prevCount,
+        delta: volumeDelta,
+      },
       spikeEvents: spikeEvents.map((s) => ({
         clusterTitle: s.cluster.title,
         ticketCount: s.ticketCount,
@@ -202,7 +239,9 @@ export class DigestService {
       },
     });
 
-    this.logger.log(`Digest ${digestRun.id} created for workspace ${workspaceId} (${narration ? 'LLM' : 'rule-based'})`);
+    this.logger.log(
+      `Digest ${digestRun.id} created for workspace ${workspaceId} (${narration ? 'LLM' : 'rule-based'})`,
+    );
 
     await this.sendDigestEmail(digestRun.id);
 
@@ -261,33 +300,50 @@ export class DigestService {
     sentimentTrend: string;
     currentCount: number;
     volumeDelta: number;
-    spikeEvents: Array<{ cluster: { title: string }; ticketCount: number; zScore: number }>;
+    spikeEvents: Array<{
+      cluster: { title: string };
+      ticketCount: number;
+      zScore: number;
+    }>;
   }): Promise<DigestNarration> {
     const apiKey = this.configService.get<string>('OPENAI_API_KEY', '');
     if (!apiKey) throw new Error('OPENAI_API_KEY not set');
 
     const themesBlock = context.topThemes
       .map((t, i) => {
-        const ciq = t.ciqScore != null
-          ? Math.round(t.ciqScore)
-          : t.priorityScore != null
-          ? Math.round(t.priorityScore * 100)
-          : null;
-        const urgency = t.urgencyScore != null ? Math.round(t.urgencyScore) : null;
-        const revenue = t.revenueScore != null ? Math.round(t.revenueScore) : null;
+        const ciq =
+          t.ciqScore != null
+            ? Math.round(t.ciqScore)
+            : t.priorityScore != null
+              ? Math.round(t.priorityScore * 100)
+              : null;
+        const urgency =
+          t.urgencyScore != null ? Math.round(t.urgencyScore) : null;
+        const revenue =
+          t.revenueScore != null ? Math.round(t.revenueScore) : null;
         const sources: string[] = [];
-        if ((t.feedbackCount ?? 0) > 0) sources.push(`${t.feedbackCount} feedback`);
-        if ((t.supportCount ?? 0) > 0) sources.push(`${t.supportCount} support tickets`);
-        if ((t.voiceCount ?? 0) > 0) sources.push(`${t.voiceCount} voice calls`);
-        const sourceStr = sources.length > 0 ? sources.join(' + ') : `${t._count.feedbacks} signals`;
+        if ((t.feedbackCount ?? 0) > 0)
+          sources.push(`${t.feedbackCount} feedback`);
+        if ((t.supportCount ?? 0) > 0)
+          sources.push(`${t.supportCount} support tickets`);
+        if ((t.voiceCount ?? 0) > 0)
+          sources.push(`${t.voiceCount} voice calls`);
+        const sourceStr =
+          sources.length > 0
+            ? sources.join(' + ')
+            : `${t._count.feedbacks} signals`;
 
         let line = `${i + 1}. "${t.title}" — ${sourceStr}`;
         if (ciq != null) line += `, CIQ: ${ciq}/100`;
-        if (urgency != null && urgency > 30) line += `, Urgency: ${urgency}/100`;
-        if (revenue != null && revenue > 10) line += `, Revenue impact: ${revenue}/100`;
-        if (t.crossSourceInsight) line += `\n   Cross-source signal: ${t.crossSourceInsight}`;
+        if (urgency != null && urgency > 30)
+          line += `, Urgency: ${urgency}/100`;
+        if (revenue != null && revenue > 10)
+          line += `, Revenue impact: ${revenue}/100`;
+        if (t.crossSourceInsight)
+          line += `\n   Cross-source signal: ${t.crossSourceInsight}`;
         if (t.aiSummary) line += `\n   AI summary: ${t.aiSummary}`;
-        if (t.aiRecommendation) line += `\n   Suggested action: ${t.aiRecommendation}`;
+        if (t.aiRecommendation)
+          line += `\n   Suggested action: ${t.aiRecommendation}`;
         return line;
       })
       .join('\n');
@@ -295,13 +351,20 @@ export class DigestService {
     const spikesBlock =
       context.spikeEvents.length > 0
         ? context.spikeEvents
-            .map((s) => `- "${s.cluster.title}": ${s.ticketCount} tickets (z-score: ${s.zScore.toFixed(1)})`)
+            .map(
+              (s) =>
+                `- "${s.cluster.title}": ${s.ticketCount} tickets (z-score: ${s.zScore.toFixed(1)})`,
+            )
             .join('\n')
         : 'None';
 
     const sentimentLabel =
       context.avgSentiment != null
-        ? context.avgSentiment >= 0.3 ? 'positive' : context.avgSentiment <= -0.3 ? 'negative' : 'neutral'
+        ? context.avgSentiment >= 0.3
+          ? 'positive'
+          : context.avgSentiment <= -0.3
+            ? 'negative'
+            : 'neutral'
         : 'unknown';
     const sentimentStr =
       context.avgSentiment != null
@@ -360,10 +423,17 @@ Return ONLY a JSON object with exactly these keys:
     const parsed = JSON.parse(raw) as Partial<DigestNarration>;
 
     return {
-      topIssues:        Array.isArray(parsed.topIssues)        ? parsed.topIssues        : [],
-      emergingTrends:   Array.isArray(parsed.emergingTrends)   ? parsed.emergingTrends   : [],
-      recommendations:  Array.isArray(parsed.recommendations)  ? parsed.recommendations  : [],
-      narrativeSummary: typeof parsed.narrativeSummary === 'string' ? parsed.narrativeSummary : '',
+      topIssues: Array.isArray(parsed.topIssues) ? parsed.topIssues : [],
+      emergingTrends: Array.isArray(parsed.emergingTrends)
+        ? parsed.emergingTrends
+        : [],
+      recommendations: Array.isArray(parsed.recommendations)
+        ? parsed.recommendations
+        : [],
+      narrativeSummary:
+        typeof parsed.narrativeSummary === 'string'
+          ? parsed.narrativeSummary
+          : '',
     };
   }
 
@@ -375,13 +445,24 @@ Return ONLY a JSON object with exactly these keys:
     volumeDelta: number;
   }): string {
     const parts: string[] = [];
-    parts.push(`${context.currentCount} feedback items received (${context.volumeDelta >= 0 ? '+' : ''}${context.volumeDelta} vs prior period).`);
+    parts.push(
+      `${context.currentCount} feedback items received (${context.volumeDelta >= 0 ? '+' : ''}${context.volumeDelta} vs prior period).`,
+    );
     if (context.topThemes.length > 0) {
-      parts.push(`Top themes: ${context.topThemes.map((t) => `"${t.title}"`).join(', ')}.`);
+      parts.push(
+        `Top themes: ${context.topThemes.map((t) => `"${t.title}"`).join(', ')}.`,
+      );
     }
     if (context.avgSentiment != null) {
-      const label = context.avgSentiment >= 0.3 ? 'positive' : context.avgSentiment <= -0.3 ? 'negative' : 'neutral';
-      parts.push(`Overall sentiment is ${label} (${context.avgSentiment.toFixed(2)}), trend: ${context.sentimentTrend}.`);
+      const label =
+        context.avgSentiment >= 0.3
+          ? 'positive'
+          : context.avgSentiment <= -0.3
+            ? 'negative'
+            : 'neutral';
+      parts.push(
+        `Overall sentiment is ${label} (${context.avgSentiment.toFixed(2)}), trend: ${context.sentimentTrend}.`,
+      );
     }
     return parts.join(' ');
   }
@@ -397,7 +478,9 @@ Return ONLY a JSON object with exactly these keys:
     });
 
     if (!digestRun) {
-      this.logger.error(`Digest run ${digestRunId} not found for sending email.`);
+      this.logger.error(
+        `Digest run ${digestRunId} not found for sending email.`,
+      );
       return;
     }
 
@@ -406,12 +489,19 @@ Return ONLY a JSON object with exactly these keys:
       .map((m) => m.user.email);
 
     if (recipients.length === 0) {
-      this.logger.warn(`No recipients found for digest email for workspace ${digestRun.workspaceId}`);
+      this.logger.warn(
+        `No recipients found for digest email for workspace ${digestRun.workspaceId}`,
+      );
       return;
     }
 
     const summary = digestRun.summary as {
-      topThemes: Array<{ title: string; feedbackCount: number; aiSummary?: string | null; aiRecommendation?: string | null }>;
+      topThemes: Array<{
+        title: string;
+        feedbackCount: number;
+        aiSummary?: string | null;
+        aiRecommendation?: string | null;
+      }>;
       sentimentSummary: { _avg: { sentiment: number | null }; trend: string };
       feedbackVolume: { current: number; delta: number };
       narration: DigestNarration | null;
@@ -436,7 +526,9 @@ Return ONLY a JSON object with exactly these keys:
           ...narration.recommendations.map((r) => `• ${r}`),
           '',
           'TOP THEMES',
-          ...summary.topThemes.map((t) => `• ${t.title} (${t.feedbackCount} signals)`),
+          ...summary.topThemes.map(
+            (t) => `• ${t.title} (${t.feedbackCount} signals)`,
+          ),
         ].join('\n')
       : `Weekly Digest\n\n${summary.summaryText}\n\nTop Themes:\n${summary.topThemes.map((t) => `- ${t.title}`).join('\n')}`;
 
@@ -471,6 +563,8 @@ Return ONLY a JSON object with exactly these keys:
       });
     }
 
-    this.logger.log(`Digest email sent for digest run ${digestRunId} to ${recipients.length} recipients.`);
+    this.logger.log(
+      `Digest email sent for digest run ${digestRunId} to ${recipients.length} recipients.`,
+    );
   }
 }

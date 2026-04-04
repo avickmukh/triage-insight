@@ -21,10 +21,7 @@ import { PrismaModule } from '../prisma/prisma.module';
  * @Global() and imported by AppModule → WorkerModule.
  */
 @Module({
-  imports: [
-    TerminusModule,
-    PrismaModule,
-  ],
+  imports: [TerminusModule, PrismaModule],
   controllers: [HealthController, QueueHealthController],
   providers: [QueueHealthService],
 })

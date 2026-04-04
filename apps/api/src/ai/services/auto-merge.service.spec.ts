@@ -23,18 +23,23 @@ import { CIQ_SCORING_QUEUE } from '../processors/ciq-scoring.processor';
 // ─── Mock factories ────────────────────────────────────────────────────────────
 
 /** Build a minimal theme row as returned by $queryRaw (feedbackCount only) */
-function fakeThemeRaw(id: string, feedbackCount = 2): { id: string; feedbackCount: number } {
+function fakeThemeRaw(
+  id: string,
+  feedbackCount = 2,
+): { id: string; feedbackCount: number } {
   return { id, feedbackCount };
 }
 
 /** Build a theme row as returned by theme.findMany */
-function fakeTheme(overrides: Partial<{
-  id: string;
-  title: string;
-  topKeywords: string | null;
-  feedbackCount: number;
-  autoMergeCandidate: boolean;
-}> = {}) {
+function fakeTheme(
+  overrides: Partial<{
+    id: string;
+    title: string;
+    topKeywords: string | null;
+    feedbackCount: number;
+    autoMergeCandidate: boolean;
+  }> = {},
+) {
   return {
     id: overrides.id ?? 'theme-1',
     title: overrides.title ?? 'Test Theme',
@@ -45,13 +50,15 @@ function fakeTheme(overrides: Partial<{
 }
 
 /** Build a pgvector candidate row as returned by $queryRaw in the scan loop */
-function fakeCandidate(overrides: Partial<{
-  id: string;
-  title: string;
-  similarity: number;
-  topKeywords: string | null;
-  feedbackCount: number;
-}> = {}) {
+function fakeCandidate(
+  overrides: Partial<{
+    id: string;
+    title: string;
+    similarity: number;
+    topKeywords: string | null;
+    feedbackCount: number;
+  }> = {},
+) {
   return {
     id: overrides.id ?? 'theme-2',
     title: overrides.title ?? 'Candidate Theme',
@@ -90,7 +97,9 @@ const mockPrisma: Record<string, unknown> = {
     updateMany: jest.fn().mockResolvedValue({ count: 0 }),
   },
   $queryRaw: jest.fn(),
-  $transaction: jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(mockPrisma)),
+  $transaction: jest.fn((fn: (tx: unknown) => Promise<unknown>) =>
+    fn(mockPrisma),
+  ),
 };
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -103,7 +112,9 @@ describe('AutoMergeService', () => {
 
     // Default: $queryRaw returns empty (no themes with embeddings)
     (mockPrisma.$queryRaw as jest.Mock).mockResolvedValue([]);
-    (mockPrisma.theme as Record<string, jest.Mock>).findMany.mockResolvedValue([]);
+    (mockPrisma.theme as Record<string, jest.Mock>).findMany.mockResolvedValue(
+      [],
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -157,7 +168,9 @@ describe('AutoMergeService', () => {
         // Second $queryRaw call is the candidate scan — return empty to short-circuit
         .mockResolvedValue([]);
 
-      (mockPrisma.theme as Record<string, jest.Mock>).findMany.mockResolvedValue([
+      (
+        mockPrisma.theme as Record<string, jest.Mock>
+      ).findMany.mockResolvedValue([
         fakeTheme({ id: 't1' }),
         fakeTheme({ id: 't2' }),
         fakeTheme({ id: 't3' }),
@@ -179,8 +192,12 @@ describe('AutoMergeService', () => {
         .mockResolvedValueOnce(rawRows)
         .mockResolvedValue([]);
 
-      (mockPrisma.theme as Record<string, jest.Mock>).findMany.mockResolvedValue(
-        rawRows.map((r) => fakeTheme({ id: r.id, feedbackCount: r.feedbackCount })),
+      (
+        mockPrisma.theme as Record<string, jest.Mock>
+      ).findMany.mockResolvedValue(
+        rawRows.map((r) =>
+          fakeTheme({ id: r.id, feedbackCount: r.feedbackCount }),
+        ),
       );
 
       const result = await service.detectAndMerge('ws-1');
@@ -191,13 +208,19 @@ describe('AutoMergeService', () => {
 
     it('uses normal threshold (0.85) for large datasets', async () => {
       // 15 themes, all with 5+ items
-      const rawRows = Array.from({ length: 15 }, (_, i) => fakeThemeRaw(`t${i}`, 5));
+      const rawRows = Array.from({ length: 15 }, (_, i) =>
+        fakeThemeRaw(`t${i}`, 5),
+      );
       (mockPrisma.$queryRaw as jest.Mock)
         .mockResolvedValueOnce(rawRows)
         .mockResolvedValue([]);
 
-      (mockPrisma.theme as Record<string, jest.Mock>).findMany.mockResolvedValue(
-        rawRows.map((r) => fakeTheme({ id: r.id, feedbackCount: r.feedbackCount })),
+      (
+        mockPrisma.theme as Record<string, jest.Mock>
+      ).findMany.mockResolvedValue(
+        rawRows.map((r) =>
+          fakeTheme({ id: r.id, feedbackCount: r.feedbackCount }),
+        ),
       );
 
       const result = await service.detectAndMerge('ws-1');
@@ -217,22 +240,36 @@ describe('AutoMergeService', () => {
       const sharedKeywords = JSON.stringify(['payment', 'failure', 'checkout']);
       (mockPrisma.$queryRaw as jest.Mock)
         .mockResolvedValueOnce([fakeThemeRaw('t1', 3), fakeThemeRaw('t2', 3)]) // call 1
-        .mockResolvedValueOnce([fakeCandidate({ id: 't2', similarity: 1.0, feedbackCount: 3, topKeywords: sharedKeywords })]); // call 2
+        .mockResolvedValueOnce([
+          fakeCandidate({
+            id: 't2',
+            similarity: 1.0,
+            feedbackCount: 3,
+            topKeywords: sharedKeywords,
+          }),
+        ]); // call 2
 
-      (mockPrisma.theme as Record<string, jest.Mock>).findMany.mockResolvedValue([
+      (
+        mockPrisma.theme as Record<string, jest.Mock>
+      ).findMany.mockResolvedValue([
         fakeTheme({ id: 't1', feedbackCount: 3, topKeywords: sharedKeywords }),
         fakeTheme({ id: 't2', feedbackCount: 3, topKeywords: sharedKeywords }),
       ]);
 
-      const result = await service.detectAndMerge('ws-1', { autoExecute: false });
+      const result = await service.detectAndMerge('ws-1', {
+        autoExecute: false,
+      });
 
       expect(result.detectedCount).toBe(1);
       expect(result.mergedCount).toBe(0); // suggestion mode — no execution
       expect(result.suggestions[0].similarity).toBeGreaterThanOrEqual(0.72);
 
       // theme.update should have been called to flag the source
-      const updateCalls = (mockPrisma.theme as Record<string, jest.Mock>).update.mock.calls as Array<[{ data: { autoMergeCandidate?: boolean } }]>;
-      const flagCalls = updateCalls.filter(([args]) => args.data.autoMergeCandidate === true);
+      const updateCalls = (mockPrisma.theme as Record<string, jest.Mock>).update
+        .mock.calls as Array<[{ data: { autoMergeCandidate?: boolean } }]>;
+      const flagCalls = updateCalls.filter(
+        ([args]) => args.data.autoMergeCandidate === true,
+      );
       expect(flagCalls.length).toBeGreaterThan(0);
     });
 
@@ -240,21 +277,30 @@ describe('AutoMergeService', () => {
       (mockPrisma.$queryRaw as jest.Mock)
         .mockResolvedValueOnce([fakeThemeRaw('t1', 3), fakeThemeRaw('t2', 3)]) // call 1
         // Candidate with low similarity — below bootstrap threshold 0.72
-        .mockResolvedValueOnce([fakeCandidate({ id: 't2', similarity: 0.5, feedbackCount: 3 })]); // call 2
+        .mockResolvedValueOnce([
+          fakeCandidate({ id: 't2', similarity: 0.5, feedbackCount: 3 }),
+        ]); // call 2
 
-      (mockPrisma.theme as Record<string, jest.Mock>).findMany.mockResolvedValue([
+      (
+        mockPrisma.theme as Record<string, jest.Mock>
+      ).findMany.mockResolvedValue([
         fakeTheme({ id: 't1', feedbackCount: 3 }),
         fakeTheme({ id: 't2', feedbackCount: 3 }),
       ]);
 
-      const result = await service.detectAndMerge('ws-1', { autoExecute: false });
+      const result = await service.detectAndMerge('ws-1', {
+        autoExecute: false,
+      });
 
       expect(result.detectedCount).toBe(0);
       expect(result.mergedCount).toBe(0);
 
       // No flagging update should have been called
-      const updateCalls = (mockPrisma.theme as Record<string, jest.Mock>).update.mock.calls as Array<[{ data: { autoMergeCandidate?: boolean } }]>;
-      const flagCalls = updateCalls.filter(([args]) => args.data.autoMergeCandidate === true);
+      const updateCalls = (mockPrisma.theme as Record<string, jest.Mock>).update
+        .mock.calls as Array<[{ data: { autoMergeCandidate?: boolean } }]>;
+      const flagCalls = updateCalls.filter(
+        ([args]) => args.data.autoMergeCandidate === true,
+      );
       expect(flagCalls).toHaveLength(0);
     });
   });
@@ -268,19 +314,37 @@ describe('AutoMergeService', () => {
       const sharedKeywords = JSON.stringify(['payment', 'failure', 'checkout']);
       (mockPrisma.$queryRaw as jest.Mock)
         .mockResolvedValueOnce([fakeThemeRaw('t1', 3), fakeThemeRaw('t2', 3)]) // call 1
-        .mockResolvedValueOnce([fakeCandidate({ id: 't2', similarity: 1.0, feedbackCount: 3, topKeywords: sharedKeywords })]); // call 2
+        .mockResolvedValueOnce([
+          fakeCandidate({
+            id: 't2',
+            similarity: 1.0,
+            feedbackCount: 3,
+            topKeywords: sharedKeywords,
+          }),
+        ]); // call 2
 
-      (mockPrisma.theme as Record<string, jest.Mock>).findMany.mockResolvedValue([
+      (
+        mockPrisma.theme as Record<string, jest.Mock>
+      ).findMany.mockResolvedValue([
         fakeTheme({ id: 't1', feedbackCount: 3, topKeywords: sharedKeywords }),
         fakeTheme({ id: 't2', feedbackCount: 3, topKeywords: sharedKeywords }),
       ]);
 
       // themeFeedback.findMany inside executeMerge (called inside $transaction)
-      (mockPrisma.themeFeedback as Record<string, jest.Mock>).findMany.mockResolvedValue([
-        { themeId: 't2', feedbackId: 'fb-1', assignedBy: 'ai', confidence: 0.9 },
+      (
+        mockPrisma.themeFeedback as Record<string, jest.Mock>
+      ).findMany.mockResolvedValue([
+        {
+          themeId: 't2',
+          feedbackId: 'fb-1',
+          assignedBy: 'ai',
+          confidence: 0.9,
+        },
       ]);
 
-      const result = await service.detectAndMerge('ws-1', { autoExecute: true });
+      const result = await service.detectAndMerge('ws-1', {
+        autoExecute: true,
+      });
 
       expect(result.merged).toBe(true);
       expect(result.mergedCount).toBe(1);
@@ -291,22 +355,42 @@ describe('AutoMergeService', () => {
       const sharedKeywords = JSON.stringify(['payment', 'failure', 'checkout']);
       (mockPrisma.$queryRaw as jest.Mock)
         .mockResolvedValueOnce([fakeThemeRaw('t1', 5), fakeThemeRaw('t2', 3)]) // call 1
-        .mockResolvedValueOnce([fakeCandidate({ id: 't2', similarity: 1.0, feedbackCount: 3, topKeywords: sharedKeywords })]); // call 2
+        .mockResolvedValueOnce([
+          fakeCandidate({
+            id: 't2',
+            similarity: 1.0,
+            feedbackCount: 3,
+            topKeywords: sharedKeywords,
+          }),
+        ]); // call 2
 
-      (mockPrisma.theme as Record<string, jest.Mock>).findMany.mockResolvedValue([
+      (
+        mockPrisma.theme as Record<string, jest.Mock>
+      ).findMany.mockResolvedValue([
         fakeTheme({ id: 't1', feedbackCount: 5, topKeywords: sharedKeywords }),
         fakeTheme({ id: 't2', feedbackCount: 3, topKeywords: sharedKeywords }),
       ]);
 
-      (mockPrisma.themeFeedback as Record<string, jest.Mock>).findMany.mockResolvedValue([
-        { themeId: 't2', feedbackId: 'fb-1', assignedBy: 'ai', confidence: 0.9 },
+      (
+        mockPrisma.themeFeedback as Record<string, jest.Mock>
+      ).findMany.mockResolvedValue([
+        {
+          themeId: 't2',
+          feedbackId: 'fb-1',
+          assignedBy: 'ai',
+          confidence: 0.9,
+        },
       ]);
 
       await service.detectAndMerge('ws-1', { autoExecute: true });
 
       // t1 has more feedback (5 vs 3) so t1 is the target
       expect(mockCiqQueue.add).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'THEME_SCORED', workspaceId: 'ws-1', themeId: 't1' }),
+        expect.objectContaining({
+          type: 'THEME_SCORED',
+          workspaceId: 'ws-1',
+          themeId: 't1',
+        }),
         expect.any(Object),
       );
     });
@@ -317,19 +401,30 @@ describe('AutoMergeService', () => {
   describe('anchorThemeId fast path', () => {
     it('only scans the anchor theme when anchorThemeId is provided', async () => {
       (mockPrisma.$queryRaw as jest.Mock)
-        .mockResolvedValueOnce([fakeThemeRaw('t1', 2), fakeThemeRaw('t2', 2), fakeThemeRaw('t3', 2)])
+        .mockResolvedValueOnce([
+          fakeThemeRaw('t1', 2),
+          fakeThemeRaw('t2', 2),
+          fakeThemeRaw('t3', 2),
+        ])
         // Candidate scan for t1 only
         .mockResolvedValueOnce([fakeCandidate({ id: 't2', similarity: 0.9 })]);
 
-      (mockPrisma.theme as Record<string, jest.Mock>).findMany.mockResolvedValue([
+      (
+        mockPrisma.theme as Record<string, jest.Mock>
+      ).findMany.mockResolvedValue([
         fakeTheme({ id: 't1' }),
         fakeTheme({ id: 't2' }),
         fakeTheme({ id: 't3' }),
       ]);
 
-      (mockPrisma.themeFeedback as Record<string, jest.Mock>).findMany.mockResolvedValue([]);
+      (
+        mockPrisma.themeFeedback as Record<string, jest.Mock>
+      ).findMany.mockResolvedValue([]);
 
-      await service.detectAndMerge('ws-1', { autoExecute: true, anchorThemeId: 't1' });
+      await service.detectAndMerge('ws-1', {
+        autoExecute: true,
+        anchorThemeId: 't1',
+      });
 
       // $queryRaw for candidates should have been called exactly once (for t1 only)
       // First call is the themes-with-embeddings query, second is the candidate scan
@@ -344,12 +439,16 @@ describe('AutoMergeService', () => {
         fakeThemeRaw('t2', 2),
       ]);
 
-      (mockPrisma.theme as Record<string, jest.Mock>).findMany.mockResolvedValue([
+      (
+        mockPrisma.theme as Record<string, jest.Mock>
+      ).findMany.mockResolvedValue([
         fakeTheme({ id: 't1' }),
         fakeTheme({ id: 't2' }),
       ]);
 
-      const result = await service.detectAndMerge('ws-1', { anchorThemeId: 'nonexistent' });
+      const result = await service.detectAndMerge('ws-1', {
+        anchorThemeId: 'nonexistent',
+      });
 
       expect(result.merged).toBe(false);
       expect(result.reason).toMatch(/not found/);
@@ -360,28 +459,51 @@ describe('AutoMergeService', () => {
 
   describe('executeMerge', () => {
     it('re-links all feedback from source to target via upsert', async () => {
-      (mockPrisma.themeFeedback as Record<string, jest.Mock>).findMany.mockResolvedValue([
-        { themeId: 'source', feedbackId: 'fb-1', assignedBy: 'ai', confidence: 0.9 },
-        { themeId: 'source', feedbackId: 'fb-2', assignedBy: 'ai', confidence: 0.8 },
+      (
+        mockPrisma.themeFeedback as Record<string, jest.Mock>
+      ).findMany.mockResolvedValue([
+        {
+          themeId: 'source',
+          feedbackId: 'fb-1',
+          assignedBy: 'ai',
+          confidence: 0.9,
+        },
+        {
+          themeId: 'source',
+          feedbackId: 'fb-2',
+          assignedBy: 'ai',
+          confidence: 0.8,
+        },
       ]);
 
       await service.executeMerge('ws-1', 'target', 'source', 'user-1', 0.88);
 
-      expect((mockPrisma.themeFeedback as Record<string, jest.Mock>).upsert).toHaveBeenCalledTimes(2);
-      expect((mockPrisma.themeFeedback as Record<string, jest.Mock>).upsert).toHaveBeenCalledWith(
+      expect(
+        (mockPrisma.themeFeedback as Record<string, jest.Mock>).upsert,
+      ).toHaveBeenCalledTimes(2);
+      expect(
+        (mockPrisma.themeFeedback as Record<string, jest.Mock>).upsert,
+      ).toHaveBeenCalledWith(
         expect.objectContaining({
-          create: expect.objectContaining({ themeId: 'target', feedbackId: 'fb-1' }),
+          create: expect.objectContaining({
+            themeId: 'target',
+            feedbackId: 'fb-1',
+          }),
         }),
       );
     });
 
     it('archives the source theme (does NOT delete it)', async () => {
-      (mockPrisma.themeFeedback as Record<string, jest.Mock>).findMany.mockResolvedValue([]);
+      (
+        mockPrisma.themeFeedback as Record<string, jest.Mock>
+      ).findMany.mockResolvedValue([]);
 
       await service.executeMerge('ws-1', 'target', 'source', 'user-1');
 
       // Should update source to ARCHIVED
-      expect((mockPrisma.theme as Record<string, jest.Mock>).update).toHaveBeenCalledWith(
+      expect(
+        (mockPrisma.theme as Record<string, jest.Mock>).update,
+      ).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 'source', workspaceId: 'ws-1' },
           data: expect.objectContaining({ status: 'ARCHIVED' }),
@@ -389,37 +511,50 @@ describe('AutoMergeService', () => {
       );
 
       // Should NOT delete the source theme
-      const deleteCalls = (mockPrisma.theme as Record<string, jest.Mock>).update?.mock?.calls ?? [];
-      const hardDeleteCalls = deleteCalls.filter(([args]: [{ data: { status?: string } }]) =>
-        args.data?.status === 'DELETED',
+      const deleteCalls =
+        (mockPrisma.theme as Record<string, jest.Mock>).update?.mock?.calls ??
+        [];
+      const hardDeleteCalls = deleteCalls.filter(
+        ([args]: [{ data: { status?: string } }]) =>
+          args.data?.status === 'DELETED',
       );
       expect(hardDeleteCalls).toHaveLength(0);
     });
 
     it('re-points RoadmapItems from source to target', async () => {
-      (mockPrisma.themeFeedback as Record<string, jest.Mock>).findMany.mockResolvedValue([]);
+      (
+        mockPrisma.themeFeedback as Record<string, jest.Mock>
+      ).findMany.mockResolvedValue([]);
 
       await service.executeMerge('ws-1', 'target', 'source', 'user-1');
 
-      expect((mockPrisma.roadmapItem as Record<string, jest.Mock>).updateMany).toHaveBeenCalledWith({
+      expect(
+        (mockPrisma.roadmapItem as Record<string, jest.Mock>).updateMany,
+      ).toHaveBeenCalledWith({
         where: { themeId: 'source' },
         data: { themeId: 'target' },
       });
     });
 
     it('re-points CustomerSignals from source to target', async () => {
-      (mockPrisma.themeFeedback as Record<string, jest.Mock>).findMany.mockResolvedValue([]);
+      (
+        mockPrisma.themeFeedback as Record<string, jest.Mock>
+      ).findMany.mockResolvedValue([]);
 
       await service.executeMerge('ws-1', 'target', 'source', 'user-1');
 
-      expect((mockPrisma.customerSignal as Record<string, jest.Mock>).updateMany).toHaveBeenCalledWith({
+      expect(
+        (mockPrisma.customerSignal as Record<string, jest.Mock>).updateMany,
+      ).toHaveBeenCalledWith({
         where: { themeId: 'source' },
         data: { themeId: 'target' },
       });
     });
 
     it('enqueues CIQ re-scoring for the target theme', async () => {
-      (mockPrisma.themeFeedback as Record<string, jest.Mock>).findMany.mockResolvedValue([]);
+      (
+        mockPrisma.themeFeedback as Record<string, jest.Mock>
+      ).findMany.mockResolvedValue([]);
 
       await service.executeMerge('ws-1', 'target', 'source', 'user-1', 0.9);
 
@@ -434,13 +569,35 @@ describe('AutoMergeService', () => {
     });
 
     it('returns affectedFeedbackCount equal to number of re-linked items', async () => {
-      (mockPrisma.themeFeedback as Record<string, jest.Mock>).findMany.mockResolvedValue([
-        { themeId: 'source', feedbackId: 'fb-1', assignedBy: 'ai', confidence: 0.9 },
-        { themeId: 'source', feedbackId: 'fb-2', assignedBy: 'ai', confidence: 0.8 },
-        { themeId: 'source', feedbackId: 'fb-3', assignedBy: 'ai', confidence: 0.7 },
+      (
+        mockPrisma.themeFeedback as Record<string, jest.Mock>
+      ).findMany.mockResolvedValue([
+        {
+          themeId: 'source',
+          feedbackId: 'fb-1',
+          assignedBy: 'ai',
+          confidence: 0.9,
+        },
+        {
+          themeId: 'source',
+          feedbackId: 'fb-2',
+          assignedBy: 'ai',
+          confidence: 0.8,
+        },
+        {
+          themeId: 'source',
+          feedbackId: 'fb-3',
+          assignedBy: 'ai',
+          confidence: 0.7,
+        },
       ]);
 
-      const result = await service.executeMerge('ws-1', 'target', 'source', 'user-1');
+      const result = await service.executeMerge(
+        'ws-1',
+        'target',
+        'source',
+        'user-1',
+      );
 
       expect(result.affectedFeedbackCount).toBe(3);
     });
@@ -452,7 +609,9 @@ describe('AutoMergeService', () => {
     it('clears the autoMergeCandidate flag on the theme', async () => {
       await service.dismissAutoMerge('ws-1', 'theme-1');
 
-      expect((mockPrisma.theme as Record<string, jest.Mock>).update).toHaveBeenCalledWith(
+      expect(
+        (mockPrisma.theme as Record<string, jest.Mock>).update,
+      ).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 'theme-1', workspaceId: 'ws-1' },
           data: expect.objectContaining({

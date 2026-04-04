@@ -1,4 +1,10 @@
-import { IsString, IsNotEmpty, IsOptional, IsEmail, MaxLength } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsEmail,
+  MaxLength,
+} from 'class-validator';
 
 /**
  * Body for POST /public/:workspaceSlug/feedback/:id/comments

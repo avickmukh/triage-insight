@@ -2,7 +2,12 @@ import { Process, Processor } from '@nestjs/bull';
 import type { Job } from 'bull';
 import { Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { PurgeService, PURGE_QUEUE, PURGE_JOB_NAME, PurgeJobPayload } from './purge.service';
+import {
+  PurgeService,
+  PURGE_QUEUE,
+  PURGE_JOB_NAME,
+  PurgeJobPayload,
+} from './purge.service';
 import { StoragePurgeStep } from './steps/storage-purge.step';
 import { DatabasePurgeStep } from './steps/database-purge.step';
 import { QueuePurgeStep } from './steps/queue-purge.step';
@@ -38,7 +43,9 @@ export class PurgeWorker {
   @Process(PURGE_JOB_NAME)
   async execute(job: Job<PurgeJobPayload>) {
     const { deletionRequestId, workspaceId } = job.data;
-    this.logger.log(`[Purge] Starting purge for workspace ${workspaceId} (request: ${deletionRequestId})`);
+    this.logger.log(
+      `[Purge] Starting purge for workspace ${workspaceId} (request: ${deletionRequestId})`,
+    );
 
     // Mark as IN_PROGRESS
     await this.prisma.workspaceDeletionRequest.update({
@@ -50,20 +57,38 @@ export class PurgeWorker {
     });
 
     const steps = [
-      { name: 'REVOKE_TOKENS',  fn: () => this.tokenRevocation.execute(deletionRequestId, workspaceId) },
-      { name: 'DRAIN_QUEUES',   fn: () => this.queuePurge.execute(deletionRequestId, workspaceId) },
-      { name: 'PURGE_STORAGE',  fn: () => this.storagePurge.execute(deletionRequestId, workspaceId) },
-      { name: 'PURGE_DATABASE', fn: () => this.databasePurge.execute(deletionRequestId, workspaceId) },
+      {
+        name: 'REVOKE_TOKENS',
+        fn: () => this.tokenRevocation.execute(deletionRequestId, workspaceId),
+      },
+      {
+        name: 'DRAIN_QUEUES',
+        fn: () => this.queuePurge.execute(deletionRequestId, workspaceId),
+      },
+      {
+        name: 'PURGE_STORAGE',
+        fn: () => this.storagePurge.execute(deletionRequestId, workspaceId),
+      },
+      {
+        name: 'PURGE_DATABASE',
+        fn: () => this.databasePurge.execute(deletionRequestId, workspaceId),
+      },
     ];
 
     for (const step of steps) {
       try {
-        this.logger.log(`[Purge] Executing step: ${step.name} for workspace ${workspaceId}`);
+        this.logger.log(
+          `[Purge] Executing step: ${step.name} for workspace ${workspaceId}`,
+        );
         await step.fn();
-        this.logger.log(`[Purge] Step ${step.name} completed for workspace ${workspaceId}`);
+        this.logger.log(
+          `[Purge] Step ${step.name} completed for workspace ${workspaceId}`,
+        );
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
-        this.logger.error(`[Purge] Step ${step.name} FAILED for workspace ${workspaceId}: ${errorMessage}`);
+        this.logger.error(
+          `[Purge] Step ${step.name} FAILED for workspace ${workspaceId}: ${errorMessage}`,
+        );
 
         // Log the failure
         await this.purgeService.logStep(
@@ -98,6 +123,8 @@ export class PurgeWorker {
       },
     });
 
-    this.logger.log(`[Purge] Workspace ${workspaceId} purge COMPLETED successfully`);
+    this.logger.log(
+      `[Purge] Workspace ${workspaceId} purge COMPLETED successfully`,
+    );
   }
 }

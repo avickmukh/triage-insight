@@ -51,25 +51,25 @@ export interface ActionPlanItem {
   /** Signal quality labels for UI explainability chips. */
   signalLabels: SignalQualityLabel[];
   signals: {
-    feedbackCount:    number;
-    supportCount:     number;
-    voiceCount:       number;
-    surveyCount:      number;
+    feedbackCount: number;
+    supportCount: number;
+    voiceCount: number;
+    surveyCount: number;
     totalSignalCount: number;
-    sourceDiversity:  number;
-    trendDelta:       number | null;
-    resurfaceCount:   number;
-    lastEvidenceAt:   Date | null;
+    sourceDiversity: number;
+    trendDelta: number | null;
+    resurfaceCount: number;
+    lastEvidenceAt: Date | null;
   };
   /** DRS breakdown for the expandable score panel. */
   drsBreakdown: {
-    ciq:           { weight: string; value: string };
-    velocity:      { weight: string; value: string };
-    recency:       { weight: string; value: string };
-    resurfacing:   { weight: string; value: string };
+    ciq: { weight: string; value: string };
+    velocity: { weight: string; value: string };
+    recency: { weight: string; value: string };
+    resurfacing: { weight: string; value: string };
     sourceDiversity: { weight: string; value: string };
-    aiConfidence:  { weight: string; value: string };
-    penalties:     string | null;
+    aiConfidence: { weight: string; value: string };
+    penalties: string | null;
   };
 }
 
@@ -105,9 +105,13 @@ export class ActionPlanService {
       const delta = ranked.signals.trendDelta ?? 0;
 
       const priority: ActionPlanItem['priority'] =
-        drs >= 75 ? 'CRITICAL' :
-        drs >= 55 ? 'HIGH'     :
-        drs >= 35 ? 'MEDIUM'   : 'LOW';
+        drs >= 75
+          ? 'CRITICAL'
+          : drs >= 55
+            ? 'HIGH'
+            : drs >= 35
+              ? 'MEDIUM'
+              : 'LOW';
 
       // Determine recommended action
       const onRoadmap = roadmapMap.get(ranked.themeId) ?? false;
@@ -127,39 +131,65 @@ export class ActionPlanService {
       const penaltyParts: string[] = [];
       if (bd.penalties.nearDuplicate) penaltyParts.push('Near-duplicate ×0.80');
       if (bd.penalties.lowConfidence) penaltyParts.push('Low confidence ×0.85');
-      if (bd.penalties.weakSignal)    penaltyParts.push('Weak signal ×0.90');
+      if (bd.penalties.weakSignal) penaltyParts.push('Weak signal ×0.90');
 
       const drsBreakdown: ActionPlanItem['drsBreakdown'] = {
-        ciq:           { weight: '30%', value: `${Math.round(bd.ciq.raw)}/100` },
-        velocity:      { weight: '20%', value: ranked.signals.trendDelta != null ? `${delta > 0 ? '+' : ''}${Math.round(delta)}%` : 'n/a' },
-        recency:       { weight: '18%', value: ranked.signals.lastEvidenceAt ? new Date(ranked.signals.lastEvidenceAt).toLocaleDateString() : 'n/a' },
-        resurfacing:   { weight: '15%', value: ranked.signals.resurfaceCount > 0 ? `×${ranked.signals.resurfaceCount}` : 'none' },
-        sourceDiversity: { weight: '10%', value: `${ranked.signals.sourceDiversity}/4 sources` },
-        aiConfidence:  { weight: '7%',  value: ranked.aiConfidence != null ? `${Math.round(ranked.aiConfidence * 100)}%` : 'n/a' },
-        penalties:     penaltyParts.length > 0 ? penaltyParts.join(', ') : null,
+        ciq: { weight: '30%', value: `${Math.round(bd.ciq.raw)}/100` },
+        velocity: {
+          weight: '20%',
+          value:
+            ranked.signals.trendDelta != null
+              ? `${delta > 0 ? '+' : ''}${Math.round(delta)}%`
+              : 'n/a',
+        },
+        recency: {
+          weight: '18%',
+          value: ranked.signals.lastEvidenceAt
+            ? new Date(ranked.signals.lastEvidenceAt).toLocaleDateString()
+            : 'n/a',
+        },
+        resurfacing: {
+          weight: '15%',
+          value:
+            ranked.signals.resurfaceCount > 0
+              ? `×${ranked.signals.resurfaceCount}`
+              : 'none',
+        },
+        sourceDiversity: {
+          weight: '10%',
+          value: `${ranked.signals.sourceDiversity}/4 sources`,
+        },
+        aiConfidence: {
+          weight: '7%',
+          value:
+            ranked.aiConfidence != null
+              ? `${Math.round(ranked.aiConfidence * 100)}%`
+              : 'n/a',
+        },
+        penalties: penaltyParts.length > 0 ? penaltyParts.join(', ') : null,
       };
 
       return {
-        themeId:              ranked.themeId,
-        themeName:            ranked.title,
-        shortLabel:           ranked.shortLabel,
+        themeId: ranked.themeId,
+        themeName: ranked.title,
+        shortLabel: ranked.shortLabel,
         priority,
-        ciqScore:             ranked.ciqScore,
+        ciqScore: ranked.ciqScore,
         decisionPriorityScore: Math.round(drs),
         recommendedAction,
-        reason:               ranked.reason,
-        isNearDuplicate:      ranked.isNearDuplicate,
-        signalLabels:         ranked.signalLabels,
+        reason: ranked.reason,
+        isNearDuplicate: ranked.isNearDuplicate,
+        signalLabels: ranked.signalLabels,
         signals: {
-          feedbackCount:    ranked.signals.feedbackCount,
-          supportCount:     ranked.signals.supportCount,
-          voiceCount:       ranked.signals.voiceCount,
-          surveyCount:      ranked.signals.surveyCount,
+          feedbackCount: ranked.signals.feedbackCount,
+          supportCount: ranked.signals.supportCount,
+          voiceCount: ranked.signals.voiceCount,
+          surveyCount: ranked.signals.surveyCount,
           totalSignalCount: ranked.signals.totalSignalCount,
-          sourceDiversity:  ranked.signals.sourceDiversity,
-          trendDelta:       ranked.signals.trendDelta,
-          resurfaceCount:   ranked.signals.resurfaceCount,
-          lastEvidenceAt:   ranked.signals.lastEvidenceAt,
+          sourceDiversity: ranked.signals.sourceDiversity,
+          trendDelta: ranked.signals.trendDelta,
+          resurfaceCount: ranked.signals.resurfaceCount,
+          lastEvidenceAt: ranked.signals.lastEvidenceAt,
         },
         drsBreakdown,
       };
@@ -180,8 +210,8 @@ export class ActionPlanService {
     const roadmapItems = await this.prisma.roadmapItem.findMany({
       where: {
         themeId: { in: themeIds },
-        theme:   { workspaceId },
-        status:  { not: 'SHIPPED' },
+        theme: { workspaceId },
+        status: { not: 'SHIPPED' },
       },
       select: { themeId: true },
     });

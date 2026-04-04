@@ -1,6 +1,6 @@
-import { Injectable, Logger } from "@nestjs/common";
-import { SupportProvider } from "./provider.interface";
-import { SupportTicket } from "@prisma/client";
+import { Injectable, Logger } from '@nestjs/common';
+import { SupportProvider } from './provider.interface';
+import { SupportTicket } from '@prisma/client';
 
 /**
  * ZendeskService — real Zendesk REST API v2 integration.
@@ -26,7 +26,7 @@ export class ZendeskService implements SupportProvider {
     const baseUrl = `https://${this.subdomain}.zendesk.com`;
     const headers = {
       Authorization: `Bearer ${this.accessToken}`,
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     };
 
     const tickets: Partial<SupportTicket>[] = [];
@@ -52,7 +52,7 @@ export class ZendeskService implements SupportProvider {
         };
 
         for (const t of data.tickets) {
-          if (t.status === "deleted") continue;
+          if (t.status === 'deleted') continue;
           tickets.push(this.mapTicket(t));
         }
 
@@ -63,7 +63,7 @@ export class ZendeskService implements SupportProvider {
             : null;
       }
     } catch (err) {
-      this.logger.error("Zendesk sync failed", (err as Error).message);
+      this.logger.error('Zendesk sync failed', (err as Error).message);
       throw err;
     }
 
@@ -73,30 +73,32 @@ export class ZendeskService implements SupportProvider {
 
   private mapTicket(t: ZendeskTicket): Partial<SupportTicket> {
     return {
-      externalId:        String(t.id),
-      subject:           t.subject ?? "(no subject)",
-      description:       t.description ?? null,
-      status:            this.mapStatus(t.status),
-      customerEmail:     null,
-      tags:              t.tags ?? [],
+      externalId: String(t.id),
+      subject: t.subject ?? '(no subject)',
+      description: t.description ?? null,
+      status: this.mapStatus(t.status),
+      customerEmail: null,
+      tags: t.tags ?? [],
       externalCreatedAt: t.created_at ? new Date(t.created_at) : undefined,
     };
   }
 
-  private mapStatus(status: string): "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED" {
+  private mapStatus(
+    status: string,
+  ): 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED' {
     switch (status) {
-      case "new":
-      case "open":
-        return "OPEN";
-      case "pending":
-      case "hold":
-        return "IN_PROGRESS";
-      case "solved":
-        return "RESOLVED";
-      case "closed":
-        return "CLOSED";
+      case 'new':
+      case 'open':
+        return 'OPEN';
+      case 'pending':
+      case 'hold':
+        return 'IN_PROGRESS';
+      case 'solved':
+        return 'RESOLVED';
+      case 'closed':
+        return 'CLOSED';
       default:
-        return "OPEN";
+        return 'OPEN';
     }
   }
 }

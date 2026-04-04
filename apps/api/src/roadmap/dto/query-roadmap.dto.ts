@@ -27,7 +27,12 @@ export class QueryRoadmapDto {
    */
   @IsOptional()
   @IsString()
-  sortBy?: 'createdAt' | 'updatedAt' | 'priorityScore' | 'manualRank' | 'feedbackCount' = 'createdAt';
+  sortBy?:
+    | 'createdAt'
+    | 'updatedAt'
+    | 'priorityScore'
+    | 'manualRank'
+    | 'feedbackCount' = 'createdAt';
 
   @IsOptional()
   @IsString()

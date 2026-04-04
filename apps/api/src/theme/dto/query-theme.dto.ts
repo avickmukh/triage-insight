@@ -1,4 +1,10 @@
-import { IsOptional, IsString, IsEnum, IsBoolean, IsInt } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsEnum,
+  IsBoolean,
+  IsInt,
+} from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ThemeStatus } from '@prisma/client';
 

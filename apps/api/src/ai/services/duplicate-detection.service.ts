@@ -28,19 +28,19 @@ export type DuplicateMatchType =
  */
 const THRESHOLDS = {
   /** Minimum embedding similarity to even consider a candidate */
-  EMBEDDING_CANDIDATE:  0.80,
+  EMBEDDING_CANDIDATE: 0.8,
   /** Hybrid score required for EXACT_DUPLICATE classification */
-  EXACT_HYBRID:         0.92,
+  EXACT_HYBRID: 0.92,
   /** Title overlap (Jaccard) required for EXACT_DUPLICATE */
-  EXACT_TITLE_OVERLAP:  0.70,
+  EXACT_TITLE_OVERLAP: 0.7,
   /** Hybrid score required for NEAR_DUPLICATE classification */
-  NEAR_HYBRID:          0.82,
+  NEAR_HYBRID: 0.82,
   /** Title overlap (Jaccard) required for NEAR_DUPLICATE */
-  NEAR_TITLE_OVERLAP:   0.40,
+  NEAR_TITLE_OVERLAP: 0.4,
   /** Minimum keyword overlap for heuristic fallback (raised from 0.35 to reduce false positives) */
-  HEURISTIC_KEYWORD:    0.55,
+  HEURISTIC_KEYWORD: 0.55,
   /** Minimum title overlap required for heuristic path */
-  HEURISTIC_TITLE:      0.30,
+  HEURISTIC_TITLE: 0.3,
 } as const;
 
 /**
@@ -49,17 +49,77 @@ const THRESHOLDS = {
  * making them useless as discriminators between unrelated issues.
  */
 const STOPWORDS = new Set([
-  'issue', 'issues', 'problem', 'problems', 'error', 'errors',
-  'bug', 'bugs', 'working', 'work', 'works', 'slow', 'fast',
-  'please', 'need', 'needs', 'want', 'wants', 'would', 'could',
-  'should', 'like', 'also', 'when', 'with', 'that', 'this',
-  'have', 'from', 'they', 'been', 'more', 'than', 'just',
-  'able', 'user', 'users', 'page', 'time', 'times',
-  'still', 'does', 'doesnt', 'cant', 'wont', 'make', 'made',
-  'getting', 'keep', 'keeps', 'always', 'never',
-  'every', 'after', 'before', 'feature', 'features', 'button',
-  'click', 'screen', 'app', 'application', 'system', 'service',
-  'support', 'team', 'help', 'using', 'used', 'seem', 'seems',
+  'issue',
+  'issues',
+  'problem',
+  'problems',
+  'error',
+  'errors',
+  'bug',
+  'bugs',
+  'working',
+  'work',
+  'works',
+  'slow',
+  'fast',
+  'please',
+  'need',
+  'needs',
+  'want',
+  'wants',
+  'would',
+  'could',
+  'should',
+  'like',
+  'also',
+  'when',
+  'with',
+  'that',
+  'this',
+  'have',
+  'from',
+  'they',
+  'been',
+  'more',
+  'than',
+  'just',
+  'able',
+  'user',
+  'users',
+  'page',
+  'time',
+  'times',
+  'still',
+  'does',
+  'doesnt',
+  'cant',
+  'wont',
+  'make',
+  'made',
+  'getting',
+  'keep',
+  'keeps',
+  'always',
+  'never',
+  'every',
+  'after',
+  'before',
+  'feature',
+  'features',
+  'button',
+  'click',
+  'screen',
+  'app',
+  'application',
+  'system',
+  'service',
+  'support',
+  'team',
+  'help',
+  'using',
+  'used',
+  'seem',
+  'seems',
 ]);
 
 interface SimilarFeedbackRow {
@@ -136,7 +196,12 @@ export class DuplicateDetectionService {
     embedding: number[],
     threshold = 0.88,
   ): Promise<SimilarFeedbackRow[]> {
-    await this.generateSuggestions(workspaceId, feedbackId, embedding, threshold);
+    await this.generateSuggestions(
+      workspaceId,
+      feedbackId,
+      embedding,
+      threshold,
+    );
     const suggestions = await this.prisma.feedbackDuplicateSuggestion.findMany({
       where: { sourceId: feedbackId },
       select: {
@@ -175,12 +240,14 @@ export class DuplicateDetectionService {
     // Use a lower floor (EMBEDDING_CANDIDATE = 0.80) here and apply stricter
     // hybrid scoring below. This avoids discarding candidates that have strong
     // title overlap but slightly lower embedding similarity.
-    const candidates = await this.prisma.$queryRaw<Array<{
-      id: string;
-      title: string;
-      description: string;
-      similarity: number;
-    }>>`
+    const candidates = await this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        title: string;
+        description: string;
+        similarity: number;
+      }>
+    >`
       SELECT
         id,
         title,
@@ -209,7 +276,10 @@ export class DuplicateDetectionService {
       // Only persist EXACT_DUPLICATE and NEAR_DUPLICATE.
       // RELATED_SAME_THEME must NOT be shown as a duplicate suggestion.
       // This is the critical guardrail: theme similarity ≠ duplicate similarity.
-      if (result.matchType === 'NOT_DUPLICATE' || result.matchType === 'RELATED_SAME_THEME') {
+      if (
+        result.matchType === 'NOT_DUPLICATE' ||
+        result.matchType === 'RELATED_SAME_THEME'
+      ) {
         continue;
       }
 
@@ -259,7 +329,12 @@ export class DuplicateDetectionService {
         id: { not: feedbackId },
         status: { not: 'MERGED' },
       },
-      select: { id: true, title: true, description: true, normalizedText: true },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        normalizedText: true,
+      },
       orderBy: { createdAt: 'desc' },
       take: 300,
     });
@@ -269,7 +344,10 @@ export class DuplicateDetectionService {
       const candidateKeywords = this._extractKeywords(
         candidate.normalizedText ?? candidate.description,
       );
-      const keywordOverlap = this._jaccardOverlap(sourceKeywords, candidateKeywords);
+      const keywordOverlap = this._jaccardOverlap(
+        sourceKeywords,
+        candidateKeywords,
+      );
 
       // Raised from 0.35 → 0.55 to reduce false positives from generic complaint language
       if (keywordOverlap < THRESHOLDS.HEURISTIC_KEYWORD) {
@@ -277,7 +355,10 @@ export class DuplicateDetectionService {
       }
 
       const candidateTitleTokens = this._tokenize(candidate.title);
-      const titleOverlap = this._jaccardOverlap(sourceTitleTokens, candidateTitleTokens);
+      const titleOverlap = this._jaccardOverlap(
+        sourceTitleTokens,
+        candidateTitleTokens,
+      );
 
       // Require title overlap — prevents completely unrelated items from matching
       if (titleOverlap < THRESHOLDS.HEURISTIC_TITLE) {
@@ -285,15 +366,15 @@ export class DuplicateDetectionService {
       }
 
       // Heuristic hybrid score (no embedding available)
-      const hybridScore = keywordOverlap * 0.60 + titleOverlap * 0.40;
+      const hybridScore = keywordOverlap * 0.6 + titleOverlap * 0.4;
 
       let matchType: DuplicateMatchType;
       let matchReason: string;
 
-      if (hybridScore >= 0.85 && titleOverlap >= 0.70) {
+      if (hybridScore >= 0.85 && titleOverlap >= 0.7) {
         matchType = 'EXACT_DUPLICATE';
         matchReason = 'Same issue wording';
-      } else if (hybridScore >= 0.70 && titleOverlap >= 0.40) {
+      } else if (hybridScore >= 0.7 && titleOverlap >= 0.4) {
         matchType = 'NEAR_DUPLICATE';
         matchReason = 'Similar title and description';
       } else {
@@ -341,16 +422,17 @@ export class DuplicateDetectionService {
   ): HybridScoreResult {
     const sourceTitleTokens = this._tokenize(sourceTitle);
     const targetTitleTokens = this._tokenize(targetTitle);
-    const titleOverlap = this._jaccardOverlap(sourceTitleTokens, targetTitleTokens);
+    const titleOverlap = this._jaccardOverlap(
+      sourceTitleTokens,
+      targetTitleTokens,
+    );
 
     const sourceKeywords = this._extractKeywords(sourceDescription);
     const targetKeywords = this._extractKeywords(targetDescription);
     const keywordOverlap = this._jaccardOverlap(sourceKeywords, targetKeywords);
 
     const hybridScore =
-      embeddingSimilarity * 0.55 +
-      titleOverlap * 0.30 +
-      keywordOverlap * 0.15;
+      embeddingSimilarity * 0.55 + titleOverlap * 0.3 + keywordOverlap * 0.15;
 
     // Classification: BOTH hybrid score AND title overlap must meet thresholds.
     // This is the key guardrail: two items about "payment" and "dark mode" will
@@ -363,7 +445,12 @@ export class DuplicateDetectionService {
       return {
         hybridScore,
         matchType: 'EXACT_DUPLICATE',
-        matchReason: this._buildReason(titleOverlap, keywordOverlap, embeddingSimilarity, 'exact'),
+        matchReason: this._buildReason(
+          titleOverlap,
+          keywordOverlap,
+          embeddingSimilarity,
+          'exact',
+        ),
         titleOverlap,
         keywordOverlap,
       };
@@ -376,7 +463,12 @@ export class DuplicateDetectionService {
       return {
         hybridScore,
         matchType: 'NEAR_DUPLICATE',
-        matchReason: this._buildReason(titleOverlap, keywordOverlap, embeddingSimilarity, 'near'),
+        matchReason: this._buildReason(
+          titleOverlap,
+          keywordOverlap,
+          embeddingSimilarity,
+          'near',
+        ),
         titleOverlap,
         keywordOverlap,
       };
@@ -399,14 +491,14 @@ export class DuplicateDetectionService {
     level: 'exact' | 'near',
   ): string {
     const parts: string[] = [];
-    if (titleOverlap >= 0.80) {
+    if (titleOverlap >= 0.8) {
       parts.push('Nearly identical title');
-    } else if (titleOverlap >= 0.50) {
+    } else if (titleOverlap >= 0.5) {
       parts.push('Similar title');
     }
-    if (keywordOverlap >= 0.70) {
+    if (keywordOverlap >= 0.7) {
       parts.push('same issue wording');
-    } else if (keywordOverlap >= 0.40) {
+    } else if (keywordOverlap >= 0.4) {
       parts.push('similar description');
     }
     if (embeddingSimilarity >= 0.95) {
@@ -415,7 +507,9 @@ export class DuplicateDetectionService {
       parts.push('high semantic similarity');
     }
     if (parts.length === 0) {
-      return level === 'exact' ? 'Same issue wording' : 'Similar title and description';
+      return level === 'exact'
+        ? 'Same issue wording'
+        : 'Similar title and description';
     }
     return parts.join(' · ');
   }
@@ -427,9 +521,7 @@ export class DuplicateDetectionService {
    * Used for title overlap computation.
    */
   private _tokenize(text: string): Set<string> {
-    return new Set(
-      (text.toLowerCase().match(/\b[a-z]{3,}\b/g) ?? []),
-    );
+    return new Set(text.toLowerCase().match(/\b[a-z]{3,}\b/g) ?? []);
   }
 
   /**
@@ -466,7 +558,14 @@ export class DuplicateDetectionService {
     await this.prisma.feedbackDuplicateSuggestion.upsert({
       where: { sourceId_targetId: { sourceId, targetId } },
       update: { similarity, hybridScore, matchType, matchReason },
-      create: { sourceId, targetId, similarity, hybridScore, matchType, matchReason },
+      create: {
+        sourceId,
+        targetId,
+        similarity,
+        hybridScore,
+        matchType,
+        matchReason,
+      },
     });
   }
 }

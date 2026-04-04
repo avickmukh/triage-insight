@@ -13,15 +13,20 @@
  *   - For multi-instance deployments, replace with Redis-backed cache.
  */
 import { Injectable, Logger } from '@nestjs/common';
-import type { ThemePriorityItem, FeaturePriorityItem, RoadmapRecommendationItem, PrioritizationOpportunity } from './aggregation.service';
+import type {
+  ThemePriorityItem,
+  FeaturePriorityItem,
+  RoadmapRecommendationItem,
+  PrioritizationOpportunity,
+} from './aggregation.service';
 
 export interface PrioritizationCacheEntry {
-  themes:       ThemePriorityItem[];
-  features:     FeaturePriorityItem[];
-  roadmap:      RoadmapRecommendationItem[];
+  themes: ThemePriorityItem[];
+  features: FeaturePriorityItem[];
+  roadmap: RoadmapRecommendationItem[];
   opportunities: PrioritizationOpportunity[];
-  computedAt:   Date;
-  expiresAt:    Date;
+  computedAt: Date;
+  expiresAt: Date;
 }
 
 const TTL_MS = 5 * 60 * 1000; // 5 minutes
@@ -41,12 +46,17 @@ export class PrioritizationCacheService {
     return entry;
   }
 
-  set(workspaceId: string, data: Omit<PrioritizationCacheEntry, 'expiresAt'>): void {
+  set(
+    workspaceId: string,
+    data: Omit<PrioritizationCacheEntry, 'expiresAt'>,
+  ): void {
     this.cache.set(workspaceId, {
       ...data,
       expiresAt: new Date(Date.now() + TTL_MS),
     });
-    this.logger.debug(`Cache set for workspace ${workspaceId}, expires in ${TTL_MS / 1000}s`);
+    this.logger.debug(
+      `Cache set for workspace ${workspaceId}, expires in ${TTL_MS / 1000}s`,
+    );
   }
 
   invalidate(workspaceId: string): void {

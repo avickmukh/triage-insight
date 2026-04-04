@@ -53,16 +53,21 @@ export class SlackIngestionService {
     });
 
     if (!connection) {
-      this.logger.warn(`No Slack connection found for workspace ${workspaceId}`);
+      this.logger.warn(
+        `No Slack connection found for workspace ${workspaceId}`,
+      );
       return result;
     }
 
     const token = connection.accessToken;
     const metadata = (connection.metadata ?? {}) as Record<string, unknown>;
-    const selectedChannels = (metadata.channels as Array<{ id: string; name: string }>) ?? [];
+    const selectedChannels =
+      (metadata.channels as Array<{ id: string; name: string }>) ?? [];
 
     if (selectedChannels.length === 0) {
-      this.logger.log(`No channels configured for workspace ${workspaceId} — skipping`);
+      this.logger.log(
+        `No channels configured for workspace ${workspaceId} — skipping`,
+      );
       return result;
     }
 
@@ -96,20 +101,27 @@ export class SlackIngestionService {
                 msg.ts,
               );
               for (const reply of replies) {
-                const replyResult = await this.ingestMessage(workspaceId, reply);
+                const replyResult = await this.ingestMessage(
+                  workspaceId,
+                  reply,
+                );
                 if (replyResult === 'ingested') result.ingested++;
                 else if (replyResult === 'skipped') result.skipped++;
                 else result.errors++;
               }
             } catch (threadErr) {
-              this.logger.warn(`Failed to fetch thread ${msg.ts} in ${channel.name}: ${String(threadErr)}`);
+              this.logger.warn(
+                `Failed to fetch thread ${msg.ts} in ${channel.name}: ${String(threadErr)}`,
+              );
             }
           }
         }
 
         result.channelsSynced.push(channel.name);
       } catch (channelErr) {
-        this.logger.error(`Failed to ingest channel ${channel.name}: ${String(channelErr)}`);
+        this.logger.error(
+          `Failed to ingest channel ${channel.name}: ${String(channelErr)}`,
+        );
         result.errors++;
       }
     }
@@ -151,7 +163,8 @@ export class SlackIngestionService {
 
     // Build a title from the first line or first 80 chars
     const firstLine = text.split('\n')[0].trim();
-    const title = firstLine.length > 80 ? firstLine.slice(0, 77) + '…' : firstLine;
+    const title =
+      firstLine.length > 80 ? firstLine.slice(0, 77) + '…' : firstLine;
 
     // Build metadata for traceability
     const slackMetadata: Record<string, unknown> = {
@@ -163,7 +176,10 @@ export class SlackIngestionService {
       ...(msg.username ? { authorName: msg.username } : {}),
       ...(msg.reactions?.length
         ? {
-            reactions: msg.reactions.map((r) => ({ name: r.name, count: r.count })),
+            reactions: msg.reactions.map((r) => ({
+              name: r.name,
+              count: r.count,
+            })),
             reactionScore: msg.reactions.reduce((sum, r) => sum + r.count, 0),
           }
         : {}),
@@ -187,7 +203,9 @@ export class SlackIngestionService {
 
       // Queue for AI analysis (summarization, embedding, clustering)
       // workspaceId is required by AiAnalysisProcessor for tenant isolation
-      await this.analysisQueue.add({ feedbackId: feedback.id, workspaceId }).catch(() => {});
+      await this.analysisQueue
+        .add({ feedbackId: feedback.id, workspaceId })
+        .catch(() => {});
 
       // Queue for CIQ scoring — use 'type' not 'action' to match CiqJobPayload
       await this.ciqQueue
@@ -196,7 +214,9 @@ export class SlackIngestionService {
 
       return 'ingested';
     } catch (err) {
-      this.logger.error(`Failed to create feedback for ${sourceRef}: ${String(err)}`);
+      this.logger.error(
+        `Failed to create feedback for ${sourceRef}: ${String(err)}`,
+      );
       return 'error';
     }
   }

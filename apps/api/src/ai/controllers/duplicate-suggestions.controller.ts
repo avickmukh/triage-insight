@@ -52,7 +52,10 @@ export class DuplicateSuggestionsController {
     @Param('workspaceId') workspaceId: string,
     @Query() query: DuplicateSuggestionQueryDto,
   ) {
-    return this.duplicateSuggestionsService.listForWorkspace(workspaceId, query.status);
+    return this.duplicateSuggestionsService.listForWorkspace(
+      workspaceId,
+      query.status,
+    );
   }
 
   /**
@@ -85,7 +88,11 @@ export class DuplicateSuggestionsController {
     @Param('suggestionId') suggestionId: string,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.duplicateSuggestionsService.accept(workspaceId, suggestionId, req.user.sub);
+    return this.duplicateSuggestionsService.accept(
+      workspaceId,
+      suggestionId,
+      req.user.sub,
+    );
   }
 
   /**
@@ -100,6 +107,10 @@ export class DuplicateSuggestionsController {
     @Param('suggestionId') suggestionId: string,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.duplicateSuggestionsService.reject(workspaceId, suggestionId, req.user.sub);
+    return this.duplicateSuggestionsService.reject(
+      workspaceId,
+      suggestionId,
+      req.user.sub,
+    );
   }
 }

@@ -15,7 +15,14 @@ export class ThemeRepository {
   }
 
   async findMany(workspaceId: string, query: QueryThemeDto) {
-    const { page = 1, limit = 20, search, status, pinned, sortBy = ThemeSortBy.CREATED_AT } = query;
+    const {
+      page = 1,
+      limit = 20,
+      search,
+      status,
+      pinned,
+      sortBy = ThemeSortBy.CREATED_AT,
+    } = query;
     // When no status filter is provided, exclude PROVISIONAL and ARCHIVED themes from the
     // default list view. PROVISIONAL themes are draft clusters that have not yet reached
     // minimum support — they should not appear in the main dashboard until promoted to STABLE.
@@ -38,10 +45,13 @@ export class ThemeRepository {
     // Build orderBy: priorityScore sorts nulls last so unscored themes appear at bottom
     const orderBy: Prisma.ThemeOrderByWithRelationInput[] =
       sortBy === ThemeSortBy.PRIORITY_SCORE
-        ? [{ priorityScore: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }]
+        ? [
+            { priorityScore: { sort: 'desc', nulls: 'last' } },
+            { createdAt: 'desc' },
+          ]
         : sortBy === ThemeSortBy.UPDATED_AT
-        ? [{ updatedAt: 'desc' }]
-        : [{ createdAt: 'desc' }];
+          ? [{ updatedAt: 'desc' }]
+          : [{ createdAt: 'desc' }];
 
     const [data, total] = await this.prisma.$transaction([
       this.prisma.theme.findMany({
@@ -73,10 +83,10 @@ export class ThemeRepository {
           createdAt: true,
           updatedAt: true,
           // ── Unified cross-source signal counts (surfaced on list cards) ──────────────────────────────────
-          feedbackCount:    true,
-          voiceCount:       true,
-          supportCount:     true,
-          surveyCount:      true,
+          feedbackCount: true,
+          voiceCount: true,
+          supportCount: true,
+          surveyCount: true,
           totalSignalCount: true,
           _count: { select: { feedbacks: true } },
         },
@@ -87,7 +97,10 @@ export class ThemeRepository {
     return { data, total, page, limit };
   }
 
-  async create(workspaceId: string, data: Prisma.ThemeCreateWithoutWorkspaceInput) {
+  async create(
+    workspaceId: string,
+    data: Prisma.ThemeCreateWithoutWorkspaceInput,
+  ) {
     return this.prisma.theme.create({
       data: {
         ...data,

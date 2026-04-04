@@ -508,6 +508,9 @@ const apiClient = {
     /** GET /workspaces/:id/themes/:themeId/similar — returns similar themes for merge suggestion panel */
     getSimilarThemes: (workspaceId: string, themeId: string): Promise<import('./api-types').SimilarThemesResponse> =>
       api.get(`/workspaces/${workspaceId}/themes/${themeId}/similar`).then(handleResponse),
+    /** PATCH /workspaces/:id/themes/:themeId/archive — manually archive a theme with reason */
+    archiveTheme: (workspaceId: string, themeId: string, reason?: string): Promise<import('./api-types').Theme> =>
+      api.patch(`/workspaces/${workspaceId}/themes/${themeId}/archive`, { reason }).then(handleResponse),
   },
 
   roadmap: {

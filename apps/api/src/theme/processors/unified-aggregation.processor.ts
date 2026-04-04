@@ -14,7 +14,9 @@ import { UnifiedAggregationService } from '../services/unified-aggregation.servi
 
 export const UNIFIED_AGGREGATION_QUEUE = 'unified-aggregation';
 
-export type UnifiedAggregationJobType = 'AGGREGATE_THEME' | 'AGGREGATE_WORKSPACE';
+export type UnifiedAggregationJobType =
+  | 'AGGREGATE_THEME'
+  | 'AGGREGATE_WORKSPACE';
 
 export interface UnifiedAggregationJobPayload {
   type: UnifiedAggregationJobType;
@@ -34,7 +36,9 @@ export class UnifiedAggregationProcessor {
   @Process({ concurrency: 3 })
   async handle(job: Job<UnifiedAggregationJobPayload>): Promise<void> {
     const { type, workspaceId, themeId } = job.data;
-    this.logger.log(`[UnifiedAggregation] Processing job type=${type} workspace=${workspaceId} theme=${themeId ?? 'all'}`);
+    this.logger.log(
+      `[UnifiedAggregation] Processing job type=${type} workspace=${workspaceId} theme=${themeId ?? 'all'}`,
+    );
 
     if (type === 'AGGREGATE_THEME' && themeId) {
       await this.unifiedAggregationService.aggregateTheme(themeId);

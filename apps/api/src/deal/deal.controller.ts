@@ -43,10 +43,7 @@ export class DealController {
    */
   @Get(':id')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
-  findOne(
-    @Param('workspaceId') workspaceId: string,
-    @Param('id') id: string,
-  ) {
+  findOne(@Param('workspaceId') workspaceId: string, @Param('id') id: string) {
     return this.dealService.findOne(workspaceId, id);
   }
 
@@ -83,10 +80,7 @@ export class DealController {
   @Delete(':id')
   @Roles(WorkspaceRole.ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(
-    @Param('workspaceId') workspaceId: string,
-    @Param('id') id: string,
-  ) {
+  remove(@Param('workspaceId') workspaceId: string, @Param('id') id: string) {
     return this.dealService.remove(workspaceId, id);
   }
 

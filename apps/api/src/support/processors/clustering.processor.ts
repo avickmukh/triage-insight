@@ -50,7 +50,10 @@ export class ClusteringProcessor {
     // ── In-memory idempotency guard (5-minute dedup window) ─────────────────
     const lastRun = lastRunMap.get(workspaceId) ?? 0;
     if (Date.now() - lastRun < DEDUP_WINDOW_MS) {
-      this.logger.skip(ctx, `Clustering ran ${Math.round((Date.now() - lastRun) / 1000)}s ago — skipping`);
+      this.logger.skip(
+        ctx,
+        `Clustering ran ${Math.round((Date.now() - lastRun) / 1000)}s ago — skipping`,
+      );
       return;
     }
 
@@ -83,7 +86,10 @@ export class ClusteringProcessor {
               ),
             ),
           );
-          this.logger.debug(ctx, `Enqueued CIQ re-scoring for ${themeIds.length} themes after support clustering`);
+          this.logger.debug(
+            ctx,
+            `Enqueued CIQ re-scoring for ${themeIds.length} themes after support clustering`,
+          );
         }
       } catch (ciqErr) {
         // Non-fatal: log and continue — CIQ will be recomputed on next run
@@ -94,7 +100,12 @@ export class ClusteringProcessor {
       this.logger.complete({ ...ctx, durationMs });
     } catch (err) {
       const durationMs = Date.now() - startedAt;
-      this.logger.fail({ ...ctx, durationMs, failureReason: (err as Error).message, attempt: job.attemptsMade });
+      this.logger.fail({
+        ...ctx,
+        durationMs,
+        failureReason: (err as Error).message,
+        attempt: job.attemptsMade,
+      });
       throw err; // Re-throw so Bull retries
     }
   }

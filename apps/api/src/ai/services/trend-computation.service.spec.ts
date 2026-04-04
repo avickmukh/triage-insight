@@ -47,10 +47,12 @@ describe('TrendComputationService', () => {
 
   it('should compute UP trend when current week signals exceed previous week by > 10%', async () => {
     // 10 this week vs 6 last week → +67%
-    mockPrisma.theme.findMany.mockResolvedValue([{ id: 'theme-1', workspaceId: 'ws-1' }]);
+    mockPrisma.theme.findMany.mockResolvedValue([
+      { id: 'theme-1', workspaceId: 'ws-1' },
+    ]);
     mockPrisma.themeFeedback.count
-      .mockResolvedValueOnce(10)  // currentWeek
-      .mockResolvedValueOnce(6);  // prevWeek
+      .mockResolvedValueOnce(10) // currentWeek
+      .mockResolvedValueOnce(6); // prevWeek
     mockPrisma.theme.update.mockResolvedValue({});
 
     await service.computeWorkspaceTrends('ws-1');
@@ -72,9 +74,11 @@ describe('TrendComputationService', () => {
 
   it('should compute DOWN trend when current week signals are less than previous week by > 10%', async () => {
     // 4 this week vs 10 last week → -60%
-    mockPrisma.theme.findMany.mockResolvedValue([{ id: 'theme-1', workspaceId: 'ws-1' }]);
+    mockPrisma.theme.findMany.mockResolvedValue([
+      { id: 'theme-1', workspaceId: 'ws-1' },
+    ]);
     mockPrisma.themeFeedback.count
-      .mockResolvedValueOnce(4)   // currentWeek
+      .mockResolvedValueOnce(4) // currentWeek
       .mockResolvedValueOnce(10); // prevWeek
     mockPrisma.theme.update.mockResolvedValue({});
 
@@ -89,9 +93,11 @@ describe('TrendComputationService', () => {
 
   it('should compute STABLE trend when change is within ±10%', async () => {
     // 10 this week vs 10 last week → 0%
-    mockPrisma.theme.findMany.mockResolvedValue([{ id: 'theme-1', workspaceId: 'ws-1' }]);
+    mockPrisma.theme.findMany.mockResolvedValue([
+      { id: 'theme-1', workspaceId: 'ws-1' },
+    ]);
     mockPrisma.themeFeedback.count
-      .mockResolvedValueOnce(10)  // currentWeek
+      .mockResolvedValueOnce(10) // currentWeek
       .mockResolvedValueOnce(10); // prevWeek
     mockPrisma.theme.update.mockResolvedValue({});
 
@@ -104,9 +110,11 @@ describe('TrendComputationService', () => {
   // ── 4. Edge: prevWeek = 0 ───────────────────────────────────────────────────
 
   it('should handle prevWeek = 0 without division errors', async () => {
-    mockPrisma.theme.findMany.mockResolvedValue([{ id: 'theme-1', workspaceId: 'ws-1' }]);
+    mockPrisma.theme.findMany.mockResolvedValue([
+      { id: 'theme-1', workspaceId: 'ws-1' },
+    ]);
     mockPrisma.themeFeedback.count
-      .mockResolvedValueOnce(5)  // currentWeek
+      .mockResolvedValueOnce(5) // currentWeek
       .mockResolvedValueOnce(0); // prevWeek (no data)
     mockPrisma.theme.update.mockResolvedValue({});
 

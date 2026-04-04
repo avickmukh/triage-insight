@@ -1,4 +1,14 @@
-import { IsString, IsNotEmpty, IsOptional, IsEnum, IsBoolean, IsInt, IsUUID, Min, Max } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsEnum,
+  IsBoolean,
+  IsInt,
+  IsUUID,
+  Min,
+  Max,
+} from 'class-validator';
 import { RoadmapStatus } from '@prisma/client';
 
 export class CreateRoadmapItemDto {

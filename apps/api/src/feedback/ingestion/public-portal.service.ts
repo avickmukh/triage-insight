@@ -2,7 +2,11 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { FeedbackService } from '../feedback.service';
 import { PublicFeedbackDto } from '../dto/public-feedback.dto';
-import { FeedbackSourceType, FeedbackPrimarySource, FeedbackSecondarySource } from '@prisma/client';
+import {
+  FeedbackSourceType,
+  FeedbackPrimarySource,
+  FeedbackSecondarySource,
+} from '@prisma/client';
 
 @Injectable()
 export class PublicPortalService {
@@ -22,10 +26,10 @@ export class PublicPortalService {
 
     return this.feedbackService.create(workspace.id, {
       ...dto,
-      sourceType:      FeedbackSourceType.PUBLIC_PORTAL,
-      primarySource:   FeedbackPrimarySource.FEEDBACK,
+      sourceType: FeedbackSourceType.PUBLIC_PORTAL,
+      primarySource: FeedbackPrimarySource.FEEDBACK,
       secondarySource: FeedbackSecondarySource.PORTAL,
-      customerId:      dto.email, // Use email as customer identifier
+      customerId: dto.email, // Use email as customer identifier
     });
   }
 }

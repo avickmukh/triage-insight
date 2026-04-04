@@ -29,7 +29,11 @@ export class JobIdempotencyService {
   /**
    * Build a canonical dedup key for a job.
    */
-  static buildKey(jobType: string, entityId: string, workspaceId: string): string {
+  static buildKey(
+    jobType: string,
+    entityId: string,
+    workspaceId: string,
+  ): string {
     return `${jobType}:${entityId}:${workspaceId}`;
   }
 
@@ -43,7 +47,11 @@ export class JobIdempotencyService {
     workspaceId: string,
     ttlMs: number = DEFAULT_TTL_MS,
   ): Promise<boolean> {
-    const dedupeKey = JobIdempotencyService.buildKey(jobType, entityId, workspaceId);
+    const dedupeKey = JobIdempotencyService.buildKey(
+      jobType,
+      entityId,
+      workspaceId,
+    );
     const since = new Date(Date.now() - ttlMs);
 
     const existing = await this.prisma.aiJobLog.findFirst({
@@ -77,7 +85,11 @@ export class JobIdempotencyService {
     workspaceId: string,
     entityType?: string,
   ): Promise<string> {
-    const dedupeKey = JobIdempotencyService.buildKey(jobType, entityId, workspaceId);
+    const dedupeKey = JobIdempotencyService.buildKey(
+      jobType,
+      entityId,
+      workspaceId,
+    );
     const record = await this.prisma.aiJobLog.create({
       data: {
         workspaceId,
@@ -110,7 +122,11 @@ export class JobIdempotencyService {
    * Mark a job as failed in the idempotency store.
    * Failed jobs are NOT considered duplicates — they can be retried.
    */
-  async markFailed(logId: string, errorMessage: string, durationMs: number): Promise<void> {
+  async markFailed(
+    logId: string,
+    errorMessage: string,
+    durationMs: number,
+  ): Promise<void> {
     await this.prisma.aiJobLog.update({
       where: { id: logId },
       data: {
@@ -126,7 +142,12 @@ export class JobIdempotencyService {
    * Mark a job as dead-lettered (max retries exceeded).
    * Dead-lettered jobs are inspectable via the AiJobLog table.
    */
-  async markDeadLettered(logId: string, errorMessage: string, attempts: number, durationMs: number): Promise<void> {
+  async markDeadLettered(
+    logId: string,
+    errorMessage: string,
+    attempts: number,
+    durationMs: number,
+  ): Promise<void> {
     await this.prisma.aiJobLog.update({
       where: { id: logId },
       data: {

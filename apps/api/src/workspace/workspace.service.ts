@@ -40,13 +40,18 @@ export class WorkspaceService {
     return membership.workspace;
   }
 
-  async updateCurrentWorkspace(userId: string, updateWorkspaceDto: UpdateWorkspaceDto) {
+  async updateCurrentWorkspace(
+    userId: string,
+    updateWorkspaceDto: UpdateWorkspaceDto,
+  ) {
     const workspace = await this.getCurrentWorkspace(userId);
     const membership = await this.prisma.workspaceMember.findUnique({
       where: { userId_workspaceId: { userId, workspaceId: workspace.id } },
     });
     if (!membership || membership.role !== WorkspaceRole.ADMIN) {
-      throw new ForbiddenException('Only workspace admins can update workspace settings.');
+      throw new ForbiddenException(
+        'Only workspace admins can update workspace settings.',
+      );
     }
     return this.prisma.workspace.update({
       where: { id: workspace.id },
@@ -59,7 +64,13 @@ export class WorkspaceService {
       where: { workspaceId },
       include: {
         user: {
-          select: { id: true, email: true, firstName: true, lastName: true, status: true },
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            status: true,
+          },
         },
       },
       orderBy: { joinedAt: 'asc' },
@@ -87,13 +98,22 @@ export class WorkspaceService {
     await this.planLimit.assertCanAddMember(workspace.id, dto.role);
 
     // Check if user is already a member
-    const existingUser = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
     if (existingUser) {
       const alreadyMember = await this.prisma.workspaceMember.findUnique({
-        where: { userId_workspaceId: { userId: existingUser.id, workspaceId: workspace.id } },
+        where: {
+          userId_workspaceId: {
+            userId: existingUser.id,
+            workspaceId: workspace.id,
+          },
+        },
       });
       if (alreadyMember) {
-        throw new ConflictException('This user is already a member of the workspace.');
+        throw new ConflictException(
+          'This user is already a member of the workspace.',
+        );
       }
     }
 
@@ -103,7 +123,9 @@ export class WorkspaceService {
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
     await this.prisma.workspaceInvite.upsert({
-      where: { workspaceId_email: { workspaceId: workspace.id, email: dto.email } },
+      where: {
+        workspaceId_email: { workspaceId: workspace.id, email: dto.email },
+      },
       create: {
         workspaceId: workspace.id,
         email: dto.email,
@@ -145,47 +167,71 @@ export class WorkspaceService {
   async removeMember(adminUserId: string, targetUserId: string) {
     const workspace = await this.getCurrentWorkspace(adminUserId);
     const adminMembership = await this.prisma.workspaceMember.findUnique({
-      where: { userId_workspaceId: { userId: adminUserId, workspaceId: workspace.id } },
+      where: {
+        userId_workspaceId: { userId: adminUserId, workspaceId: workspace.id },
+      },
     });
     if (!adminMembership || adminMembership.role !== WorkspaceRole.ADMIN) {
       throw new ForbiddenException('Only workspace admins can remove members.');
     }
     if (adminUserId === targetUserId) {
-      throw new BadRequestException('You cannot remove yourself from the workspace.');
+      throw new BadRequestException(
+        'You cannot remove yourself from the workspace.',
+      );
     }
     const targetMembership = await this.prisma.workspaceMember.findUnique({
-      where: { userId_workspaceId: { userId: targetUserId, workspaceId: workspace.id } },
+      where: {
+        userId_workspaceId: { userId: targetUserId, workspaceId: workspace.id },
+      },
     });
     if (!targetMembership) {
       throw new NotFoundException('Member not found in this workspace.');
     }
     await this.prisma.workspaceMember.delete({
-      where: { userId_workspaceId: { userId: targetUserId, workspaceId: workspace.id } },
+      where: {
+        userId_workspaceId: { userId: targetUserId, workspaceId: workspace.id },
+      },
     });
     return { message: 'Member removed successfully.' };
   }
 
-  async updateMemberRole(adminUserId: string, targetUserId: string, dto: UpdateMemberRoleDto) {
+  async updateMemberRole(
+    adminUserId: string,
+    targetUserId: string,
+    dto: UpdateMemberRoleDto,
+  ) {
     const workspace = await this.getCurrentWorkspace(adminUserId);
     const adminMembership = await this.prisma.workspaceMember.findUnique({
-      where: { userId_workspaceId: { userId: adminUserId, workspaceId: workspace.id } },
+      where: {
+        userId_workspaceId: { userId: adminUserId, workspaceId: workspace.id },
+      },
     });
     if (!adminMembership || adminMembership.role !== WorkspaceRole.ADMIN) {
-      throw new ForbiddenException('Only workspace admins can change member roles.');
+      throw new ForbiddenException(
+        'Only workspace admins can change member roles.',
+      );
     }
     if (adminUserId === targetUserId) {
       throw new BadRequestException('You cannot change your own role.');
     }
     const targetMembership = await this.prisma.workspaceMember.findUnique({
-      where: { userId_workspaceId: { userId: targetUserId, workspaceId: workspace.id } },
+      where: {
+        userId_workspaceId: { userId: targetUserId, workspaceId: workspace.id },
+      },
     });
     if (!targetMembership) {
       throw new NotFoundException('Member not found in this workspace.');
     }
     return this.prisma.workspaceMember.update({
-      where: { userId_workspaceId: { userId: targetUserId, workspaceId: workspace.id } },
+      where: {
+        userId_workspaceId: { userId: targetUserId, workspaceId: workspace.id },
+      },
       data: { role: dto.role },
-      include: { user: { select: { id: true, email: true, firstName: true, lastName: true } } },
+      include: {
+        user: {
+          select: { id: true, email: true, firstName: true, lastName: true },
+        },
+      },
     });
   }
 
@@ -202,7 +248,11 @@ export class WorkspaceService {
   async getPendingInvites(userId: string) {
     const workspace = await this.getCurrentWorkspace(userId);
     return this.prisma.workspaceInvite.findMany({
-      where: { workspaceId: workspace.id, usedAt: null, expiresAt: { gt: new Date() } },
+      where: {
+        workspaceId: workspace.id,
+        usedAt: null,
+        expiresAt: { gt: new Date() },
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -210,7 +260,9 @@ export class WorkspaceService {
   async revokeInvite(adminUserId: string, inviteId: string) {
     const workspace = await this.getCurrentWorkspace(adminUserId);
     const adminMembership = await this.prisma.workspaceMember.findUnique({
-      where: { userId_workspaceId: { userId: adminUserId, workspaceId: workspace.id } },
+      where: {
+        userId_workspaceId: { userId: adminUserId, workspaceId: workspace.id },
+      },
     });
     if (!adminMembership || adminMembership.role !== WorkspaceRole.ADMIN) {
       throw new ForbiddenException('Only workspace admins can revoke invites.');
@@ -369,12 +421,16 @@ export class WorkspaceService {
       where: { userId_workspaceId: { userId, workspaceId: workspace.id } },
     });
     if (!membership || membership.role !== WorkspaceRole.ADMIN) {
-      throw new ForbiddenException('Only workspace admins can update portal settings.');
+      throw new ForbiddenException(
+        'Only workspace admins can update portal settings.',
+      );
     }
     const updated = await this.prisma.workspace.update({
       where: { id: workspace.id },
       data: {
-        ...(dto.portalVisibility !== undefined && { portalVisibility: dto.portalVisibility }),
+        ...(dto.portalVisibility !== undefined && {
+          portalVisibility: dto.portalVisibility,
+        }),
         ...(dto.name !== undefined && { name: dto.name }),
         ...(dto.description !== undefined && { description: dto.description }),
       },
@@ -395,7 +451,9 @@ export class WorkspaceService {
     const workspace = await this.getCurrentWorkspace(adminUserId);
 
     if (!workspace.customDomain) {
-      throw new BadRequestException('No custom domain is currently configured.');
+      throw new BadRequestException(
+        'No custom domain is currently configured.',
+      );
     }
 
     const updated = await this.prisma.workspace.update({

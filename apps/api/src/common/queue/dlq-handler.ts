@@ -45,14 +45,16 @@ export async function handleDlq(
     });
 
     if (idempotencyService && job.data.__logId) {
-      await idempotencyService.markDeadLettered(
-        job.data.__logId,
-        error.message,
-        job.attemptsMade,
-        durationMs,
-      ).catch(() => {
-        // Non-critical: log update failure should not throw
-      });
+      await idempotencyService
+        .markDeadLettered(
+          job.data.__logId,
+          error.message,
+          job.attemptsMade,
+          durationMs,
+        )
+        .catch(() => {
+          // Non-critical: log update failure should not throw
+        });
     }
   } else {
     // Not yet exhausted — log the failure and let Bull retry
@@ -64,13 +66,11 @@ export async function handleDlq(
     });
 
     if (idempotencyService && job.data.__logId) {
-      await idempotencyService.markFailed(
-        job.data.__logId,
-        error.message,
-        durationMs,
-      ).catch(() => {
-        // Non-critical
-      });
+      await idempotencyService
+        .markFailed(job.data.__logId, error.message, durationMs)
+        .catch(() => {
+          // Non-critical
+        });
     }
   }
 }

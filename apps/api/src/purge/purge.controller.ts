@@ -12,11 +12,17 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { PurgeService } from './purge.service';
-import { RequestWorkspaceDeletionDto, ApproveWorkspaceDeletionDto } from './dto/purge.dto';
+import {
+  RequestWorkspaceDeletionDto,
+  ApproveWorkspaceDeletionDto,
+} from './dto/purge.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../workspace/guards/roles.guard';
 import { Roles } from '../workspace/decorators/roles.decorator';
-import { PlatformRoleGuard, PlatformRoles } from '../auth/guards/platform-role.guard';
+import {
+  PlatformRoleGuard,
+  PlatformRoles,
+} from '../auth/guards/platform-role.guard';
 import { WorkspaceRole, PlatformRole } from '@prisma/client';
 
 // ─── Workspace-Admin Endpoints ───────────────────────────────────────────────
@@ -50,10 +56,7 @@ export class PurgeWorkspaceController {
    */
   @Delete('request/:requestId')
   @HttpCode(HttpStatus.OK)
-  async cancelDeletion(
-    @Param('requestId') requestId: string,
-    @Req() req: any,
-  ) {
+  async cancelDeletion(@Param('requestId') requestId: string, @Req() req: any) {
     return this.purgeService.cancelDeletion(requestId, req.user.sub);
   }
 
@@ -135,10 +138,7 @@ export class PurgePlatformController {
    */
   @Delete('requests/:requestId')
   @HttpCode(HttpStatus.OK)
-  async cancelDeletion(
-    @Param('requestId') requestId: string,
-    @Req() req: any,
-  ) {
+  async cancelDeletion(@Param('requestId') requestId: string, @Req() req: any) {
     return this.purgeService.cancelDeletion(requestId, req.user.sub);
   }
 }

@@ -10,11 +10,7 @@ import {
   IsIn,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import {
-  WorkspaceStatus,
-  BillingPlan,
-  BillingStatus,
-} from '@prisma/client';
+import { WorkspaceStatus, BillingPlan, BillingStatus } from '@prisma/client';
 
 export class UpdateWorkspaceStatusDto {
   @IsEnum(WorkspaceStatus)

@@ -47,8 +47,13 @@ export class TranscriptionService {
     });
 
     // When response_format is 'text', the SDK returns a plain string
-    const transcript = typeof response === 'string' ? response : (response as { text: string }).text;
-    this.logger.log(`Transcription complete. Length: ${transcript.length} chars`);
+    const transcript =
+      typeof response === 'string'
+        ? response
+        : (response as { text: string }).text;
+    this.logger.log(
+      `Transcription complete. Length: ${transcript.length} chars`,
+    );
     return transcript.trim();
   }
 }

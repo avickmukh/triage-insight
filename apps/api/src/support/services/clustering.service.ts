@@ -2,18 +2,135 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 const STOP_WORDS = new Set([
-  'a','an','the','and','or','but','in','on','at','to','for','of','with','by',
-  'from','is','it','its','was','are','were','be','been','being','have','has',
-  'had','do','does','did','will','would','could','should','may','might','shall',
-  'can','need','must','am','i','we','you','he','she','they','this','that','these',
-  'those','my','your','our','their','not','no','so','if','as','up','out','about',
-  'into','through','during','before','after','above','below','between','each',
-  'than','too','very','just','because','while','although','however','therefore',
-  'also','when','where','how','what','which','who','whom','all','any','both',
-  'few','more','most','other','some','such','only','own','same','than','then',
-  'there','here','again','further','once','get','got','getting','please','hi',
-  'hello','thanks','thank','dear','regards','sincerely','re','fwd','issue',
-  'problem','error','help','support','ticket','request','question',
+  'a',
+  'an',
+  'the',
+  'and',
+  'or',
+  'but',
+  'in',
+  'on',
+  'at',
+  'to',
+  'for',
+  'of',
+  'with',
+  'by',
+  'from',
+  'is',
+  'it',
+  'its',
+  'was',
+  'are',
+  'were',
+  'be',
+  'been',
+  'being',
+  'have',
+  'has',
+  'had',
+  'do',
+  'does',
+  'did',
+  'will',
+  'would',
+  'could',
+  'should',
+  'may',
+  'might',
+  'shall',
+  'can',
+  'need',
+  'must',
+  'am',
+  'i',
+  'we',
+  'you',
+  'he',
+  'she',
+  'they',
+  'this',
+  'that',
+  'these',
+  'those',
+  'my',
+  'your',
+  'our',
+  'their',
+  'not',
+  'no',
+  'so',
+  'if',
+  'as',
+  'up',
+  'out',
+  'about',
+  'into',
+  'through',
+  'during',
+  'before',
+  'after',
+  'above',
+  'below',
+  'between',
+  'each',
+  'than',
+  'too',
+  'very',
+  'just',
+  'because',
+  'while',
+  'although',
+  'however',
+  'therefore',
+  'also',
+  'when',
+  'where',
+  'how',
+  'what',
+  'which',
+  'who',
+  'whom',
+  'all',
+  'any',
+  'both',
+  'few',
+  'more',
+  'most',
+  'other',
+  'some',
+  'such',
+  'only',
+  'own',
+  'same',
+  'than',
+  'then',
+  'there',
+  'here',
+  'again',
+  'further',
+  'once',
+  'get',
+  'got',
+  'getting',
+  'please',
+  'hi',
+  'hello',
+  'thanks',
+  'thank',
+  'dear',
+  'regards',
+  'sincerely',
+  're',
+  'fwd',
+  'issue',
+  'problem',
+  'error',
+  'help',
+  'support',
+  'ticket',
+  'request',
+  'question',
 ]);
 
 function tokenize(text: string): string[] {
@@ -43,8 +160,13 @@ function computeTfIdf(docs: string[][]): Map<string, number>[] {
   });
 }
 
-function cosineSimilarity(a: Map<string, number>, b: Map<string, number>): number {
-  let dot = 0, normA = 0, normB = 0;
+function cosineSimilarity(
+  a: Map<string, number>,
+  b: Map<string, number>,
+): number {
+  let dot = 0,
+    normA = 0,
+    normB = 0;
   for (const [k, v] of a) {
     dot += v * (b.get(k) ?? 0);
     normA += v * v;
@@ -67,7 +189,9 @@ export class ClusteringService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async clusterTickets(workspaceId: string): Promise<{ clustersCreated: number; ticketsMapped: number }> {
+  async clusterTickets(
+    workspaceId: string,
+  ): Promise<{ clustersCreated: number; ticketsMapped: number }> {
     this.logger.log(`[Clustering] Starting for workspace ${workspaceId}`);
 
     const tickets = await this.prisma.supportTicket.findMany({
@@ -79,7 +203,9 @@ export class ClusteringService {
 
     if (tickets.length === 0) return { clustersCreated: 0, ticketsMapped: 0 };
 
-    const docs = tickets.map((t) => tokenize(`${t.subject} ${t.description ?? ''}`));
+    const docs = tickets.map((t) =>
+      tokenize(`${t.subject} ${t.description ?? ''}`),
+    );
     const vectors = computeTfIdf(docs);
 
     const THRESHOLD = 0.25;
@@ -91,16 +217,23 @@ export class ClusteringService {
       let bestSim = THRESHOLD;
       for (let c = 0; c < clusterCentroids.length; c++) {
         const sim = cosineSimilarity(vectors[i], clusterCentroids[c]);
-        if (sim > bestSim) { bestSim = sim; bestCluster = c; }
+        if (sim > bestSim) {
+          bestSim = sim;
+          bestCluster = c;
+        }
       }
       if (bestCluster === -1) {
         bestCluster = clusterCentroids.length;
         clusterCentroids.push(new Map(vectors[i]));
       } else {
         const centroid = clusterCentroids[bestCluster];
-        const clusterSize = clusterAssignments.filter((a) => a === bestCluster).length + 1;
+        const clusterSize =
+          clusterAssignments.filter((a) => a === bestCluster).length + 1;
         for (const [k, v] of vectors[i]) {
-          centroid.set(k, ((centroid.get(k) ?? 0) * (clusterSize - 1) + v) / clusterSize);
+          centroid.set(
+            k,
+            ((centroid.get(k) ?? 0) * (clusterSize - 1) + v) / clusterSize,
+          );
         }
       }
       clusterAssignments[i] = bestCluster;
@@ -113,8 +246,12 @@ export class ClusteringService {
       clusterGroups.get(c)!.push(i);
     }
 
-    await this.prisma.supportIssueClusterMap.deleteMany({ where: { cluster: { workspaceId } } });
-    await this.prisma.supportIssueCluster.deleteMany({ where: { workspaceId } });
+    await this.prisma.supportIssueClusterMap.deleteMany({
+      where: { cluster: { workspaceId } },
+    });
+    await this.prisma.supportIssueCluster.deleteMany({
+      where: { workspaceId },
+    });
 
     let clustersCreated = 0;
     let ticketsMapped = 0;
@@ -131,7 +268,13 @@ export class ClusteringService {
         _sum: { arrValue: true },
       });
       const cluster = await this.prisma.supportIssueCluster.create({
-        data: { workspaceId, title, description, ticketCount: ticketIndices.length, arrExposure: arrAgg._sum.arrValue ?? 0 },
+        data: {
+          workspaceId,
+          title,
+          description,
+          ticketCount: ticketIndices.length,
+          arrExposure: arrAgg._sum.arrValue ?? 0,
+        },
       });
       clustersCreated++;
       await this.prisma.supportIssueClusterMap.createMany({
@@ -144,11 +287,15 @@ export class ClusteringService {
       ticketsMapped += ticketIndices.length;
     }
 
-    this.logger.log(`[Clustering] Done: ${clustersCreated} clusters, ${ticketsMapped} tickets mapped`);
+    this.logger.log(
+      `[Clustering] Done: ${clustersCreated} clusters, ${ticketsMapped} tickets mapped`,
+    );
     return { clustersCreated, ticketsMapped };
   }
 
-  async correlateWithFeedback(workspaceId: string): Promise<{ linked: number }> {
+  async correlateWithFeedback(
+    workspaceId: string,
+  ): Promise<{ linked: number }> {
     this.logger.log(`[ThemeLinkage] Starting for workspace ${workspaceId}`);
     const [clusters, themes] = await Promise.all([
       this.prisma.supportIssueCluster.findMany({
@@ -177,7 +324,10 @@ export class ClusteringService {
       let bestSim = LINK_THRESHOLD;
       for (let j = 0; j < themes.length; j++) {
         const sim = cosineSimilarity(clusterVectors[i], themeVectors[j]);
-        if (sim > bestSim) { bestSim = sim; bestTheme = j; }
+        if (sim > bestSim) {
+          bestSim = sim;
+          bestTheme = j;
+        }
       }
       if (bestTheme !== -1) {
         await this.prisma.supportIssueCluster.update({

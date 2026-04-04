@@ -6,9 +6,7 @@ import { DigestController } from './digest.controller';
 // ConfigService is provided globally via ConfigModule.forRoot({ isGlobal: true }) in AppModule.
 // DigestService calls OpenAI directly — AiModule is no longer needed here.
 @Module({
-  imports: [
-    PrismaModule,
-  ],
+  imports: [PrismaModule],
   controllers: [DigestController],
   providers: [DigestService],
   exports: [DigestService],

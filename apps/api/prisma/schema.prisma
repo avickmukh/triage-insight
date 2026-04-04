@@ -282,6 +282,7 @@ enum AuditLogAction {
   THEME_UPDATE
   THEME_DELETE
   THEME_MERGE
+  THEME_ARCHIVE
   THEME_SPLIT
   THEME_FEEDBACK_ADD
   THEME_FEEDBACK_REMOVE
@@ -966,6 +967,17 @@ model Theme {
   /// Timestamp of the most recent evidence attachment (any source).
   /// Updated on every ThemeFeedback upsert so the theme list can be sorted by activity.
   lastEvidenceAt     DateTime?
+  // ─── Archive explainability metadata ────────────────────────────────────────────────────────────────────────────────────────
+  /// Human or AI label for why the theme was archived (e.g. 'Duplicate', 'Noise', 'Wrong clustering', 'Other')
+  archiveReason      String?
+  /// AI confidence in the archive decision (0–1); null for manual archives
+  archiveConfidence  Float?
+  /// Human-readable explanation of why the theme was archived (AI-generated or user-provided)
+  archiveExplanation String?
+  /// Who triggered the archive: 'AI' (auto-merge/pipeline) or 'MANUAL' (PM action)
+  archivedBy         String?
+  /// Timestamp of the archive action
+  archivedAt         DateTime?
 
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt

@@ -100,7 +100,10 @@ export class WorkspaceController {
     @Req() req: AuthenticatedRequest,
     @Body() updateWorkspaceDto: UpdateWorkspaceDto,
   ) {
-    return this.workspaceService.updateCurrentWorkspace(req.user.sub, updateWorkspaceDto);
+    return this.workspaceService.updateCurrentWorkspace(
+      req.user.sub,
+      updateWorkspaceDto,
+    );
   }
 
   /**
@@ -121,7 +124,10 @@ export class WorkspaceController {
   @Delete('current/invites/:inviteId')
   @UseGuards(RolesGuard)
   @Roles(WorkspaceRole.ADMIN)
-  revokeInvite(@Req() req: AuthenticatedRequest, @Param('inviteId') inviteId: string) {
+  revokeInvite(
+    @Req() req: AuthenticatedRequest,
+    @Param('inviteId') inviteId: string,
+  ) {
     return this.workspaceService.revokeInvite(req.user.sub, inviteId);
   }
 
@@ -132,7 +138,10 @@ export class WorkspaceController {
   @Delete('current/members/:userId')
   @UseGuards(RolesGuard)
   @Roles(WorkspaceRole.ADMIN)
-  removeMember(@Req() req: AuthenticatedRequest, @Param('userId') userId: string) {
+  removeMember(
+    @Req() req: AuthenticatedRequest,
+    @Param('userId') userId: string,
+  ) {
     return this.workspaceService.removeMember(req.user.sub, userId);
   }
 
@@ -197,10 +206,7 @@ export class WorkspaceController {
   @Put('current/domain')
   @UseGuards(RolesGuard)
   @Roles(WorkspaceRole.ADMIN)
-  setDomain(
-    @Req() req: AuthenticatedRequest,
-    @Body() dto: SetDomainDto,
-  ) {
+  setDomain(@Req() req: AuthenticatedRequest, @Body() dto: SetDomainDto) {
     return this.workspaceService.setDomain(req.user.sub, dto);
   }
 
@@ -244,8 +250,16 @@ export class WorkspaceController {
     @Query('action') action?: AuditLogAction,
     @Query('userId') userId?: string,
   ) {
-    return this.workspaceService.getCurrentWorkspace(req.user.sub).then((ws) =>
-      this.auditService.listWorkspaceAuditLogs(ws.id, page, limit, action, userId)
-    );
+    return this.workspaceService
+      .getCurrentWorkspace(req.user.sub)
+      .then((ws) =>
+        this.auditService.listWorkspaceAuditLogs(
+          ws.id,
+          page,
+          limit,
+          action,
+          userId,
+        ),
+      );
   }
 }

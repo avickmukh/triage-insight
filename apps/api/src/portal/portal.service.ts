@@ -7,14 +7,21 @@ import {
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
 import { PrismaService } from '../prisma/prisma.service';
-import { FeedbackStatus, FeedbackSourceType, WorkspaceStatus } from '@prisma/client';
+import {
+  FeedbackStatus,
+  FeedbackSourceType,
+  WorkspaceStatus,
+} from '@prisma/client';
 import { AI_ANALYSIS_QUEUE } from '../ai/processors/analysis.processor';
 import { VoiceService } from '../voice/services/voice.service';
 import { PortalCreateFeedbackDto } from './dto/portal-create-feedback.dto';
 import { PublicFeedbackQueryDto } from '../public/dto/public-feedback-query.dto';
 import { PublicVoteDto } from '../public/dto/public-vote.dto';
 import { PublicCommentDto } from '../public/dto/public-comment.dto';
-import { PortalVoicePresignedUrlDto, PortalFinalizeVoiceUploadDto } from './dto/portal-voice.dto';
+import {
+  PortalVoicePresignedUrlDto,
+  PortalFinalizeVoiceUploadDto,
+} from './dto/portal-voice.dto';
 import {
   PORTAL_SIGNAL_QUEUE,
   PORTAL_SIGNAL_JOB,
@@ -219,7 +226,10 @@ export class PortalService {
     try {
       await this.analysisQueue.add({ feedbackId: feedback.id });
     } catch (queueErr) {
-      console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+      console.warn(
+        '[Queue] Redis unavailable — job skipped:',
+        (queueErr as Error).message,
+      );
     }
 
     this.signalQueue
@@ -234,7 +244,9 @@ export class PortalService {
         },
         { attempts: 2, removeOnComplete: true },
       )
-      .catch(() => {/* non-critical */});
+      .catch(() => {
+        /* non-critical */
+      });
 
     return {
       ...feedback,
@@ -323,18 +335,16 @@ export class PortalService {
         },
         { attempts: 2, removeOnComplete: true },
       )
-      .catch(() => {/* non-critical */});
+      .catch(() => {
+        /* non-critical */
+      });
 
     return { ...vote, voteCount };
   }
 
   // ─── 6. Comment ───────────────────────────────────────────────────────────
 
-  async addComment(
-    orgSlug: string,
-    feedbackId: string,
-    dto: PublicCommentDto,
-  ) {
+  async addComment(orgSlug: string, feedbackId: string, dto: PublicCommentDto) {
     const workspace = await this.resolveWorkspace(orgSlug);
     await this.resolveFeedback(workspace.id, feedbackId);
 
@@ -379,21 +389,29 @@ export class PortalService {
         },
         { attempts: 2, removeOnComplete: true },
       )
-      .catch(() => {/* non-critical */});
+      .catch(() => {
+        /* non-critical */
+      });
 
     return comment;
   }
 
   // ─── 7. Voice Upload (Presigned URL) ──────────────────────────────────────
 
-  async createPublicPresignedUploadUrl(orgSlug: string, dto: PortalVoicePresignedUrlDto) {
+  async createPublicPresignedUploadUrl(
+    orgSlug: string,
+    dto: PortalVoicePresignedUrlDto,
+  ) {
     const workspace = await this.resolveWorkspace(orgSlug);
     return this.voiceService.createPresignedUploadUrl(workspace.id, dto);
   }
 
   // ─── 8. Voice Upload (Finalize) ───────────────────────────────────────────
 
-  async finalizePublicUpload(orgSlug: string, dto: PortalFinalizeVoiceUploadDto) {
+  async finalizePublicUpload(
+    orgSlug: string,
+    dto: PortalFinalizeVoiceUploadDto,
+  ) {
     const workspace = await this.resolveWorkspace(orgSlug);
     const portalUserId = await this.resolvePortalUser(
       workspace.id,

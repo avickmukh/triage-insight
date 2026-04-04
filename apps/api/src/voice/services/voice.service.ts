@@ -12,7 +12,11 @@ import {
 } from '../dto/voice.dto';
 import { AiJobStatus, AiJobType } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 export const VOICE_TRANSCRIPTION_QUEUE = 'voice-transcription';
@@ -33,7 +37,7 @@ export interface VoiceTranscriptionJobPayload {
 
 /** Allowed audio MIME types */
 const ALLOWED_AUDIO_TYPES = new Set([
-  'audio/mpeg',        // .mp3
+  'audio/mpeg', // .mp3
   'audio/mp3',
   'audio/wav',
   'audio/x-wav',
@@ -78,14 +82,20 @@ export class VoiceService {
       region: this.configService.get<string>('AWS_S3_REGION', 'us-east-1'),
       credentials: {
         accessKeyId: this.configService.get<string>('AWS_ACCESS_KEY_ID', ''),
-        secretAccessKey: this.configService.get<string>('AWS_SECRET_ACCESS_KEY', ''),
+        secretAccessKey: this.configService.get<string>(
+          'AWS_SECRET_ACCESS_KEY',
+          '',
+        ),
       },
     });
   }
 
   // ─── Presigned PUT URL ─────────────────────────────────────────────────────
 
-  async createPresignedUploadUrl(workspaceId: string, dto: VoicePresignedUrlDto) {
+  async createPresignedUploadUrl(
+    workspaceId: string,
+    dto: VoicePresignedUrlDto,
+  ) {
     // Accept both mimeType and contentType for backwards-compat
     const mimeType = dto.mimeType ?? dto.contentType ?? 'audio/mpeg';
     const { fileName, sizeBytes } = dto;
@@ -103,7 +113,9 @@ export class VoiceService {
       ContentType: mimeType,
       ContentLength: sizeBytes,
     });
-    const signedUrl = await getSignedUrl(this.s3Client, command, { expiresIn: 3600 });
+    const signedUrl = await getSignedUrl(this.s3Client, command, {
+      expiresIn: 3600,
+    });
 
     return { signedUrl, key, bucket: this.bucket };
   }
@@ -113,7 +125,17 @@ export class VoiceService {
   async finalizeUpload(workspaceId: string, dto: FinalizeVoiceUploadDto) {
     // Accept both mimeType and contentType for backwards-compat
     const mimeType = dto.mimeType ?? dto.contentType ?? 'audio/mpeg';
-    const { s3Key, fileName, sizeBytes, label, customerId, dealId, portalUserId, submittedText, anonymousId } = dto;
+    const {
+      s3Key,
+      fileName,
+      sizeBytes,
+      label,
+      customerId,
+      dealId,
+      portalUserId,
+      submittedText,
+      anonymousId,
+    } = dto;
     const s3Bucket = dto.s3Bucket ?? this.bucket;
 
     // 1. Create UploadAsset record
@@ -139,7 +161,16 @@ export class VoiceService {
         status: AiJobStatus.QUEUED,
         entityType: 'UploadAsset',
         entityId: uploadAsset.id,
-        input: { s3Key, fileName, mimeType, sizeBytes, label, portalUserId, submittedText, anonymousId },
+        input: {
+          s3Key,
+          fileName,
+          mimeType,
+          sizeBytes,
+          label,
+          portalUserId,
+          submittedText,
+          anonymousId,
+        },
       },
     });
 
@@ -225,13 +256,23 @@ export class VoiceService {
       },
     );
 
-    this.logger.log(`Reprocess enqueued: asset=${asset.id}, newJob=${aiJobLog.id}`);
-    return { uploadAssetId: asset.id, aiJobLogId: aiJobLog.id, status: AiJobStatus.QUEUED };
+    this.logger.log(
+      `Reprocess enqueued: asset=${asset.id}, newJob=${aiJobLog.id}`,
+    );
+    return {
+      uploadAssetId: asset.id,
+      aiJobLogId: aiJobLog.id,
+      status: AiJobStatus.QUEUED,
+    };
   }
 
   // ─── Link a voice upload to a theme ───────────────────────────────────────
 
-  async linkTheme(workspaceId: string, uploadAssetId: string, dto: LinkVoiceThemeDto) {
+  async linkTheme(
+    workspaceId: string,
+    uploadAssetId: string,
+    dto: LinkVoiceThemeDto,
+  ) {
     const { themeId } = dto;
     const asset = await this.prisma.uploadAsset.findFirst({
       where: { id: uploadAssetId, workspaceId },
@@ -240,7 +281,10 @@ export class VoiceService {
 
     // Find the feedback created from this upload and link it to the theme
     const feedback = await this.prisma.feedback.findFirst({
-      where: { workspaceId, metadata: { path: ['uploadAssetId'], equals: asset.id } },
+      where: {
+        workspaceId,
+        metadata: { path: ['uploadAssetId'], equals: asset.id },
+      },
     });
 
     if (feedback) {
@@ -257,7 +301,11 @@ export class VoiceService {
 
   // ─── Link a voice upload to a customer ────────────────────────────────────
 
-  async linkCustomer(workspaceId: string, uploadAssetId: string, dto: LinkVoiceCustomerDto) {
+  async linkCustomer(
+    workspaceId: string,
+    uploadAssetId: string,
+    dto: LinkVoiceCustomerDto,
+  ) {
     const { customerId } = dto;
     const asset = await this.prisma.uploadAsset.findFirst({
       where: { id: uploadAssetId, workspaceId },
@@ -271,7 +319,10 @@ export class VoiceService {
 
     // Also link the generated feedback to the customer
     const feedback = await this.prisma.feedback.findFirst({
-      where: { workspaceId, metadata: { path: ['uploadAssetId'], equals: asset.id } },
+      where: {
+        workspaceId,
+        metadata: { path: ['uploadAssetId'], equals: asset.id },
+      },
     });
     if (feedback) {
       await this.prisma.feedback.update({
@@ -296,8 +347,18 @@ export class VoiceService {
         skip,
         take: limit,
         include: {
-          customer: { select: { id: true, name: true, companyName: true, arrValue: true, churnRisk: true } },
-          deal: { select: { id: true, title: true, stage: true, annualValue: true } },
+          customer: {
+            select: {
+              id: true,
+              name: true,
+              companyName: true,
+              arrValue: true,
+              churnRisk: true,
+            },
+          },
+          deal: {
+            select: { id: true, title: true, stage: true, annualValue: true },
+          },
         },
       }),
     ]);
@@ -322,7 +383,13 @@ export class VoiceService {
                 workspaceId,
                 metadata: { path: ['uploadAssetId'], equals: asset.id },
               },
-              select: { id: true, title: true, status: true, sentiment: true, impactScore: true },
+              select: {
+                id: true,
+                title: true,
+                status: true,
+                sentiment: true,
+                impactScore: true,
+              },
             })
           : null;
 
@@ -339,7 +406,8 @@ export class VoiceService {
             })
           : null;
 
-        const extractionOutput = extractionJob?.output as ExtractionOutput | null;
+        const extractionOutput =
+          extractionJob?.output as ExtractionOutput | null;
 
         return {
           ...asset,
@@ -375,8 +443,25 @@ export class VoiceService {
     const asset = await this.prisma.uploadAsset.findFirst({
       where: { id: uploadAssetId, workspaceId },
       include: {
-          customer: { select: { id: true, name: true, companyName: true, arrValue: true, churnRisk: true, lifecycleStage: true } },
-          deal: { select: { id: true, title: true, stage: true, annualValue: true, expectedCloseDate: true } },
+        customer: {
+          select: {
+            id: true,
+            name: true,
+            companyName: true,
+            arrValue: true,
+            churnRisk: true,
+            lifecycleStage: true,
+          },
+        },
+        deal: {
+          select: {
+            id: true,
+            title: true,
+            stage: true,
+            annualValue: true,
+            expectedCloseDate: true,
+          },
+        },
       },
     });
     if (!asset) return null;
@@ -449,7 +534,9 @@ export class VoiceService {
       // Transcription state
       jobStatus: transcriptionJob?.status ?? null,
       jobId: transcriptionJob?.id ?? null,
-      transcript: (transcriptionJob?.output as { transcript?: string } | null)?.transcript ?? null,
+      transcript:
+        (transcriptionJob?.output as { transcript?: string } | null)
+          ?.transcript ?? null,
       error: transcriptionJob?.error ?? extractionJob?.error ?? null,
       // Feedback linkage
       feedback: feedback

@@ -72,26 +72,26 @@ const BATCH_SIZE = 100;
 
 /** Map legacy FeedbackSourceType → FeedbackPrimarySource for Gap-B backfill. */
 const SOURCE_TYPE_TO_PRIMARY: Partial<Record<string, FeedbackPrimarySource>> = {
-  VOICE:         FeedbackPrimarySource.VOICE,
+  VOICE: FeedbackPrimarySource.VOICE,
   PUBLIC_PORTAL: FeedbackPrimarySource.VOICE,
-  SURVEY:        FeedbackPrimarySource.SURVEY,
-  SUPPORT:       FeedbackPrimarySource.SUPPORT,
-  MANUAL:        FeedbackPrimarySource.FEEDBACK,
-  CSV_UPLOAD:    FeedbackPrimarySource.FEEDBACK,
-  EMAIL:         FeedbackPrimarySource.FEEDBACK,
-  SLACK:         FeedbackPrimarySource.FEEDBACK,
-  API:           FeedbackPrimarySource.FEEDBACK,
-  PORTAL:        FeedbackPrimarySource.FEEDBACK,
-  INTERCOM:      FeedbackPrimarySource.FEEDBACK,
-  ZENDESK:       FeedbackPrimarySource.SUPPORT,
+  SURVEY: FeedbackPrimarySource.SURVEY,
+  SUPPORT: FeedbackPrimarySource.SUPPORT,
+  MANUAL: FeedbackPrimarySource.FEEDBACK,
+  CSV_UPLOAD: FeedbackPrimarySource.FEEDBACK,
+  EMAIL: FeedbackPrimarySource.FEEDBACK,
+  SLACK: FeedbackPrimarySource.FEEDBACK,
+  API: FeedbackPrimarySource.FEEDBACK,
+  PORTAL: FeedbackPrimarySource.FEEDBACK,
+  INTERCOM: FeedbackPrimarySource.FEEDBACK,
+  ZENDESK: FeedbackPrimarySource.SUPPORT,
 };
 
 export interface BackfillResult {
-  textFeedbackCreated:   number;
-  textFeedbackSkipped:   number;
-  primarySourcePatched:  number;
-  ciqReScoreEnqueued:    number;
-  errors:                string[];
+  textFeedbackCreated: number;
+  textFeedbackSkipped: number;
+  primarySourcePatched: number;
+  ciqReScoreEnqueued: number;
+  errors: string[];
 }
 
 @Injectable()
@@ -107,11 +107,11 @@ export class SurveyBackfillService {
 
   async run(workspaceId?: string): Promise<BackfillResult> {
     const result: BackfillResult = {
-      textFeedbackCreated:  0,
-      textFeedbackSkipped:  0,
+      textFeedbackCreated: 0,
+      textFeedbackSkipped: 0,
       primarySourcePatched: 0,
-      ciqReScoreEnqueued:   0,
-      errors:               [],
+      ciqReScoreEnqueued: 0,
+      errors: [],
     };
 
     this.logger.log('=== SurveyBackfillService starting ===');
@@ -160,7 +160,9 @@ export class SurveyBackfillService {
       },
     });
 
-    this.logger.log(`Found ${surveys.length} surveys with convertToFeedback=true`);
+    this.logger.log(
+      `Found ${surveys.length} surveys with convertToFeedback=true`,
+    );
 
     for (const survey of surveys) {
       try {
@@ -261,27 +263,27 @@ export class SurveyBackfillService {
         try {
           const fb = await this.prisma.feedback.create({
             data: {
-              workspaceId:     survey.workspaceId,
-              sourceType:      FeedbackSourceType.SURVEY,
-              primarySource:   FeedbackPrimarySource.SURVEY,
+              workspaceId: survey.workspaceId,
+              sourceType: FeedbackSourceType.SURVEY,
+              primarySource: FeedbackPrimarySource.SURVEY,
               secondarySource: FeedbackSecondarySource.PORTAL,
               sourceRef,
-              title:           question.label,
-              description:     text,
-              rawText:         text,
-              normalizedText:  text.toLowerCase(),
-              status:          FeedbackStatus.NEW,
-              portalUserId:    answer.response.portalUserId ?? undefined,
+              title: question.label,
+              description: text,
+              rawText: text,
+              normalizedText: text.toLowerCase(),
+              status: FeedbackStatus.NEW,
+              portalUserId: answer.response.portalUserId ?? undefined,
               metadata: {
-                surveyId:        survey.id,
-                surveyTitle:     survey.title,
-                responseId:      answer.response.id,
-                questionId:      answer.questionId,
-                questionText:    question.label,
-                questionType:    question.type,
+                surveyId: survey.id,
+                surveyTitle: survey.title,
+                responseId: answer.response.id,
+                questionId: answer.questionId,
+                questionText: question.label,
+                questionType: question.type,
                 respondentEmail: answer.response.respondentEmail ?? null,
-                respondentName:  answer.response.respondentName ?? null,
-                backfilled:      true,
+                respondentName: answer.response.respondentName ?? null,
+                backfilled: true,
               },
             },
           });
@@ -308,7 +310,7 @@ export class SurveyBackfillService {
           result.textFeedbackCreated++;
           this.logger.log(
             `[Backfill] Created Feedback ${fb.id} for survey ${survey.id} ` +
-            `response ${resp.id} question ${answer.questionId}`,
+              `response ${resp.id} question ${answer.questionId}`,
           );
         } catch (err) {
           const msg = `Failed to backfill answer ${answer.id}: ${(err as Error).message}`;
@@ -332,7 +334,9 @@ export class SurveyBackfillService {
     workspaceId: string | undefined,
     result: BackfillResult,
   ): Promise<void> {
-    this.logger.log('[Step 2] Backfilling legacy Feedback.primarySource=null rows');
+    this.logger.log(
+      '[Step 2] Backfilling legacy Feedback.primarySource=null rows',
+    );
 
     let cursor: string | undefined;
     for (;;) {
@@ -351,7 +355,9 @@ export class SurveyBackfillService {
       cursor = rows[rows.length - 1].id;
 
       for (const row of rows) {
-        const primary = SOURCE_TYPE_TO_PRIMARY[row.sourceType ?? ''] ?? FeedbackPrimarySource.FEEDBACK;
+        const primary =
+          SOURCE_TYPE_TO_PRIMARY[row.sourceType ?? ''] ??
+          FeedbackPrimarySource.FEEDBACK;
         try {
           await this.prisma.feedback.update({
             where: { id: row.id },
@@ -368,7 +374,9 @@ export class SurveyBackfillService {
       if (rows.length < BATCH_SIZE) break;
     }
 
-    this.logger.log(`[Step 2] Patched ${result.primarySourcePatched} legacy Feedback rows`);
+    this.logger.log(
+      `[Step 2] Patched ${result.primarySourcePatched} legacy Feedback rows`,
+    );
   }
 
   // ─── Step 3: Enqueue stale CIQ re-scores ─────────────────────────────────
@@ -392,7 +400,7 @@ export class SurveyBackfillService {
     // a direct Bull connection.  The queue name is the only thing we need.
     // NOTE: In production, prefer injecting the queue via NestJS DI.
     // This fallback uses the same Redis connection string as the rest of the app.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+
     const Bull = require('bull');
     const ciqQueue = new Bull(CIQ_SCORING_QUEUE, {
       redis: process.env.REDIS_URL ?? 'redis://localhost:6379',
@@ -404,10 +412,7 @@ export class SurveyBackfillService {
         const themes = await this.prisma.theme.findMany({
           where: {
             status: { not: 'ARCHIVED' },
-            OR: [
-              { lastScoredAt: null },
-              { surveyCount: null },
-            ],
+            OR: [{ lastScoredAt: null }, { surveyCount: null }],
             ...(workspaceId ? { workspaceId } : {}),
           },
           select: { id: true, workspaceId: true },
@@ -422,7 +427,11 @@ export class SurveyBackfillService {
         for (const theme of themes) {
           try {
             await ciqQueue.add(
-              { type: 'THEME_SCORED', workspaceId: theme.workspaceId, themeId: theme.id },
+              {
+                type: 'THEME_SCORED',
+                workspaceId: theme.workspaceId,
+                themeId: theme.id,
+              },
               RetryPolicy.light(),
             );
             result.ciqReScoreEnqueued++;
@@ -439,6 +448,8 @@ export class SurveyBackfillService {
       await ciqQueue.close();
     }
 
-    this.logger.log(`[Step 3] Enqueued ${result.ciqReScoreEnqueued} CIQ re-score jobs`);
+    this.logger.log(
+      `[Step 3] Enqueued ${result.ciqReScoreEnqueued} CIQ re-score jobs`,
+    );
   }
 }

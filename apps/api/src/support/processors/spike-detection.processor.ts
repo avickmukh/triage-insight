@@ -30,13 +30,20 @@ export class SpikeDetectionProcessor {
   @Process()
   async handleSpikeDetection(job: Job<SpikeDetectionJobData>) {
     const { workspaceId } = job.data;
-    const ctx = { jobType: 'SUPPORT_SPIKE_DETECTION', workspaceId, jobId: job.id };
+    const ctx = {
+      jobType: 'SUPPORT_SPIKE_DETECTION',
+      workspaceId,
+      jobId: job.id,
+    };
     const startedAt = Date.now();
 
     // ── In-memory idempotency guard ──────────────────────────────────────────
     const lastRun = lastRunMap.get(workspaceId) ?? 0;
     if (Date.now() - lastRun < DEDUP_WINDOW_MS) {
-      this.logger.skip(ctx, `Spike detection ran ${Math.round((Date.now() - lastRun) / 1000)}s ago — skipping`);
+      this.logger.skip(
+        ctx,
+        `Spike detection ran ${Math.round((Date.now() - lastRun) / 1000)}s ago — skipping`,
+      );
       return;
     }
 
@@ -48,7 +55,12 @@ export class SpikeDetectionProcessor {
       this.logger.complete({ ...ctx, durationMs });
     } catch (err) {
       const durationMs = Date.now() - startedAt;
-      this.logger.fail({ ...ctx, durationMs, failureReason: (err as Error).message, attempt: job.attemptsMade });
+      this.logger.fail({
+        ...ctx,
+        durationMs,
+        failureReason: (err as Error).message,
+        attempt: job.attemptsMade,
+      });
       throw err; // Re-throw so Bull retries
     }
   }

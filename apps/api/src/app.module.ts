@@ -1,4 +1,3 @@
-
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
@@ -36,7 +35,7 @@ import { SchedulerModule } from './scheduler/scheduler.module';
 import { validationSchema } from './config/validation';
 
 /** Resolve .env relative to this file so CWD does not matter */
-const API_ENV_PATH  = path.resolve(__dirname, '../.env');
+const API_ENV_PATH = path.resolve(__dirname, '../.env');
 const ROOT_ENV_PATH = path.resolve(__dirname, '../../.env');
 
 @Module({

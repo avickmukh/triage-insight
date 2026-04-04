@@ -98,7 +98,7 @@ export interface CiqScoreOutput {
    * Indicates whether the score was computed in signal-only mode (no CRM data)
    * or in full mode (ARR + deal pipeline + customer data contributed).
    */
-   scoringMode?: 'signal-only' | 'full';
+  scoringMode?: 'signal-only' | 'full';
   /** 7-class friction taxonomy for this theme */
   frictionClass?: FrictionClass;
   /** Priority band derived from score: low | medium | high | critical */
@@ -173,19 +173,19 @@ export interface CiqFeedbackScore {
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
 const ACCOUNT_PRIORITY_MAP: Record<AccountPriority, number> = {
-  [AccountPriority.LOW]:      1,
-  [AccountPriority.MEDIUM]:   2,
-  [AccountPriority.HIGH]:     3,
+  [AccountPriority.LOW]: 1,
+  [AccountPriority.MEDIUM]: 2,
+  [AccountPriority.HIGH]: 3,
   [AccountPriority.CRITICAL]: 4,
 };
 
 /** Map DealStage to a multiplier (mirrors PrioritizationSettings stage weights) */
 const DEAL_STAGE_WEIGHT: Record<DealStage, number> = {
   [DealStage.PROSPECTING]: 0.1,
-  [DealStage.QUALIFYING]:  0.3,
-  [DealStage.PROPOSAL]:    0.6,
+  [DealStage.QUALIFYING]: 0.3,
+  [DealStage.PROPOSAL]: 0.6,
   [DealStage.NEGOTIATION]: 0.8,
-  [DealStage.CLOSED_WON]:  1.0,
+  [DealStage.CLOSED_WON]: 1.0,
   [DealStage.CLOSED_LOST]: 0.0,
 };
 
@@ -195,9 +195,7 @@ const VOICE_SOURCE_TYPES: FeedbackSourceType[] = [
   FeedbackSourceType.PUBLIC_PORTAL,
 ];
 /** Survey source type — feedback from SURVEY channel is counted separately */
-const SURVEY_SOURCE_TYPES: FeedbackSourceType[] = [
-  FeedbackSourceType.SURVEY,
-];
+const SURVEY_SOURCE_TYPES: FeedbackSourceType[] = [FeedbackSourceType.SURVEY];
 
 /**
  * Determine the effective source category for a feedback row.
@@ -205,15 +203,18 @@ const SURVEY_SOURCE_TYPES: FeedbackSourceType[] = [
  * Uses `primarySource` (unified attribution) as the authoritative classifier
  * when present. Falls back to legacy `sourceType` for pre-migration rows.
  */
-function effectiveSourceCategory(
-  row: { primarySource: FeedbackPrimarySource | null; sourceType: string },
-): 'voice' | 'survey' | 'support' | 'feedback' {
-  if (row.primarySource === FeedbackPrimarySource.VOICE)    return 'voice';
-  if (row.primarySource === FeedbackPrimarySource.SURVEY)   return 'survey';
-  if (row.primarySource === FeedbackPrimarySource.SUPPORT)  return 'support';
+function effectiveSourceCategory(row: {
+  primarySource: FeedbackPrimarySource | null;
+  sourceType: string;
+}): 'voice' | 'survey' | 'support' | 'feedback' {
+  if (row.primarySource === FeedbackPrimarySource.VOICE) return 'voice';
+  if (row.primarySource === FeedbackPrimarySource.SURVEY) return 'survey';
+  if (row.primarySource === FeedbackPrimarySource.SUPPORT) return 'support';
   if (row.primarySource === FeedbackPrimarySource.FEEDBACK) return 'feedback';
-  if (VOICE_SOURCE_TYPES.includes(row.sourceType as FeedbackSourceType))  return 'voice';
-  if (SURVEY_SOURCE_TYPES.includes(row.sourceType as FeedbackSourceType)) return 'survey';
+  if (VOICE_SOURCE_TYPES.includes(row.sourceType as FeedbackSourceType))
+    return 'voice';
+  if (SURVEY_SOURCE_TYPES.includes(row.sourceType as FeedbackSourceType))
+    return 'survey';
   return 'feedback';
 }
 
@@ -252,9 +253,9 @@ function deriveConfidence(
 ): number {
   const raw =
     feedbackCount * 0.04 +
-    voiceCount    * 0.06 +
-    supportCount  * 0.05 +
-    signalCount   * 0.08 +
+    voiceCount * 0.06 +
+    supportCount * 0.05 +
+    signalCount * 0.08 +
     customerCount * 0.03;
   return parseFloat(Math.min(1, raw).toFixed(3));
 }
@@ -269,22 +270,63 @@ function deriveConfidence(
  *   LOW      (0.25): would be nice, suggestion, idea, improvement, feature request
  */
 const SEVERITY_CRITICAL = [
-  'crash', 'data loss', 'security', 'outage', 'broken', 'blocker', 'urgent',
-  'critical', "can't", 'cannot', 'down', 'unavailable', 'corrupted', 'lost data',
-  'not loading', 'stuck', 'blocked',
+  'crash',
+  'data loss',
+  'security',
+  'outage',
+  'broken',
+  'blocker',
+  'urgent',
+  'critical',
+  "can't",
+  'cannot',
+  'down',
+  'unavailable',
+  'corrupted',
+  'lost data',
+  'not loading',
+  'stuck',
+  'blocked',
 ];
 const SEVERITY_HIGH = [
-  'slow', 'error', 'fail', 'failed', 'bug', 'missing', 'wrong', 'issue',
-  'problem', 'not working', 'doesn\'t work', 'does not work', 'broken',
-  'incorrect', 'unexpected', 'exception',
+  'slow',
+  'error',
+  'fail',
+  'failed',
+  'bug',
+  'missing',
+  'wrong',
+  'issue',
+  'problem',
+  'not working',
+  "doesn't work",
+  'does not work',
+  'broken',
+  'incorrect',
+  'unexpected',
+  'exception',
 ];
 const SEVERITY_MEDIUM = [
-  'difficult', 'confusing', 'annoying', 'frustrating', 'unclear', 'hard to',
-  'takes too long', 'inefficient', 'clunky', 'awkward',
+  'difficult',
+  'confusing',
+  'annoying',
+  'frustrating',
+  'unclear',
+  'hard to',
+  'takes too long',
+  'inefficient',
+  'clunky',
+  'awkward',
 ];
 const SEVERITY_LOW = [
-  'would be nice', 'suggestion', 'idea', 'improvement', 'feature request',
-  'could be better', 'nice to have', 'consider adding',
+  'would be nice',
+  'suggestion',
+  'idea',
+  'improvement',
+  'feature request',
+  'could be better',
+  'nice to have',
+  'consider adding',
 ];
 
 /**
@@ -294,9 +336,9 @@ const SEVERITY_LOW = [
 function computeSeverityScore(texts: string[]): number {
   const combined = texts.join(' ').toLowerCase();
   if (SEVERITY_CRITICAL.some((kw) => combined.includes(kw))) return 100;
-  if (SEVERITY_HIGH.some((kw) => combined.includes(kw)))     return 75;
-  if (SEVERITY_MEDIUM.some((kw) => combined.includes(kw)))   return 50;
-  if (SEVERITY_LOW.some((kw) => combined.includes(kw)))      return 25;
+  if (SEVERITY_HIGH.some((kw) => combined.includes(kw))) return 75;
+  if (SEVERITY_MEDIUM.some((kw) => combined.includes(kw))) return 50;
+  if (SEVERITY_LOW.some((kw) => combined.includes(kw))) return 25;
   // Default: neutral signal (no strong keywords found)
   return 40;
 }
@@ -324,57 +366,125 @@ export type FrictionClass =
   | 'minor_ux';
 
 export const FRICTION_CLASS_WEIGHTS: Record<FrictionClass, number> = {
-  core_workflow_blocked:  1.00,
-  permissions_access:     0.90,
-  performance_latency:    0.85,
-  navigation_confusion:   0.80,
-  reporting_visibility:   0.70,
-  missing_configuration:  0.65,
-  minor_ux:               0.40,
+  core_workflow_blocked: 1.0,
+  permissions_access: 0.9,
+  performance_latency: 0.85,
+  navigation_confusion: 0.8,
+  reporting_visibility: 0.7,
+  missing_configuration: 0.65,
+  minor_ux: 0.4,
 };
 
 const FRICTION_KEYWORDS: Array<{ class: FrictionClass; keywords: string[] }> = [
   {
     class: 'core_workflow_blocked',
     keywords: [
-      'login', 'logout', 'auth', 'authentication', 'payment', 'billing', 'checkout',
-      'data', 'export', 'import', 'api', 'sync', 'webhook', 'integration',
-      'crash', 'broken', 'error', 'fail', 'blocked', 'cannot', 'unable',
+      'login',
+      'logout',
+      'auth',
+      'authentication',
+      'payment',
+      'billing',
+      'checkout',
+      'data',
+      'export',
+      'import',
+      'api',
+      'sync',
+      'webhook',
+      'integration',
+      'crash',
+      'broken',
+      'error',
+      'fail',
+      'blocked',
+      'cannot',
+      'unable',
     ],
   },
   {
     class: 'permissions_access',
     keywords: [
-      'permission', 'role', 'access', 'forbidden', 'unauthorized', 'denied',
-      'admin', 'privilege', 'visibility', 'share', 'invite', 'sso',
+      'permission',
+      'role',
+      'access',
+      'forbidden',
+      'unauthorized',
+      'denied',
+      'admin',
+      'privilege',
+      'visibility',
+      'share',
+      'invite',
+      'sso',
     ],
   },
   {
     class: 'performance_latency',
     keywords: [
-      'slow', 'timeout', 'latency', 'load', 'loading', 'freeze', 'hang',
-      'performance', 'speed', 'lag', 'delay', 'unresponsive',
+      'slow',
+      'timeout',
+      'latency',
+      'load',
+      'loading',
+      'freeze',
+      'hang',
+      'performance',
+      'speed',
+      'lag',
+      'delay',
+      'unresponsive',
     ],
   },
   {
     class: 'navigation_confusion',
     keywords: [
-      'navigation', 'menu', 'sidebar', 'search', 'filter', 'sort', 'find',
-      'confusing', 'unclear', 'hard to find', 'lost', 'dashboard',
+      'navigation',
+      'menu',
+      'sidebar',
+      'search',
+      'filter',
+      'sort',
+      'find',
+      'confusing',
+      'unclear',
+      'hard to find',
+      'lost',
+      'dashboard',
     ],
   },
   {
     class: 'reporting_visibility',
     keywords: [
-      'report', 'analytics', 'chart', 'graph', 'metric', 'insight',
-      'visibility', 'tracking', 'audit', 'log', 'history',
+      'report',
+      'analytics',
+      'chart',
+      'graph',
+      'metric',
+      'insight',
+      'visibility',
+      'tracking',
+      'audit',
+      'log',
+      'history',
     ],
   },
   {
     class: 'missing_configuration',
     keywords: [
-      'limit', 'quota', 'plan', 'upgrade', 'missing', 'feature', 'request',
-      'configure', 'setting', 'customise', 'customize', 'option', 'support',
+      'limit',
+      'quota',
+      'plan',
+      'upgrade',
+      'missing',
+      'feature',
+      'request',
+      'configure',
+      'setting',
+      'customise',
+      'customize',
+      'option',
+      'support',
     ],
   },
 ];
@@ -396,10 +506,16 @@ function classifyFriction(
 
   for (const { class: fc, keywords: kws } of FRICTION_KEYWORDS) {
     if (kws.some((kw) => combined.includes(kw))) {
-      return { frictionClass: fc, frictionScore: FRICTION_CLASS_WEIGHTS[fc] * 100 };
+      return {
+        frictionClass: fc,
+        frictionScore: FRICTION_CLASS_WEIGHTS[fc] * 100,
+      };
     }
   }
-  return { frictionClass: 'minor_ux', frictionScore: FRICTION_CLASS_WEIGHTS.minor_ux * 100 };
+  return {
+    frictionClass: 'minor_ux',
+    frictionScore: FRICTION_CLASS_WEIGHTS.minor_ux * 100,
+  };
 }
 
 /** @deprecated Use classifyFriction instead */
@@ -430,109 +546,121 @@ export class CiqService {
    *
    * CRM Multiplier (1.0–1.5) applied on top of base score when CRM data exists.
    */
-  async scoreTheme(workspaceId: string, themeId: string): Promise<CiqScoreOutput> {
-    const [feedbackRows, signalRows, dealLinks, supportClusters, voteRows, themeRow] =
-      await Promise.all([
-        // ── All feedback linked to this theme ──────────────────────────────
-        this.prisma.themeFeedback.findMany({
-          where: { themeId },
-          select: {
-            feedback: {
-              select: {
-                customerId:   true,
-                sentiment:    true,
-                impactScore:  true,
-                status:       true,
-                sourceType:   true,
-                primarySource: true,
-                createdAt:    true,
-                title:        true,
-                description:  true,
-                rawText:      true,
-                customer: {
-                  select: {
-                    arrValue:        true,
-                    accountPriority: true,
-                  },
+  async scoreTheme(
+    workspaceId: string,
+    themeId: string,
+  ): Promise<CiqScoreOutput> {
+    const [
+      feedbackRows,
+      signalRows,
+      dealLinks,
+      supportClusters,
+      voteRows,
+      themeRow,
+    ] = await Promise.all([
+      // ── All feedback linked to this theme ──────────────────────────────
+      this.prisma.themeFeedback.findMany({
+        where: { themeId },
+        select: {
+          feedback: {
+            select: {
+              customerId: true,
+              sentiment: true,
+              impactScore: true,
+              status: true,
+              sourceType: true,
+              primarySource: true,
+              createdAt: true,
+              title: true,
+              description: true,
+              rawText: true,
+              customer: {
+                select: {
+                  arrValue: true,
+                  accountPriority: true,
                 },
               },
             },
           },
-        }),
+        },
+      }),
 
-        // ── CustomerSignal strength for this theme ─────────────────────────
-        this.prisma.customerSignal.findMany({
-          where: { themeId, workspaceId },
-          select: { strength: true },
-        }),
+      // ── CustomerSignal strength for this theme ─────────────────────────
+      this.prisma.customerSignal.findMany({
+        where: { themeId, workspaceId },
+        select: { strength: true },
+      }),
 
-        // ── Deals linked to this theme via DealThemeLink ───────────────────
-        this.prisma.dealThemeLink.findMany({
-          where: { themeId },
-          select: {
-            deal: {
-              select: {
-                annualValue: true,
-                stage:       true,
-                status:      true,
-              },
+      // ── Deals linked to this theme via DealThemeLink ───────────────────
+      this.prisma.dealThemeLink.findMany({
+        where: { themeId },
+        select: {
+          deal: {
+            select: {
+              annualValue: true,
+              stage: true,
+              status: true,
             },
           },
-        }),
+        },
+      }),
 
-        // ── Support clusters directly linked to this theme ─────────────────
-        this.prisma.supportIssueCluster.findMany({
-          where: { themeId, workspaceId },
-          select: {
-            ticketCount:    true,
-            avgSentiment:   true,
-            hasActiveSpike: true,
-          },
-        }),
+      // ── Support clusters directly linked to this theme ─────────────────
+      this.prisma.supportIssueCluster.findMany({
+        where: { themeId, workspaceId },
+        select: {
+          ticketCount: true,
+          avgSentiment: true,
+          hasActiveSpike: true,
+        },
+      }),
 
-        // ── Portal votes on linked feedback ────────────────────────────────
-        this.prisma.feedbackVote.findMany({
-          where: {
-            feedback: {
-              themes: { some: { themeId } },
-              status: { not: 'MERGED' },
-            },
+      // ── Portal votes on linked feedback ────────────────────────────────
+      this.prisma.feedbackVote.findMany({
+        where: {
+          feedback: {
+            themes: { some: { themeId } },
+            status: { not: 'MERGED' },
           },
-          select: { id: true },
-        }),
+        },
+        select: { id: true },
+      }),
 
-        // ── Theme metadata (topKeywords, dominantSignal, trend, resurfacing) ─
-        this.prisma.theme.findUnique({
-          where: { id: themeId },
-          select: {
-            topKeywords:        true,
-            dominantSignal:     true,
-            resurfaceCount:     true,
-            resurfacedAt:       true,
-            trendDelta:         true,
-            currentWeekSignals: true,
-            prevWeekSignals:    true,
-          },
-        }),
-      ]);
+      // ── Theme metadata (topKeywords, dominantSignal, trend, resurfacing) ─
+      this.prisma.theme.findUnique({
+        where: { id: themeId },
+        select: {
+          topKeywords: true,
+          dominantSignal: true,
+          resurfaceCount: true,
+          resurfacedAt: true,
+          trendDelta: true,
+          currentWeekSignals: true,
+          prevWeekSignals: true,
+        },
+      }),
+    ]);
 
     // ── Filter out MERGED feedback ─────────────────────────────────────────
-    const activeFeedback = feedbackRows.filter((tf) => tf.feedback.status !== 'MERGED');
+    const activeFeedback = feedbackRows.filter(
+      (tf) => tf.feedback.status !== 'MERGED',
+    );
 
     // ── Source breakdown counts ────────────────────────────────────────────
     const feedbackCount = activeFeedback.length;
-    const voiceCount    = activeFeedback.filter(
+    const voiceCount = activeFeedback.filter(
       (tf) => effectiveSourceCategory(tf.feedback) === 'voice',
     ).length;
-    const surveyFeedbackCount  = activeFeedback.filter(
+    const surveyFeedbackCount = activeFeedback.filter(
       (tf) => effectiveSourceCategory(tf.feedback) === 'survey',
     ).length;
     const supportFeedbackCount = activeFeedback.filter(
       (tf) => effectiveSourceCategory(tf.feedback) === 'support',
     ).length;
-    const textFeedbackCount = feedbackCount - voiceCount - surveyFeedbackCount - supportFeedbackCount;
-    const supportCount  = supportFeedbackCount;
-    const surveyCount   = surveyFeedbackCount;
+    const textFeedbackCount =
+      feedbackCount - voiceCount - surveyFeedbackCount - supportFeedbackCount;
+    const supportCount = supportFeedbackCount;
+    const surveyCount = surveyFeedbackCount;
     const hasSupportSpike = supportClusters.some((c) => c.hasActiveSpike);
     const totalSignalCount = feedbackCount;
 
@@ -543,7 +671,8 @@ export class CiqService {
     const uniqueCustomerCount = customerIds.size;
 
     const arrValue = activeFeedback.reduce(
-      (sum, tf) => sum + (tf.feedback.customer?.arrValue ?? 0), 0,
+      (sum, tf) => sum + (tf.feedback.customer?.arrValue ?? 0),
+      0,
     );
 
     const priorityValues = activeFeedback
@@ -558,12 +687,17 @@ export class CiqService {
     // ── Deal influence ─────────────────────────────────────────────────────
     const dealInfluenceValue = dealLinks.reduce((sum, dl) => {
       if (dl.deal.status === DealStatus.LOST) return sum;
-      return sum + dl.deal.annualValue * (DEAL_STAGE_WEIGHT[dl.deal.stage] ?? 0);
+      return (
+        sum + dl.deal.annualValue * (DEAL_STAGE_WEIGHT[dl.deal.stage] ?? 0)
+      );
     }, 0);
 
     // ── Signal strength ────────────────────────────────────────────────────
-    const signalCount    = signalRows.length;
-    const signalStrength = signalRows.reduce((sum, s) => sum + (s.strength ?? 0), 0);
+    const signalCount = signalRows.length;
+    const signalStrength = signalRows.reduce(
+      (sum, s) => sum + (s.strength ?? 0),
+      0,
+    );
 
     // ── Sentiment ──────────────────────────────────────────────────────────
     const feedbackSentiments = activeFeedback
@@ -576,33 +710,38 @@ export class CiqService {
     const negativeSentiments = allSentiments.filter((s) => s < 0);
     const sentimentPenalty =
       negativeSentiments.length > 0
-        ? Math.abs(negativeSentiments.reduce((a, b) => a + b, 0) / negativeSentiments.length)
+        ? Math.abs(
+            negativeSentiments.reduce((a, b) => a + b, 0) /
+              negativeSentiments.length,
+          )
         : 0;
 
     // ── Resurfacing boost ──────────────────────────────────────────────────
     const resurfaceCount = themeRow?.resurfaceCount ?? 0;
-    const resurfacedAt   = themeRow?.resurfacedAt ? new Date(themeRow.resurfacedAt) : null;
+    const resurfacedAt = themeRow?.resurfacedAt
+      ? new Date(themeRow.resurfacedAt)
+      : null;
     const daysSinceResurface = resurfacedAt
       ? (Date.now() - resurfacedAt.getTime()) / (1000 * 60 * 60 * 24)
       : 999;
-    const resurfaceDecay  = daysSinceResurface < 90
-      ? Math.max(0, 1 - daysSinceResurface / 90)
-      : 0;
-    const resurfaceBonus  = resurfaceCount > 0
-      ? Math.min(15, resurfaceCount * 5) * resurfaceDecay
-      : 0;
+    const resurfaceDecay =
+      daysSinceResurface < 90 ? Math.max(0, 1 - daysSinceResurface / 90) : 0;
+    const resurfaceBonus =
+      resurfaceCount > 0
+        ? Math.min(15, resurfaceCount * 5) * resurfaceDecay
+        : 0;
 
     // ── Signal velocity ────────────────────────────────────────────────────
-    const velocityDelta  = themeRow?.trendDelta ?? null;
-    const rawVelocity    = velocityDelta != null ? Math.max(0, velocityDelta) : 0;
-    const normVelocity   = Math.min(100, (rawVelocity / 50) * 100);
+    const velocityDelta = themeRow?.trendDelta ?? null;
+    const rawVelocity = velocityDelta != null ? Math.max(0, velocityDelta) : 0;
+    const normVelocity = Math.min(100, (rawVelocity / 50) * 100);
 
     // ── Source diversity ───────────────────────────────────────────────────
     const activeSources = [
       textFeedbackCount > 0,
-      voiceCount        > 0,
-      supportCount      > 0,
-      surveyCount       > 0,
+      voiceCount > 0,
+      supportCount > 0,
+      surveyCount > 0,
     ].filter(Boolean).length;
 
     // ──────────────────────────────────────────────────────────────────────
@@ -613,18 +752,20 @@ export class CiqService {
     // Adaptive cap: max(totalSignals * 0.5, 10)
     // A theme with 5 signals → cap=10 → 50% → 50 pts (not 10% with old cap=50)
     // Log-scale applied on top for diminishing returns at high volumes
-    const adaptiveCap   = Math.max(totalSignalCount * 0.5, 10);
-    const rawVolume     = Math.min(100, (totalSignalCount / adaptiveCap) * 100);
+    const adaptiveCap = Math.max(totalSignalCount * 0.5, 10);
+    const rawVolume = Math.min(100, (totalSignalCount / adaptiveCap) * 100);
     // Apply mild log-dampening so 100 signals doesn't dwarf 10 signals
-    const volumeScore   = rawVolume; // already 0–100 from adaptive cap
+    const volumeScore = rawVolume; // already 0–100 from adaptive cap
 
     // ── Factor 2: Severity (25%) ───────────────────────────────────────────
     // Keyword classification from feedback title + description + rawText
-    const feedbackTexts = activeFeedback.map((tf) => [
-      tf.feedback.title ?? '',
-      tf.feedback.description ?? '',
-      tf.feedback.rawText ?? '',
-    ].join(' '));
+    const feedbackTexts = activeFeedback.map((tf) =>
+      [
+        tf.feedback.title ?? '',
+        tf.feedback.description ?? '',
+        tf.feedback.rawText ?? '',
+      ].join(' '),
+    );
     // Also include theme dominantSignal as a severity hint
     if (themeRow?.dominantSignal) feedbackTexts.push(themeRow.dominantSignal);
     const severityScore = computeSeverityScore(feedbackTexts);
@@ -633,7 +774,10 @@ export class CiqService {
     // Ratio of unique customers to total signals (breadth of impact).
     // More distinct customers = higher frequency score.
     // Adaptive cap same as volume so small workspaces score well.
-    const frequencyScore = adaptiveCountNorm(uniqueCustomerCount, totalSignalCount);
+    const frequencyScore = adaptiveCountNorm(
+      uniqueCustomerCount,
+      totalSignalCount,
+    );
     // ── Factor 4: Friction (15%) ─────────────────────────────────────────────────────
     // Theme impact type from topKeywords + dominantSignal (7-class taxonomy)
     const { frictionClass, frictionScore } = classifyFriction(
@@ -647,30 +791,41 @@ export class CiqService {
     let weightedSignalCount = 0;
     let recentFeedbackCount = 0;
     for (const tf of activeFeedback) {
-      const createdAt = tf.feedback.createdAt ? new Date(tf.feedback.createdAt) : null;
-      if (!createdAt) { weightedSignalCount += 0.2; continue; }
-      if (createdAt > now30) { weightedSignalCount += 1.0; recentFeedbackCount++; }
-      else if (createdAt > now90) { weightedSignalCount += 0.6; }
-      else { weightedSignalCount += 0.2; }
+      const createdAt = tf.feedback.createdAt
+        ? new Date(tf.feedback.createdAt)
+        : null;
+      if (!createdAt) {
+        weightedSignalCount += 0.2;
+        continue;
+      }
+      if (createdAt > now30) {
+        weightedSignalCount += 1.0;
+        recentFeedbackCount++;
+      } else if (createdAt > now90) {
+        weightedSignalCount += 0.6;
+      } else {
+        weightedSignalCount += 0.2;
+      }
     }
     // Recency score: ratio of weighted signals to raw signals (0–100)
-    const recencyScore = totalSignalCount > 0
-      ? Math.min(100, (weightedSignalCount / totalSignalCount) * 100)
-      : 0;
+    const recencyScore =
+      totalSignalCount > 0
+        ? Math.min(100, (weightedSignalCount / totalSignalCount) * 100)
+        : 0;
 
     // ── Compute weighted base score ────────────────────────────────────────
-    const WEIGHT_VOLUME   = 0.30;
+    const WEIGHT_VOLUME = 0.3;
     const WEIGHT_SEVERITY = 0.25;
-    const WEIGHT_FREQ     = 0.20;
+    const WEIGHT_FREQ = 0.2;
     const WEIGHT_FRICTION = 0.15;
-    const WEIGHT_RECENCY  = 0.10;
+    const WEIGHT_RECENCY = 0.1;
 
     const baseScore =
-      volumeScore   * WEIGHT_VOLUME   +
+      volumeScore * WEIGHT_VOLUME +
       severityScore * WEIGHT_SEVERITY +
-      frequencyScore * WEIGHT_FREQ    +
-      frictionScore  * WEIGHT_FRICTION +
-      recencyScore   * WEIGHT_RECENCY;
+      frequencyScore * WEIGHT_FREQ +
+      frictionScore * WEIGHT_FRICTION +
+      recencyScore * WEIGHT_RECENCY;
 
     // ──────────────────────────────────────────────────────────────────────
     // ── CRM MULTIPLIER (1.0–1.5) ──────────────────────────────────────────
@@ -687,19 +842,21 @@ export class CiqService {
     // Customer count alone does not indicate CRM integration — a customer record
     // can exist without any ARR value (e.g. free-tier users).
     const hasCrmData = arrValue > 0 || dealInfluenceValue > 0;
-    const scoringMode: 'signal-only' | 'full' = hasCrmData ? 'full' : 'signal-only';
+    const scoringMode: 'signal-only' | 'full' = hasCrmData
+      ? 'full'
+      : 'signal-only';
 
-    const normArr             = logNorm(arrValue, 7);
-    const normDealInfluence   = logNorm(dealInfluenceValue, 7);
+    const normArr = logNorm(arrValue, 7);
+    const normDealInfluence = logNorm(dealInfluenceValue, 7);
     const normAccountPriority = (accountPriorityValue / 4) * 100;
-    const normSignalStrength  = logNorm(signalStrength + signalCount, 4);
+    const normSignalStrength = logNorm(signalStrength + signalCount, 4);
 
     const crmMultiplier = hasCrmData
       ? 1.0 +
-        (normArr             / 100) * 0.20 +
-        (normDealInfluence   / 100) * 0.15 +
-        (normAccountPriority / 100) * 0.10 +
-        (normSignalStrength  / 100) * 0.05
+        (normArr / 100) * 0.2 +
+        (normDealInfluence / 100) * 0.15 +
+        (normAccountPriority / 100) * 0.1 +
+        (normSignalStrength / 100) * 0.05
       : 1.0;
 
     // ── Spike and resurfacing bonuses ──────────────────────────────────────
@@ -707,98 +864,118 @@ export class CiqService {
 
     // ── Compute final score ────────────────────────────────────────────────
     // Apply CRM multiplier, sentiment penalty, and additive bonuses
-    const amplifiedScore  = baseScore * Math.min(1.5, crmMultiplier);
-    const adjustedScore   = amplifiedScore * (1 - sentimentPenalty * 0.1) + spikeBonus + resurfaceBonus;
-    const priorityScore   = parseFloat(Math.min(100, Math.max(0, adjustedScore)).toFixed(2));
+    const amplifiedScore = baseScore * Math.min(1.5, crmMultiplier);
+    const adjustedScore =
+      amplifiedScore * (1 - sentimentPenalty * 0.1) +
+      spikeBonus +
+      resurfaceBonus;
+    const priorityScore = parseFloat(
+      Math.min(100, Math.max(0, adjustedScore)).toFixed(2),
+    );
 
     const revenueImpactValue = arrValue;
     const revenueImpactScore = parseFloat(
-      Math.min(100, logNorm(arrValue, 7) * 0.6 + logNorm(dealInfluenceValue, 7) * 0.4).toFixed(2),
+      Math.min(
+        100,
+        logNorm(arrValue, 7) * 0.6 + logNorm(dealInfluenceValue, 7) * 0.4,
+      ).toFixed(2),
     );
 
     const confidenceScore = deriveConfidence(
-      feedbackCount, voiceCount, supportCount, signalCount, uniqueCustomerCount,
+      feedbackCount,
+      voiceCount,
+      supportCount,
+      signalCount,
+      uniqueCustomerCount,
     );
 
     // ── Build score explanation ────────────────────────────────────────────
     const explanation: Record<string, CiqScoreComponent> = {
       volume: {
-        value:        volumeScore,
-        weight:       WEIGHT_VOLUME,
+        value: volumeScore,
+        weight: WEIGHT_VOLUME,
         contribution: volumeScore * WEIGHT_VOLUME,
-        label:        `Volume (${totalSignalCount} signal${totalSignalCount !== 1 ? 's' : ''}, adaptive cap ${adaptiveCap.toFixed(0)})`,
+        label: `Volume (${totalSignalCount} signal${totalSignalCount !== 1 ? 's' : ''}, adaptive cap ${adaptiveCap.toFixed(0)})`,
       },
       severity: {
-        value:        severityScore,
-        weight:       WEIGHT_SEVERITY,
+        value: severityScore,
+        weight: WEIGHT_SEVERITY,
         contribution: severityScore * WEIGHT_SEVERITY,
-        label:        `Severity (${severityScore >= 100 ? 'Critical' : severityScore >= 75 ? 'High' : severityScore >= 50 ? 'Medium' : severityScore >= 25 ? 'Low' : 'Neutral'})`,
+        label: `Severity (${severityScore >= 100 ? 'Critical' : severityScore >= 75 ? 'High' : severityScore >= 50 ? 'Medium' : severityScore >= 25 ? 'Low' : 'Neutral'})`,
       },
       frequency: {
-        value:        frequencyScore,
-        weight:       WEIGHT_FREQ,
+        value: frequencyScore,
+        weight: WEIGHT_FREQ,
         contribution: frequencyScore * WEIGHT_FREQ,
-        label:        `Frequency (${uniqueCustomerCount} unique customer${uniqueCustomerCount !== 1 ? 's' : ''})`,
+        label: `Frequency (${uniqueCustomerCount} unique customer${uniqueCustomerCount !== 1 ? 's' : ''})`,
       },
       friction: {
-        value:        frictionScore,
-        weight:       WEIGHT_FRICTION,
+        value: frictionScore,
+        weight: WEIGHT_FRICTION,
         contribution: frictionScore * WEIGHT_FRICTION,
-        label:        `Friction (class: ${frictionClass}, score: ${frictionScore.toFixed(0)})`,
+        label: `Friction (class: ${frictionClass}, score: ${frictionScore.toFixed(0)})`,
       },
       recency: {
-        value:        recencyScore,
-        weight:       WEIGHT_RECENCY,
+        value: recencyScore,
+        weight: WEIGHT_RECENCY,
         contribution: recencyScore * WEIGHT_RECENCY,
-        label:        `Recency (${recentFeedbackCount} signal${recentFeedbackCount !== 1 ? 's' : ''} in last 30d)`,
+        label: `Recency (${recentFeedbackCount} signal${recentFeedbackCount !== 1 ? 's' : ''} in last 30d)`,
       },
     };
 
     // CRM multiplier as an informational entry (not a base factor)
     if (hasCrmData) {
       explanation['crmMultiplier'] = {
-        value:        (crmMultiplier - 1) * 100,
-        weight:       0,
+        value: (crmMultiplier - 1) * 100,
+        weight: 0,
         contribution: amplifiedScore - baseScore,
-        label:        `CRM amplifier (×${crmMultiplier.toFixed(2)}: ARR, deal pipeline, account priority)`,
+        label: `CRM amplifier (×${crmMultiplier.toFixed(2)}: ARR, deal pipeline, account priority)`,
       };
     }
 
     // Velocity signal (informational bonus)
     if (normVelocity > 0) {
       explanation['velocitySignal'] = {
-        value:        normVelocity,
-        weight:       0,
+        value: normVelocity,
+        weight: 0,
         contribution: 0,
-        label:        velocityDelta != null
-          ? `Signal velocity (+${velocityDelta.toFixed(0)}% WoW)`
-          : 'Signal velocity (no trend data yet)',
+        label:
+          velocityDelta != null
+            ? `Signal velocity (+${velocityDelta.toFixed(0)}% WoW)`
+            : 'Signal velocity (no trend data yet)',
       };
     }
 
     // Source diversity (informational)
     explanation['sourceDiversitySignal'] = {
-      value:        (activeSources / 4) * 100,
-      weight:       0,
+      value: (activeSources / 4) * 100,
+      weight: 0,
       contribution: 0,
-      label:        `Source diversity (${activeSources}/4 sources active)`,
+      label: `Source diversity (${activeSources}/4 sources active)`,
     };
 
     // Resurfacing bonus
     if (resurfaceBonus > 0) {
       explanation['resurfacingSignal'] = {
-        value:        resurfaceBonus,
-        weight:       1,
+        value: resurfaceBonus,
+        weight: 1,
         contribution: resurfaceBonus,
-        label:        `Resurfaced after shipped (×${resurfaceCount})`,
+        label: `Resurfaced after shipped (×${resurfaceCount})`,
       };
     }
 
     // ── Dominant driver ────────────────────────────────────────────────────
-    const BASE_FACTOR_KEYS = new Set(['volume', 'severity', 'frequency', 'friction', 'recency']);
-    const dominantDriver = Object.entries(explanation)
-      .filter(([k]) => BASE_FACTOR_KEYS.has(k))
-      .sort((a, b) => b[1].contribution - a[1].contribution)[0]?.[0] ?? null;
+    const BASE_FACTOR_KEYS = new Set([
+      'volume',
+      'severity',
+      'frequency',
+      'friction',
+      'recency',
+    ]);
+    const dominantDriver =
+      Object.entries(explanation)
+        .filter(([k]) => BASE_FACTOR_KEYS.has(k))
+        .sort((a, b) => b[1].contribution - a[1].contribution)[0]?.[0] ?? null;
 
     // ── Priority reason sentence ───────────────────────────────────────────
     const topFactors = Object.entries(explanation)
@@ -807,28 +984,47 @@ export class CiqService {
       .slice(0, 2);
 
     const DRIVER_PHRASES: Record<string, (v: number) => string> = {
-      volume:    (v) => `${totalSignalCount} signal${totalSignalCount !== 1 ? 's' : ''} (volume score ${Math.round(v)}/100)`,
-      severity:  (v) => `${v >= 100 ? 'critical' : v >= 75 ? 'high' : v >= 50 ? 'medium' : 'low'} severity keywords`,
-      frequency: (v) => `${uniqueCustomerCount} unique customer${uniqueCustomerCount !== 1 ? 's' : ''} affected (breadth ${Math.round(v)}/100)`,
-      friction:  (v) => `${v >= 100 ? 'core workflow' : v >= 80 ? 'navigation' : v >= 60 ? 'feature limit' : 'minor UX'} friction`,
-      recency:   (v) => `${recentFeedbackCount} recent signal${recentFeedbackCount !== 1 ? 's' : ''} in last 30 days`,
+      volume: (v) =>
+        `${totalSignalCount} signal${totalSignalCount !== 1 ? 's' : ''} (volume score ${Math.round(v)}/100)`,
+      severity: (v) =>
+        `${v >= 100 ? 'critical' : v >= 75 ? 'high' : v >= 50 ? 'medium' : 'low'} severity keywords`,
+      frequency: (v) =>
+        `${uniqueCustomerCount} unique customer${uniqueCustomerCount !== 1 ? 's' : ''} affected (breadth ${Math.round(v)}/100)`,
+      friction: (v) =>
+        `${v >= 100 ? 'core workflow' : v >= 80 ? 'navigation' : v >= 60 ? 'feature limit' : 'minor UX'} friction`,
+      recency: (v) =>
+        `${recentFeedbackCount} recent signal${recentFeedbackCount !== 1 ? 's' : ''} in last 30 days`,
     };
 
     // 4-tier priority band (aligns with ThemePriorityResult spec)
     const priorityBand: 'low' | 'medium' | 'high' | 'critical' =
-      priorityScore >= 75 ? 'critical' :
-      priorityScore >= 50 ? 'high' :
-      priorityScore >= 25 ? 'medium' : 'low';
-    const band = priorityBand === 'critical' ? 'Critical' : priorityBand === 'high' ? 'High' : priorityBand === 'medium' ? 'Moderate' : 'Low';
-    const driverPhrase = dominantDriver && DRIVER_PHRASES[dominantDriver]
-      ? DRIVER_PHRASES[dominantDriver](topFactors[0]?.[1].value ?? 0)
-      : 'multiple signals';
-    const secondPhrase = topFactors[1] && DRIVER_PHRASES[topFactors[1][0]]
-      ? ` and ${DRIVER_PHRASES[topFactors[1][0]](topFactors[1][1].value)}`
-      : '';
-    const signalOnlyNote = scoringMode === 'signal-only'
-      ? ' Scored in signal-only mode (no CRM data). Connect your CRM to unlock revenue-weighted prioritization.'
-      : '';
+      priorityScore >= 75
+        ? 'critical'
+        : priorityScore >= 50
+          ? 'high'
+          : priorityScore >= 25
+            ? 'medium'
+            : 'low';
+    const band =
+      priorityBand === 'critical'
+        ? 'Critical'
+        : priorityBand === 'high'
+          ? 'High'
+          : priorityBand === 'medium'
+            ? 'Moderate'
+            : 'Low';
+    const driverPhrase =
+      dominantDriver && DRIVER_PHRASES[dominantDriver]
+        ? DRIVER_PHRASES[dominantDriver](topFactors[0]?.[1].value ?? 0)
+        : 'multiple signals';
+    const secondPhrase =
+      topFactors[1] && DRIVER_PHRASES[topFactors[1][0]]
+        ? ` and ${DRIVER_PHRASES[topFactors[1][0]](topFactors[1][1].value)}`
+        : '';
+    const signalOnlyNote =
+      scoringMode === 'signal-only'
+        ? ' Scored in signal-only mode (no CRM data). Connect your CRM to unlock revenue-weighted prioritization.'
+        : '';
     const crmNote = hasCrmData
       ? ` CRM amplifier: ×${crmMultiplier.toFixed(2)}.`
       : '';
@@ -837,22 +1033,40 @@ export class CiqService {
       ` Score: ${Math.round(priorityScore)}/100.${crmNote}${signalOnlyNote}`;
 
     // ── Confidence explanation sentence ───────────────────────────────────
-    const confBand = confidenceScore >= 0.75 ? 'High' : confidenceScore >= 0.45 ? 'Medium' : 'Low';
+    const confBand =
+      confidenceScore >= 0.75
+        ? 'High'
+        : confidenceScore >= 0.45
+          ? 'Medium'
+          : 'Low';
     const signalSummaryParts: string[] = [];
-    if (feedbackCount > 0)  signalSummaryParts.push(`${feedbackCount} feedback item${feedbackCount !== 1 ? 's' : ''}`);
-    if (voiceCount > 0)     signalSummaryParts.push(`${voiceCount} voice signal${voiceCount !== 1 ? 's' : ''}`);
-    if (supportCount > 0)   signalSummaryParts.push(`${supportCount} support ticket${supportCount !== 1 ? 's' : ''}`);
-    if (surveyCount > 0)    signalSummaryParts.push(`${surveyCount} survey response${surveyCount !== 1 ? 's' : ''}`);
-    const signalSummary = signalSummaryParts.length > 0
-      ? signalSummaryParts.join(', ')
-      : 'no signals yet';
-    const confAdvice = confidenceScore < 0.45
-      ? ' Add more signals from multiple sources to increase confidence.'
-      : confidenceScore < 0.75
-      ? ' More cross-source signals will raise confidence further.'
-      : '';
-    const confidenceExplanation =
-      `${confBand} confidence — based on ${signalSummary}.${confAdvice}`;
+    if (feedbackCount > 0)
+      signalSummaryParts.push(
+        `${feedbackCount} feedback item${feedbackCount !== 1 ? 's' : ''}`,
+      );
+    if (voiceCount > 0)
+      signalSummaryParts.push(
+        `${voiceCount} voice signal${voiceCount !== 1 ? 's' : ''}`,
+      );
+    if (supportCount > 0)
+      signalSummaryParts.push(
+        `${supportCount} support ticket${supportCount !== 1 ? 's' : ''}`,
+      );
+    if (surveyCount > 0)
+      signalSummaryParts.push(
+        `${surveyCount} survey response${surveyCount !== 1 ? 's' : ''}`,
+      );
+    const signalSummary =
+      signalSummaryParts.length > 0
+        ? signalSummaryParts.join(', ')
+        : 'no signals yet';
+    const confAdvice =
+      confidenceScore < 0.45
+        ? ' Add more signals from multiple sources to increase confidence.'
+        : confidenceScore < 0.75
+          ? ' More cross-source signals will raise confidence further.'
+          : '';
+    const confidenceExplanation = `${confBand} confidence — based on ${signalSummary}.${confAdvice}`;
 
     return {
       priorityScore,
@@ -869,9 +1083,14 @@ export class CiqService {
       uniqueCustomerCount,
       scoreExplanation: explanation,
       dominantDriver,
-      sentimentScore: allSentiments.length > 0
-        ? parseFloat((allSentiments.reduce((a, b) => a + b, 0) / allSentiments.length).toFixed(3))
-        : null,
+      sentimentScore:
+        allSentiments.length > 0
+          ? parseFloat(
+              (
+                allSentiments.reduce((a, b) => a + b, 0) / allSentiments.length
+              ).toFixed(3),
+            )
+          : null,
       priorityReason,
       confidenceExplanation,
       sourceDiversityCount: activeSources,
@@ -881,11 +1100,41 @@ export class CiqService {
       priorityBand,
       // Structured breakdown array for ThemePriorityResult consumers
       breakdown: [
-        { factor: 'volume'    as const, raw: volumeScore,    normalized: volumeScore / 100,    weightedContribution: volumeScore * 0.30,    explanation: explanation.volume?.label    ?? '' },
-        { factor: 'severity'  as const, raw: severityScore,  normalized: severityScore / 100,  weightedContribution: severityScore * 0.25,  explanation: explanation.severity?.label  ?? '' },
-        { factor: 'frequency' as const, raw: frequencyScore, normalized: frequencyScore / 100, weightedContribution: frequencyScore * 0.20, explanation: explanation.frequency?.label ?? '' },
-        { factor: 'friction'  as const, raw: frictionScore,  normalized: frictionScore / 100,  weightedContribution: frictionScore * 0.15,  explanation: explanation.friction?.label  ?? '' },
-        { factor: 'recency'   as const, raw: recencyScore,   normalized: recencyScore / 100,   weightedContribution: recencyScore * 0.10,   explanation: explanation.recency?.label   ?? '' },
+        {
+          factor: 'volume' as const,
+          raw: volumeScore,
+          normalized: volumeScore / 100,
+          weightedContribution: volumeScore * 0.3,
+          explanation: explanation.volume?.label ?? '',
+        },
+        {
+          factor: 'severity' as const,
+          raw: severityScore,
+          normalized: severityScore / 100,
+          weightedContribution: severityScore * 0.25,
+          explanation: explanation.severity?.label ?? '',
+        },
+        {
+          factor: 'frequency' as const,
+          raw: frequencyScore,
+          normalized: frequencyScore / 100,
+          weightedContribution: frequencyScore * 0.2,
+          explanation: explanation.frequency?.label ?? '',
+        },
+        {
+          factor: 'friction' as const,
+          raw: frictionScore,
+          normalized: frictionScore / 100,
+          weightedContribution: frictionScore * 0.15,
+          explanation: explanation.friction?.label ?? '',
+        },
+        {
+          factor: 'recency' as const,
+          raw: recencyScore,
+          normalized: recencyScore / 100,
+          weightedContribution: recencyScore * 0.1,
+          explanation: explanation.recency?.label ?? '',
+        },
       ],
     };
   }
@@ -900,20 +1149,23 @@ export class CiqService {
    *   Sentiment (30%): negative sentiment → higher urgency
    *   CRM (20%): ARR + account priority (if available)
    */
-  async scoreFeedback(workspaceId: string, feedbackId: string): Promise<CiqFeedbackScore> {
+  async scoreFeedback(
+    workspaceId: string,
+    feedbackId: string,
+  ): Promise<CiqFeedbackScore> {
     const feedback = await this.prisma.feedback.findUnique({
       where: { id: feedbackId, workspaceId },
       select: {
-        sentiment:   true,
+        sentiment: true,
         impactScore: true,
-        status:      true,
-        sourceType:  true,
-        title:       true,
+        status: true,
+        sourceType: true,
+        title: true,
         description: true,
-        rawText:     true,
+        rawText: true,
         customer: {
           select: {
-            arrValue:        true,
+            arrValue: true,
             accountPriority: true,
           },
         },
@@ -925,19 +1177,20 @@ export class CiqService {
 
     if (!feedback) {
       return {
-        impactScore:          0,
-        confidenceScore:      0,
-        customerArrValue:     0,
+        impactScore: 0,
+        confidenceScore: 0,
+        customerArrValue: 0,
         accountPriorityValue: 0,
-        sentiment:            null,
-        scoreExplanation:     {},
+        sentiment: null,
+        scoreExplanation: {},
       };
     }
 
-    const customerArrValue    = feedback.customer?.arrValue ?? 0;
-    const accountPriorityRaw  = feedback.customer?.accountPriority ?? AccountPriority.MEDIUM;
+    const customerArrValue = feedback.customer?.arrValue ?? 0;
+    const accountPriorityRaw =
+      feedback.customer?.accountPriority ?? AccountPriority.MEDIUM;
     const accountPriorityValue = ACCOUNT_PRIORITY_MAP[accountPriorityRaw];
-    const sentiment            = feedback.sentiment ?? null;
+    const sentiment = feedback.sentiment ?? null;
 
     // Severity from text
     const texts = [
@@ -952,46 +1205,52 @@ export class CiqService {
       sentiment != null && sentiment < 0 ? Math.abs(sentiment) * 100 : 30;
 
     // CRM score
-    const normArr      = logNorm(customerArrValue, 7);
+    const normArr = logNorm(customerArrValue, 7);
     const normPriority = (accountPriorityValue / 4) * 100;
-    const crmScore     = normArr * 0.6 + normPriority * 0.4;
+    const crmScore = normArr * 0.6 + normPriority * 0.4;
 
     // Voice feedback gets a small urgency bonus (higher signal quality)
-    const isVoice    = VOICE_SOURCE_TYPES.includes(feedback.sourceType as FeedbackSourceType);
+    const isVoice = VOICE_SOURCE_TYPES.includes(feedback.sourceType);
     const voiceBonus = isVoice ? 8 : 0;
 
     const explanation: Record<string, CiqScoreComponent> = {
       severity: {
-        value:        severityScore,
-        weight:       0.50,
-        contribution: severityScore * 0.50,
-        label:        `Severity (${severityScore >= 100 ? 'Critical' : severityScore >= 75 ? 'High' : severityScore >= 50 ? 'Medium' : 'Low'})`,
+        value: severityScore,
+        weight: 0.5,
+        contribution: severityScore * 0.5,
+        label: `Severity (${severityScore >= 100 ? 'Critical' : severityScore >= 75 ? 'High' : severityScore >= 50 ? 'Medium' : 'Low'})`,
       },
       sentimentUrgency: {
-        value:        sentimentUrgency,
-        weight:       0.30,
-        contribution: sentimentUrgency * 0.30,
-        label:        'Sentiment urgency',
+        value: sentimentUrgency,
+        weight: 0.3,
+        contribution: sentimentUrgency * 0.3,
+        label: 'Sentiment urgency',
       },
       crmSignal: {
-        value:        crmScore,
-        weight:       0.20,
-        contribution: crmScore * 0.20,
-        label:        'CRM signal (ARR + account priority)',
+        value: crmScore,
+        weight: 0.2,
+        contribution: crmScore * 0.2,
+        label: 'CRM signal (ARR + account priority)',
       },
     };
 
-    const baseImpact = Object.values(explanation).reduce((s, c) => s + c.contribution, 0);
-    const impactScore = parseFloat(Math.min(100, baseImpact + voiceBonus).toFixed(2));
+    const baseImpact = Object.values(explanation).reduce(
+      (s, c) => s + c.contribution,
+      0,
+    );
+    const impactScore = parseFloat(
+      Math.min(100, baseImpact + voiceBonus).toFixed(2),
+    );
 
-    const hasCustomer  = feedback.customer != null ? 1 : 0;
+    const hasCustomer = feedback.customer != null ? 1 : 0;
     const hasSentiment = sentiment != null ? 1 : 0;
     const confidenceScore = parseFloat(
-      Math.min(1, (
-        hasCustomer  * 0.5 +
-        hasSentiment * 0.3 +
-        (feedback.themes.length > 0 ? 0.2 : 0)
-      )).toFixed(3),
+      Math.min(
+        1,
+        hasCustomer * 0.5 +
+          hasSentiment * 0.3 +
+          (feedback.themes.length > 0 ? 0.2 : 0),
+      ).toFixed(3),
     );
 
     return {
@@ -1017,25 +1276,29 @@ export class CiqService {
   ): Promise<CiqScoreOutput & { themeScored: boolean }> {
     const item = await this.prisma.roadmapItem.findUnique({
       where: { id: itemId, workspaceId },
-      select: { themeId: true, revenueImpactValue: true, dealInfluenceValue: true },
+      select: {
+        themeId: true,
+        revenueImpactValue: true,
+        dealInfluenceValue: true,
+      },
     });
 
     if (!item) {
       return {
-        priorityScore:      0,
-        confidenceScore:    0,
+        priorityScore: 0,
+        confidenceScore: 0,
         revenueImpactScore: 0,
         revenueImpactValue: 0,
         dealInfluenceValue: 0,
-        feedbackCount:      0,
-        voiceCount:         0,
-        supportCount:       0,
-        surveyCount:        0,
-        totalSignalCount:   0,
-        signalCount:        0,
+        feedbackCount: 0,
+        voiceCount: 0,
+        supportCount: 0,
+        surveyCount: 0,
+        totalSignalCount: 0,
+        signalCount: 0,
         uniqueCustomerCount: 0,
-        scoreExplanation:   {},
-        themeScored:        false,
+        scoreExplanation: {},
+        themeScored: false,
       };
     }
 
@@ -1047,28 +1310,32 @@ export class CiqService {
     const revenueImpactValue = item.revenueImpactValue ?? 0;
     const dealInfluenceValue = item.dealInfluenceValue ?? 0;
     const revenueImpactScore = parseFloat(
-      Math.min(100, logNorm(revenueImpactValue, 7) * 0.6 + logNorm(dealInfluenceValue, 7) * 0.4).toFixed(2),
+      Math.min(
+        100,
+        logNorm(revenueImpactValue, 7) * 0.6 +
+          logNorm(dealInfluenceValue, 7) * 0.4,
+      ).toFixed(2),
     );
 
     return {
-      priorityScore:      0,
-      confidenceScore:    0,
+      priorityScore: 0,
+      confidenceScore: 0,
       revenueImpactScore,
       revenueImpactValue,
       dealInfluenceValue,
-      feedbackCount:      0,
-      voiceCount:         0,
-      supportCount:       0,
-      surveyCount:        0,
-      totalSignalCount:   0,
-      signalCount:        0,
+      feedbackCount: 0,
+      voiceCount: 0,
+      supportCount: 0,
+      surveyCount: 0,
+      totalSignalCount: 0,
+      signalCount: 0,
       uniqueCustomerCount: 0,
       scoreExplanation: {
         storedRevenue: {
-          value:        revenueImpactValue,
-          weight:       1,
+          value: revenueImpactValue,
+          weight: 1,
           contribution: revenueImpactScore,
-          label:        'Stored revenue impact (no theme linked)',
+          label: 'Stored revenue impact (no theme linked)',
         },
       },
       themeScored: false,
@@ -1082,69 +1349,89 @@ export class CiqService {
    * Writes: priorityScore, lastScoredAt, revenueInfluence, signalBreakdown,
    *         feedbackCount, voiceCount, supportCount, totalSignalCount.
    */
-  async persistThemeScore(themeId: string, score: CiqScoreOutput): Promise<void> {
+  async persistThemeScore(
+    themeId: string,
+    score: CiqScoreOutput,
+  ): Promise<void> {
     try {
       await this.prisma.theme.update({
         where: { id: themeId },
         data: {
-          priorityScore:    score.priorityScore,
-          lastScoredAt:     new Date(),
+          priorityScore: score.priorityScore,
+          lastScoredAt: new Date(),
           revenueInfluence: score.revenueImpactValue,
-          signalBreakdown:  score.scoreExplanation as object,
-          feedbackCount:    score.feedbackCount,
-          voiceCount:       score.voiceCount,
-          supportCount:     score.supportCount,
-          surveyCount:      score.surveyCount,
+          signalBreakdown: score.scoreExplanation as object,
+          feedbackCount: score.feedbackCount,
+          voiceCount: score.voiceCount,
+          supportCount: score.supportCount,
+          surveyCount: score.surveyCount,
           totalSignalCount: score.totalSignalCount,
         },
       });
     } catch (err) {
-      this.logger.warn(`Failed to persist CIQ score to Theme row: ${(err as Error).message}`);
+      this.logger.warn(
+        `Failed to persist CIQ score to Theme row: ${(err as Error).message}`,
+      );
     }
   }
 
   /**
    * Persist CIQ scores back to RoadmapItem rows linked to the given theme.
    */
-  async persistThemeScoreToRoadmap(workspaceId: string, themeId: string, score: CiqScoreOutput): Promise<void> {
+  async persistThemeScoreToRoadmap(
+    workspaceId: string,
+    themeId: string,
+    score: CiqScoreOutput,
+  ): Promise<void> {
     try {
       await this.prisma.roadmapItem.updateMany({
         where: { workspaceId, themeId },
         data: {
-          priorityScore:      score.priorityScore,
-          confidenceScore:    score.confidenceScore,
+          priorityScore: score.priorityScore,
+          confidenceScore: score.confidenceScore,
           revenueImpactScore: score.revenueImpactScore,
           revenueImpactValue: score.revenueImpactValue,
           dealInfluenceValue: score.dealInfluenceValue,
-          signalCount:        score.signalCount,
-          customerCount:      score.uniqueCustomerCount,
+          signalCount: score.signalCount,
+          customerCount: score.uniqueCustomerCount,
         },
       });
     } catch (err) {
-      this.logger.warn(`Failed to persist theme score to roadmap items: ${(err as Error).message}`);
+      this.logger.warn(
+        `Failed to persist theme score to roadmap items: ${(err as Error).message}`,
+      );
     }
   }
 
   /**
    * Persist CIQ impactScore back to a single Feedback row.
    */
-  async persistFeedbackScore(feedbackId: string, score: CiqFeedbackScore): Promise<void> {
+  async persistFeedbackScore(
+    feedbackId: string,
+    score: CiqFeedbackScore,
+  ): Promise<void> {
     try {
       await this.prisma.feedback.update({
         where: { id: feedbackId },
         data: { impactScore: score.impactScore },
       });
     } catch (err) {
-      this.logger.warn(`Failed to persist feedback score: ${(err as Error).message}`);
+      this.logger.warn(
+        `Failed to persist feedback score: ${(err as Error).message}`,
+      );
     }
   }
 
   // ─── Settings helper ────────────────────────────────────────────────────────
 
   async getSettings(workspaceId: string) {
-    let settings = await this.prisma.prioritizationSettings.findUnique({ where: { workspaceId } });
+    let settings = await this.prisma.prioritizationSettings.findUnique({
+      where: { workspaceId },
+    });
     if (!settings) {
-      settings = await this.prisma.prioritizationSettings.create({ data: { workspaceId } });
+      settings = await this.prisma.prioritizationSettings.create({
+        data: { workspaceId },
+      });
     }
     return settings;
   }

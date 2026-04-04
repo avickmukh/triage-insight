@@ -126,7 +126,10 @@ export class PlatformService {
       );
     }
     await this.getPlan(planType);
-    return this.prisma.plan.update({ where: { planType }, data: { trialDays } });
+    return this.prisma.plan.update({
+      where: { planType },
+      data: { trialDays },
+    });
   }
 
   // ── Workspace management ──────────────────────────────────────────────────────
@@ -327,7 +330,9 @@ export class PlatformService {
       trialWorkspaces: trialingCount,
       failedPayments: pastDueCount,
       cancelledWorkspaces: canceledCount,
-      freeWorkspaces: planBreakdown.find((p) => p.billingPlan === BillingPlan.FREE)?._count.id ?? 0,
+      freeWorkspaces:
+        planBreakdown.find((p) => p.billingPlan === BillingPlan.FREE)?._count
+          .id ?? 0,
       suspendedWorkspaces: suspendedCount,
       // MRR/ARR/churnRate are Stripe-derived; return null when Stripe is not configured
       mrr: null,
@@ -375,7 +380,13 @@ export class PlatformService {
       }),
       this.prisma.workspace.count(),
     ]);
-    return { workspaces: data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return {
+      workspaces: data,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async overrideBillingPlan(
@@ -393,7 +404,10 @@ export class PlatformService {
       where: { planType: dto.plan },
     });
 
-    const before = { plan: workspace.billingPlan, status: workspace.billingStatus };
+    const before = {
+      plan: workspace.billingPlan,
+      status: workspace.billingStatus,
+    };
 
     const updated = await this.prisma.workspace.update({
       where: { id: workspaceId },
@@ -420,11 +434,7 @@ export class PlatformService {
     return updated;
   }
 
-  async extendTrial(
-    workspaceId: string,
-    dto: ExtendTrialDto,
-    actorId: string,
-  ) {
+  async extendTrial(workspaceId: string, dto: ExtendTrialDto, actorId: string) {
     const workspace = await this.prisma.workspace.findUnique({
       where: { id: workspaceId },
     });
@@ -578,7 +588,9 @@ export class PlatformService {
       where: { workspaceId_feature: { workspaceId, feature } },
     });
     if (!existing)
-      throw new NotFoundException(`No override found for feature '${feature}'.`);
+      throw new NotFoundException(
+        `No override found for feature '${feature}'.`,
+      );
 
     await this.prisma.workspaceFeatureOverride.delete({
       where: { workspaceId_feature: { workspaceId, feature } },
@@ -614,7 +626,9 @@ export class PlatformService {
       feedbackLast30d,
     ] = await Promise.all([
       this.prisma.workspace.count(),
-      this.prisma.workspace.count({ where: { status: WorkspaceStatus.ACTIVE } }),
+      this.prisma.workspace.count({
+        where: { status: WorkspaceStatus.ACTIVE },
+      }),
       this.prisma.workspace.count({
         where: { status: WorkspaceStatus.SUSPENDED },
       }),
@@ -628,8 +642,16 @@ export class PlatformService {
         where: { healthState: 'ERROR' as any },
       }),
       this.prisma.user.count(),
-      this.prisma.user.count({ where: { updatedAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } } }),
-      this.prisma.feedback.count({ where: { createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } } }),
+      this.prisma.user.count({
+        where: {
+          updatedAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
+        },
+      }),
+      this.prisma.feedback.count({
+        where: {
+          createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
+        },
+      }),
     ]);
 
     // Probe infrastructure health
@@ -645,17 +667,22 @@ export class PlatformService {
       const net = await import('net');
       await new Promise<void>((resolve, reject) => {
         const t0 = Date.now();
-        const sock = net.createConnection({ host: redisHost, port: redisPort }, () => {
-          redisLatency = Date.now() - t0;
-          redisStatus = 'healthy';
-          sock.destroy();
-          resolve();
-        });
+        const sock = net.createConnection(
+          { host: redisHost, port: redisPort },
+          () => {
+            redisLatency = Date.now() - t0;
+            redisStatus = 'healthy';
+            sock.destroy();
+            resolve();
+          },
+        );
         sock.setTimeout(2000);
         sock.on('error', reject);
         sock.on('timeout', reject);
       });
-    } catch { /* redisStatus stays 'down' */ }
+    } catch {
+      /* redisStatus stays 'down' */
+    }
 
     const openAiKey = this.config.get<string>('OPENAI_API_KEY', '');
     const aiStatus = openAiKey ? 'healthy' : 'degraded';
@@ -700,9 +727,7 @@ export class PlatformService {
         running: runningAiJobs,
         failed: failedAiJobs,
         failureRate:
-          totalAiJobs > 0
-            ? Math.round((failedAiJobs / totalAiJobs) * 100)
-            : 0,
+          totalAiJobs > 0 ? Math.round((failedAiJobs / totalAiJobs) * 100) : 0,
       },
       // queue metrics are not directly queryable without Bull injection; return nulls
       queue: {
@@ -719,11 +744,7 @@ export class PlatformService {
 
   // ── Platform audit log ────────────────────────────────────────────────────────
 
-  async listPlatformAuditLogs(
-    page = 1,
-    limit = 50,
-    workspaceId?: string,
-  ) {
+  async listPlatformAuditLogs(page = 1, limit = 50, workspaceId?: string) {
     const skip = (page - 1) * limit;
     const where: any = {};
     if (workspaceId) where.workspaceId = workspaceId;
@@ -749,7 +770,13 @@ export class PlatformService {
       this.prisma.platformAuditLog.count({ where }),
     ]);
 
-    return { logs: data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return {
+      logs: data,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   // ── Platform users management ─────────────────────────────────────────────────

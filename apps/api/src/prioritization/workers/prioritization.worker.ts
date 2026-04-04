@@ -21,10 +21,10 @@ export const PRIORITIZATION_QUEUE = 'prioritization';
 export type PrioritizationJobType = 'WORKSPACE_RECOMPUTE' | 'THEME_RECOMPUTE';
 
 export interface PrioritizationJobPayload {
-  type:        PrioritizationJobType;
+  type: PrioritizationJobType;
   workspaceId: string;
-  themeId?:    string;
-  userId?:     string;
+  themeId?: string;
+  userId?: string;
 }
 
 @Processor(PRIORITIZATION_QUEUE)
@@ -39,17 +39,29 @@ export class PrioritizationWorker {
   @Process()
   async handle(job: Job<PrioritizationJobPayload>): Promise<void> {
     const { type, workspaceId, themeId } = job.data;
-    this.logger.log(`Processing prioritization job [${type}] for workspace ${workspaceId}`);
+    this.logger.log(
+      `Processing prioritization job [${type}] for workspace ${workspaceId}`,
+    );
 
     try {
       if (type === 'WORKSPACE_RECOMPUTE') {
         // 1. Compute all theme priority scores
-        const themes = await this.aggregationService.getThemePriorityRanking(workspaceId, 200);
+        const themes = await this.aggregationService.getThemePriorityRanking(
+          workspaceId,
+          200,
+        );
         await this.aggregationService.persistThemeScores(workspaceId, themes);
 
         // 2. Compute all feature priority scores (urgency signals)
-        const features = await this.aggregationService.getFeaturePriorityRanking(workspaceId, 500);
-        await this.aggregationService.persistFeedbackSignals(workspaceId, features);
+        const features =
+          await this.aggregationService.getFeaturePriorityRanking(
+            workspaceId,
+            500,
+          );
+        await this.aggregationService.persistFeedbackSignals(
+          workspaceId,
+          features,
+        );
 
         // 3. Invalidate cache
         this.cacheService.invalidate(workspaceId);
@@ -59,13 +71,18 @@ export class PrioritizationWorker {
         );
       } else if (type === 'THEME_RECOMPUTE' && themeId) {
         // Targeted single-theme recompute: run full ranking and persist only the target theme
-        const themes = await this.aggregationService.getThemePriorityRanking(workspaceId, 200);
-        const target = themes.filter(t => t.themeId === themeId);
+        const themes = await this.aggregationService.getThemePriorityRanking(
+          workspaceId,
+          200,
+        );
+        const target = themes.filter((t) => t.themeId === themeId);
         if (target.length > 0) {
           await this.aggregationService.persistThemeScores(workspaceId, target);
         }
         this.cacheService.invalidate(workspaceId);
-        this.logger.log(`THEME_RECOMPUTE complete for theme ${themeId} in workspace ${workspaceId}`);
+        this.logger.log(
+          `THEME_RECOMPUTE complete for theme ${themeId} in workspace ${workspaceId}`,
+        );
       } else {
         this.logger.warn(`Unknown prioritization job type: ${type}`);
       }

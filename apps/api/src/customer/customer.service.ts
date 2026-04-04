@@ -15,7 +15,13 @@ import {
   type CustomerSignalAggregationJobPayload,
 } from './processors/customer-signal-aggregation.processor';
 
-type CustomerSortField = 'createdAt' | 'updatedAt' | 'arrValue' | 'name' | 'ciqInfluenceScore' | 'healthScore';
+type CustomerSortField =
+  | 'createdAt'
+  | 'updatedAt'
+  | 'arrValue'
+  | 'name'
+  | 'ciqInfluenceScore'
+  | 'healthScore';
 
 @Injectable()
 export class CustomerService {
@@ -37,16 +43,28 @@ export class CustomerService {
     await this.revenueSignalQueue
       .add(
         { type: 'RECOMPUTE_WORKSPACE', workspaceId },
-        { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, delay: 5000 },
+        {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 2000 },
+          delay: 5000,
+        },
       )
-      .catch(() => { /* non-critical */ });
+      .catch(() => {
+        /* non-critical */
+      });
     // Enqueue signal aggregation for the new customer
     await this.signalAggregationQueue
       .add(
         { type: 'AGGREGATE_CUSTOMER', workspaceId, customerId: customer.id },
-        { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, delay: 3000 },
+        {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 2000 },
+          delay: 3000,
+        },
       )
-      .catch(() => { /* non-critical */ });
+      .catch(() => {
+        /* non-critical */
+      });
     return customer;
   }
 
@@ -64,8 +82,17 @@ export class CustomerService {
       limit = 50,
     } = query;
 
-    const allowedSort: CustomerSortField[] = ['createdAt', 'updatedAt', 'arrValue', 'name', 'ciqInfluenceScore', 'healthScore'];
-    const resolvedSort: CustomerSortField = allowedSort.includes(sortBy as CustomerSortField)
+    const allowedSort: CustomerSortField[] = [
+      'createdAt',
+      'updatedAt',
+      'arrValue',
+      'name',
+      'ciqInfluenceScore',
+      'healthScore',
+    ];
+    const resolvedSort: CustomerSortField = allowedSort.includes(
+      sortBy as CustomerSortField,
+    )
       ? (sortBy as CustomerSortField)
       : 'createdAt';
 
@@ -171,7 +198,10 @@ export class CustomerService {
       .filter((d) => d.status === 'OPEN')
       .reduce((sum, d) => sum + d.annualValue, 0);
 
-    const totalDealValue = customer.deals.reduce((sum, d) => sum + d.annualValue, 0);
+    const totalDealValue = customer.deals.reduce(
+      (sum, d) => sum + d.annualValue,
+      0,
+    );
 
     // Unique themes influenced by this customer's feedback
     const influencedThemeIds = new Set<string>();
@@ -199,24 +229,25 @@ export class CustomerService {
     }
 
     // Roadmap items linked to those themes
-    const roadmapItems = influencedThemeIds.size > 0
-      ? await this.prisma.roadmapItem.findMany({
-          where: {
-            workspaceId,
-            themeId: { in: Array.from(influencedThemeIds) },
-          },
-          select: {
-            id: true,
-            title: true,
-            status: true,
-            priorityScore: true,
-            confidenceScore: true,
-            isPublic: true,
-            targetQuarter: true,
-            targetYear: true,
-          },
-        })
-      : [];
+    const roadmapItems =
+      influencedThemeIds.size > 0
+        ? await this.prisma.roadmapItem.findMany({
+            where: {
+              workspaceId,
+              themeId: { in: Array.from(influencedThemeIds) },
+            },
+            select: {
+              id: true,
+              title: true,
+              status: true,
+              priorityScore: true,
+              confidenceScore: true,
+              isPublic: true,
+              targetQuarter: true,
+              targetYear: true,
+            },
+          })
+        : [];
 
     return {
       ...customer,
@@ -282,9 +313,10 @@ export class CustomerService {
     // Sentiment distribution from feedback
     const feedbacks = customer.feedbacks;
     const sentimentValues = feedbacks.map((f) => f.sentiment ?? 0);
-    const avgSentiment = sentimentValues.length > 0
-      ? sentimentValues.reduce((a, b) => a + b, 0) / sentimentValues.length
-      : 0;
+    const avgSentiment =
+      sentimentValues.length > 0
+        ? sentimentValues.reduce((a, b) => a + b, 0) / sentimentValues.length
+        : 0;
 
     const positive = sentimentValues.filter((s) => s >= 0.3).length;
     const negative = sentimentValues.filter((s) => s <= -0.3).length;
@@ -332,10 +364,14 @@ export class CustomerService {
     });
 
     // ── Segment breakdown ────────────────────────────────────────────────────
-    const segmentMap: Record<string, { count: number; totalARR: number; avgCIQ: number; ciqSum: number }> = {};
+    const segmentMap: Record<
+      string,
+      { count: number; totalARR: number; avgCIQ: number; ciqSum: number }
+    > = {};
     for (const c of customers) {
       const seg = c.segment ?? 'UNKNOWN';
-      if (!segmentMap[seg]) segmentMap[seg] = { count: 0, totalARR: 0, avgCIQ: 0, ciqSum: 0 };
+      if (!segmentMap[seg])
+        segmentMap[seg] = { count: 0, totalARR: 0, avgCIQ: 0, ciqSum: 0 };
       segmentMap[seg].count++;
       segmentMap[seg].totalARR += c.arrValue ?? 0;
       segmentMap[seg].ciqSum += c.ciqInfluenceScore ?? 0;
@@ -350,20 +386,27 @@ export class CustomerService {
     // ── Lifecycle distribution ───────────────────────────────────────────────
     const lifecycleMap: Record<string, number> = {};
     for (const c of customers) {
-      lifecycleMap[c.lifecycleStage] = (lifecycleMap[c.lifecycleStage] ?? 0) + 1;
+      lifecycleMap[c.lifecycleStage] =
+        (lifecycleMap[c.lifecycleStage] ?? 0) + 1;
     }
 
     // ── ARR-weighted feature demand ──────────────────────────────────────────
     const arrWeightedDemand = customers
       .filter((c) => (c.featureDemandScore ?? 0) > 0)
-      .sort((a, b) => ((b.featureDemandScore ?? 0) * (b.arrValue ?? 0)) - ((a.featureDemandScore ?? 0) * (a.arrValue ?? 0)))
+      .sort(
+        (a, b) =>
+          (b.featureDemandScore ?? 0) * (b.arrValue ?? 0) -
+          (a.featureDemandScore ?? 0) * (a.arrValue ?? 0),
+      )
       .slice(0, 10)
       .map((c) => ({
         customerId: c.id,
         name: c.name,
         arrValue: c.arrValue ?? 0,
         featureDemandScore: c.featureDemandScore ?? 0,
-        weightedScore: Math.round((c.featureDemandScore ?? 0) * ((c.arrValue ?? 0) / 10_000)),
+        weightedScore: Math.round(
+          (c.featureDemandScore ?? 0) * ((c.arrValue ?? 0) / 10_000),
+        ),
       }));
 
     // ── Churn risk distribution ──────────────────────────────────────────────
@@ -371,9 +414,13 @@ export class CustomerService {
     let atRiskARR = 0;
     for (const c of customers) {
       const risk = c.churnRisk ?? 0;
-      if (risk >= 75) { churnBuckets.critical++; atRiskARR += c.arrValue ?? 0; }
-      else if (risk >= 50) { churnBuckets.high++; atRiskARR += c.arrValue ?? 0; }
-      else if (risk >= 25) churnBuckets.medium++;
+      if (risk >= 75) {
+        churnBuckets.critical++;
+        atRiskARR += c.arrValue ?? 0;
+      } else if (risk >= 50) {
+        churnBuckets.high++;
+        atRiskARR += c.arrValue ?? 0;
+      } else if (risk >= 25) churnBuckets.medium++;
       else churnBuckets.low++;
     }
 
@@ -409,22 +456,28 @@ export class CustomerService {
   async triggerAggregation(workspaceId: string, customerId?: string) {
     if (customerId) {
       try {
-      await this.signalAggregationQueue.add(
-        { type: 'AGGREGATE_CUSTOMER', workspaceId, customerId },
-        { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
-      );
+        await this.signalAggregationQueue.add(
+          { type: 'AGGREGATE_CUSTOMER', workspaceId, customerId },
+          { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
+        );
       } catch (queueErr) {
-        console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+        console.warn(
+          '[Queue] Redis unavailable — job skipped:',
+          (queueErr as Error).message,
+        );
       }
       return { queued: true, scope: 'customer', customerId };
     }
     try {
-    await this.signalAggregationQueue.add(
-      { type: 'AGGREGATE_WORKSPACE', workspaceId },
-      { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
-    );
+      await this.signalAggregationQueue.add(
+        { type: 'AGGREGATE_WORKSPACE', workspaceId },
+        { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
+      );
     } catch (queueErr) {
-      console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+      console.warn(
+        '[Queue] Redis unavailable — job skipped:',
+        (queueErr as Error).message,
+      );
     }
     return { queued: true, scope: 'workspace' };
   }
@@ -442,17 +495,29 @@ export class CustomerService {
       await this.revenueSignalQueue
         .add(
           { type: 'RECOMPUTE_WORKSPACE', workspaceId },
-          { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, delay: 3000 },
+          {
+            attempts: 3,
+            backoff: { type: 'exponential', delay: 2000 },
+            delay: 3000,
+          },
         )
-        .catch(() => { /* non-critical */ });
+        .catch(() => {
+          /* non-critical */
+        });
     }
     // Re-aggregate this customer's signals
     await this.signalAggregationQueue
       .add(
         { type: 'AGGREGATE_CUSTOMER', workspaceId, customerId: id },
-        { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, delay: 2000 },
+        {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 2000 },
+          delay: 2000,
+        },
       )
-      .catch(() => { /* non-critical */ });
+      .catch(() => {
+        /* non-critical */
+      });
     return customer;
   }
 

@@ -32,7 +32,9 @@ export class SpikeDetectionService {
     windowHours = 24,
     zScoreThreshold = 2.5,
   ): Promise<SpikeResult[]> {
-    this.logger.log(`[SpikeDetection] workspace=${workspaceId} window=${windowHours}h`);
+    this.logger.log(
+      `[SpikeDetection] workspace=${workspaceId} window=${windowHours}h`,
+    );
 
     const now = new Date();
     const windowEnd = new Date(now);
@@ -40,11 +42,18 @@ export class SpikeDetectionService {
 
     // Historical baseline window: 7x the detection window, ending at windowStart
     const baselineEnd = new Date(windowStart);
-    const baselineStart = new Date(windowStart.getTime() - windowHours * 7 * 3_600_000);
+    const baselineStart = new Date(
+      windowStart.getTime() - windowHours * 7 * 3_600_000,
+    );
 
     const clusters = await this.prisma.supportIssueCluster.findMany({
       where: { workspaceId },
-      select: { id: true, title: true, arrExposure: true, ticketMaps: { select: { ticketId: true } } },
+      select: {
+        id: true,
+        title: true,
+        arrExposure: true,
+        ticketMaps: { select: { ticketId: true } },
+      },
     });
 
     if (clusters.length === 0) return [];
@@ -79,7 +88,8 @@ export class SpikeDetectionService {
       }
 
       const mean = subCounts.reduce((s, c) => s + c, 0) / subCounts.length;
-      const variance = subCounts.reduce((s, c) => s + (c - mean) ** 2, 0) / subCounts.length;
+      const variance =
+        subCounts.reduce((s, c) => s + (c - mean) ** 2, 0) / subCounts.length;
       const stdDev = Math.sqrt(variance);
 
       // Avoid division by zero — use a floor of 1
@@ -90,7 +100,11 @@ export class SpikeDetectionService {
 
       // Upsert spike event
       const existing = await this.prisma.issueSpikeEvent.findFirst({
-        where: { workspaceId, clusterId: cluster.id, windowStart: { gte: windowStart } },
+        where: {
+          workspaceId,
+          clusterId: cluster.id,
+          windowStart: { gte: windowStart },
+        },
       });
 
       if (!existing) {
@@ -108,7 +122,12 @@ export class SpikeDetectionService {
       } else {
         await this.prisma.issueSpikeEvent.update({
           where: { id: existing.id },
-          data: { ticketCount: currentCount, baseline: mean, zScore, windowEnd },
+          data: {
+            ticketCount: currentCount,
+            baseline: mean,
+            zScore,
+            windowEnd,
+          },
         });
       }
 
@@ -148,7 +167,9 @@ export class SpikeDetectionService {
     const since = new Date(Date.now() - 7 * 24 * 3_600_000); // last 7 days
     const spikes = await this.prisma.issueSpikeEvent.findMany({
       where: { workspaceId, windowStart: { gte: since } },
-      include: { cluster: { include: { theme: { select: { id: true, title: true } } } } },
+      include: {
+        cluster: { include: { theme: { select: { id: true, title: true } } } },
+      },
       orderBy: { zScore: 'desc' },
       take: 50,
     });

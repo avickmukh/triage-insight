@@ -24,7 +24,8 @@ export class SummarizationService {
       messages: [
         {
           role: 'system',
-          content: 'You are a helpful assistant that summarizes user feedback into a concise, one-sentence title.',
+          content:
+            'You are a helpful assistant that summarizes user feedback into a concise, one-sentence title.',
         },
         {
           role: 'user',
@@ -34,6 +35,8 @@ export class SummarizationService {
       temperature: 0.2,
       max_tokens: 60,
     });
-    return response.choices[0].message.content?.trim() ?? 'Summary not available';
+    return (
+      response.choices[0].message.content?.trim() ?? 'Summary not available'
+    );
   }
 }

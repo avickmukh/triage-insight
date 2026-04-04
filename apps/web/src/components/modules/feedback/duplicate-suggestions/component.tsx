@@ -318,25 +318,25 @@ export function DuplicateSuggestionsPanel({
     );
   }
 
-  // ── Empty ────────────────────────────────────────────────────────────────────
+  // ── Empty ───────────────────────────────────────────────────────────────────────────────────
   if (suggestions.length === 0) {
     return (
       <div style={CARD}>
         <p style={SECTION_TITLE}>Possible Duplicates</p>
-        <p
-          style={{
-            fontSize: '0.85rem',
-            color: '#6C757D',
-            padding: '0.75rem 0',
-          }}
-        >
-          No pending duplicate suggestions for this feedback item.
-        </p>
+        <div style={{ background: '#f8fafc', border: '1px solid #e9ecef', borderRadius: '0.5rem', padding: '0.625rem 0.875rem' }}>
+          <p style={{ fontSize: '0.85rem', color: '#6C757D', margin: '0 0 0.25rem', fontWeight: 600 }}>
+            No high-confidence duplicates detected.
+          </p>
+          <p style={{ fontSize: '0.775rem', color: '#adb5bd', margin: 0, lineHeight: 1.5 }}>
+            The AI only flags items with a hybrid similarity score ≥ 0.82 (combining semantic meaning, title similarity, and keyword overlap).
+            Items below this threshold are not shown to avoid false positives.
+          </p>
+        </div>
       </div>
     );
   }
 
-  // ── Suggestions list ─────────────────────────────────────────────────────────
+  // ── Suggestions list ───────────────────────────────────────────────────────────────────────────────────
   return (
     <div style={CARD}>
       <div

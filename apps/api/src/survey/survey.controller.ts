@@ -135,7 +135,12 @@ export class SurveyController {
     @Param('questionId') questionId: string,
     @Body() dto: UpdateSurveyQuestionDto,
   ) {
-    return this.surveyService.updateQuestion(workspaceId, surveyId, questionId, dto);
+    return this.surveyService.updateQuestion(
+      workspaceId,
+      surveyId,
+      questionId,
+      dto,
+    );
   }
 
   @Delete(':surveyId/questions/:questionId')
@@ -159,7 +164,12 @@ export class SurveyController {
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
-    return this.surveyService.listResponses(workspaceId, surveyId, Number(page) || 1, Number(limit) || 20);
+    return this.surveyService.listResponses(
+      workspaceId,
+      surveyId,
+      Number(page) || 1,
+      Number(limit) || 20,
+    );
   }
 
   // ─── Intelligence ───────────────────────────────────────────────────────────
@@ -253,9 +263,7 @@ export class PublicSurveyController {
 @Controller('workspaces/:workspaceId/surveys')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class SurveyAdminController {
-  constructor(
-    private readonly surveyBackfillService: SurveyBackfillService,
-  ) {}
+  constructor(private readonly surveyBackfillService: SurveyBackfillService) {}
 
   /**
    * Trigger the idempotent survey backfill for a specific workspace.

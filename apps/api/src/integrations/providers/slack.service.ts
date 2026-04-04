@@ -185,7 +185,9 @@ export class SlackService {
   /**
    * Validate that a token is valid and return basic team info.
    */
-  async testAuth(token: string): Promise<{ teamId: string; teamName: string; botUserId: string }> {
+  async testAuth(
+    token: string,
+  ): Promise<{ teamId: string; teamName: string; botUserId: string }> {
     const res = await this.slackGet<{
       team_id: string;
       team: string;

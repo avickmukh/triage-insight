@@ -20,15 +20,20 @@ interface ClusteringJobPayload {
 export class ThemeClusteringProcessor {
   private readonly logger = new Logger(ThemeClusteringProcessor.name);
 
-  constructor(private readonly themeClusteringService: ThemeClusteringService) {}
+  constructor(
+    private readonly themeClusteringService: ThemeClusteringService,
+  ) {}
 
   @Process()
   async handleClustering(job: Job<ClusteringJobPayload>) {
     const { workspaceId } = job.data;
-    this.logger.log(`Processing theme clustering job for workspace ${workspaceId}`);
+    this.logger.log(
+      `Processing theme clustering job for workspace ${workspaceId}`,
+    );
 
     try {
-      const result = await this.themeClusteringService.runClustering(workspaceId);
+      const result =
+        await this.themeClusteringService.runClustering(workspaceId);
       this.logger.log(
         `Theme clustering complete for workspace ${workspaceId}: ` +
           `processed=${result.processed}, assigned=${result.assigned}, created=${result.created}`,

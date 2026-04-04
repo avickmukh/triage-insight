@@ -54,7 +54,7 @@ export class ClusterRefinementService {
    * Minimum cosine similarity for a merge-before-archive attempt.
    * If no neighbour exceeds this, the theme is archived.
    */
-  private readonly MERGE_SIMILARITY_FLOOR = 0.60;
+  private readonly MERGE_SIMILARITY_FLOOR = 0.6;
 
   /** In-memory lock set to prevent concurrent runs per workspace. */
   private readonly runningWorkspaces = new Set<string>();
@@ -75,22 +75,40 @@ export class ClusterRefinementService {
    */
   async refineWorkspace(workspaceId: string): Promise<RefinementSummary> {
     if (this.runningWorkspaces.has(workspaceId)) {
-      this.logger.debug(`[Refine] Workspace ${workspaceId} already running — skipping`);
-      return { workspaceId, promoted: 0, archived: 0, merged: 0, labelled: 0, trends: 0, skipped: true };
+      this.logger.debug(
+        `[Refine] Workspace ${workspaceId} already running — skipping`,
+      );
+      return {
+        workspaceId,
+        promoted: 0,
+        archived: 0,
+        merged: 0,
+        labelled: 0,
+        trends: 0,
+        skipped: true,
+      };
     }
 
     this.runningWorkspaces.add(workspaceId);
     const start = Date.now();
 
     try {
-      this.logger.log(`[Refine] Starting refinement for workspace ${workspaceId}`);
+      this.logger.log(
+        `[Refine] Starting refinement for workspace ${workspaceId}`,
+      );
 
       // Step 1: Compute dynamic min support based on active theme count
-      const dynamicMinSupport = await this.computeDynamicMinSupport(workspaceId);
-      this.logger.debug(`[Refine] dynamicMinSupport=${dynamicMinSupport} for workspace ${workspaceId}`);
+      const dynamicMinSupport =
+        await this.computeDynamicMinSupport(workspaceId);
+      this.logger.debug(
+        `[Refine] dynamicMinSupport=${dynamicMinSupport} for workspace ${workspaceId}`,
+      );
 
       // Step 2: Promote PROVISIONAL → AI_GENERATED (correct post-AI status)
-      const promoted = await this.promoteProvisionalThemes(workspaceId, dynamicMinSupport);
+      const promoted = await this.promoteProvisionalThemes(
+        workspaceId,
+        dynamicMinSupport,
+      );
 
       // Step 3: Convergent merge pass BEFORE archive so weak themes get a chance
       // to merge into a stronger neighbour rather than being discarded.
@@ -105,20 +123,30 @@ export class ClusterRefinementService {
       const archived = await this.archiveWeakProvisionalThemes(workspaceId);
 
       // Step 5: Refresh stale labels
-      const labelResult = await this.labelService.generateLabelsForWorkspace(workspaceId);
+      const labelResult =
+        await this.labelService.generateLabelsForWorkspace(workspaceId);
       const labelled = labelResult.processed;
 
       // Step 6: Recompute trends
-      const trendResult = await this.trendService.computeWorkspaceTrends(workspaceId);
+      const trendResult =
+        await this.trendService.computeWorkspaceTrends(workspaceId);
       const trends = trendResult?.processed ?? 0;
 
       const durationMs = Date.now() - start;
       this.logger.log(
         `[Refine] Workspace ${workspaceId} done in ${durationMs}ms — ` +
-        `promoted=${promoted} merged=${merged} archived=${archived} labelled=${labelled} trends=${trends}`,
+          `promoted=${promoted} merged=${merged} archived=${archived} labelled=${labelled} trends=${trends}`,
       );
 
-      return { workspaceId, promoted, archived, merged, labelled, trends, skipped: false };
+      return {
+        workspaceId,
+        promoted,
+        archived,
+        merged,
+        labelled,
+        trends,
+        skipped: false,
+      };
     } catch (err) {
       this.logger.error(
         `[Refine] Workspace ${workspaceId} failed: ${(err as Error).message}`,
@@ -148,7 +176,9 @@ export class ClusterRefinementService {
       select: { id: true },
     });
 
-    this.logger.log(`[Refine] Running refinement for ${activeWorkspaces.length} active workspaces`);
+    this.logger.log(
+      `[Refine] Running refinement for ${activeWorkspaces.length} active workspaces`,
+    );
 
     const results: RefinementSummary[] = [];
     for (const { id } of activeWorkspaces) {
@@ -159,7 +189,11 @@ export class ClusterRefinementService {
         // Already logged in refineWorkspace — continue with next workspace
         results.push({
           workspaceId: id,
-          promoted: 0, archived: 0, merged: 0, labelled: 0, trends: 0,
+          promoted: 0,
+          archived: 0,
+          merged: 0,
+          labelled: 0,
+          trends: 0,
           skipped: false,
           error: true,
         });
@@ -213,7 +247,9 @@ export class ClusterRefinementService {
     workspaceId: string,
     dynamicMinSupport: number,
   ): Promise<number> {
-    const candidates = await this.prisma.$queryRaw<Array<{ id: string; feedbackCount: number }>>`
+    const candidates = await this.prisma.$queryRaw<
+      Array<{ id: string; feedbackCount: number }>
+    >`
       SELECT t.id, COUNT(tf.*)::int AS "feedbackCount"
       FROM "Theme" t
       LEFT JOIN "ThemeFeedback" tf ON tf."themeId" = t.id
@@ -256,25 +292,30 @@ export class ClusterRefinementService {
    *
    * Returns the number of themes archived.
    */
-  private async archiveWeakProvisionalThemes(workspaceId: string): Promise<number> {
+  private async archiveWeakProvisionalThemes(
+    workspaceId: string,
+  ): Promise<number> {
     const activeThemeCount = await this.prisma.theme.count({
       where: { workspaceId, status: { not: 'ARCHIVED' } },
     });
 
     // Bootstrap workspaces get a relaxed cutoff (60 days instead of 30)
-    const ageCutoffDays = activeThemeCount <= 20
-      ? this.MAX_PROVISIONAL_AGE_DAYS * 2
-      : this.MAX_PROVISIONAL_AGE_DAYS;
+    const ageCutoffDays =
+      activeThemeCount <= 20
+        ? this.MAX_PROVISIONAL_AGE_DAYS * 2
+        : this.MAX_PROVISIONAL_AGE_DAYS;
 
     const cutoff = new Date(Date.now() - ageCutoffDays * 24 * 60 * 60 * 1000);
 
     // Find old PROVISIONAL themes with < 2 signals
-    const candidates = await this.prisma.$queryRaw<Array<{
-      id: string;
-      title: string;
-      hasEmbedding: boolean;
-      feedbackCount: number;
-    }>>`
+    const candidates = await this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        title: string;
+        hasEmbedding: boolean;
+        feedbackCount: number;
+      }>
+    >`
       SELECT
         t.id,
         t.title,
@@ -297,11 +338,13 @@ export class ClusterRefinementService {
     for (const candidate of weakCandidates) {
       // Attempt merge-before-archive: find the nearest active neighbour
       if (candidate.hasEmbedding) {
-        const neighbours = await this.prisma.$queryRaw<Array<{
-          id: string;
-          title: string;
-          sim: number;
-        }>>`
+        const neighbours = await this.prisma.$queryRaw<
+          Array<{
+            id: string;
+            title: string;
+            sim: number;
+          }>
+        >`
           SELECT
             t.id,
             t.title,
@@ -330,14 +373,16 @@ export class ClusterRefinementService {
             WHERE tf."themeId" = ${candidate.id}
             ON CONFLICT ("themeId", "feedbackId") DO NOTHING;
           `;
-          await this.prisma.themeFeedback.deleteMany({ where: { themeId: candidate.id } });
+          await this.prisma.themeFeedback.deleteMany({
+            where: { themeId: candidate.id },
+          });
           await this.prisma.theme.update({
             where: { id: candidate.id },
             data: { status: 'ARCHIVED' },
           });
           this.logger.log(
             `[Refine] Merged weak PROVISIONAL "${candidate.title}" (${candidate.id}) ` +
-            `→ "${nearest.title}" (${nearest.id}, sim=${nearest.sim.toFixed(3)}) then archived`,
+              `→ "${nearest.title}" (${nearest.id}, sim=${nearest.sim.toFixed(3)}) then archived`,
           );
           archived++;
           continue;
@@ -345,21 +390,21 @@ export class ClusterRefinementService {
 
         // No suitable merge target — keep as hidden candidate (do not archive yet)
         // unless the theme is truly isolated (no neighbour at all or sim very low)
-        if (!nearest || nearest.sim < 0.30) {
+        if (!nearest || nearest.sim < 0.3) {
           await this.prisma.theme.update({
             where: { id: candidate.id },
             data: { status: 'ARCHIVED' },
           });
           this.logger.log(
             `[Refine] Archived isolated PROVISIONAL "${candidate.title}" (${candidate.id}) ` +
-            `[nearest sim=${nearest?.sim?.toFixed(3) ?? 'n/a'} < 0.30, age > ${ageCutoffDays}d]`,
+              `[nearest sim=${nearest?.sim?.toFixed(3) ?? 'n/a'} < 0.30, age > ${ageCutoffDays}d]`,
           );
           archived++;
         } else {
           // Similarity is between 0.30 and MERGE_SIMILARITY_FLOOR — keep as hidden candidate
           this.logger.debug(
             `[Refine] Keeping weak PROVISIONAL "${candidate.title}" (${candidate.id}) as hidden candidate ` +
-            `[nearest sim=${nearest.sim.toFixed(3)}, age > ${ageCutoffDays}d]`,
+              `[nearest sim=${nearest.sim.toFixed(3)}, age > ${ageCutoffDays}d]`,
           );
         }
       } else {
@@ -378,7 +423,7 @@ export class ClusterRefinementService {
     if (archived > 0) {
       this.logger.log(
         `[Refine] Archived ${archived} weak PROVISIONAL themes in workspace ${workspaceId} ` +
-        `(age cutoff: ${ageCutoffDays}d, bootstrap: ${activeThemeCount <= 20})`,
+          `(age cutoff: ${ageCutoffDays}d, bootstrap: ${activeThemeCount <= 20})`,
       );
     }
 

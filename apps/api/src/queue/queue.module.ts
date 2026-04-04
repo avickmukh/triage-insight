@@ -41,27 +41,27 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 
 /** All queue names as constants — import these instead of hardcoding strings */
 export const QUEUE_NAMES = {
-  AI_ANALYSIS:                  'ai-analysis',
-  CIQ_SCORING:                  'ciq-scoring',
-  VOICE_TRANSCRIPTION:          'voice-transcription',
-  VOICE_EXTRACTION:             'voice-extraction',
-  SURVEY_INTELLIGENCE:          'survey-intelligence',
-  SUPPORT_SYNC:                 'support-sync',
-  SUPPORT_CLUSTERING:           'support-clustering',
-  SUPPORT_SPIKE_DETECTION:      'support-spike-detection',
-  SUPPORT_SENTIMENT:            'support-sentiment',
-  CUSTOMER_REVENUE_SIGNAL:      'customer-revenue-signal',
-  CUSTOMER_SIGNAL_AGGREGATION:  'customer-signal-aggregation',
-  THEME_CLUSTERING:             'theme-clustering',
-  UNIFIED_AGGREGATION:          'unified-aggregation',
-  PRIORITIZATION:               'prioritization',
-  DASHBOARD_REFRESH:            'dashboard-refresh',
-  DIGEST:                       'digest',
-  PORTAL_SIGNAL:                'portal-signal',
-  SLACK_INGESTION:              'slack-ingestion',
-  PURGE:                        'workspace-purge',
+  AI_ANALYSIS: 'ai-analysis',
+  CIQ_SCORING: 'ciq-scoring',
+  VOICE_TRANSCRIPTION: 'voice-transcription',
+  VOICE_EXTRACTION: 'voice-extraction',
+  SURVEY_INTELLIGENCE: 'survey-intelligence',
+  SUPPORT_SYNC: 'support-sync',
+  SUPPORT_CLUSTERING: 'support-clustering',
+  SUPPORT_SPIKE_DETECTION: 'support-spike-detection',
+  SUPPORT_SENTIMENT: 'support-sentiment',
+  CUSTOMER_REVENUE_SIGNAL: 'customer-revenue-signal',
+  CUSTOMER_SIGNAL_AGGREGATION: 'customer-signal-aggregation',
+  THEME_CLUSTERING: 'theme-clustering',
+  UNIFIED_AGGREGATION: 'unified-aggregation',
+  PRIORITIZATION: 'prioritization',
+  DASHBOARD_REFRESH: 'dashboard-refresh',
+  DIGEST: 'digest',
+  PORTAL_SIGNAL: 'portal-signal',
+  SLACK_INGESTION: 'slack-ingestion',
+  PURGE: 'workspace-purge',
   /** Dead-letter queue — all exhausted jobs are moved here */
-  DLQ:                          'dlq',
+  DLQ: 'dlq',
 } as const;
 
 /**
@@ -76,11 +76,16 @@ function parseRedisUrl(url: string): {
   tls?: object;
 } {
   const parsed = new URL(url);
-  const host     = parsed.hostname || 'localhost';
-  const port     = parsed.port ? parseInt(parsed.port, 10) : 6379;
+  const host = parsed.hostname || 'localhost';
+  const port = parsed.port ? parseInt(parsed.port, 10) : 6379;
   const password = parsed.password || undefined;
-  const tls      = parsed.protocol === 'rediss:' ? {} : undefined;
-  return { host, port, ...(password ? { password } : {}), ...(tls ? { tls } : {}) };
+  const tls = parsed.protocol === 'rediss:' ? {} : undefined;
+  return {
+    host,
+    port,
+    ...(password ? { password } : {}),
+    ...(tls ? { tls } : {}),
+  };
 }
 
 @Global()
@@ -90,15 +95,16 @@ function parseRedisUrl(url: string): {
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => {
         // ── Redis connection: REDIS_URL takes priority over individual vars ──
-        const redisUrl      = configService.get<string>('REDIS_URL', '');
+        const redisUrl = configService.get<string>('REDIS_URL', '');
         const redisPassword = configService.get<string>('REDIS_PASSWORD', '');
-        const redisTls      = configService.get<string>('REDIS_TLS', 'false') === 'true';
+        const redisTls =
+          configService.get<string>('REDIS_TLS', 'false') === 'true';
 
         const redisConfig = redisUrl
           ? parseRedisUrl(redisUrl)
           : {
-              host:     configService.get<string>('REDIS_HOST', 'localhost'),
-              port:     configService.get<number>('REDIS_PORT', 6379),
+              host: configService.get<string>('REDIS_HOST', 'localhost'),
+              port: configService.get<number>('REDIS_PORT', 6379),
               ...(redisPassword ? { password: redisPassword } : {}),
               ...(redisTls ? { tls: {} } : {}),
             };
@@ -106,17 +112,20 @@ function parseRedisUrl(url: string): {
         return {
           redis: {
             ...redisConfig,
-            connectTimeout:       10000,
+            connectTimeout: 10000,
             maxRetriesPerRequest: null,
           },
           defaultJobOptions: {
-            attempts:        configService.get<number>('JOB_MAX_ATTEMPTS', 5),
+            attempts: configService.get<number>('JOB_MAX_ATTEMPTS', 5),
             backoff: {
-              type:  'exponential',
+              type: 'exponential',
               delay: configService.get<number>('JOB_BACKOFF_DELAY_MS', 2000),
             },
-            removeOnComplete: configService.get<number>('JOB_REMOVE_ON_COMPLETE', 100),
-            removeOnFail:     configService.get<number>('JOB_REMOVE_ON_FAIL', 500),
+            removeOnComplete: configService.get<number>(
+              'JOB_REMOVE_ON_COMPLETE',
+              100,
+            ),
+            removeOnFail: configService.get<number>('JOB_REMOVE_ON_FAIL', 500),
           },
         };
       },

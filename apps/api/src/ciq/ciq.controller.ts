@@ -71,7 +71,10 @@ export class CiqController {
     @Param('workspaceId') workspaceId: string,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
   ) {
-    return this.ciqEngineService.getFeatureRanking(workspaceId, Math.min(limit, 50));
+    return this.ciqEngineService.getFeatureRanking(
+      workspaceId,
+      Math.min(limit, 50),
+    );
   }
 
   /**
@@ -87,7 +90,10 @@ export class CiqController {
     @Param('workspaceId') workspaceId: string,
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
   ) {
-    return this.ciqEngineService.getFeatureRanking(workspaceId, Math.min(limit, 200));
+    return this.ciqEngineService.getFeatureRanking(
+      workspaceId,
+      Math.min(limit, 200),
+    );
   }
 
   /**
@@ -103,7 +109,10 @@ export class CiqController {
     @Param('workspaceId') workspaceId: string,
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
   ) {
-    return this.ciqEngineService.getThemeRanking(workspaceId, Math.min(limit, 200));
+    return this.ciqEngineService.getThemeRanking(
+      workspaceId,
+      Math.min(limit, 200),
+    );
   }
 
   /**
@@ -119,7 +128,10 @@ export class CiqController {
     @Param('workspaceId') workspaceId: string,
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
   ) {
-    return this.ciqEngineService.getCustomerRanking(workspaceId, Math.min(limit, 200));
+    return this.ciqEngineService.getCustomerRanking(
+      workspaceId,
+      Math.min(limit, 200),
+    );
   }
 
   /**
@@ -153,6 +165,9 @@ export class CiqController {
     @Param('workspaceId') workspaceId: string,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.prioritizationService.enqueueFullRecompute(workspaceId, req.user.sub);
+    return this.prioritizationService.enqueueFullRecompute(
+      workspaceId,
+      req.user.sub,
+    );
   }
 }

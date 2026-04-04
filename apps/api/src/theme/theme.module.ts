@@ -8,12 +8,7 @@ import { DealModule } from '../deal/deal.module';
 import { UnifiedAggregationService } from './services/unified-aggregation.service';
 
 @Module({
-  imports: [
-    PrismaModule,
-    AiModule,
-
-    DealModule,
-  ],
+  imports: [PrismaModule, AiModule, DealModule],
   controllers: [ThemeController],
   providers: [ThemeService, ThemeRepository, UnifiedAggregationService],
   // ThemeService, ThemeRepository, and UnifiedAggregationService exported so

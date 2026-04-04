@@ -295,6 +295,55 @@ export class ThemeService {
     return updatedTheme;
   }
 
+  // ─── Archive ──────────────────────────────────────────────────────────────
+
+  /**
+   * Manually archive a theme with explainability metadata.
+   * Sets status = ARCHIVED, records reason, explanation, archivedBy = 'MANUAL', archivedAt = now().
+   */
+  async archiveTheme(
+    workspaceId: string,
+    userId: string,
+    id: string,
+    reason?: string,
+  ) {
+    const theme = await this.findOne(workspaceId, id);
+    if (theme.status === 'ARCHIVED') {
+      throw new BadRequestException('Theme is already archived.');
+    }
+
+    const now = new Date();
+    const explanationMap: Record<string, string> = {
+      Duplicate: 'This theme overlaps with another theme covering the same user problem. Archiving keeps the signal consolidated.',
+      Noise: 'This theme contains low-quality or irrelevant signals that do not represent a real product problem.',
+      'Wrong clustering': 'The AI incorrectly grouped unrelated feedback into this theme. The signals have been or will be re-assigned.',
+      Other: 'This theme was manually archived by a product team member.',
+    };
+    const archiveReason = reason ?? 'Other';
+    const archiveExplanation = explanationMap[archiveReason] ?? explanationMap['Other'];
+
+    const archived = await this.prisma.theme.update({
+      where: { id },
+      data: {
+        status: 'ARCHIVED',
+        archiveReason,
+        archiveExplanation,
+        archivedBy: 'MANUAL',
+        archivedAt: now,
+        archiveConfidence: null, // manual archives have no AI confidence
+      },
+    });
+
+    await this.auditService.logAction(
+      workspaceId,
+      userId,
+      AuditLogAction.THEME_ARCHIVE,
+      { themeId: id, archiveReason, archivedBy: 'MANUAL' },
+    );
+
+    return archived;
+  }
+
   // ─── Feedback linking ─────────────────────────────────────────────────────
 
   /**

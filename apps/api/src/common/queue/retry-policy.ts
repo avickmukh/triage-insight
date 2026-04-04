@@ -30,8 +30,8 @@ export class RetryPolicy {
         type: RetryPolicy.backoffType(),
         delay: RetryPolicy.backoffDelay(),
       },
-      removeOnComplete: 100,   // keep last 100 completed jobs for observability
-      removeOnFail: 500,       // keep last 500 failed jobs for DLQ inspection
+      removeOnComplete: 100, // keep last 100 completed jobs for observability
+      removeOnFail: 500, // keep last 500 failed jobs for DLQ inspection
     };
   }
 

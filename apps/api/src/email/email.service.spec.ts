@@ -36,7 +36,12 @@ describe('EmailService', () => {
     beforeEach(async () => {
       service = await buildModule('console');
       // Spy on the logger to verify log output without real side effects
-      loggerSpy = jest.spyOn((service as unknown as { logger: { log: jest.Mock } }).logger, 'log').mockImplementation(() => {});
+      loggerSpy = jest
+        .spyOn(
+          (service as unknown as { logger: { log: jest.Mock } }).logger,
+          'log',
+        )
+        .mockImplementation(() => {});
     });
 
     it('should be defined', () => {
@@ -58,7 +63,12 @@ describe('EmailService', () => {
   describe('when EMAIL_PROVIDER is smtp', () => {
     beforeEach(async () => {
       service = await buildModule('smtp');
-      loggerSpy = jest.spyOn((service as unknown as { logger: { warn: jest.Mock } }).logger, 'warn').mockImplementation(() => {});
+      loggerSpy = jest
+        .spyOn(
+          (service as unknown as { logger: { warn: jest.Mock } }).logger,
+          'warn',
+        )
+        .mockImplementation(() => {});
     });
 
     it('should resolve without throwing (stub behaviour)', async () => {
@@ -67,16 +77,19 @@ describe('EmailService', () => {
 
     it('should warn that the smtp provider is not yet fully implemented', async () => {
       await service.send(emailOptions);
-      expect(loggerSpy).toHaveBeenCalledWith(
-        expect.stringContaining('smtp'),
-      );
+      expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining('smtp'));
     });
   });
 
   describe('when EMAIL_PROVIDER is ses', () => {
     beforeEach(async () => {
       service = await buildModule('ses');
-      loggerSpy = jest.spyOn((service as unknown as { logger: { warn: jest.Mock } }).logger, 'warn').mockImplementation(() => {});
+      loggerSpy = jest
+        .spyOn(
+          (service as unknown as { logger: { warn: jest.Mock } }).logger,
+          'warn',
+        )
+        .mockImplementation(() => {});
     });
 
     it('should resolve without throwing (stub behaviour)', async () => {
@@ -85,9 +98,7 @@ describe('EmailService', () => {
 
     it('should warn that the ses provider is not yet fully implemented', async () => {
       await service.send(emailOptions);
-      expect(loggerSpy).toHaveBeenCalledWith(
-        expect.stringContaining('ses'),
-      );
+      expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining('ses'));
     });
   });
 });

@@ -242,12 +242,20 @@ export class PublicPortalService {
     // Enqueue AI analysis (embedding, summarization, clustering, dedup)
     this.analysisQueue
       .add({ feedbackId: feedback.id, workspaceId: workspace.id })
-      .catch(() => {/* non-critical — worker will retry */});
+      .catch(() => {
+        /* non-critical — worker will retry */
+      });
 
     // Enqueue CIQ scoring
     this.ciqQueue
-      .add({ type: 'FEEDBACK_SCORED', workspaceId: workspace.id, feedbackId: feedback.id })
-      .catch(() => {/* non-critical — worker will retry */});
+      .add({
+        type: 'FEEDBACK_SCORED',
+        workspaceId: workspace.id,
+        feedbackId: feedback.id,
+      })
+      .catch(() => {
+        /* non-critical — worker will retry */
+      });
 
     // Publish portal signal (non-critical)
     this.signalQueue
@@ -262,17 +270,15 @@ export class PublicPortalService {
         },
         { attempts: 2, removeOnComplete: true },
       )
-      .catch(() => {/* non-critical */});
+      .catch(() => {
+        /* non-critical */
+      });
     return { ...feedback, portalUserId };
   }
 
   // ─── Vote ─────────────────────────────────────────────────────────────────
 
-  async vote(
-    workspaceSlug: string,
-    feedbackId: string,
-    dto: PublicVoteDto,
-  ) {
+  async vote(workspaceSlug: string, feedbackId: string, dto: PublicVoteDto) {
     const workspace = await this.resolveWorkspace(workspaceSlug);
     await this.resolveFeedback(workspace.id, feedbackId);
 
@@ -329,7 +335,9 @@ export class PublicPortalService {
         },
         { attempts: 2, removeOnComplete: true },
       )
-      .catch(() => {/* non-critical */});
+      .catch(() => {
+        /* non-critical */
+      });
 
     return { ...vote, voteCount };
   }
@@ -386,7 +394,9 @@ export class PublicPortalService {
         },
         { attempts: 2, removeOnComplete: true },
       )
-      .catch(() => {/* non-critical */});
+      .catch(() => {
+        /* non-critical */
+      });
 
     return comment;
   }

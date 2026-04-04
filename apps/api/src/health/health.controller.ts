@@ -65,12 +65,18 @@ export class HealthController {
     const key = 'redis';
     try {
       // Bull exposes the underlying ioredis client via queue.client
-      const client = (this.analysisQueue as unknown as { client: { ping: () => Promise<string> } }).client;
+      const client = (
+        this.analysisQueue as unknown as {
+          client: { ping: () => Promise<string> };
+        }
+      ).client;
       const pong = await client.ping();
       if (pong === 'PONG') {
         return { [key]: { status: 'up' } };
       }
-      return { [key]: { status: 'down', message: `Unexpected PING response: ${pong}` } };
+      return {
+        [key]: { status: 'down', message: `Unexpected PING response: ${pong}` },
+      };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return { [key]: { status: 'down', message } };

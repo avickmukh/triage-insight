@@ -42,11 +42,13 @@ describe('ExplainableInsightsService', () => {
       ],
     }).compile();
 
-    service = module.get<ExplainableInsightsService>(ExplainableInsightsService);
+    service = module.get<ExplainableInsightsService>(
+      ExplainableInsightsService,
+    );
   });
 
   // Helper to access private method via type cast
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   function heuristic(theme: any, customerCount: number): string {
     return (service as any).heuristicSentence(theme, customerCount);
   }
@@ -127,7 +129,9 @@ describe('ExplainableInsightsService', () => {
     );
 
     expect(sentence).toContain('Payment Failures');
-    expect(sentence).not.toContain('Payment Processing Failures During Checkout Flow');
+    expect(sentence).not.toContain(
+      'Payment Processing Failures During Checkout Flow',
+    );
   });
 
   // ── 5. Batch workspace generation ──────────────────────────────────────────

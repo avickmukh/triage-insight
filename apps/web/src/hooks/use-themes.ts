@@ -238,6 +238,28 @@ export const useMoveFeedback = () => {
   });
 };
 
+export const useArchiveTheme = (themeId: string) => {
+  const { workspace } = useWorkspace();
+  const workspaceId = workspace?.id;
+  const queryClient = useQueryClient();
+
+  return useMutation<Theme, Error, string | undefined>({
+    mutationFn: (reason) => {
+      if (!workspaceId) throw new Error('Workspace ID is not available');
+      return apiClient.themes.archiveTheme(workspaceId, themeId, reason);
+    },
+    onSuccess: (archived) => {
+      queryClient.invalidateQueries({
+        queryKey: [THEME_QUERY_KEY, workspaceId, 'list'],
+      });
+      queryClient.setQueryData(
+        [THEME_QUERY_KEY, workspaceId, archived.id],
+        archived
+      );
+    },
+  });
+};
+
 export const useTriggerRecluster = () => {
   const { workspace } = useWorkspace();
   const workspaceId = workspace?.id;

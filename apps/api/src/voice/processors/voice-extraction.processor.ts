@@ -52,8 +52,20 @@ export class VoiceExtractionProcessor {
 
   @Process()
   async handleExtraction(job: Job<VoiceExtractionJobPayload>) {
-    const { uploadAssetId, workspaceId, feedbackId, transcript, label, batchId } = job.data;
-    const ctx = { jobType: 'VOICE_EXTRACTION', workspaceId, entityId: feedbackId, jobId: job.id };
+    const {
+      uploadAssetId,
+      workspaceId,
+      feedbackId,
+      transcript,
+      label,
+      batchId,
+    } = job.data;
+    const ctx = {
+      jobType: 'VOICE_EXTRACTION',
+      workspaceId,
+      entityId: feedbackId,
+      jobId: job.id,
+    };
     const startedAt = Date.now();
 
     this.logger.start(ctx);
@@ -66,13 +78,20 @@ export class VoiceExtractionProcessor {
         status: AiJobStatus.RUNNING,
         entityType: 'Feedback',
         entityId: feedbackId,
-        input: { uploadAssetId, feedbackId, transcriptLength: transcript.length },
+        input: {
+          uploadAssetId,
+          feedbackId,
+          transcriptLength: transcript.length,
+        },
       },
     });
 
     try {
       // ── 2. Extract structured intelligence from the transcript ────────────
-      const intelligence = await this.intelligenceService.extractIntelligence(transcript, label);
+      const intelligence = await this.intelligenceService.extractIntelligence(
+        transcript,
+        label,
+      );
       this.logger.debug(ctx, 'Intelligence extracted', {
         sentiment: intelligence.sentiment.toFixed(2),
         confidence: intelligence.confidenceScore.toFixed(2),
@@ -91,7 +110,8 @@ export class VoiceExtractionProcessor {
           ...intelligence.painPoints,
           ...intelligence.featureRequests,
         ].join(' ');
-        embedding = await this.embeddingService.generateEmbedding(embeddingText);
+        embedding =
+          await this.embeddingService.generateEmbedding(embeddingText);
       } catch (embErr) {
         this.logger.stepWarn(ctx, 'EMBEDDING', (embErr as Error).message);
       }
@@ -133,7 +153,11 @@ export class VoiceExtractionProcessor {
           this.logger.debug(ctx, 'Theme linked', { linkedThemeId });
         }
       } catch (clusterErr) {
-        this.logger.stepWarn(ctx, 'THEME_LINKING', (clusterErr as Error).message);
+        this.logger.stepWarn(
+          ctx,
+          'THEME_LINKING',
+          (clusterErr as Error).message,
+        );
       }
 
       // ── 6. Enqueue CIQ re-scoring for the linked theme ────────────────────
@@ -163,7 +187,11 @@ export class VoiceExtractionProcessor {
           this.clusteringService
             .runBatchFinalization(workspaceId, batchId)
             .catch((finErr: Error) =>
-              this.logger.stepWarn(ctx, 'BATCH_FINALIZE', `Non-fatal: ${finErr.message}`),
+              this.logger.stepWarn(
+                ctx,
+                'BATCH_FINALIZE',
+                `Non-fatal: ${finErr.message}`,
+              ),
             );
         } catch (batchErr) {
           this.logger.stepWarn(
@@ -196,11 +224,15 @@ export class VoiceExtractionProcessor {
 
       const durationMs = Date.now() - startedAt;
       this.logger.complete({ ...ctx, durationMs });
-
     } catch (err) {
       const errorMessage = (err as Error).message ?? 'Unknown error';
       const durationMs = Date.now() - startedAt;
-      this.logger.fail({ ...ctx, durationMs, failureReason: errorMessage, attempt: job.attemptsMade });
+      this.logger.fail({
+        ...ctx,
+        durationMs,
+        failureReason: errorMessage,
+        attempt: job.attemptsMade,
+      });
 
       await this.prisma.aiJobLog.update({
         where: { id: extractionJob.id },
@@ -221,7 +253,11 @@ export class VoiceExtractionProcessor {
     // Mark AiJobLog as DEAD_LETTERED on final failure (no idempotency service for voice — uses AiJobLog directly)
     const maxAttempts = RetryPolicy.maxAttempts();
     if (job.attemptsMade >= maxAttempts) {
-      this.logger.dlq({ ...ctx, failureReason: error.message, attempts: job.attemptsMade });
+      this.logger.dlq({
+        ...ctx,
+        failureReason: error.message,
+        attempts: job.attemptsMade,
+      });
       await this.prisma.aiJobLog
         .updateMany({
           where: {
@@ -232,16 +268,22 @@ export class VoiceExtractionProcessor {
           },
           data: { status: AiJobStatus.DEAD_LETTERED },
         })
-        .catch(() => {/* best-effort */});
+        .catch(() => {
+          /* best-effort */
+        });
 
       // If the batch exists, count this as a failed row so the batch can still
       // reach COMPLETED (all rows accounted for).
       const { batchId } = job.data;
       if (batchId) {
-        await this.prisma.importBatch.update({
-          where: { id: batchId },
-          data: { failedRows: 1, stage: 'COMPLETED', status: 'FAILED' },
-        }).catch(() => {/* best-effort */});
+        await this.prisma.importBatch
+          .update({
+            where: { id: batchId },
+            data: { failedRows: 1, stage: 'COMPLETED', status: 'FAILED' },
+          })
+          .catch(() => {
+            /* best-effort */
+          });
       }
     }
   }

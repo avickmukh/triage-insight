@@ -51,7 +51,9 @@ describe('SlackIngestionService', () => {
 
   describe('ingestWorkspace', () => {
     it('should return empty result when no Slack connection is found', async () => {
-      mockPrismaService.integrationConnection.findUnique.mockResolvedValue(null);
+      mockPrismaService.integrationConnection.findUnique.mockResolvedValue(
+        null,
+      );
 
       const result = await service.ingestWorkspace('ws-id');
 
@@ -114,7 +116,9 @@ describe('SlackIngestionService', () => {
         .mockResolvedValueOnce(null) // new
         .mockResolvedValueOnce({ id: 'existing-feedback-id' }); // duplicate
 
-      mockPrismaService.feedback.create.mockResolvedValue({ id: 'new-feedback-id' });
+      mockPrismaService.feedback.create.mockResolvedValue({
+        id: 'new-feedback-id',
+      });
       mockPrismaService.integrationConnection.update.mockResolvedValue({});
 
       const result = await service.ingestWorkspace('ws-id');
@@ -150,7 +154,9 @@ describe('SlackIngestionService', () => {
       ]);
 
       mockPrismaService.feedback.findUnique.mockResolvedValue(null);
-      mockPrismaService.feedback.create.mockRejectedValue(new Error('DB error'));
+      mockPrismaService.feedback.create.mockRejectedValue(
+        new Error('DB error'),
+      );
       mockPrismaService.integrationConnection.update.mockResolvedValue({});
 
       const result = await service.ingestWorkspace('ws-id');

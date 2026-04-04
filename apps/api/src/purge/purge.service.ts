@@ -13,7 +13,10 @@ import {
   WorkspaceStatus,
   PurgeStepStatus,
 } from '@prisma/client';
-import { RequestWorkspaceDeletionDto, ApproveWorkspaceDeletionDto } from './dto/purge.dto';
+import {
+  RequestWorkspaceDeletionDto,
+  ApproveWorkspaceDeletionDto,
+} from './dto/purge.dto';
 
 export const PURGE_QUEUE = 'workspace-purge';
 

@@ -1,6 +1,6 @@
-import { Injectable, Logger } from "@nestjs/common";
-import { SupportProvider } from "./provider.interface";
-import { SupportTicket } from "@prisma/client";
+import { Injectable, Logger } from '@nestjs/common';
+import { SupportProvider } from './provider.interface';
+import { SupportTicket } from '@prisma/client';
 
 /**
  * IntercomService — real Intercom REST API v2.11 integration.
@@ -12,7 +12,7 @@ import { SupportTicket } from "@prisma/client";
 @Injectable()
 export class IntercomService implements SupportProvider {
   private readonly logger = new Logger(IntercomService.name);
-  private readonly baseUrl = "https://api.intercom.io";
+  private readonly baseUrl = 'https://api.intercom.io';
 
   constructor(private readonly accessToken: string) {}
 
@@ -23,9 +23,9 @@ export class IntercomService implements SupportProvider {
 
     const headers = {
       Authorization: `Bearer ${this.accessToken}`,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      "Intercom-Version": "2.11",
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'Intercom-Version': '2.11',
     };
 
     const tickets: Partial<SupportTicket>[] = [];
@@ -35,19 +35,20 @@ export class IntercomService implements SupportProvider {
       while (true) {
         const body: Record<string, unknown> = {
           query: {
-            operator: "AND",
+            operator: 'AND',
             value: [
-              { field: "updated_at", operator: ">", value: updatedAfter },
+              { field: 'updated_at', operator: '>', value: updatedAfter },
             ],
           },
           pagination: { per_page: 150 },
         };
         if (startingAfter) {
-          (body.pagination as Record<string, unknown>).starting_after = startingAfter;
+          (body.pagination as Record<string, unknown>).starting_after =
+            startingAfter;
         }
 
         const response = await fetch(`${this.baseUrl}/conversations/search`, {
-          method: "POST",
+          method: 'POST',
           headers,
           body: JSON.stringify(body),
         });
@@ -77,44 +78,48 @@ export class IntercomService implements SupportProvider {
         }
       }
     } catch (err) {
-      this.logger.error("Intercom sync failed", (err as Error).message);
+      this.logger.error('Intercom sync failed', (err as Error).message);
       throw err;
     }
 
-    this.logger.log(`Intercom sync complete: ${tickets.length} conversations fetched`);
+    this.logger.log(
+      `Intercom sync complete: ${tickets.length} conversations fetched`,
+    );
     return tickets;
   }
 
   private mapConversation(c: IntercomConversation): Partial<SupportTicket> {
     const subject =
-      c.source?.subject ||
-      c.source?.body?.slice(0, 120) ||
-      "(no subject)";
+      c.source?.subject || c.source?.body?.slice(0, 120) || '(no subject)';
 
     return {
-      externalId:        c.id,
+      externalId: c.id,
       subject,
-      description:       c.source?.body ?? null,
-      status:            this.mapState(c.state),
-      customerEmail:     c.source?.author?.email ?? null,
-      tags:              (c.tags?.tags ?? []).map((t) => t.name),
-      externalCreatedAt: c.created_at ? new Date(c.created_at * 1000) : undefined,
+      description: c.source?.body ?? null,
+      status: this.mapState(c.state),
+      customerEmail: c.source?.author?.email ?? null,
+      tags: (c.tags?.tags ?? []).map((t) => t.name),
+      externalCreatedAt: c.created_at
+        ? new Date(c.created_at * 1000)
+        : undefined,
     };
   }
 
-  private mapState(state: string): "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED" {
+  private mapState(
+    state: string,
+  ): 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED' {
     switch (state) {
-      case "open":
-        return "OPEN";
-      case "snoozed":
-      case "pending":
-        return "IN_PROGRESS";
-      case "resolved":
-        return "RESOLVED";
-      case "closed":
-        return "CLOSED";
+      case 'open':
+        return 'OPEN';
+      case 'snoozed':
+      case 'pending':
+        return 'IN_PROGRESS';
+      case 'resolved':
+        return 'RESOLVED';
+      case 'closed':
+        return 'CLOSED';
       default:
-        return "OPEN";
+        return 'OPEN';
     }
   }
 }

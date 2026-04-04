@@ -87,10 +87,7 @@ export class CustomerController {
    */
   @Post(':id/rescore')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
-  rescore(
-    @Param('workspaceId') workspaceId: string,
-    @Param('id') id: string,
-  ) {
+  rescore(@Param('workspaceId') workspaceId: string, @Param('id') id: string) {
     return this.customerService.triggerAggregation(workspaceId, id);
   }
 
@@ -100,10 +97,7 @@ export class CustomerController {
    */
   @Get(':id')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
-  findOne(
-    @Param('workspaceId') workspaceId: string,
-    @Param('id') id: string,
-  ) {
+  findOne(@Param('workspaceId') workspaceId: string, @Param('id') id: string) {
     return this.customerService.findOne(workspaceId, id);
   }
 
@@ -141,10 +135,7 @@ export class CustomerController {
   @Delete(':id')
   @Roles(WorkspaceRole.ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(
-    @Param('workspaceId') workspaceId: string,
-    @Param('id') id: string,
-  ) {
+  remove(@Param('workspaceId') workspaceId: string, @Param('id') id: string) {
     return this.customerService.remove(workspaceId, id);
   }
 }

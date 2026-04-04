@@ -21,6 +21,7 @@ import { ExplainableInsightsService } from '../ai/services/explainable-insights.
 import { TrendComputationService } from '../ai/services/trend-computation.service';
 import { CreateThemeDto } from './dto/create-theme.dto';
 import { UpdateThemeDto } from './dto/update-theme.dto';
+import { ArchiveThemeDto } from './dto/archive-theme.dto';
 import { QueryThemeDto } from './dto/query-theme.dto';
 import { MergeThemesDto } from './dto/merge-themes.dto';
 import { SplitThemeDto } from './dto/split-theme.dto';
@@ -151,6 +152,27 @@ export class ThemeController {
       req.user.sub,
       id,
       updateThemeDto,
+    );
+  }
+
+  /**
+   * PATCH /workspaces/:workspaceId/themes/:id/archive
+   * Manually archive a theme with an optional reason.
+   * Sets status = ARCHIVED and records archive metadata for explainability.
+   */
+  @Patch(':id/archive')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
+  archiveTheme(
+    @Param('workspaceId') workspaceId: string,
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() dto: ArchiveThemeDto,
+  ) {
+    return this.themeService.archiveTheme(
+      workspaceId,
+      req.user.sub,
+      id,
+      dto.reason,
     );
   }
 

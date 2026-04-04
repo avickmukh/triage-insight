@@ -162,7 +162,10 @@ export class ReportingController {
     switch (report as ExportReport) {
       case 'theme-trends': {
         const result = await this.reportingService.getThemeTrends(
-          workspaceId, query.from, query.to, query.limit ?? 50,
+          workspaceId,
+          query.from,
+          query.to,
+          query.limit ?? 50,
         );
         data = result;
         rows = result.themes as unknown as Record<string, unknown>[];
@@ -170,7 +173,9 @@ export class ReportingController {
       }
       case 'priority-distribution': {
         const result = await this.reportingService.getPriorityDistribution(
-          workspaceId, query.from, query.to,
+          workspaceId,
+          query.from,
+          query.to,
         );
         data = result;
         rows = result.buckets as unknown as Record<string, unknown>[];
@@ -178,7 +183,10 @@ export class ReportingController {
       }
       case 'revenue-impact': {
         const result = await this.reportingService.getRevenueImpact(
-          workspaceId, query.from, query.to, query.limit ?? 50,
+          workspaceId,
+          query.from,
+          query.to,
+          query.limit ?? 50,
         );
         data = result;
         rows = result.topThemes as unknown as Record<string, unknown>[];
@@ -186,7 +194,9 @@ export class ReportingController {
       }
       case 'roadmap-progress': {
         const result = await this.reportingService.getRoadmapProgress(
-          workspaceId, query.from, query.to,
+          workspaceId,
+          query.from,
+          query.to,
         );
         data = result;
         rows = result.byStatus as unknown as Record<string, unknown>[];
@@ -194,7 +204,9 @@ export class ReportingController {
       }
       case 'feedback-volume': {
         const result = await this.reportingService.getFeedbackVolume(
-          workspaceId, query.from, query.to,
+          workspaceId,
+          query.from,
+          query.to,
         );
         data = result;
         rows = result.series.map((s) => ({

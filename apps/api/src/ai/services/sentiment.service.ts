@@ -21,7 +21,11 @@
  *   - If the API call fails for any reason the caller should fall back to 0
  *     (neutral) so the rest of the pipeline is not interrupted.
  */
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 
@@ -84,13 +88,17 @@ export class SentimentService {
     try {
       parsed = JSON.parse(raw) as SentimentResponse;
     } catch {
-      this.logger.warn(`Sentiment response could not be parsed: ${raw} — defaulting to 0`);
+      this.logger.warn(
+        `Sentiment response could not be parsed: ${raw} — defaulting to 0`,
+      );
       return 0;
     }
 
     const score = parsed.score;
     if (typeof score !== 'number' || isNaN(score)) {
-      this.logger.warn(`Sentiment score is not a number: ${String(score)} — defaulting to 0`);
+      this.logger.warn(
+        `Sentiment score is not a number: ${String(score)} — defaulting to 0`,
+      );
       return 0;
     }
 

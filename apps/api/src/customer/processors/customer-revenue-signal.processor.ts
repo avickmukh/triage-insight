@@ -20,7 +20,10 @@ import { Processor, Process, InjectQueue } from '@nestjs/bull';
 import type { Job, Queue } from 'bull';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CIQ_SCORING_QUEUE, type CiqJobPayload } from '../../ai/processors/ciq-scoring.processor';
+import {
+  CIQ_SCORING_QUEUE,
+  type CiqJobPayload,
+} from '../../ai/processors/ciq-scoring.processor';
 
 export const CUSTOMER_REVENUE_SIGNAL_QUEUE = 'customer-revenue-signal';
 
@@ -84,8 +87,14 @@ export class CustomerRevenueSignalProcessor {
   /**
    * Recompute revenueInfluence for a single theme, then enqueue CIQ re-scoring.
    */
-  async recomputeThemeRevenue(workspaceId: string, themeId: string): Promise<void> {
-    const revenueInfluence = await this.computeRevenueInfluence(workspaceId, themeId);
+  async recomputeThemeRevenue(
+    workspaceId: string,
+    themeId: string,
+  ): Promise<void> {
+    const revenueInfluence = await this.computeRevenueInfluence(
+      workspaceId,
+      themeId,
+    );
 
     await this.prisma.theme.update({
       where: { id: themeId },

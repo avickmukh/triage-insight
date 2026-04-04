@@ -1,13 +1,13 @@
-import { Test, TestingModule } from "@nestjs/testing";
-import { ScoringService } from "./scoring.service";
-import { PrioritizationSettings } from "@prisma/client";
-import { ThemeData } from "./aggregation.service";
+import { Test, TestingModule } from '@nestjs/testing';
+import { ScoringService } from './scoring.service';
+import { PrioritizationSettings } from '@prisma/client';
+import { ThemeData } from './aggregation.service';
 
-describe("ScoringService", () => {
+describe('ScoringService', () => {
   let service: ScoringService;
 
   const mockSettings: PrioritizationSettings = {
-    workspaceId: "ws-1",
+    workspaceId: 'ws-1',
     requestFrequencyWeight: 0.2,
     customerCountWeight: 0.2,
     arrValueWeight: 0.2,
@@ -23,16 +23,16 @@ describe("ScoringService", () => {
     dealStageNegotiation: 0.8,
     dealStageClosedWon: 1.0,
     updatedAt: new Date(),
-    demandStrengthWeight: 0.30,
+    demandStrengthWeight: 0.3,
     revenueImpactWeight: 0.35,
-    strategicImportanceWeight: 0.20,
+    strategicImportanceWeight: 0.2,
     urgencySignalWeight: 0.15,
     supportWeight: 1.5,
     voiceWeight: 1.2,
   };
 
   const mockThemeData: ThemeData = {
-    themeId: "theme-1",
+    themeId: 'theme-1',
     requestFrequency: 100,
     uniqueCustomerCount: 20,
     arrValue: 50000,
@@ -48,49 +48,51 @@ describe("ScoringService", () => {
     service = module.get<ScoringService>(ScoringService);
   });
 
-  it("should be defined", () => {
+  it('should be defined', () => {
     expect(service).toBeDefined();
   });
 
-  it("should return a priorityScore in the 0–100 range", () => {
+  it('should return a priorityScore in the 0–100 range', () => {
     const result = service.calculateScore(mockSettings, mockThemeData, 0.5);
     expect(result.priorityScore).toBeGreaterThanOrEqual(0);
     expect(result.priorityScore).toBeLessThanOrEqual(100);
   });
 
-  it("should generate a detailed score explanation with all required fields", () => {
+  it('should generate a detailed score explanation with all required fields', () => {
     const result = service.calculateScore(mockSettings, mockThemeData, 0.5);
 
-    expect(result.scoreExplanation).toHaveProperty("requestFrequencyWeight");
-    expect(result.scoreExplanation).toHaveProperty("customerCountWeight");
-    expect(result.scoreExplanation).toHaveProperty("arrValueWeight");
-    expect(result.scoreExplanation).toHaveProperty("accountPriorityWeight");
-    expect(result.scoreExplanation).toHaveProperty("dealValueWeight");
-    expect(result.scoreExplanation).toHaveProperty("strategicWeight");
+    expect(result.scoreExplanation).toHaveProperty('requestFrequencyWeight');
+    expect(result.scoreExplanation).toHaveProperty('customerCountWeight');
+    expect(result.scoreExplanation).toHaveProperty('arrValueWeight');
+    expect(result.scoreExplanation).toHaveProperty('accountPriorityWeight');
+    expect(result.scoreExplanation).toHaveProperty('dealValueWeight');
+    expect(result.scoreExplanation).toHaveProperty('strategicWeight');
 
     const component = result.scoreExplanation.requestFrequencyWeight;
-    expect(component).toHaveProperty("value");
-    expect(component).toHaveProperty("normalisedValue");
-    expect(component).toHaveProperty("weight");
-    expect(component).toHaveProperty("contribution");
-    expect(component).toHaveProperty("label");
+    expect(component).toHaveProperty('value');
+    expect(component).toHaveProperty('normalisedValue');
+    expect(component).toHaveProperty('weight');
+    expect(component).toHaveProperty('contribution');
+    expect(component).toHaveProperty('label');
   });
 
-  it("should preserve raw revenue and deal values in the output", () => {
+  it('should preserve raw revenue and deal values in the output', () => {
     const result = service.calculateScore(mockSettings, mockThemeData);
     expect(result.revenueImpactValue).toBe(50000);
     expect(result.dealInfluenceValue).toBe(10000);
   });
 
-  it("should identify a dominant driver in the score", () => {
+  it('should identify a dominant driver in the score', () => {
     const result = service.calculateScore(mockSettings, mockThemeData, 0.5);
     expect(result.dominantDriver).toBeTruthy();
-    expect(Object.keys(result.scoreExplanation)).toContain(result.dominantDriver);
+    expect(Object.keys(result.scoreExplanation)).toContain(
+      result.dominantDriver,
+    );
   });
 
-  it("should clamp the score to 100 even for extreme input values", () => {
+  it('should clamp the score to 100 even for extreme input values', () => {
     const extremeData: ThemeData = {
-      themeId: "theme-extreme",
+      themeId: 'theme-extreme',
       requestFrequency: 999999,
       uniqueCustomerCount: 999999,
       arrValue: 999_999_999,
@@ -102,9 +104,9 @@ describe("ScoringService", () => {
     expect(result.priorityScore).toBeLessThanOrEqual(100);
   });
 
-  it("should return a score of 0 for all-zero input data", () => {
+  it('should return a score of 0 for all-zero input data', () => {
     const zeroData: ThemeData = {
-      themeId: "theme-zero",
+      themeId: 'theme-zero',
       requestFrequency: 0,
       uniqueCustomerCount: 0,
       arrValue: 0,
@@ -116,7 +118,7 @@ describe("ScoringService", () => {
     expect(result.priorityScore).toBe(0);
   });
 
-  it("should normalise weights so scores are stable even if weights do not sum to 1", () => {
+  it('should normalise weights so scores are stable even if weights do not sum to 1', () => {
     const unevenSettings: PrioritizationSettings = {
       ...mockSettings,
       requestFrequencyWeight: 10,
@@ -144,9 +146,9 @@ describe("ScoringService", () => {
     expect(result1.priorityScore).toBeCloseTo(result2.priorityScore, 1);
   });
 
-  it("should produce a higher score for a theme with more requests and ARR", () => {
+  it('should produce a higher score for a theme with more requests and ARR', () => {
     const lowData: ThemeData = {
-      themeId: "theme-low",
+      themeId: 'theme-low',
       requestFrequency: 1,
       uniqueCustomerCount: 1,
       arrValue: 100,
@@ -155,7 +157,7 @@ describe("ScoringService", () => {
     };
 
     const highData: ThemeData = {
-      themeId: "theme-high",
+      themeId: 'theme-high',
       requestFrequency: 150,
       uniqueCustomerCount: 80,
       arrValue: 500000,

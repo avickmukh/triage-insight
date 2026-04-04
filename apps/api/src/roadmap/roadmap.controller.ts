@@ -1,21 +1,34 @@
-import { Controller, Delete, Get, Post, Body, Patch, Param, Query, UseGuards, Req, HttpCode, HttpStatus } from "@nestjs/common";
-import { RoadmapService } from "./services/roadmap.service";
-import { RoadmapIntelligenceService } from "./services/roadmap-intelligence.service";
-import { CiqService } from "../ai/services/ciq.service";
-import { CreateRoadmapItemDto } from "./dto/create-roadmap-item.dto";
-import { UpdateRoadmapItemDto } from "./dto/update-roadmap-item.dto";
-import { QueryRoadmapDto } from "./dto/query-roadmap.dto";
-import { PromoteThemeDto } from "./dto/promote-theme.dto";
-import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
-import { RolesGuard } from "../workspace/guards/roles.guard";
-import { Roles } from "../workspace/decorators/roles.decorator";
-import { WorkspaceRole } from "@prisma/client";
+import {
+  Controller,
+  Delete,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Query,
+  UseGuards,
+  Req,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
+import { RoadmapService } from './services/roadmap.service';
+import { RoadmapIntelligenceService } from './services/roadmap-intelligence.service';
+import { CiqService } from '../ai/services/ciq.service';
+import { CreateRoadmapItemDto } from './dto/create-roadmap-item.dto';
+import { UpdateRoadmapItemDto } from './dto/update-roadmap-item.dto';
+import { QueryRoadmapDto } from './dto/query-roadmap.dto';
+import { PromoteThemeDto } from './dto/promote-theme.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../workspace/guards/roles.guard';
+import { Roles } from '../workspace/decorators/roles.decorator';
+import { WorkspaceRole } from '@prisma/client';
 
 interface AuthenticatedRequest {
   user: { sub: string; email: string };
 }
 
-@Controller("workspaces/:workspaceId/roadmap")
+@Controller('workspaces/:workspaceId/roadmap')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class RoadmapController {
   constructor(
@@ -26,7 +39,11 @@ export class RoadmapController {
 
   @Post()
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
-  create(@Param("workspaceId") workspaceId: string, @Req() req: AuthenticatedRequest, @Body() dto: CreateRoadmapItemDto) {
+  create(
+    @Param('workspaceId') workspaceId: string,
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: CreateRoadmapItemDto,
+  ) {
     return this.roadmapService.create(workspaceId, req.user.sub, dto);
   }
 
@@ -35,11 +52,11 @@ export class RoadmapController {
    * Returns an AI-prefilled suggestion for a roadmap item WITHOUT creating it.
    * Used by the UI modal to prefill the form before the user confirms.
    */
-  @Get("from-theme/:themeId/preview")
+  @Get('from-theme/:themeId/preview')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
   previewFromTheme(
-    @Param("workspaceId") workspaceId: string,
-    @Param("themeId") themeId: string
+    @Param('workspaceId') workspaceId: string,
+    @Param('themeId') themeId: string,
   ) {
     return this.roadmapService.previewFromTheme(workspaceId, themeId);
   }
@@ -49,20 +66,28 @@ export class RoadmapController {
    * Creates a roadmap item from a theme, using AI narration fields for a rich
    * description. Accepts an optional override body to customise title/description/status.
    */
-  @Post("from-theme/:themeId")
+  @Post('from-theme/:themeId')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
   createFromTheme(
-    @Param("workspaceId") workspaceId: string,
+    @Param('workspaceId') workspaceId: string,
     @Req() req: AuthenticatedRequest,
-    @Param("themeId") themeId: string,
-    @Body() override?: PromoteThemeDto
+    @Param('themeId') themeId: string,
+    @Body() override?: PromoteThemeDto,
   ) {
-    return this.roadmapService.createFromTheme(workspaceId, req.user.sub, themeId, override);
+    return this.roadmapService.createFromTheme(
+      workspaceId,
+      req.user.sub,
+      themeId,
+      override,
+    );
   }
 
   @Get()
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
-  findAll(@Param("workspaceId") workspaceId: string, @Query() query: QueryRoadmapDto) {
+  findAll(
+    @Param('workspaceId') workspaceId: string,
+    @Query() query: QueryRoadmapDto,
+  ) {
     return this.roadmapService.findAll(workspaceId, query);
   }
 
@@ -77,11 +102,11 @@ export class RoadmapController {
    * NOTE: This route MUST appear before @Get(":id") so NestJS does not treat
    * the literal string "ai-suggestions" as a dynamic :id parameter.
    */
-  @Get("ai-suggestions")
+  @Get('ai-suggestions')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
   getAiSuggestions(
-    @Param("workspaceId") workspaceId: string,
-    @Query("limit") limit?: string,
+    @Param('workspaceId') workspaceId: string,
+    @Query('limit') limit?: string,
   ) {
     return this.roadmapIntelligenceService.getAiSuggestions(
       workspaceId,
@@ -89,19 +114,19 @@ export class RoadmapController {
     );
   }
 
-  @Get(":id")
+  @Get(':id')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
-  findOne(@Param("workspaceId") workspaceId: string, @Param("id") id: string) {
+  findOne(@Param('workspaceId') workspaceId: string, @Param('id') id: string) {
     return this.roadmapService.findOne(workspaceId, id);
   }
 
-  @Patch(":id")
+  @Patch(':id')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
   update(
-    @Param("workspaceId") workspaceId: string,
+    @Param('workspaceId') workspaceId: string,
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
-    @Body() dto: UpdateRoadmapItemDto
+    @Param('id') id: string,
+    @Body() dto: UpdateRoadmapItemDto,
   ) {
     return this.roadmapService.update(workspaceId, req.user.sub, id, dto);
   }
@@ -111,11 +136,11 @@ export class RoadmapController {
    * Synchronously re-runs CIQ scoring and persists results.
    * ADMIN / EDITOR only.
    */
-  @Post(":id/refresh-intelligence")
+  @Post(':id/refresh-intelligence')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
   refreshIntelligence(
-    @Param("workspaceId") workspaceId: string,
-    @Param("id") id: string
+    @Param('workspaceId') workspaceId: string,
+    @Param('id') id: string,
   ) {
     return this.roadmapService.refreshIntelligence(workspaceId, id);
   }
@@ -126,22 +151,22 @@ export class RoadmapController {
    * Read-only; all roles may access.
    * Shape supports future "why is this score high?" UI without additional API changes.
    */
-  @Get(":id/ciq-explanation")
+  @Get(':id/ciq-explanation')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
   getCiqExplanation(
-    @Param("workspaceId") workspaceId: string,
-    @Param("id") id: string
+    @Param('workspaceId') workspaceId: string,
+    @Param('id') id: string,
   ) {
     return this.ciqService.scoreRoadmapItem(workspaceId, id);
   }
 
-  @Delete(":id")
+  @Delete(':id')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(
-    @Param("workspaceId") workspaceId: string,
+    @Param('workspaceId') workspaceId: string,
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string
+    @Param('id') id: string,
   ) {
     return this.roadmapService.remove(workspaceId, req.user.sub, id);
   }

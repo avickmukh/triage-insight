@@ -80,7 +80,8 @@ describe('BillingService', () => {
 
     service = module.get<BillingService>(BillingService);
     // Inject mock Stripe instance directly to avoid real SDK calls
-    (service as unknown as { stripe: typeof mockStripeInstance }).stripe = mockStripeInstance;
+    (service as unknown as { stripe: typeof mockStripeInstance }).stripe =
+      mockStripeInstance;
     jest.clearAllMocks();
   });
 
@@ -92,7 +93,9 @@ describe('BillingService', () => {
         throw new Error('Invalid signature');
       });
 
-      const rawBody = Buffer.from(JSON.stringify({ type: 'checkout.session.completed' }));
+      const rawBody = Buffer.from(
+        JSON.stringify({ type: 'checkout.session.completed' }),
+      );
 
       await expect(
         service.handleStripeWebhook(rawBody, 'invalid-signature'),
@@ -119,7 +122,10 @@ describe('BillingService', () => {
         },
       };
       mockStripeInstance.webhooks.constructEvent.mockReturnValue(mockEvent);
-      mockPrismaService.workspace.findUnique.mockResolvedValue({ id: 'ws-id', stripeCustomerId: 'cus_mock' });
+      mockPrismaService.workspace.findUnique.mockResolvedValue({
+        id: 'ws-id',
+        stripeCustomerId: 'cus_mock',
+      });
       mockPrismaService.invoice.upsert.mockResolvedValue({});
 
       const result = await service.handleStripeWebhook(
@@ -168,7 +174,10 @@ describe('BillingService', () => {
         },
       };
       mockStripeInstance.webhooks.constructEvent.mockReturnValue(mockEvent);
-      mockPrismaService.workspace.findUnique.mockResolvedValue({ id: 'ws-id', stripeCustomerId: 'cus_mock' });
+      mockPrismaService.workspace.findUnique.mockResolvedValue({
+        id: 'ws-id',
+        stripeCustomerId: 'cus_mock',
+      });
       mockPrismaService.workspace.update.mockResolvedValue({ id: 'ws-id' });
 
       const result = await service.handleStripeWebhook(

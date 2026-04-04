@@ -64,7 +64,10 @@ import {
   SubmitSurveyResponseDto,
   SurveyQueryDto,
 } from '../dto/survey.dto';
-import { SurveyIntelligenceService, RevenueWeightedInsight } from './survey-intelligence.service';
+import {
+  SurveyIntelligenceService,
+  RevenueWeightedInsight,
+} from './survey-intelligence.service';
 
 @Injectable()
 export class SurveyService {
@@ -72,7 +75,8 @@ export class SurveyService {
 
   constructor(
     private readonly prisma: PrismaService,
-    @InjectQueue(SURVEY_INTELLIGENCE_QUEUE) private readonly intelligenceQueue: Queue,
+    @InjectQueue(SURVEY_INTELLIGENCE_QUEUE)
+    private readonly intelligenceQueue: Queue,
     @InjectQueue(AI_ANALYSIS_QUEUE) private readonly analysisQueue: Queue,
     private readonly surveyIntelligenceService: SurveyIntelligenceService,
   ) {}
@@ -196,7 +200,11 @@ export class SurveyService {
     return survey;
   }
 
-  async updateSurvey(workspaceId: string, surveyId: string, dto: UpdateSurveyDto) {
+  async updateSurvey(
+    workspaceId: string,
+    surveyId: string,
+    dto: UpdateSurveyDto,
+  ) {
     await this.resolveSurvey(workspaceId, surveyId);
 
     return this.prisma.survey.update({
@@ -226,13 +234,19 @@ export class SurveyService {
   async publishSurvey(workspaceId: string, surveyId: string) {
     const survey = await this.resolveSurvey(workspaceId, surveyId);
     if (survey.status === SurveyStatus.CLOSED) {
-      throw new BadRequestException('A closed survey cannot be re-published. Create a new survey instead.');
+      throw new BadRequestException(
+        'A closed survey cannot be re-published. Create a new survey instead.',
+      );
     }
 
     // Must have at least one question
-    const qCount = await this.prisma.surveyQuestion.count({ where: { surveyId } });
+    const qCount = await this.prisma.surveyQuestion.count({
+      where: { surveyId },
+    });
     if (qCount === 0) {
-      throw new BadRequestException('A survey must have at least one question before publishing.');
+      throw new BadRequestException(
+        'A survey must have at least one question before publishing.',
+      );
     }
 
     return this.prisma.survey.update({
@@ -277,7 +291,11 @@ export class SurveyService {
 
   // ─── Question CRUD ────────────────────────────────────────────────────────────
 
-  async addQuestion(workspaceId: string, surveyId: string, dto: CreateSurveyQuestionDto) {
+  async addQuestion(
+    workspaceId: string,
+    surveyId: string,
+    dto: CreateSurveyQuestionDto,
+  ) {
     await this.resolveSurvey(workspaceId, surveyId);
 
     // Determine next order
@@ -330,7 +348,11 @@ export class SurveyService {
     });
   }
 
-  async deleteQuestion(workspaceId: string, surveyId: string, questionId: string) {
+  async deleteQuestion(
+    workspaceId: string,
+    surveyId: string,
+    questionId: string,
+  ) {
     await this.resolveSurvey(workspaceId, surveyId);
     const question = await this.prisma.surveyQuestion.findFirst({
       where: { id: questionId, surveyId },
@@ -342,7 +364,12 @@ export class SurveyService {
 
   // ─── Responses ────────────────────────────────────────────────────────────────
 
-  async listResponses(workspaceId: string, surveyId: string, page = 1, limit = 20) {
+  async listResponses(
+    workspaceId: string,
+    surveyId: string,
+    page = 1,
+    limit = 20,
+  ) {
     await this.resolveSurvey(workspaceId, surveyId);
 
     const skip = (page - 1) * limit;
@@ -354,7 +381,9 @@ export class SurveyService {
         take: limit,
         include: {
           answers: {
-            include: { question: { select: { label: true, type: true, order: true } } },
+            include: {
+              question: { select: { label: true, type: true, order: true } },
+            },
             orderBy: { question: { order: 'asc' } },
           },
           portalUser: { select: { id: true, email: true, name: true } },
@@ -379,7 +408,8 @@ export class SurveyService {
       where: { slug: orgSlug },
       select: { id: true, status: true },
     });
-    if (!workspace) throw new NotFoundException(`Workspace '${orgSlug}' not found`);
+    if (!workspace)
+      throw new NotFoundException(`Workspace '${orgSlug}' not found`);
 
     const survey = await this.prisma.survey.findFirst({
       where: {
@@ -392,7 +422,8 @@ export class SurveyService {
         questions: { orderBy: { order: 'asc' } },
       },
     });
-    if (!survey) throw new NotFoundException('Survey not found or not published');
+    if (!survey)
+      throw new NotFoundException('Survey not found or not published');
 
     return survey;
   }
@@ -402,7 +433,8 @@ export class SurveyService {
       where: { slug: orgSlug },
       select: { id: true, status: true },
     });
-    if (!workspace) throw new NotFoundException(`Workspace '${orgSlug}' not found`);
+    if (!workspace)
+      throw new NotFoundException(`Workspace '${orgSlug}' not found`);
 
     return this.prisma.survey.findMany({
       where: {
@@ -423,12 +455,17 @@ export class SurveyService {
 
   // ─── Portal: submit response ──────────────────────────────────────────────────
 
-  async submitResponse(orgSlug: string, surveyId: string, dto: SubmitSurveyResponseDto) {
+  async submitResponse(
+    orgSlug: string,
+    surveyId: string,
+    dto: SubmitSurveyResponseDto,
+  ) {
     const workspace = await this.prisma.workspace.findUnique({
       where: { slug: orgSlug },
       select: { id: true, status: true },
     });
-    if (!workspace) throw new NotFoundException(`Workspace '${orgSlug}' not found`);
+    if (!workspace)
+      throw new NotFoundException(`Workspace '${orgSlug}' not found`);
 
     const survey = await this.prisma.survey.findFirst({
       where: {
@@ -441,7 +478,8 @@ export class SurveyService {
         questions: { orderBy: { order: 'asc' } },
       },
     });
-     if (!survey) throw new NotFoundException('Survey not found or not published');
+    if (!survey)
+      throw new NotFoundException('Survey not found or not published');
 
     // ── Duplicate submission guard ────────────────────────────────────────────
     // Prevent the same respondent from submitting the same survey twice.
@@ -467,7 +505,8 @@ export class SurveyService {
           responseId: existingResponse.id,
           feedbackIds: [],
           feedbackId: null,
-          thankYouMessage: survey.thankYouMessage ?? 'Thank you for your response!',
+          thankYouMessage:
+            survey.thankYouMessage ?? 'Thank you for your response!',
           redirectUrl: survey.redirectUrl ?? null,
           duplicate: true,
         };
@@ -487,7 +526,12 @@ export class SurveyService {
     let portalUserId: string | null = null;
     if (dto.respondentEmail) {
       const pu = await this.prisma.portalUser.upsert({
-        where: { workspaceId_email: { workspaceId: workspace.id, email: dto.respondentEmail } },
+        where: {
+          workspaceId_email: {
+            workspaceId: workspace.id,
+            email: dto.respondentEmail,
+          },
+        },
         create: {
           workspaceId: workspace.id,
           email: dto.respondentEmail,
@@ -507,7 +551,11 @@ export class SurveyService {
     const questionMap = new Map(survey.questions.map((q) => [q.id, q]));
 
     // ── Classify each answer by question type ──────────────────────────────────
-    type TextCandidate = { questionId: string; questionText: string; text: string };
+    type TextCandidate = {
+      questionId: string;
+      questionText: string;
+      text: string;
+    };
     type EvidenceCandidate = {
       questionId: string;
       questionText: string;
@@ -552,7 +600,9 @@ export class SurveyService {
           questionId: question.id,
           questionText: question.label,
           questionType: question.type,
-          choiceValues: Array.isArray(answer.choiceValues) ? (answer.choiceValues as unknown[]) : null,
+          choiceValues: Array.isArray(answer.choiceValues)
+            ? (answer.choiceValues as unknown[])
+            : null,
           numericValue,
           normalisedScore,
           ratingMin: question.ratingMin ?? 1,
@@ -562,100 +612,104 @@ export class SurveyService {
     }
 
     // ── Persist response + raw answers + SurveyEvidence in one transaction ─────
-    const { responseId, feedbackIds } = await this.prisma.$transaction(async (tx) => {
-      // 1. Create the SurveyResponse with all raw answers
-      const resp = await tx.surveyResponse.create({
-        data: {
-          surveyId,
-          workspaceId: workspace.id,
-          portalUserId,
-          respondentEmail: dto.respondentEmail ?? null,
-          respondentName: dto.respondentName ?? null,
-          anonymousId: dto.anonymousId ?? null,
-          customerId: dto.customerId ?? null,
-          metadata: { userAgent: null },
-          answers: {
-            create: dto.answers.map((a) => ({
-              questionId: a.questionId,
-              textValue: a.textValue ?? null,
-              numericValue: a.numericValue ?? null,
-              choiceValues: a.choiceValues ? a.choiceValues : undefined,
-            })),
-          },
-        },
-      });
-
-      // 2. Create one Feedback per substantive open-text answer
-      const createdFeedbackIds: string[] = [];
-      // All open-text answers create Feedback records regardless of convertToFeedback flag.
-      // The flag is preserved for backward-compat API surface but no longer gates signal creation.
-      if (textCandidates.length > 0) {
-        for (const candidate of textCandidates) {
-          const fb = await tx.feedback.create({
-            data: {
-              workspaceId: workspace.id,
-              sourceType:      FeedbackSourceType.SURVEY,
-              primarySource:   FeedbackPrimarySource.SURVEY,
-              secondarySource: FeedbackSecondarySource.PORTAL,
-              // sourceRef encodes the full provenance chain
-              sourceRef: `survey:${surveyId}:question:${candidate.questionId}`,
-              // Title = the question label — NOT the survey title
-              title: candidate.questionText,
-              description: candidate.text,
-              rawText: candidate.text,
-              normalizedText: candidate.text.toLowerCase(),
-              status: FeedbackStatus.NEW,
-              portalUserId,
-              metadata: {
-                surveyId,
-                surveyTitle: survey.title,
-                responseId: resp.id,
-                questionId: candidate.questionId,
-                questionText: candidate.questionText,
-                questionType: 'TEXT',
-                respondentEmail: dto.respondentEmail ?? null,
-                respondentName: dto.respondentName ?? null,
-              },
-            },
-          });
-          createdFeedbackIds.push(fb.id);
-        }
-
-        // Link the first feedback to the response for backward compat
-        if (createdFeedbackIds.length > 0) {
-          await tx.surveyResponse.update({
-            where: { id: resp.id },
-            data: { feedbackId: createdFeedbackIds[0] },
-          });
-        }
-      }
-
-      // 3. Create SurveyEvidence rows for all structured answers
-      if (evidenceCandidates.length > 0) {
-        await tx.surveyEvidence.createMany({
-          data: evidenceCandidates.map((ev) => ({
-            workspaceId: workspace.id,
+    const { responseId, feedbackIds } = await this.prisma.$transaction(
+      async (tx) => {
+        // 1. Create the SurveyResponse with all raw answers
+        const resp = await tx.surveyResponse.create({
+          data: {
             surveyId,
-            responseId: resp.id,
-            questionId: ev.questionId,
-            questionText: ev.questionText,
-            questionType: ev.questionType,
-            choiceValues: ev.choiceValues ? (ev.choiceValues as string[]) : undefined,
-            numericValue: ev.numericValue,
-            normalisedScore: ev.normalisedScore,
+            workspaceId: workspace.id,
+            portalUserId,
             respondentEmail: dto.respondentEmail ?? null,
+            respondentName: dto.respondentName ?? null,
+            anonymousId: dto.anonymousId ?? null,
             customerId: dto.customerId ?? null,
-            metadata: {
-              surveyTitle: survey.title,
-              ratingMin: ev.ratingMin,
-              ratingMax: ev.ratingMax,
+            metadata: { userAgent: null },
+            answers: {
+              create: dto.answers.map((a) => ({
+                questionId: a.questionId,
+                textValue: a.textValue ?? null,
+                numericValue: a.numericValue ?? null,
+                choiceValues: a.choiceValues ? a.choiceValues : undefined,
+              })),
             },
-          })),
+          },
         });
-      }
 
-      return { responseId: resp.id, feedbackIds: createdFeedbackIds };
-    });
+        // 2. Create one Feedback per substantive open-text answer
+        const createdFeedbackIds: string[] = [];
+        // All open-text answers create Feedback records regardless of convertToFeedback flag.
+        // The flag is preserved for backward-compat API surface but no longer gates signal creation.
+        if (textCandidates.length > 0) {
+          for (const candidate of textCandidates) {
+            const fb = await tx.feedback.create({
+              data: {
+                workspaceId: workspace.id,
+                sourceType: FeedbackSourceType.SURVEY,
+                primarySource: FeedbackPrimarySource.SURVEY,
+                secondarySource: FeedbackSecondarySource.PORTAL,
+                // sourceRef encodes the full provenance chain
+                sourceRef: `survey:${surveyId}:question:${candidate.questionId}`,
+                // Title = the question label — NOT the survey title
+                title: candidate.questionText,
+                description: candidate.text,
+                rawText: candidate.text,
+                normalizedText: candidate.text.toLowerCase(),
+                status: FeedbackStatus.NEW,
+                portalUserId,
+                metadata: {
+                  surveyId,
+                  surveyTitle: survey.title,
+                  responseId: resp.id,
+                  questionId: candidate.questionId,
+                  questionText: candidate.questionText,
+                  questionType: 'TEXT',
+                  respondentEmail: dto.respondentEmail ?? null,
+                  respondentName: dto.respondentName ?? null,
+                },
+              },
+            });
+            createdFeedbackIds.push(fb.id);
+          }
+
+          // Link the first feedback to the response for backward compat
+          if (createdFeedbackIds.length > 0) {
+            await tx.surveyResponse.update({
+              where: { id: resp.id },
+              data: { feedbackId: createdFeedbackIds[0] },
+            });
+          }
+        }
+
+        // 3. Create SurveyEvidence rows for all structured answers
+        if (evidenceCandidates.length > 0) {
+          await tx.surveyEvidence.createMany({
+            data: evidenceCandidates.map((ev) => ({
+              workspaceId: workspace.id,
+              surveyId,
+              responseId: resp.id,
+              questionId: ev.questionId,
+              questionText: ev.questionText,
+              questionType: ev.questionType,
+              choiceValues: ev.choiceValues
+                ? (ev.choiceValues as string[])
+                : undefined,
+              numericValue: ev.numericValue,
+              normalisedScore: ev.normalisedScore,
+              respondentEmail: dto.respondentEmail ?? null,
+              customerId: dto.customerId ?? null,
+              metadata: {
+                surveyTitle: survey.title,
+                ratingMin: ev.ratingMin,
+                ratingMax: ev.ratingMax,
+              },
+            })),
+          });
+        }
+
+        return { responseId: resp.id, feedbackIds: createdFeedbackIds };
+      },
+    );
 
     // ── Create ImportBatch so batch finalization fires after all items complete ──
     // The AiAnalysisProcessor.updateBatchProgress() increments completedRows/failedRows
@@ -681,7 +735,11 @@ export class SurveyService {
         });
       } catch (batchErr) {
         this.logger.stepWarn(
-          { jobType: 'SURVEY_SUBMIT', workspaceId: workspace.id, entityId: surveyId },
+          {
+            jobType: 'SURVEY_SUBMIT',
+            workspaceId: workspace.id,
+            entityId: surveyId,
+          },
           'BATCH_CREATE_FAILED',
           `Non-fatal: failed to create ImportBatch for survey response: ${(batchErr as Error).message}`,
         );
@@ -700,7 +758,11 @@ export class SurveyService {
           retryOpts,
         );
         this.logger.debug(
-          { jobType: 'SURVEY_SUBMIT', workspaceId: workspace.id, entityId: surveyId },
+          {
+            jobType: 'SURVEY_SUBMIT',
+            workspaceId: workspace.id,
+            entityId: surveyId,
+          },
           `Enqueued AI analysis for survey open-text Feedback ${feedbackId}`,
           { feedbackId },
         );
@@ -708,7 +770,11 @@ export class SurveyService {
         // Queue unavailability must not fail the HTTP response — the survey
         // response is already persisted. Log for operator visibility.
         this.logger.stepWarn(
-          { jobType: 'SURVEY_SUBMIT', workspaceId: workspace.id, entityId: surveyId },
+          {
+            jobType: 'SURVEY_SUBMIT',
+            workspaceId: workspace.id,
+            entityId: surveyId,
+          },
           'AI_ANALYSIS_ENQUEUE_FAILED',
           `Failed to enqueue AI analysis for Feedback ${feedbackId}: ${(err as Error).message}`,
         );
@@ -728,7 +794,11 @@ export class SurveyService {
       );
     } catch (err) {
       this.logger.stepWarn(
-        { jobType: 'SURVEY_SUBMIT', workspaceId: workspace.id, entityId: surveyId },
+        {
+          jobType: 'SURVEY_SUBMIT',
+          workspaceId: workspace.id,
+          entityId: surveyId,
+        },
         'INTELLIGENCE_ENQUEUE_FAILED',
         `Failed to enqueue survey intelligence job: ${(err as Error).message}`,
       );
@@ -788,9 +858,10 @@ export class SurveyService {
         allKeyTopics.push(...intel.keyTopics);
       }
     }
-    const avgSentiment = sentiments.length > 0
-      ? sentiments.reduce((a, b) => a + b, 0) / sentiments.length
-      : null;
+    const avgSentiment =
+      sentiments.length > 0
+        ? sentiments.reduce((a, b) => a + b, 0) / sentiments.length
+        : null;
 
     // Aggregate NPS / rating answers
     const npsValues: number[] = [];
@@ -803,23 +874,29 @@ export class SurveyService {
         }
       }
     }
-    const avgNps = npsValues.length > 0
-      ? npsValues.reduce((a, b) => a + b, 0) / npsValues.length
-      : null;
-    const avgRating = ratingValues.length > 0
-      ? ratingValues.reduce((a, b) => a + b, 0) / ratingValues.length
-      : null;
+    const avgNps =
+      npsValues.length > 0
+        ? npsValues.reduce((a, b) => a + b, 0) / npsValues.length
+        : null;
+    const avgRating =
+      ratingValues.length > 0
+        ? ratingValues.reduce((a, b) => a + b, 0) / ratingValues.length
+        : null;
 
     // NPS score: % promoters - % detractors
     let npsScore: number | null = null;
     if (npsValues.length > 0) {
       const promoters = npsValues.filter((v) => v >= 9).length;
       const detractors = npsValues.filter((v) => v <= 6).length;
-      npsScore = Math.round(((promoters - detractors) / npsValues.length) * 100);
+      npsScore = Math.round(
+        ((promoters - detractors) / npsValues.length) * 100,
+      );
     }
 
     // Linked themes from feedback — fetch titles so the UI can display them
-    const feedbackIds = responses.map((r) => r.feedbackId).filter(Boolean) as string[];
+    const feedbackIds = responses
+      .map((r) => r.feedbackId)
+      .filter(Boolean) as string[];
     const linkedThemeIds: string[] = [];
     const linkedThemes: Array<{ id: string; title: string }> = [];
     if (feedbackIds.length > 0) {
@@ -827,7 +904,9 @@ export class SurveyService {
         where: { feedbackId: { in: feedbackIds } },
         select: { themeId: true },
       });
-      const uniqueThemeIds = [...new Set(themeFeedbacks.map((tf) => tf.themeId))];
+      const uniqueThemeIds = [
+        ...new Set(themeFeedbacks.map((tf) => tf.themeId)),
+      ];
       linkedThemeIds.push(...uniqueThemeIds);
       if (uniqueThemeIds.length > 0) {
         const themeRows = await this.prisma.theme.findMany({
@@ -851,11 +930,14 @@ export class SurveyService {
     const processedCount = sentiments.length;
 
     // Sentiment distribution
-    const sentimentDistribution = sentiments.length > 0 ? {
-      positive: sentiments.filter((s) => s > 0.1).length,
-      neutral:  sentiments.filter((s) => s >= -0.1 && s <= 0.1).length,
-      negative: sentiments.filter((s) => s < -0.1).length,
-    } : null;
+    const sentimentDistribution =
+      sentiments.length > 0
+        ? {
+            positive: sentiments.filter((s) => s > 0.1).length,
+            neutral: sentiments.filter((s) => s >= -0.1 && s <= 0.1).length,
+            negative: sentiments.filter((s) => s < -0.1).length,
+          }
+        : null;
 
     // Top feature requests and pain points from metadata
     const allFeatureRequests: string[] = [];
@@ -864,56 +946,94 @@ export class SurveyService {
       const meta = r.metadata as Record<string, any> | null;
       const intel = meta?.intelligence;
       if (intel) {
-        if (Array.isArray(intel.featureRequests)) allFeatureRequests.push(...(intel.featureRequests as string[]));
-        if (Array.isArray(intel.painPoints)) allPainPoints.push(...(intel.painPoints as string[]));
+        if (Array.isArray(intel.featureRequests))
+          allFeatureRequests.push(...(intel.featureRequests as string[]));
+        if (Array.isArray(intel.painPoints))
+          allPainPoints.push(...(intel.painPoints as string[]));
       }
     }
     const frCounts = new Map<string, number>();
-    for (const fr of allFeatureRequests) frCounts.set(fr, (frCounts.get(fr) ?? 0) + 1);
+    for (const fr of allFeatureRequests)
+      frCounts.set(fr, (frCounts.get(fr) ?? 0) + 1);
     const ppCounts = new Map<string, number>();
-    for (const pp of allPainPoints) ppCounts.set(pp, (ppCounts.get(pp) ?? 0) + 1);
-    const topFeatureRequests = [...frCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([t]) => t);
-    const topPainPoints = [...ppCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([t]) => t);
+    for (const pp of allPainPoints)
+      ppCounts.set(pp, (ppCounts.get(pp) ?? 0) + 1);
+    const topFeatureRequests = [...frCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([t]) => t);
+    const topPainPoints = [...ppCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([t]) => t);
 
     // Insight score
-    const insightScore = totalResponses > 0
-      ? Math.round(
-          (processedCount / totalResponses) * 40 +
-          (keyTopics.length / 8) * 30 +
-          (avgSentiment != null ? 30 : 0),
-        )
-      : null;
+    const insightScore =
+      totalResponses > 0
+        ? Math.round(
+            (processedCount / totalResponses) * 40 +
+              (keyTopics.length / 8) * 30 +
+              (avgSentiment != null ? 30 : 0),
+          )
+        : null;
 
     // Per-question structured breakdowns (NPS, RATING, SINGLE_CHOICE, MULTIPLE_CHOICE)
     // These are shown as analytics evidence — NOT as fake text themes
     const questions = await this.prisma.surveyQuestion.findMany({
       where: { surveyId },
       orderBy: { order: 'asc' },
-      select: { id: true, type: true, label: true, options: true, ratingMin: true, ratingMax: true },
+      select: {
+        id: true,
+        type: true,
+        label: true,
+        options: true,
+        ratingMin: true,
+        ratingMax: true,
+      },
     });
     const allAnswers = await this.prisma.surveyAnswer.findMany({
       where: { response: { surveyId } },
-      select: { questionId: true, numericValue: true, textValue: true, choiceValues: true },
+      select: {
+        questionId: true,
+        numericValue: true,
+        textValue: true,
+        choiceValues: true,
+      },
     });
     const answersByQuestion = new Map<string, typeof allAnswers>();
     for (const a of allAnswers) {
-      if (!answersByQuestion.has(a.questionId)) answersByQuestion.set(a.questionId, []);
+      if (!answersByQuestion.has(a.questionId))
+        answersByQuestion.set(a.questionId, []);
       answersByQuestion.get(a.questionId)!.push(a);
     }
     const questionBreakdowns = questions
-      .filter((q) => EVIDENCE_QUESTION_TYPES.has(q.type as SurveyQuestionType))
+      .filter((q) => EVIDENCE_QUESTION_TYPES.has(q.type))
       .map((q) => {
         const answers = answersByQuestion.get(q.id) ?? [];
         const responseCount = answers.length;
-        if (q.type === SurveyQuestionType.NPS || q.type === SurveyQuestionType.RATING) {
-          const nums = answers.map((a) => a.numericValue).filter((v): v is number => v != null);
-          const avg = nums.length > 0 ? nums.reduce((s, v) => s + v, 0) / nums.length : null;
+        if (
+          q.type === SurveyQuestionType.NPS ||
+          q.type === SurveyQuestionType.RATING
+        ) {
+          const nums = answers
+            .map((a) => a.numericValue)
+            .filter((v): v is number => v != null);
+          const avg =
+            nums.length > 0
+              ? nums.reduce((s, v) => s + v, 0) / nums.length
+              : null;
           // NPS breakdown: promoters (9-10), passives (7-8), detractors (0-6)
           const distribution: Record<string, number> = {};
           if (q.type === SurveyQuestionType.NPS) {
-            distribution['Promoters (9-10)'] = nums.filter((v) => v >= 9).length;
-            distribution['Passives (7-8)']   = nums.filter((v) => v >= 7 && v <= 8).length;
-            distribution['Detractors (0-6)'] = nums.filter((v) => v <= 6).length;
+            distribution['Promoters (9-10)'] = nums.filter(
+              (v) => v >= 9,
+            ).length;
+            distribution['Passives (7-8)'] = nums.filter(
+              (v) => v >= 7 && v <= 8,
+            ).length;
+            distribution['Detractors (0-6)'] = nums.filter(
+              (v) => v <= 6,
+            ).length;
           } else {
             const min = q.ratingMin ?? 1;
             const max = q.ratingMax ?? 5;
@@ -921,25 +1041,48 @@ export class SurveyService {
               distribution[String(i)] = nums.filter((v) => v === i).length;
             }
           }
-          return { questionId: q.id, label: q.label, type: q.type, responseCount, avg, distribution };
+          return {
+            questionId: q.id,
+            label: q.label,
+            type: q.type,
+            responseCount,
+            avg,
+            distribution,
+          };
         }
         // SINGLE_CHOICE / MULTIPLE_CHOICE
         const choiceCounts: Record<string, number> = {};
         for (const a of answers) {
-          const choices = (a.choiceValues as string[] | null) ?? (a.textValue ? [a.textValue] : []);
+          const choices =
+            (a.choiceValues as string[] | null) ??
+            (a.textValue ? [a.textValue] : []);
           for (const c of choices) {
             choiceCounts[c] = (choiceCounts[c] ?? 0) + 1;
           }
         }
-        return { questionId: q.id, label: q.label, type: q.type, responseCount, avg: null, distribution: choiceCounts };
+        return {
+          questionId: q.id,
+          label: q.label,
+          type: q.type,
+          responseCount,
+          avg: null,
+          distribution: choiceCounts,
+        };
       });
 
     // Revenue-weighted intelligence (best-effort)
     const survey = await this.resolveSurvey(workspaceId, surveyId);
     let revenueWeighted: RevenueWeightedInsight | null = null;
     try {
-      revenueWeighted = await this.surveyIntelligenceService.computeRevenueWeightedIntelligence(workspaceId, surveyId);
-      await this.surveyIntelligenceService.persistIntelligenceScores(surveyId, revenueWeighted);
+      revenueWeighted =
+        await this.surveyIntelligenceService.computeRevenueWeightedIntelligence(
+          workspaceId,
+          surveyId,
+        );
+      await this.surveyIntelligenceService.persistIntelligenceScores(
+        surveyId,
+        revenueWeighted,
+      );
     } catch (_err) {
       // Non-critical
     }
@@ -948,7 +1091,8 @@ export class SurveyService {
       surveyId,
       totalResponses,
       processedCount,
-      avgSentiment: avgSentiment !== null ? parseFloat(avgSentiment.toFixed(3)) : null,
+      avgSentiment:
+        avgSentiment !== null ? parseFloat(avgSentiment.toFixed(3)) : null,
       avgNps: avgNps !== null ? parseFloat(avgNps.toFixed(2)) : null,
       avgRating: avgRating !== null ? parseFloat(avgRating.toFixed(2)) : null,
       npsScore,
@@ -969,8 +1113,12 @@ export class SurveyService {
       questionBreakdowns,
       revenueWeighted,
       surveyType: survey.surveyType,
-      validationScore: revenueWeighted?.validationScore ?? survey.validationScore ?? null,
-      revenueWeightedScore: revenueWeighted?.revenueWeightedScore ?? survey.revenueWeightedScore ?? null,
+      validationScore:
+        revenueWeighted?.validationScore ?? survey.validationScore ?? null,
+      revenueWeightedScore:
+        revenueWeighted?.revenueWeightedScore ??
+        survey.revenueWeightedScore ??
+        null,
     };
   }
 }

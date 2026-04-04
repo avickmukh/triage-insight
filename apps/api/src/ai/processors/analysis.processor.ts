@@ -77,7 +77,12 @@ export class AiAnalysisProcessor {
   @Process({ concurrency: RetryPolicy.concurrency() })
   async handleAnalysis(job: Job<AnalysisJobPayload>) {
     const { feedbackId, workspaceId } = job.data;
-    const ctx = { jobType: 'AI_ANALYSIS', workspaceId, entityId: feedbackId, jobId: job.id };
+    const ctx = {
+      jobType: 'AI_ANALYSIS',
+      workspaceId,
+      entityId: feedbackId,
+      jobId: job.id,
+    };
     const startedAt = Date.now();
 
     // ── Idempotency guard ────────────────────────────────────────────────────
@@ -100,13 +105,25 @@ export class AiAnalysisProcessor {
 
     // ── 0. Load feedback ─────────────────────────────────────────────────────
     const t0 = Date.now();
-    const feedback = await this.prisma.feedback.findUnique({ where: { id: feedbackId } });
+    const feedback = await this.prisma.feedback.findUnique({
+      where: { id: feedbackId },
+    });
     if (!feedback) {
-      this.logger.stepWarn(ctx, 'LOAD', `Feedback ${feedbackId} not found — skipping`);
-      await this.idempotencyService.markCompleted(logId, Date.now() - startedAt);
+      this.logger.stepWarn(
+        ctx,
+        'LOAD',
+        `Feedback ${feedbackId} not found — skipping`,
+      );
+      await this.idempotencyService.markCompleted(
+        logId,
+        Date.now() - startedAt,
+      );
       return;
     }
-    this.logger.debug(ctx, `[STEP] LOAD ${Date.now() - t0}ms | feedback=${feedbackId}`);
+    this.logger.debug(
+      ctx,
+      `[STEP] LOAD ${Date.now() - t0}ms | feedback=${feedbackId}`,
+    );
 
     // ── 1. Generate Embedding ────────────────────────────────────────────────
     // Use composite text (title + description) so the embedding captures both
@@ -120,7 +137,10 @@ export class AiAnalysisProcessor {
     } catch (err) {
       this.logger.stepWarn(ctx, 'EMBEDDING', (err as Error).message);
     }
-    this.logger.debug(ctx, `[STEP] EMBEDDING ${Date.now() - t1}ms | dims=${embedding.length}`);
+    this.logger.debug(
+      ctx,
+      `[STEP] EMBEDDING ${Date.now() - t1}ms | dims=${embedding.length}`,
+    );
 
     // ── 2. Analyse Sentiment ─────────────────────────────────────────────────
     // Score is in [-1, +1]: negative = frustrated/churning, 0 = neutral, positive = happy.
@@ -128,12 +148,17 @@ export class AiAnalysisProcessor {
     const t2 = Date.now();
     let sentiment = 0;
     try {
-      sentiment = await this.sentimentService.analyseSentiment(feedback.description);
+      sentiment = await this.sentimentService.analyseSentiment(
+        feedback.description,
+      );
     } catch (err) {
       this.logger.stepWarn(ctx, 'SENTIMENT', (err as Error).message);
       // sentiment remains 0 — neutral fallback
     }
-    this.logger.debug(ctx, `[STEP] SENTIMENT ${Date.now() - t2}ms | score=${sentiment}`);
+    this.logger.debug(
+      ctx,
+      `[STEP] SENTIMENT ${Date.now() - t2}ms | score=${sentiment}`,
+    );
 
     // ── 3. Generate Summary ──────────────────────────────────────────────────
     const t3 = Date.now();
@@ -143,7 +168,10 @@ export class AiAnalysisProcessor {
     } catch (err) {
       this.logger.stepWarn(ctx, 'SUMMARIZATION', (err as Error).message);
     }
-    this.logger.debug(ctx, `[STEP] SUMMARIZATION ${Date.now() - t3}ms | hasSummary=${!!summary}`);
+    this.logger.debug(
+      ctx,
+      `[STEP] SUMMARIZATION ${Date.now() - t3}ms | hasSummary=${!!summary}`,
+    );
 
     // ── 4. Persist AI data ───────────────────────────────────────────────────
     // sentiment is always written (0 = neutral fallback) so CiqService never
@@ -204,7 +232,11 @@ export class AiAnalysisProcessor {
     // and — if all rows are now processed — flip stage to COMPLETED.
     // This is the authoritative completion signal used by getBatchStatus().
     if (feedback.importBatchId) {
-      this.updateBatchProgress(feedback.importBatchId, 'completed').catch(() => { /* non-critical */ });
+      this.updateBatchProgress(feedback.importBatchId, 'completed').catch(
+        () => {
+          /* non-critical */
+        },
+      );
     }
   }
 
@@ -237,12 +269,21 @@ export class AiAnalysisProcessor {
     // Step 2: read the updated row to check if all rows are processed
     const batch = await this.prisma.importBatch.findUnique({
       where: { id: batchId },
-      select: { totalRows: true, completedRows: true, failedRows: true, stage: true },
+      select: {
+        totalRows: true,
+        completedRows: true,
+        failedRows: true,
+        stage: true,
+      },
     });
     if (!batch) return;
 
     const processed = batch.completedRows + batch.failedRows;
-    if (batch.totalRows > 0 && processed >= batch.totalRows && batch.stage !== 'COMPLETED') {
+    if (
+      batch.totalRows > 0 &&
+      processed >= batch.totalRows &&
+      batch.stage !== 'COMPLETED'
+    ) {
       // All rows done — flip stage to COMPLETED
       await this.prisma.importBatch.update({
         where: { id: batchId },
@@ -298,12 +339,16 @@ export class AiAnalysisProcessor {
     if (job.attemptsMade >= maxAttempts) {
       const feedbackId = job.data.feedbackId;
       if (feedbackId) {
-        const fb = await this.prisma.feedback.findUnique({
-          where: { id: feedbackId },
-          select: { importBatchId: true },
-        }).catch(() => null);
+        const fb = await this.prisma.feedback
+          .findUnique({
+            where: { id: feedbackId },
+            select: { importBatchId: true },
+          })
+          .catch(() => null);
         if (fb?.importBatchId) {
-          this.updateBatchProgress(fb.importBatchId, 'failed').catch(() => { /* non-critical */ });
+          this.updateBatchProgress(fb.importBatchId, 'failed').catch(() => {
+            /* non-critical */
+          });
         }
       }
     }

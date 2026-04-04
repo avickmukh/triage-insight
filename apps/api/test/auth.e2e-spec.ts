@@ -22,8 +22,14 @@ describe('AuthController (e2e)', () => {
 
   describe('POST /auth/signup', () => {
     it('should create a new user and workspace and return tokens', async () => {
-      prisma.workspace.create.mockResolvedValueOnce({ id: 'ws-1', name: 'Test Workspace' });
-      prisma.user.create.mockResolvedValueOnce({ id: 'user-1', email: 'test@example.com' });
+      prisma.workspace.create.mockResolvedValueOnce({
+        id: 'ws-1',
+        name: 'Test Workspace',
+      });
+      prisma.user.create.mockResolvedValueOnce({
+        id: 'user-1',
+        email: 'test@example.com',
+      });
 
       const res = await request(app.getHttpServer())
         .post('/api/v1/auth/signup')
@@ -45,7 +51,11 @@ describe('AuthController (e2e)', () => {
 
   describe('POST /auth/login', () => {
     it('should return tokens for valid credentials', async () => {
-      prisma.user.findUnique.mockResolvedValueOnce({ id: 'user-1', email: 'test@example.com', password: 'hashed_password' });
+      prisma.user.findUnique.mockResolvedValueOnce({
+        id: 'user-1',
+        email: 'test@example.com',
+        password: 'hashed_password',
+      });
 
       const res = await request(app.getHttpServer())
         .post('/api/v1/auth/login')
@@ -59,7 +69,10 @@ describe('AuthController (e2e)', () => {
 
   describe('GET /auth/me', () => {
     it('should return the current user profile', async () => {
-      prisma.user.findUnique.mockResolvedValueOnce({ id: 'user-1', email: 'test@example.com' });
+      prisma.user.findUnique.mockResolvedValueOnce({
+        id: 'user-1',
+        email: 'test@example.com',
+      });
 
       const loginRes = await request(app.getHttpServer())
         .post('/api/v1/auth/login')

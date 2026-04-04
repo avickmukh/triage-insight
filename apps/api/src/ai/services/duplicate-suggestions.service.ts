@@ -40,7 +40,9 @@ export class DuplicateSuggestionsService {
     const rows = await this.prisma.feedbackDuplicateSuggestion.findMany({
       where: {
         sourceFeedback: { workspaceId },
-        ...(status ? { status } : { status: DuplicateSuggestionStatus.PENDING }),
+        ...(status
+          ? { status }
+          : { status: DuplicateSuggestionStatus.PENDING }),
         // Only surface actionable match classes — never RELATED_SAME_THEME
         matchType: { in: ['EXACT_DUPLICATE', 'NEAR_DUPLICATE'] },
       },
@@ -53,7 +55,11 @@ export class DuplicateSuggestionsService {
         },
       },
       // Order by hybridScore (most confident first), fall back to similarity, then recency
-      orderBy: [{ hybridScore: 'desc' }, { similarity: 'desc' }, { createdAt: 'desc' }],
+      orderBy: [
+        { hybridScore: 'desc' },
+        { similarity: 'desc' },
+        { createdAt: 'desc' },
+      ],
     });
     // Map Prisma field names (sourceId/targetId) to the frontend API contract
     // (sourceFeedbackId/targetFeedbackId) while keeping the originals as aliases.
@@ -75,7 +81,9 @@ export class DuplicateSuggestionsService {
     const rows = await this.prisma.feedbackDuplicateSuggestion.findMany({
       where: {
         OR: [{ sourceId: feedbackId }, { targetId: feedbackId }],
-        ...(status ? { status } : { status: DuplicateSuggestionStatus.PENDING }),
+        ...(status
+          ? { status }
+          : { status: DuplicateSuggestionStatus.PENDING }),
         // Only surface actionable match classes — never RELATED_SAME_THEME
         matchType: { in: ['EXACT_DUPLICATE', 'NEAR_DUPLICATE'] },
       },
@@ -103,15 +111,16 @@ export class DuplicateSuggestionsService {
    *   2. Calls MergeService to set sourceId → MERGED, mergedIntoId = targetId.
    *   3. Writes a DUPLICATE_DECISION audit log entry.
    */
-  async accept(
-    workspaceId: string,
-    suggestionId: string,
-    userId: string,
-  ) {
-    const suggestion = await this._requireSuggestionInWorkspace(workspaceId, suggestionId);
+  async accept(workspaceId: string, suggestionId: string, userId: string) {
+    const suggestion = await this._requireSuggestionInWorkspace(
+      workspaceId,
+      suggestionId,
+    );
 
     if (suggestion.status === DuplicateSuggestionStatus.ACCEPTED) {
-      throw new BadRequestException('This duplicate suggestion has already been accepted.');
+      throw new BadRequestException(
+        'This duplicate suggestion has already been accepted.',
+      );
     }
     if (suggestion.status === DuplicateSuggestionStatus.REJECTED) {
       throw new BadRequestException(
@@ -141,7 +150,7 @@ export class DuplicateSuggestionsService {
     await this.mergeService.mergeFeedback(
       workspaceId,
       userId,
-      suggestion.targetId,   // keep target
+      suggestion.targetId, // keep target
       [suggestion.sourceId], // mark source as MERGED
     );
 
@@ -173,15 +182,16 @@ export class DuplicateSuggestionsService {
    *
    * No merge is performed.  The suggestion will not reappear in PENDING lists.
    */
-  async reject(
-    workspaceId: string,
-    suggestionId: string,
-    userId: string,
-  ) {
-    const suggestion = await this._requireSuggestionInWorkspace(workspaceId, suggestionId);
+  async reject(workspaceId: string, suggestionId: string, userId: string) {
+    const suggestion = await this._requireSuggestionInWorkspace(
+      workspaceId,
+      suggestionId,
+    );
 
     if (suggestion.status === DuplicateSuggestionStatus.REJECTED) {
-      throw new BadRequestException('This duplicate suggestion has already been rejected.');
+      throw new BadRequestException(
+        'This duplicate suggestion has already been rejected.',
+      );
     }
     if (suggestion.status === DuplicateSuggestionStatus.ACCEPTED) {
       throw new BadRequestException(
@@ -219,7 +229,9 @@ export class DuplicateSuggestionsService {
    * `targetFeedbackId`.  We add both so existing code that reads either name
    * continues to work.
    */
-  private _normaliseRow<T extends { sourceId: string; targetId: string }>(row: T) {
+  private _normaliseRow<T extends { sourceId: string; targetId: string }>(
+    row: T,
+  ) {
     return {
       ...row,
       sourceFeedbackId: row.sourceId,
@@ -230,13 +242,18 @@ export class DuplicateSuggestionsService {
     };
   }
 
-  private async _requireFeedbackInWorkspace(workspaceId: string, feedbackId: string) {
+  private async _requireFeedbackInWorkspace(
+    workspaceId: string,
+    feedbackId: string,
+  ) {
     const feedback = await this.prisma.feedback.findFirst({
       where: { id: feedbackId, workspaceId },
       select: { id: true },
     });
     if (!feedback) {
-      throw new NotFoundException(`Feedback ${feedbackId} not found in this workspace.`);
+      throw new NotFoundException(
+        `Feedback ${feedbackId} not found in this workspace.`,
+      );
     }
     return feedback;
   }
@@ -246,21 +263,28 @@ export class DuplicateSuggestionsService {
    * requesting workspace.  Raises 404 if the suggestion does not exist and
    * 403 if it belongs to a different workspace.
    */
-  private async _requireSuggestionInWorkspace(workspaceId: string, suggestionId: string) {
-    const suggestion = await this.prisma.feedbackDuplicateSuggestion.findUnique({
-      where: { id: suggestionId },
-      include: {
-        sourceFeedback: {
-          select: { id: true, workspaceId: true, status: true },
-        },
-        targetFeedback: {
-          select: { id: true, workspaceId: true, status: true },
+  private async _requireSuggestionInWorkspace(
+    workspaceId: string,
+    suggestionId: string,
+  ) {
+    const suggestion = await this.prisma.feedbackDuplicateSuggestion.findUnique(
+      {
+        where: { id: suggestionId },
+        include: {
+          sourceFeedback: {
+            select: { id: true, workspaceId: true, status: true },
+          },
+          targetFeedback: {
+            select: { id: true, workspaceId: true, status: true },
+          },
         },
       },
-    });
+    );
 
     if (!suggestion) {
-      throw new NotFoundException(`Duplicate suggestion ${suggestionId} not found.`);
+      throw new NotFoundException(
+        `Duplicate suggestion ${suggestionId} not found.`,
+      );
     }
 
     // Cross-workspace guard

@@ -14,7 +14,13 @@
 import request from 'supertest';
 import { createTestApp } from './helpers';
 import { INestApplication } from '@nestjs/common';
-import { WorkspaceStatus, FeedbackSourceType, FeedbackStatus, AiJobStatus, AiJobType } from '@prisma/client';
+import {
+  WorkspaceStatus,
+  FeedbackSourceType,
+  FeedbackStatus,
+  AiJobStatus,
+  AiJobType,
+} from '@prisma/client';
 
 // ─── Shared fixtures ──────────────────────────────────────────────────────────
 
@@ -31,7 +37,8 @@ const mockWorkspace = {
 };
 
 const mockPresignedResponse = {
-  signedUrl: 'https://s3.amazonaws.com/bucket/voice/test.mp3?X-Amz-Signature=abc',
+  signedUrl:
+    'https://s3.amazonaws.com/bucket/voice/test.mp3?X-Amz-Signature=abc',
   key: `voice/${WORKSPACE_ID}/test-${Date.now()}.mp3`,
   bucket: 'triage-test-bucket',
 };
@@ -180,7 +187,8 @@ describe('Voice Pipeline (e2e)', () => {
           mimeType: 'audio/mpeg',
           sizeBytes: 1024 * 1024,
           label: 'My voice feedback',
-          description: 'I wanted to share some thoughts about the checkout flow.',
+          description:
+            'I wanted to share some thoughts about the checkout flow.',
           email: 'user@example.com',
         });
 
@@ -333,12 +341,24 @@ describe('Voice Pipeline (e2e)', () => {
 
   describe('Audio file validation logic', () => {
     const ALLOWED_AUDIO_MIME = new Set([
-      'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/wave',
-      'audio/m4a', 'audio/x-m4a', 'audio/mp4', 'audio/ogg', 'audio/webm', 'audio/flac',
+      'audio/mpeg',
+      'audio/mp3',
+      'audio/wav',
+      'audio/x-wav',
+      'audio/wave',
+      'audio/m4a',
+      'audio/x-m4a',
+      'audio/mp4',
+      'audio/ogg',
+      'audio/webm',
+      'audio/flac',
     ]);
     const MAX_FILE_SIZE_MB = 50;
 
-    const validateAudioFile = (mimeType: string, sizeBytes: number): string | null => {
+    const validateAudioFile = (
+      mimeType: string,
+      sizeBytes: number,
+    ): string | null => {
       if (!ALLOWED_AUDIO_MIME.has(mimeType)) {
         return `Unsupported file type: ${mimeType}`;
       }
@@ -395,7 +415,7 @@ describe('Voice Pipeline (e2e)', () => {
           mimeType: 'audio/mpeg',
           sizeBytes: 1000000,
         });
-        // No Authorization header — should not get 401
+      // No Authorization header — should not get 401
       expect(res.status).not.toBe(401);
     });
 
@@ -410,7 +430,7 @@ describe('Voice Pipeline (e2e)', () => {
           mimeType: 'audio/mpeg',
           sizeBytes: 1000000,
         });
-        // No Authorization header — should not get 401
+      // No Authorization header — should not get 401
       expect(res.status).not.toBe(401);
     });
   });

@@ -179,11 +179,17 @@ export class IntegrationsController {
     // Merge channels into existing metadata via direct Prisma access
     await (this.integrationService as any).prisma.integrationConnection.update({
       where: {
-        workspaceId_provider: { workspaceId, provider: IntegrationProvider.SLACK },
+        workspaceId_provider: {
+          workspaceId,
+          provider: IntegrationProvider.SLACK,
+        },
       },
       data: { metadata: { ...existing, channels: body.channels } },
     });
-    return this.integrationService.getStatus(workspaceId, IntegrationProvider.SLACK);
+    return this.integrationService.getStatus(
+      workspaceId,
+      IntegrationProvider.SLACK,
+    );
   }
 
   // ─── POST /workspaces/:workspaceId/integrations/slack/sync ───────────────
@@ -192,12 +198,15 @@ export class IntegrationsController {
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
   async syncSlack(@Param('workspaceId') workspaceId: string) {
     try {
-    await this.slackQueue.add(
-      { workspaceId },
-      { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
-    );
+      await this.slackQueue.add(
+        { workspaceId },
+        { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
+      );
     } catch (queueErr) {
-      console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+      console.warn(
+        '[Queue] Redis unavailable — job skipped:',
+        (queueErr as Error).message,
+      );
     }
     return { message: 'Slack ingestion job queued.' };
   }
@@ -235,7 +244,9 @@ export class IntegrationsController {
       const now = Math.floor(Date.now() / 1000);
       const ts = parseInt(slackTimestamp, 10);
       if (Math.abs(now - ts) > 300) {
-        this.logger.warn(`Slack webhook replay attack: workspace=${workspaceId}`);
+        this.logger.warn(
+          `Slack webhook replay attack: workspace=${workspaceId}`,
+        );
         return { ok: false };
       }
       const rawBody = JSON.stringify(body);
@@ -250,7 +261,9 @@ export class IntegrationsController {
         sigBuf.length !== expBuf.length ||
         !crypto.timingSafeEqual(sigBuf, expBuf)
       ) {
-        this.logger.warn(`Slack webhook signature mismatch: workspace=${workspaceId}`);
+        this.logger.warn(
+          `Slack webhook signature mismatch: workspace=${workspaceId}`,
+        );
         return { ok: false };
       }
     }
@@ -260,12 +273,15 @@ export class IntegrationsController {
       const event = body.event as Record<string, unknown> | undefined;
       if (event?.type === 'message' && !event.subtype) {
         try {
-        await this.slackQueue.add(
-          { workspaceId, event },
-          { attempts: 3, backoff: { type: 'exponential', delay: 1000 } },
-        );
+          await this.slackQueue.add(
+            { workspaceId, event },
+            { attempts: 3, backoff: { type: 'exponential', delay: 1000 } },
+          );
         } catch (queueErr) {
-          console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+          console.warn(
+            '[Queue] Redis unavailable — job skipped:',
+            (queueErr as Error).message,
+          );
         }
         this.logger.debug(
           `Slack message event queued: workspace=${workspaceId} channel=${String(event.channel)}`,
@@ -295,20 +311,31 @@ export class IntegrationsController {
   @Post('sync')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
   async sync(@Param('workspaceId') workspaceId: string) {
-    const connections = await (this.integrationService as any).prisma.integrationConnection.findMany({
+    const connections = await (
+      this.integrationService as any
+    ).prisma.integrationConnection.findMany({
       where: { workspaceId },
       select: { provider: true, lastSyncedAt: true },
     });
     for (const conn of connections) {
       try {
-      await this.syncQueue.add(
-        { workspaceId, provider: conn.provider, lastSyncedAt: conn.lastSyncedAt },
-        { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
-      );
+        await this.syncQueue.add(
+          {
+            workspaceId,
+            provider: conn.provider,
+            lastSyncedAt: conn.lastSyncedAt,
+          },
+          { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
+        );
       } catch (queueErr) {
-        console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+        console.warn(
+          '[Queue] Redis unavailable — job skipped:',
+          (queueErr as Error).message,
+        );
       }
     }
-    return { message: `Sync jobs started for ${connections.length} active integration(s).` };
+    return {
+      message: `Sync jobs started for ${connections.length} active integration(s).`,
+    };
   }
 }

@@ -1,16 +1,16 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
-import { InjectQueue } from "@nestjs/bull";
-import type { Queue } from "bull";
-import { PrismaService } from "../../prisma/prisma.service";
-import { AuditService } from "../../ai/services/audit.service";
-import { CiqService } from "../../ai/services/ciq.service";
-import { AggregationService } from "./aggregation.service";
-import { PrioritizationCacheService } from "./prioritization-cache.service";
-import { UpdateSettingsDto } from "../dto/update-settings.dto";
-import { QueryPrioritizationDto } from "../dto/query-prioritization.dto";
-import { AuditLogAction, ThemeStatus } from "@prisma/client";
-import { CIQ_SCORING_QUEUE } from "../../ai/processors/ciq-scoring.processor";
-import { PRIORITIZATION_QUEUE } from "../workers/prioritization.worker";
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bull';
+import type { Queue } from 'bull';
+import { PrismaService } from '../../prisma/prisma.service';
+import { AuditService } from '../../ai/services/audit.service';
+import { CiqService } from '../../ai/services/ciq.service';
+import { AggregationService } from './aggregation.service';
+import { PrioritizationCacheService } from './prioritization-cache.service';
+import { UpdateSettingsDto } from '../dto/update-settings.dto';
+import { QueryPrioritizationDto } from '../dto/query-prioritization.dto';
+import { AuditLogAction, ThemeStatus } from '@prisma/client';
+import { CIQ_SCORING_QUEUE } from '../../ai/processors/ciq-scoring.processor';
+import { PRIORITIZATION_QUEUE } from '../workers/prioritization.worker';
 
 export interface SetManualOverrideDto {
   manualOverrideScore: number | null;
@@ -27,7 +27,8 @@ export class PrioritizationService {
     private readonly aggregationService: AggregationService,
     private readonly cacheService: PrioritizationCacheService,
     @InjectQueue(CIQ_SCORING_QUEUE) private readonly ciqQueue: Queue,
-    @InjectQueue(PRIORITIZATION_QUEUE) private readonly prioritizationQueue: Queue,
+    @InjectQueue(PRIORITIZATION_QUEUE)
+    private readonly prioritizationQueue: Queue,
   ) {}
 
   /**
@@ -35,21 +36,26 @@ export class PrioritizationService {
    * Includes both AI_GENERATED and VERIFIED themes.
    * Themes that have never been scored appear last (null score).
    */
-  async getPrioritizedThemes(workspaceId: string, query: QueryPrioritizationDto) {
+  async getPrioritizedThemes(
+    workspaceId: string,
+    query: QueryPrioritizationDto,
+  ) {
     const { page = 1, limit = 20 } = query;
 
     const [themes, total] = await this.prisma.$transaction([
       this.prisma.theme.findMany({
         where: { workspaceId, status: { not: ThemeStatus.ARCHIVED } },
         orderBy: [
-          { priorityScore: { sort: "desc", nulls: "last" } },
-          { createdAt: "desc" },
+          { priorityScore: { sort: 'desc', nulls: 'last' } },
+          { createdAt: 'desc' },
         ],
         skip: (page - 1) * limit,
         take: limit,
         include: { _count: { select: { feedbacks: true } } },
       }),
-      this.prisma.theme.count({ where: { workspaceId, status: { not: ThemeStatus.ARCHIVED } } }),
+      this.prisma.theme.count({
+        where: { workspaceId, status: { not: ThemeStatus.ARCHIVED } },
+      }),
     ]);
 
     return { data: themes, total, page, limit };
@@ -67,9 +73,23 @@ export class PrioritizationService {
    */
   async getPrioritizedFeatures(workspaceId: string, limit = 50) {
     const cached = this.cacheService.get(workspaceId);
-    if (cached) return { data: cached.features.slice(0, limit), total: cached.features.length, computedAt: cached.computedAt, cached: true };
-    const features = await this.aggregationService.getFeaturePriorityRanking(workspaceId, limit);
-    return { data: features, total: features.length, computedAt: new Date(), cached: false };
+    if (cached)
+      return {
+        data: cached.features.slice(0, limit),
+        total: cached.features.length,
+        computedAt: cached.computedAt,
+        cached: true,
+      };
+    const features = await this.aggregationService.getFeaturePriorityRanking(
+      workspaceId,
+      limit,
+    );
+    return {
+      data: features,
+      total: features.length,
+      computedAt: new Date(),
+      cached: false,
+    };
   }
 
   /**
@@ -77,9 +97,23 @@ export class PrioritizationService {
    */
   async getOpportunities(workspaceId: string, limit = 20) {
     const cached = this.cacheService.get(workspaceId);
-    if (cached) return { data: cached.opportunities.slice(0, limit), total: cached.opportunities.length, computedAt: cached.computedAt, cached: true };
-    const opportunities = await this.aggregationService.getOpportunities(workspaceId, limit);
-    return { data: opportunities, total: opportunities.length, computedAt: new Date(), cached: false };
+    if (cached)
+      return {
+        data: cached.opportunities.slice(0, limit),
+        total: cached.opportunities.length,
+        computedAt: cached.computedAt,
+        cached: true,
+      };
+    const opportunities = await this.aggregationService.getOpportunities(
+      workspaceId,
+      limit,
+    );
+    return {
+      data: opportunities,
+      total: opportunities.length,
+      computedAt: new Date(),
+      cached: false,
+    };
   }
 
   /**
@@ -87,9 +121,23 @@ export class PrioritizationService {
    */
   async getRoadmapRecommendations(workspaceId: string, limit = 30) {
     const cached = this.cacheService.get(workspaceId);
-    if (cached) return { data: cached.roadmap.slice(0, limit), total: cached.roadmap.length, computedAt: cached.computedAt, cached: true };
-    const roadmap = await this.aggregationService.getRoadmapRecommendations(workspaceId, limit);
-    return { data: roadmap, total: roadmap.length, computedAt: new Date(), cached: false };
+    if (cached)
+      return {
+        data: cached.roadmap.slice(0, limit),
+        total: cached.roadmap.length,
+        computedAt: cached.computedAt,
+        cached: true,
+      };
+    const roadmap = await this.aggregationService.getRoadmapRecommendations(
+      workspaceId,
+      limit,
+    );
+    return {
+      data: roadmap,
+      total: roadmap.length,
+      computedAt: new Date(),
+      cached: false,
+    };
   }
 
   /**
@@ -101,11 +149,18 @@ export class PrioritizationService {
     try {
       const job = await this.prioritizationQueue.add(
         { type: 'WORKSPACE_RECOMPUTE', workspaceId, userId },
-        { attempts: 3, backoff: { type: 'exponential', delay: 3000 }, removeOnComplete: 50 },
+        {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 3000 },
+          removeOnComplete: 50,
+        },
       );
       jobId = String(job.id);
     } catch (queueErr) {
-      console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+      console.warn(
+        '[Queue] Redis unavailable — job skipped:',
+        (queueErr as Error).message,
+      );
     }
     await this.auditService.logAction(
       workspaceId,
@@ -120,17 +175,24 @@ export class PrioritizationService {
    * POST /prioritization/themes/:themeId/override — set or clear a manual override score.
    * ADMIN only.
    */
-  async setManualOverride(workspaceId: string, themeId: string, userId: string, dto: SetManualOverrideDto) {
-    const theme = await this.prisma.theme.findFirst({ where: { id: themeId, workspaceId } });
+  async setManualOverride(
+    workspaceId: string,
+    themeId: string,
+    userId: string,
+    dto: SetManualOverrideDto,
+  ) {
+    const theme = await this.prisma.theme.findFirst({
+      where: { id: themeId, workspaceId },
+    });
     if (!theme) throw new NotFoundException('Theme not found');
 
     const updated = await this.prisma.theme.update({
       where: { id: themeId },
       data: {
         manualOverrideScore: dto.manualOverrideScore,
-        strategicTag:        dto.strategicTag ?? theme.strategicTag,
-        overrideReason:      dto.overrideReason ?? null,
-        lastScoredAt:        new Date(),
+        strategicTag: dto.strategicTag ?? theme.strategicTag,
+        overrideReason: dto.overrideReason ?? null,
+        lastScoredAt: new Date(),
       },
     });
 
@@ -138,7 +200,12 @@ export class PrioritizationService {
       workspaceId,
       userId,
       AuditLogAction.PRIORITIZATION_SETTINGS_UPDATE,
-      { action: 'manual_override', themeId, overrideScore: dto.manualOverrideScore, reason: dto.overrideReason },
+      {
+        action: 'manual_override',
+        themeId,
+        overrideScore: dto.manualOverrideScore,
+        reason: dto.overrideReason,
+      },
     );
 
     // Invalidate cache so next read reflects the override
@@ -151,8 +218,15 @@ export class PrioritizationService {
    * PATCH /prioritization/themes/:themeId/strategic-tag — set strategic tag only.
    * ADMIN only.
    */
-  async setStrategicTag(workspaceId: string, themeId: string, userId: string, strategicTag: string | null) {
-    const theme = await this.prisma.theme.findFirst({ where: { id: themeId, workspaceId } });
+  async setStrategicTag(
+    workspaceId: string,
+    themeId: string,
+    userId: string,
+    strategicTag: string | null,
+  ) {
+    const theme = await this.prisma.theme.findFirst({
+      where: { id: themeId, workspaceId },
+    });
     if (!theme) throw new NotFoundException('Theme not found');
 
     const updated = await this.prisma.theme.update({
@@ -178,14 +252,17 @@ export class PrioritizationService {
     let jobId: string | undefined;
     try {
       const job = await this.ciqQueue.add(
-        { type: "THEME_SCORED", workspaceId, themeId },
-        { attempts: 3, backoff: { type: "exponential", delay: 2000 } },
+        { type: 'THEME_SCORED', workspaceId, themeId },
+        { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
       );
       jobId = String(job.id);
     } catch (queueErr) {
-      console.warn('[Queue] Redis unavailable — job skipped:', (queueErr as Error).message);
+      console.warn(
+        '[Queue] Redis unavailable — job skipped:',
+        (queueErr as Error).message,
+      );
     }
-    return { jobId, message: "CIQ scoring job enqueued" };
+    return { jobId, message: 'CIQ scoring job enqueued' };
   }
 
   /**
@@ -201,8 +278,8 @@ export class PrioritizationService {
     const jobs = await Promise.all(
       themes.map((t) =>
         this.ciqQueue.add(
-          { type: "THEME_SCORED", workspaceId, themeId: t.id },
-          { attempts: 3, backoff: { type: "exponential", delay: 2000 } },
+          { type: 'THEME_SCORED', workspaceId, themeId: t.id },
+          { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
         ),
       ),
     );
@@ -211,21 +288,32 @@ export class PrioritizationService {
       workspaceId,
       userId,
       AuditLogAction.PRIORITIZATION_SETTINGS_UPDATE,
-      { action: "bulk_rescore", themeCount: themes.length },
+      { action: 'bulk_rescore', themeCount: themes.length },
     );
 
-    return { enqueued: jobs.length, message: `${jobs.length} CIQ scoring jobs enqueued` };
+    return {
+      enqueued: jobs.length,
+      message: `${jobs.length} CIQ scoring jobs enqueued`,
+    };
   }
 
   async getSettings(workspaceId: string) {
-    let settings = await this.prisma.prioritizationSettings.findUnique({ where: { workspaceId } });
+    let settings = await this.prisma.prioritizationSettings.findUnique({
+      where: { workspaceId },
+    });
     if (!settings) {
-      settings = await this.prisma.prioritizationSettings.create({ data: { workspaceId } });
+      settings = await this.prisma.prioritizationSettings.create({
+        data: { workspaceId },
+      });
     }
     return settings;
   }
 
-  async updateSettings(workspaceId: string, userId: string, dto: UpdateSettingsDto) {
+  async updateSettings(
+    workspaceId: string,
+    userId: string,
+    dto: UpdateSettingsDto,
+  ) {
     const updatedSettings = await this.prisma.prioritizationSettings.upsert({
       where: { workspaceId },
       update: dto,

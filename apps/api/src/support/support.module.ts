@@ -23,11 +23,7 @@ import { SentimentService } from './services/sentiment.service';
  * token to bridge newly ingested SupportTickets into the unified Feedback pipeline.
  */
 @Module({
-  imports: [
-    PrismaModule,
-    IntegrationsModule,
-    FeedbackModule,
-  ],
+  imports: [PrismaModule, IntegrationsModule, FeedbackModule],
   controllers: [SupportController],
   providers: [
     IngestionService,

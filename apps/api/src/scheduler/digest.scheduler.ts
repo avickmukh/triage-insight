@@ -39,14 +39,21 @@ export class DigestScheduler {
       return;
     }
 
-    this.logger.log(`Found ${subscriptions.length} workspaces subscribed to weekly digests.`);
+    this.logger.log(
+      `Found ${subscriptions.length} workspaces subscribed to weekly digests.`,
+    );
 
     for (const sub of subscriptions) {
       try {
         await this.digestQueue.add({ workspaceId: sub.workspaceId });
-        this.logger.log(`Enqueued digest generation for workspace ${sub.workspaceId}`);
+        this.logger.log(
+          `Enqueued digest generation for workspace ${sub.workspaceId}`,
+        );
       } catch (error) {
-        this.logger.error(`Failed to enqueue digest generation for workspace ${sub.workspaceId}`, error);
+        this.logger.error(
+          `Failed to enqueue digest generation for workspace ${sub.workspaceId}`,
+          error,
+        );
       }
     }
 

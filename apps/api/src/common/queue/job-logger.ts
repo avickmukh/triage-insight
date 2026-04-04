@@ -48,7 +48,13 @@ export class JobLogger {
   }
 
   /** Log a fatal job failure */
-  fail(ctx: JobContext & { durationMs: number; failureReason: string; attempt?: number }): void {
+  fail(
+    ctx: JobContext & {
+      durationMs: number;
+      failureReason: string;
+      attempt?: number;
+    },
+  ): void {
     this.logger.error(this.format('JOB_FAIL', ctx));
   }
 
@@ -63,7 +69,11 @@ export class JobLogger {
   }
 
   /** Log a generic debug message */
-  debug(ctx: JobContext, message: string, extra?: Record<string, unknown>): void {
+  debug(
+    ctx: JobContext,
+    message: string,
+    extra?: Record<string, unknown>,
+  ): void {
     this.logger.debug(this.format('JOB_DEBUG', { ...ctx, message, ...extra }));
   }
 
@@ -76,13 +86,24 @@ export class JobLogger {
       job_id: payload.jobId ?? null,
     };
 
-    if (payload.durationMs !== undefined) fields.duration_ms = payload.durationMs;
+    if (payload.durationMs !== undefined)
+      fields.duration_ms = payload.durationMs;
     if (payload.failureReason) fields.failure_reason = payload.failureReason;
     if (payload.attempt !== undefined) fields.attempt = payload.attempt;
 
     // Include any extra fields
     for (const [k, v] of Object.entries(payload)) {
-      if (!['jobType', 'workspaceId', 'entityId', 'jobId', 'durationMs', 'failureReason', 'attempt'].includes(k)) {
+      if (
+        ![
+          'jobType',
+          'workspaceId',
+          'entityId',
+          'jobId',
+          'durationMs',
+          'failureReason',
+          'attempt',
+        ].includes(k)
+      ) {
         fields[k] = v;
       }
     }

@@ -47,7 +47,8 @@ export class SentimentProcessor {
 
     this.logger.start(ctx);
     try {
-      const result = await this.sentimentService.runFullSentimentPass(workspaceId);
+      const result =
+        await this.sentimentService.runFullSentimentPass(workspaceId);
       lastRunMap.set(workspaceId, Date.now());
       const durationMs = Date.now() - startedAt;
       this.logger.complete({ ...ctx, durationMs, ...result });

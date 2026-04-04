@@ -1,16 +1,16 @@
-import { Injectable, Logger } from "@nestjs/common";
-import { InjectQueue } from "@nestjs/bull";
-import type { Queue } from "bull";
-import { PrismaService } from "../../prisma/prisma.service";
+import { Injectable, Logger } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bull';
+import type { Queue } from 'bull';
+import { PrismaService } from '../../prisma/prisma.service';
 import {
   IntegrationProvider,
   SupportTicket,
   FeedbackPrimarySource,
   FeedbackSecondarySource,
   FeedbackSourceType,
-} from "@prisma/client";
-import { AI_ANALYSIS_QUEUE } from "../../ai/processors/analysis.processor";
-import { RetryPolicy } from "../../common/queue/retry-policy";
+} from '@prisma/client';
+import { AI_ANALYSIS_QUEUE } from '../../ai/processors/analysis.processor';
+import { RetryPolicy } from '../../common/queue/retry-policy';
 
 /**
  * IngestionService — ingests support tickets from external providers.
@@ -71,17 +71,23 @@ export class IngestionService {
         update: data,
         create: {
           externalId: ticket.externalId,
-          subject: ticket.subject ?? "(no subject)",
+          subject: ticket.subject ?? '(no subject)',
           workspaceId,
           provider,
-          status: ticket.status ?? "OPEN",
+          status: ticket.status ?? 'OPEN',
           tags: ticket.tags ?? [],
           customerId: ticket.customerEmail ?? undefined,
           customerEmail: ticket.customerEmail ?? undefined,
           arrValue: ticket.arrValue ?? undefined,
           externalCreatedAt: ticket.externalCreatedAt ?? undefined,
         },
-        select: { id: true, unifiedFeedbackId: true, subject: true, description: true, customerId: true },
+        select: {
+          id: true,
+          unifiedFeedbackId: true,
+          subject: true,
+          description: true,
+          customerId: true,
+        },
       });
 
       // ── Bridge to unified Feedback (only for new tickets) ─────────────────
@@ -93,17 +99,17 @@ export class IngestionService {
           provider === IntegrationProvider.ZENDESK
             ? FeedbackSecondarySource.ZENDESK
             : provider === IntegrationProvider.INTERCOM
-            ? FeedbackSecondarySource.INTERCOM
-            : FeedbackSecondarySource.OTHER;
+              ? FeedbackSecondarySource.INTERCOM
+              : FeedbackSecondarySource.OTHER;
 
         const feedback = await this.prisma.feedback.create({
           data: {
             workspaceId,
-            title: upserted.subject ?? "(no subject)",
-            description: upserted.description ?? "",
-            rawText: upserted.description ?? "",
-            normalizedText: (upserted.description ?? "").toLowerCase(),
-            status: "NEW",
+            title: upserted.subject ?? '(no subject)',
+            description: upserted.description ?? '',
+            rawText: upserted.description ?? '',
+            normalizedText: (upserted.description ?? '').toLowerCase(),
+            status: 'NEW',
             sourceType: FeedbackSourceType.API,
             primarySource: FeedbackPrimarySource.SUPPORT,
             secondarySource,
@@ -189,6 +195,9 @@ export class IngestionService {
         (batchId ? ` (batchId=${batchId})` : ''),
     );
 
-    return { ingested: validTickets.length, bridged: createdFeedbackIds.length };
+    return {
+      ingested: validTickets.length,
+      bridged: createdFeedbackIds.length,
+    };
   }
 }

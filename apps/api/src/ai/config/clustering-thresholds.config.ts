@@ -44,13 +44,13 @@ export const EMBEDDING_DIMENSIONS = 1536;
 // ─── Assignment score weights (must sum to 1.0) ───────────────────────────────
 
 /** Semantic cosine similarity weight in the hybrid assignment score. */
-export const W_SEMANTIC  = 0.70;
+export const W_SEMANTIC = 0.7;
 /** Keyword overlap weight in the hybrid assignment score. */
-export const W_KEYWORD   = 0.05;
+export const W_KEYWORD = 0.05;
 /** Cluster size bias weight in the hybrid assignment score. */
-export const W_SIZE_BIAS = 0.10;
+export const W_SIZE_BIAS = 0.1;
 /** CIQ priority bias weight in the hybrid assignment score. */
-export const W_CIQ_BIAS  = 0.15;
+export const W_CIQ_BIAS = 0.15;
 
 // ─── Vector search ────────────────────────────────────────────────────────────
 
@@ -80,7 +80,7 @@ export const MERGE_VECTOR_CANDIDATES = 5;
 export const NOVELTY_THRESHOLD_BASE = 0.55;
 
 /** Floor for the dynamic novelty threshold (never go below this). */
-export const NOVELTY_THRESHOLD_MIN  = 0.40;
+export const NOVELTY_THRESHOLD_MIN = 0.4;
 
 /**
  * When workspace has many themes (> THEME_CAP_GUARDRAIL), accept a match at
@@ -142,7 +142,7 @@ export const OUTLIER_THRESHOLD = 0.45;
  * Confidence score below which a ThemeFeedback link is considered borderline
  * and eligible for reassignment during batch finalization.
  */
-export const BORDERLINE_SCORE_THRESHOLD = 0.60;
+export const BORDERLINE_SCORE_THRESHOLD = 0.6;
 
 /**
  * Minimum feedback count a PROVISIONAL theme must reach after batch

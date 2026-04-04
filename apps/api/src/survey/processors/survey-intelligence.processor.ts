@@ -107,17 +107,24 @@ export class SurveyIntelligenceProcessor {
         where: { surveyId },
         select: { customerId: true },
       });
-      const customerIds = allResponses.map((r) => r.customerId).filter(Boolean) as string[];
-      const totalArrResult = customerIds.length > 0
-        ? await this.prisma.customer.aggregate({
-            where: { id: { in: customerIds } },
-            _sum: { arrValue: true },
-          })
-        : { _sum: { arrValue: 0 } };
+      const customerIds = allResponses
+        .map((r) => r.customerId)
+        .filter(Boolean) as string[];
+      const totalArrResult =
+        customerIds.length > 0
+          ? await this.prisma.customer.aggregate({
+              where: { id: { in: customerIds } },
+              _sum: { arrValue: true },
+            })
+          : { _sum: { arrValue: 0 } };
       const totalSurveyArr = totalArrResult._sum.arrValue ?? 0;
 
-      const clusterLabel = intelligence.aggregateSentiment > 0.3 ? 'Promoter'
-        : intelligence.aggregateSentiment < -0.3 ? 'Detractor' : 'Neutral';
+      const clusterLabel =
+        intelligence.aggregateSentiment > 0.3
+          ? 'Promoter'
+          : intelligence.aggregateSentiment < -0.3
+            ? 'Detractor'
+            : 'Neutral';
 
       // ── 5. Persist CIQ/revenue metadata back to the response ────────────────
       await this.prisma.surveyResponse.update({
@@ -128,7 +135,8 @@ export class SurveyIntelligenceProcessor {
           revenueWeight: totalSurveyArr > 0 ? arrValue / totalSurveyArr : 0,
           clusterLabel,
           metadata: {
-            ...(typeof response.metadata === 'object' && response.metadata !== null
+            ...(typeof response.metadata === 'object' &&
+            response.metadata !== null
               ? (response.metadata as Record<string, unknown>)
               : {}),
             intelligence: {
@@ -144,41 +152,52 @@ export class SurveyIntelligenceProcessor {
 
       // ── 6. Detect churn signal for negative NPS / sentiment ─────────────────
       try {
-        const customerId = response.customerId
-          ?? (response.portalUserId
-            ? (await this.prisma.portalUser.findUnique({
-                where: { id: response.portalUserId },
-                select: { customerId: true },
-              }))?.customerId
+        const customerId =
+          response.customerId ??
+          (response.portalUserId
+            ? (
+                await this.prisma.portalUser.findUnique({
+                  where: { id: response.portalUserId },
+                  select: { customerId: true },
+                })
+              )?.customerId
             : null);
 
         if (customerId && intelligence.aggregateSentiment < -0.3) {
-          const npsAnswer = response.answers.find((a) => a.question.type === 'NPS');
+          const npsAnswer = response.answers.find(
+            (a) => a.question.type === 'NPS',
+          );
           const npsVal = npsAnswer?.numericValue ?? null;
           const isChurnRisk = npsVal != null ? npsVal <= 6 : true;
           if (isChurnRisk) {
-            await this.prisma.customerSignal.create({
-              data: {
-                workspaceId,
-                customerId,
-                signalType: 'CHURN_RISK',
-                sourceId: responseId,
-                strength: Math.abs(intelligence.aggregateSentiment),
-                metadata: {
-                  label: `Survey churn signal: sentiment ${intelligence.aggregateSentiment.toFixed(2)}`,
-                  surveyId,
-                  responseId,
-                  npsVal,
-                  surveyType: response.survey.surveyType,
-                },
-              } as any,
-            }).catch((err: Error) => {
-              this.logger.warn(`Failed to create churn CustomerSignal: ${err.message}`);
-            });
+            await this.prisma.customerSignal
+              .create({
+                data: {
+                  workspaceId,
+                  customerId,
+                  signalType: 'CHURN_RISK',
+                  sourceId: responseId,
+                  strength: Math.abs(intelligence.aggregateSentiment),
+                  metadata: {
+                    label: `Survey churn signal: sentiment ${intelligence.aggregateSentiment.toFixed(2)}`,
+                    surveyId,
+                    responseId,
+                    npsVal,
+                    surveyType: response.survey.surveyType,
+                  },
+                } as any,
+              })
+              .catch((err: Error) => {
+                this.logger.warn(
+                  `Failed to create churn CustomerSignal: ${err.message}`,
+                );
+              });
           }
         }
       } catch (err) {
-        this.logger.warn(`Churn signal detection failed for response ${responseId}: ${(err as Error).message}`);
+        this.logger.warn(
+          `Churn signal detection failed for response ${responseId}: ${(err as Error).message}`,
+        );
       }
 
       // ── 7. Create CustomerSignal records for numeric answers ─────────────────
@@ -192,29 +211,35 @@ export class SurveyIntelligenceProcessor {
           const customerId = portalUser.customerId;
 
           for (const signal of intelligence.numericSignals) {
-            await this.prisma.customerSignal.create({
-              data: {
-                workspaceId,
-                customerId,
-                signalType: 'SURVEY_RATING',
-                sourceId: responseId,
-                strength: signal.normalisedValue,
-                metadata: {
-                  label: signal.label,
-                  rawValue: signal.rawValue,
-                  sentimentEquivalent: signal.sentimentEquivalent,
-                  surveyId,
-                  responseId,
-                },
-              } as any,
-            }).catch((err: Error) => {
-              this.logger.warn(`Failed to create CustomerSignal: ${err.message}`);
-            });
+            await this.prisma.customerSignal
+              .create({
+                data: {
+                  workspaceId,
+                  customerId,
+                  signalType: 'SURVEY_RATING',
+                  sourceId: responseId,
+                  strength: signal.normalisedValue,
+                  metadata: {
+                    label: signal.label,
+                    rawValue: signal.rawValue,
+                    sentimentEquivalent: signal.sentimentEquivalent,
+                    surveyId,
+                    responseId,
+                  },
+                } as any,
+              })
+              .catch((err: Error) => {
+                this.logger.warn(
+                  `Failed to create CustomerSignal: ${err.message}`,
+                );
+              });
           }
         }
       }
 
-      this.logger.log(`Survey intelligence complete for response ${responseId}`);
+      this.logger.log(
+        `Survey intelligence complete for response ${responseId}`,
+      );
     } catch (err) {
       this.logger.error(
         `Survey intelligence processor failed for response ${responseId}: ${(err as Error).message}`,

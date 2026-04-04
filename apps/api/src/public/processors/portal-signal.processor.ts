@@ -79,7 +79,9 @@ export class PortalSignalProcessor {
             { themeId: link.themeId, workspaceId },
             { attempts: 2, removeOnComplete: true },
           )
-          .catch(() => {/* non-critical */});
+          .catch(() => {
+            /* non-critical */
+          });
       }
     } catch (err) {
       this.logger.error(`FEEDBACK_CREATED processor error: ${String(err)}`);
@@ -117,7 +119,9 @@ export class PortalSignalProcessor {
             { themeId: link.themeId, workspaceId },
             { attempts: 2, removeOnComplete: true },
           )
-          .catch(() => {/* non-critical */});
+          .catch(() => {
+            /* non-critical */
+          });
       }
     } catch (err) {
       this.logger.error(`FEEDBACK_VOTED processor error: ${String(err)}`);

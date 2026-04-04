@@ -1,4 +1,11 @@
-import { IsString, IsNotEmpty, IsArray, IsUUID, ArrayMinSize, IsOptional } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsArray,
+  IsUUID,
+  ArrayMinSize,
+  IsOptional,
+} from 'class-validator';
 
 export class SplitThemeDto {
   @IsString()

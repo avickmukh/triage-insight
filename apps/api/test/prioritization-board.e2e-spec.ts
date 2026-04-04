@@ -25,12 +25,12 @@ import { RoadmapStatus } from '@prisma/client';
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
 const WORKSPACE_ID = 'ws-pboard-test-001';
-const THEME_ID_A   = 'theme-pboard-001';
-const THEME_ID_B   = 'theme-pboard-002';
-const ITEM_ID_A    = 'roadmap-pboard-001';
-const ITEM_ID_B    = 'roadmap-pboard-002';
-const ITEM_ID_C    = 'roadmap-pboard-003';
-const USER_ID      = 'user-pboard-001';
+const THEME_ID_A = 'theme-pboard-001';
+const THEME_ID_B = 'theme-pboard-002';
+const ITEM_ID_A = 'roadmap-pboard-001';
+const ITEM_ID_B = 'roadmap-pboard-002';
+const ITEM_ID_C = 'roadmap-pboard-003';
+const USER_ID = 'user-pboard-001';
 
 const mockThemeA = {
   id: THEME_ID_A,
@@ -126,7 +126,9 @@ const mockItemC = {
 
 const mockPrisma = {
   workspace: {
-    findUnique: jest.fn().mockResolvedValue({ id: WORKSPACE_ID, slug: 'test-org' }),
+    findUnique: jest
+      .fn()
+      .mockResolvedValue({ id: WORKSPACE_ID, slug: 'test-org' }),
   },
   workspaceMember: {
     findFirst: jest.fn().mockResolvedValue({ role: 'ADMIN', userId: USER_ID }),
@@ -160,7 +162,7 @@ const mockPrisma = {
     findMany: jest.fn().mockResolvedValue([]),
   },
   aiJobLog: { create: jest.fn().mockResolvedValue({}) },
-  auditLog:  { create: jest.fn().mockResolvedValue({}) },
+  auditLog: { create: jest.fn().mockResolvedValue({}) },
   $queryRaw: jest.fn().mockResolvedValue([]),
   $transaction: jest.fn((fn: (tx: unknown) => unknown) => fn(mockPrisma)),
 };
@@ -203,12 +205,20 @@ describe('Prioritization Board API (e2e)', () => {
       .compile();
 
     app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({ transform: true, whitelist: true }),
+    );
     await app.init();
 
     // Obtain a JWT by logging in with a mocked user
-    mockPrisma.workspace.findUnique.mockResolvedValue({ id: WORKSPACE_ID, slug: 'test-org' });
-    mockPrisma.workspaceMember.findFirst.mockResolvedValue({ role: 'ADMIN', userId: USER_ID });
+    mockPrisma.workspace.findUnique.mockResolvedValue({
+      id: WORKSPACE_ID,
+      slug: 'test-org',
+    });
+    mockPrisma.workspaceMember.findFirst.mockResolvedValue({
+      role: 'ADMIN',
+      userId: USER_ID,
+    });
 
     // Use the test helper to get a token (or skip auth for unit-level e2e)
     // We'll use a fake bearer token and rely on the mock guard
@@ -221,10 +231,20 @@ describe('Prioritization Board API (e2e)', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockPrisma.roadmapItem.findMany.mockResolvedValue([mockItemA, mockItemB, mockItemC]);
+    mockPrisma.roadmapItem.findMany.mockResolvedValue([
+      mockItemA,
+      mockItemB,
+      mockItemC,
+    ]);
     mockPrisma.roadmapItem.findUnique.mockResolvedValue(mockItemA);
-    mockPrisma.workspaceMember.findFirst.mockResolvedValue({ role: 'ADMIN', userId: USER_ID });
-    mockPrisma.workspace.findUnique.mockResolvedValue({ id: WORKSPACE_ID, slug: 'test-org' });
+    mockPrisma.workspaceMember.findFirst.mockResolvedValue({
+      role: 'ADMIN',
+      userId: USER_ID,
+    });
+    mockPrisma.workspace.findUnique.mockResolvedValue({
+      id: WORKSPACE_ID,
+      slug: 'test-org',
+    });
     mockPrisma.themeFeedback.count.mockResolvedValue(12);
     mockPrisma.customerSignal.count.mockResolvedValue(8);
   });
@@ -298,7 +318,11 @@ describe('Prioritization Board API (e2e)', () => {
   // ── Test 5: PATCH sets manualRank ─────────────────────────────────────────────
 
   it('PATCH /roadmap/:id should set manualRank on a roadmap item', async () => {
-    mockPrisma.roadmapItem.update.mockResolvedValue({ ...mockItemA, manualRank: 3, theme: mockThemeA });
+    mockPrisma.roadmapItem.update.mockResolvedValue({
+      ...mockItemA,
+      manualRank: 3,
+      theme: mockThemeA,
+    });
 
     const res = await request(app.getHttpServer())
       .patch(`/workspaces/${WORKSPACE_ID}/roadmap/${ITEM_ID_A}`)
@@ -317,7 +341,11 @@ describe('Prioritization Board API (e2e)', () => {
   // ── Test 6: PATCH clears manualRank ──────────────────────────────────────────
 
   it('PATCH /roadmap/:id should clear manualRank when set to null', async () => {
-    mockPrisma.roadmapItem.update.mockResolvedValue({ ...mockItemA, manualRank: null, theme: mockThemeA });
+    mockPrisma.roadmapItem.update.mockResolvedValue({
+      ...mockItemA,
+      manualRank: null,
+      theme: mockThemeA,
+    });
 
     const res = await request(app.getHttpServer())
       .patch(`/workspaces/${WORKSPACE_ID}/roadmap/${ITEM_ID_A}`)
@@ -339,9 +367,14 @@ describe('Prioritization Board API (e2e)', () => {
 
     expect(Array.isArray(res.body)).toBe(true);
     // The first item has a theme with aiRecommendation
-    const itemWithTheme = res.body.find((i: { theme?: { aiRecommendation?: string } }) => i.theme?.aiRecommendation);
+    const itemWithTheme = res.body.find(
+      (i: { theme?: { aiRecommendation?: string } }) =>
+        i.theme?.aiRecommendation,
+    );
     expect(itemWithTheme).toBeDefined();
-    expect(itemWithTheme.theme.aiRecommendation).toBe(mockThemeA.aiRecommendation);
+    expect(itemWithTheme.theme.aiRecommendation).toBe(
+      mockThemeA.aiRecommendation,
+    );
   });
 
   // ── Test 8: flat list includes feedbackCount ──────────────────────────────────
@@ -370,7 +403,9 @@ describe('Prioritization Board API (e2e)', () => {
 
     expect(Array.isArray(res.body)).toBe(true);
     // Items should have manualRank (either a number or null)
-    const rankedItem = res.body.find((i: { manualRank?: number | null }) => i.manualRank != null);
+    const rankedItem = res.body.find(
+      (i: { manualRank?: number | null }) => i.manualRank != null,
+    );
     expect(rankedItem).toBeDefined();
   });
 
@@ -386,7 +421,13 @@ describe('Prioritization Board API (e2e)', () => {
     expect(Array.isArray(res.body)).toBe(false);
     expect(typeof res.body).toBe('object');
     // Should have at least one RoadmapStatus key
-    const statusKeys = ['BACKLOG', 'EXPLORING', 'PLANNED', 'COMMITTED', 'SHIPPED'];
+    const statusKeys = [
+      'BACKLOG',
+      'EXPLORING',
+      'PLANNED',
+      'COMMITTED',
+      'SHIPPED',
+    ];
     const hasStatusKey = statusKeys.some((k) => k in res.body);
     expect(hasStatusKey).toBe(true);
   });

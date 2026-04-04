@@ -5,14 +5,9 @@ import { PublicPortalService } from './public-portal.service';
 import { PortalSseGateway } from './gateway/portal-sse.gateway';
 
 @Module({
-  imports: [
-    PrismaModule,
-  ],
+  imports: [PrismaModule],
   controllers: [PublicPortalController],
-  providers: [
-    PublicPortalService,
-    PortalSseGateway,
-  ],
+  providers: [PublicPortalService, PortalSseGateway],
   exports: [PortalSseGateway],
 })
 export class PublicPortalModule {}

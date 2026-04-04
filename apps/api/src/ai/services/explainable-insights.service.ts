@@ -78,7 +78,9 @@ export class ExplainableInsightsService {
   /**
    * Batch generate impact sentences for themes in a workspace that lack one.
    */
-  async generateInsightsForWorkspace(workspaceId: string): Promise<{ processed: number }> {
+  async generateInsightsForWorkspace(
+    workspaceId: string,
+  ): Promise<{ processed: number }> {
     const themes = await this.prisma.theme.findMany({
       where: {
         workspaceId,
@@ -95,7 +97,9 @@ export class ExplainableInsightsService {
         await this.generateImpactSentence(id);
         processed++;
       } catch (err) {
-        this.logger.warn(`[Insight] Failed for theme ${id}: ${(err as Error).message}`);
+        this.logger.warn(
+          `[Insight] Failed for theme ${id}: ${(err as Error).message}`,
+        );
       }
     }
 
@@ -126,8 +130,8 @@ export class ExplainableInsightsService {
         theme.trendDirection === 'UP'
           ? 'increased'
           : theme.trendDirection === 'DOWN'
-          ? 'decreased'
-          : 'remained stable';
+            ? 'decreased'
+            : 'remained stable';
 
       const prompt = [
         'You are a product intelligence analyst. Write ONE sentence (max 25 words) that explains:',
@@ -140,12 +144,18 @@ export class ExplainableInsightsService {
         `Signals this week: ${theme.currentWeekSignals ?? 0} (prev: ${theme.prevWeekSignals ?? 0})`,
         `Total feedback items: ${theme._count.feedbacks}`,
         customerCount > 0 ? `Affected customers: ${customerCount}` : '',
-        theme.revenueInfluence ? `Revenue at risk: $${Math.round(theme.revenueInfluence / 1000)}K` : '',
-        keywords.length > 0 ? `Key terms: ${keywords.slice(0, 4).join(', ')}` : '',
+        theme.revenueInfluence
+          ? `Revenue at risk: $${Math.round(theme.revenueInfluence / 1000)}K`
+          : '',
+        keywords.length > 0
+          ? `Key terms: ${keywords.slice(0, 4).join(', ')}`
+          : '',
         theme.crossSourceInsight ? `Context: ${theme.crossSourceInsight}` : '',
         '',
         'Write ONLY the sentence. Be specific. No generic phrases.',
-      ].filter(Boolean).join('\n');
+      ]
+        .filter(Boolean)
+        .join('\n');
 
       const response = await this.openai.chat.completions.create({
         model: 'gpt-4.1-mini',
@@ -183,17 +193,21 @@ export class ExplainableInsightsService {
       theme.trendDirection === 'UP'
         ? `increased ${delta}%`
         : theme.trendDirection === 'DOWN'
-        ? `decreased ${delta}%`
-        : 'remained stable';
+          ? `decreased ${delta}%`
+          : 'remained stable';
 
     const parts: string[] = [`${label} ${trendWord} this week`];
 
     if (customerCount > 0) {
-      parts.push(`affecting ${customerCount} customer${customerCount !== 1 ? 's' : ''}`);
+      parts.push(
+        `affecting ${customerCount} customer${customerCount !== 1 ? 's' : ''}`,
+      );
     }
 
     if (theme.revenueInfluence && theme.revenueInfluence > 0) {
-      parts.push(`with $${Math.round(theme.revenueInfluence / 1000)}K revenue at risk`);
+      parts.push(
+        `with $${Math.round(theme.revenueInfluence / 1000)}K revenue at risk`,
+      );
     }
 
     return parts.join(', ') + '.';

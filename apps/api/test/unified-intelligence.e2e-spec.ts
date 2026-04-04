@@ -35,8 +35,10 @@ describe('Unified Intelligence API (e2e)', () => {
       voiceCount: 5,
       supportCount: 20,
       sentimentDistribution: { positive: 8, neutral: 10, negative: 27 },
-      crossSourceInsight: 'High negative sentiment (60%) across 20 feedback, 20 support tickets and 5 voice reports.',
-      aiRecommendation: 'Prioritise server-side rendering of the checkout page.',
+      crossSourceInsight:
+        'High negative sentiment (60%) across 20 feedback, 20 support tickets and 5 voice reports.',
+      aiRecommendation:
+        'Prioritise server-side rendering of the checkout page.',
       lastAggregatedAt: new Date('2026-03-01'),
     },
     {
@@ -50,7 +52,8 @@ describe('Unified Intelligence API (e2e)', () => {
       voiceCount: 3,
       supportCount: 7,
       sentimentDistribution: { positive: 10, neutral: 12, negative: 6 },
-      crossSourceInsight: 'Reported across 3 sources: 18 feedback, 7 support tickets and 3 voice reports.',
+      crossSourceInsight:
+        'Reported across 3 sources: 18 feedback, 7 support tickets and 3 voice reports.',
       aiRecommendation: 'Simplify the onboarding wizard to reduce drop-off.',
       lastAggregatedAt: new Date('2026-03-01'),
     },
@@ -174,7 +177,9 @@ describe('Unified Intelligence API (e2e)', () => {
         { sourceType: 'FEEDBACK', _count: { id: 120 } },
         { sourceType: 'VOICE', _count: { id: 15 } },
       ]);
-      prisma.supportIssueCluster.aggregate.mockResolvedValue({ _sum: { ticketCount: 65 } });
+      prisma.supportIssueCluster.aggregate.mockResolvedValue({
+        _sum: { ticketCount: 65 },
+      });
       prisma.theme.aggregate.mockResolvedValue({ _count: { id: 18 } });
       prisma.theme.count.mockResolvedValue(14);
       prisma.$queryRaw
@@ -202,7 +207,9 @@ describe('Unified Intelligence API (e2e)', () => {
         { sourceType: 'FEEDBACK', _count: { id: 50 } },
         { sourceType: 'VOICE', _count: { id: 10 } },
       ]);
-      prisma.supportIssueCluster.aggregate.mockResolvedValue({ _sum: { ticketCount: 40 } });
+      prisma.supportIssueCluster.aggregate.mockResolvedValue({
+        _sum: { ticketCount: 40 },
+      });
       prisma.theme.aggregate.mockResolvedValue({ _count: { id: 5 } });
       prisma.theme.count.mockResolvedValue(3);
       prisma.$queryRaw.mockResolvedValue([]);
@@ -237,7 +244,9 @@ describe('Unified Intelligence API (e2e)', () => {
       // Mock the per-theme aggregation calls
       prisma.theme.findUnique.mockResolvedValue({ title: 'Test Theme' });
       prisma.themeFeedback.findMany.mockResolvedValue([]);
-      prisma.supportIssueCluster.aggregate.mockResolvedValue({ _sum: { ticketCount: 0 } });
+      prisma.supportIssueCluster.aggregate.mockResolvedValue({
+        _sum: { ticketCount: 0 },
+      });
       prisma.theme.update.mockResolvedValue({});
 
       const res = await request(app.getHttpServer())
@@ -272,13 +281,17 @@ describe('Unified Intelligence API (e2e)', () => {
 
   describe('POST /workspaces/:id/themes/:themeId/aggregate', () => {
     it('should return 200 with theme aggregation result', async () => {
-      prisma.theme.findUnique.mockResolvedValue({ title: 'Checkout Performance' });
+      prisma.theme.findUnique.mockResolvedValue({
+        title: 'Checkout Performance',
+      });
       prisma.themeFeedback.findMany.mockResolvedValue([
         { feedback: { sourceType: 'FEEDBACK', sentiment: 0.5 } },
         { feedback: { sourceType: 'VOICE', sentiment: -0.7 } },
         { feedback: { sourceType: 'FEEDBACK', sentiment: -0.4 } },
       ]);
-      prisma.supportIssueCluster.aggregate.mockResolvedValue({ _sum: { ticketCount: 8 } });
+      prisma.supportIssueCluster.aggregate.mockResolvedValue({
+        _sum: { ticketCount: 8 },
+      });
       prisma.theme.update.mockResolvedValue({});
 
       const res = await request(app.getHttpServer())
@@ -300,13 +313,17 @@ describe('Unified Intelligence API (e2e)', () => {
     it('should return 404 for unknown theme', async () => {
       prisma.theme.findUnique.mockResolvedValue(null);
       prisma.themeFeedback.findMany.mockResolvedValue([]);
-      prisma.supportIssueCluster.aggregate.mockResolvedValue({ _sum: { ticketCount: 0 } });
+      prisma.supportIssueCluster.aggregate.mockResolvedValue({
+        _sum: { ticketCount: 0 },
+      });
       prisma.theme.update.mockRejectedValue(
         Object.assign(new Error('Not found'), { code: 'P2025' }),
       );
 
       await request(app.getHttpServer())
-        .post(`/api/v1/workspaces/${WORKSPACE_ID}/themes/nonexistent-theme/aggregate`)
+        .post(
+          `/api/v1/workspaces/${WORKSPACE_ID}/themes/nonexistent-theme/aggregate`,
+        )
         .set('Authorization', AUTH_HEADER)
         .expect(404);
     });

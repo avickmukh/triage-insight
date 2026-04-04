@@ -1,15 +1,12 @@
-import { Module } from "@nestjs/common";
-import { PrismaModule } from "../prisma/prisma.module";
-import { AiModule } from "../ai/ai.module";
-import { RoadmapController } from "./roadmap.controller";
-import { RoadmapService } from "./services/roadmap.service";
-import { RoadmapIntelligenceService } from "./services/roadmap-intelligence.service";
+import { Module } from '@nestjs/common';
+import { PrismaModule } from '../prisma/prisma.module';
+import { AiModule } from '../ai/ai.module';
+import { RoadmapController } from './roadmap.controller';
+import { RoadmapService } from './services/roadmap.service';
+import { RoadmapIntelligenceService } from './services/roadmap-intelligence.service';
 
 @Module({
-  imports: [
-    PrismaModule,
-    AiModule,
-  ],
+  imports: [PrismaModule, AiModule],
   controllers: [RoadmapController],
   providers: [RoadmapService, RoadmapIntelligenceService],
   exports: [RoadmapIntelligenceService],

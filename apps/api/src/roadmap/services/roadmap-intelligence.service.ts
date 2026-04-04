@@ -17,11 +17,12 @@
  *   • Duplicate suggestions are suppressed (one per theme)
  *
  * RPS formula (weights configurable via PrioritizationSettings):
- *   RPS = ciqScore × 0.35
- *       + velocitySignal × 0.20
- *       + sentimentIntensity × 0.15
- *       + sourceImportance × 0.15
+ *   RPS = ciqScore × 0.33
+ *       + velocitySignal × 0.19
+ *       + sentimentIntensity × 0.14
+ *       + sourceImportance × 0.14
  *       + recencySignal × 0.10
+ *       + confidenceScore × 0.05
  *       + resurfacingBonus × 0.05
  */
 
@@ -58,7 +59,10 @@ export interface AiSuggestionBreakdown {
   sourceScore: number;
   recencyScore: number;
   resurfacingBonus: number;
+  confidenceScore: number;
   roadmapPriorityScore: number;
+  /** Ordered list of factor contributions for explainability UI */
+  scoreBreakdown: Array<{ factor: string; rawScore: number; weight: number; contribution: number }>;
 }
 
 export interface AiRoadmapSuggestion {
@@ -249,16 +253,6 @@ export class RoadmapIntelligenceService {
             ? 60
             : 0;
 
-      // --- Roadmap Priority Score (RPS) ---
-      const roadmapPriorityScore = clamp(
-        ciqScore * 0.35 +
-          velocityScore * 0.2 +
-          sentimentIntensity * 0.15 +
-          sourceScore * 0.15 +
-          recencyScore * 0.1 +
-          resurfacingBonus * 0.05,
-      );
-
       // --- Active sources count ---
       const activeSources = [
         feedbackCount,
@@ -266,6 +260,41 @@ export class RoadmapIntelligenceService {
         supportCount,
         surveyCount,
       ].filter((c) => c > 0).length;
+
+      // --- Confidence numeric score (0-100) ---
+      // Derived from signal volume, source diversity, and CIQ score quality.
+      // Used both as a label (HIGH/MEDIUM/LOW) and as a 5% component in RPS.
+      const totalSignals =
+        theme.totalSignalCount ??
+        feedbackCount + voiceCount + supportCount + surveyCount;
+      const confidenceNumeric = clamp(
+        countNorm(totalSignals, 20) * 0.5 +
+          (activeSources / 4) * 100 * 0.3 +
+          ciqScore * 0.2,
+      );
+
+      // --- Roadmap Priority Score (RPS) ---
+      // Weights: CIQ 33% | Velocity 19% | Sentiment 14% | Source 14% | Recency 10% | Confidence 5% | Resurfacing 5%
+      const roadmapPriorityScore = clamp(
+        ciqScore * 0.33 +
+          velocityScore * 0.19 +
+          sentimentIntensity * 0.14 +
+          sourceScore * 0.14 +
+          recencyScore * 0.10 +
+          confidenceNumeric * 0.05 +
+          resurfacingBonus * 0.05,
+      );
+
+      // --- Score breakdown for explainability ---
+      const scoreBreakdown = [
+        { factor: 'CIQ Score',         rawScore: parseFloat(ciqScore.toFixed(1)),           weight: 0.33, contribution: parseFloat((ciqScore * 0.33).toFixed(1)) },
+        { factor: 'Signal Velocity',   rawScore: parseFloat(velocityScore.toFixed(1)),       weight: 0.19, contribution: parseFloat((velocityScore * 0.19).toFixed(1)) },
+        { factor: 'Sentiment',         rawScore: parseFloat(sentimentIntensity.toFixed(1)),  weight: 0.14, contribution: parseFloat((sentimentIntensity * 0.14).toFixed(1)) },
+        { factor: 'Source Coverage',   rawScore: parseFloat(sourceScore.toFixed(1)),         weight: 0.14, contribution: parseFloat((sourceScore * 0.14).toFixed(1)) },
+        { factor: 'Recency',           rawScore: parseFloat(recencyScore.toFixed(1)),        weight: 0.10, contribution: parseFloat((recencyScore * 0.10).toFixed(1)) },
+        { factor: 'Confidence',        rawScore: parseFloat(confidenceNumeric.toFixed(1)),   weight: 0.05, contribution: parseFloat((confidenceNumeric * 0.05).toFixed(1)) },
+        { factor: 'Resurfacing Bonus', rawScore: parseFloat(resurfacingBonus.toFixed(1)),    weight: 0.05, contribution: parseFloat((resurfacingBonus * 0.05).toFixed(1)) },
+      ].sort((a, b) => b.contribution - a.contribution);
 
       // --- Roadmap link ---
       const roadmapItem = theme.roadmapItems[0] ?? null;
@@ -280,10 +309,7 @@ export class RoadmapIntelligenceService {
         resurfacingBonus,
       );
 
-      // --- Confidence ---
-      const totalSignals =
-        theme.totalSignalCount ??
-        feedbackCount + voiceCount + supportCount + surveyCount;
+      // --- Confidence label ---
       const confidence = this.computeConfidence(
         totalSignals,
         activeSources,
@@ -358,7 +384,9 @@ export class RoadmapIntelligenceService {
           sourceScore: parseFloat(sourceScore.toFixed(1)),
           recencyScore: parseFloat(recencyScore.toFixed(1)),
           resurfacingBonus: parseFloat(resurfacingBonus.toFixed(1)),
+          confidenceScore: parseFloat(confidenceNumeric.toFixed(1)),
           roadmapPriorityScore: parseFloat(roadmapPriorityScore.toFixed(1)),
+          scoreBreakdown,
         },
         roadmapItemId,
         roadmapStatus,

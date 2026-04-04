@@ -137,7 +137,9 @@ export class ReportingService {
       where: {
         workspaceId,
         status: { not: ThemeStatus.ARCHIVED },
-        ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {}),
+        ...(Object.keys(dateFilter).length > 0
+          ? { createdAt: dateFilter }
+          : {}),
       },
       select: {
         id: true,
@@ -189,20 +191,24 @@ export class ReportingService {
     const feedbacks = await this.prisma.feedback.findMany({
       where: {
         workspaceId,
-        ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {}),
+        ...(Object.keys(dateFilter).length > 0
+          ? { createdAt: dateFilter }
+          : {}),
       },
       select: { ciqScore: true },
     });
 
-    const scored = feedbacks.filter((f) => f.ciqScore != null && f.ciqScore > 0);
+    const scored = feedbacks.filter(
+      (f) => f.ciqScore != null && f.ciqScore > 0,
+    );
     const unscored = feedbacks.length - scored.length;
 
     const bucketDefs = [
       { label: 'Critical (80–100)', min: 80, max: 100 },
-      { label: 'High (60–79)',      min: 60, max: 79 },
-      { label: 'Medium (40–59)',    min: 40, max: 59 },
-      { label: 'Low (20–39)',       min: 20, max: 39 },
-      { label: 'Minimal (0–19)',    min: 0,  max: 19 },
+      { label: 'High (60–79)', min: 60, max: 79 },
+      { label: 'Medium (40–59)', min: 40, max: 59 },
+      { label: 'Low (20–39)', min: 20, max: 39 },
+      { label: 'Minimal (0–19)', min: 0, max: 19 },
     ];
 
     const buckets: PriorityBucket[] = bucketDefs.map((b) => {
@@ -260,7 +266,9 @@ export class ReportingService {
       where: {
         workspaceId,
         status: { not: ThemeStatus.ARCHIVED },
-        ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {}),
+        ...(Object.keys(dateFilter).length > 0
+          ? { createdAt: dateFilter }
+          : {}),
       },
       select: {
         id: true,
@@ -335,7 +343,9 @@ export class ReportingService {
     const items = await this.prisma.roadmapItem.findMany({
       where: {
         workspaceId,
-        ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {}),
+        ...(Object.keys(dateFilter).length > 0
+          ? { createdAt: dateFilter }
+          : {}),
       },
       select: {
         status: true,
@@ -375,7 +385,10 @@ export class ReportingService {
         count: group.length,
         avgPriorityScore: avgPriority,
         avgRevenueImpact: avgRevenue,
-        totalSignalCount: group.reduce((acc, i) => acc + (i.signalCount ?? 0), 0),
+        totalSignalCount: group.reduce(
+          (acc, i) => acc + (i.signalCount ?? 0),
+          0,
+        ),
       };
     });
 
@@ -414,7 +427,9 @@ export class ReportingService {
     const feedbacks = await this.prisma.feedback.findMany({
       where: {
         workspaceId,
-        ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {}),
+        ...(Object.keys(dateFilter).length > 0
+          ? { createdAt: dateFilter }
+          : {}),
       },
       select: {
         createdAt: true,
@@ -424,7 +439,10 @@ export class ReportingService {
     });
 
     // Group by date (YYYY-MM-DD)
-    const dayMap = new Map<string, { total: number; bySource: Record<string, number> }>();
+    const dayMap = new Map<
+      string,
+      { total: number; bySource: Record<string, number> }
+    >();
     for (const f of feedbacks) {
       const day = f.createdAt.toISOString().slice(0, 10);
       if (!dayMap.has(day)) {

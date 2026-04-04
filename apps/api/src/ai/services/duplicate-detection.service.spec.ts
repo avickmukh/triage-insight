@@ -23,7 +23,11 @@ import { PrismaService } from '../../prisma/prisma.service';
 // ─── Mock PrismaService ───────────────────────────────────────────────────────
 
 function makeMockPrisma() {
-  const suggestionStore: Array<{ sourceId: string; targetId: string; similarity: number }> = [];
+  const suggestionStore: Array<{
+    sourceId: string;
+    targetId: string;
+    similarity: number;
+  }> = [];
 
   return {
     _store: suggestionStore,
@@ -83,35 +87,42 @@ describe('DuplicateDetectionService', () => {
     jest.clearAllMocks();
 
     // Re-bind mocks after clearAllMocks
-    mockPrisma.feedbackDuplicateSuggestion.upsert.mockImplementation(({ create, update, where }) => {
-      const key = `${where.sourceId_targetId.sourceId}:${where.sourceId_targetId.targetId}`;
-      const existing = mockPrisma._store.findIndex(
-        (s) => `${s.sourceId}:${s.targetId}` === key,
-      );
-      if (existing >= 0) {
-        mockPrisma._store[existing].similarity = update.similarity;
-      } else {
-        mockPrisma._store.push({ ...create });
-      }
-      return Promise.resolve(create);
-    });
-    mockPrisma.feedbackDuplicateSuggestion.findMany.mockImplementation(({ where }) => {
-      return Promise.resolve(
-        mockPrisma._store
-          .filter((s) => s.sourceId === where?.sourceId)
-          .map((s) => ({
-            targetId: s.targetId,
-            similarity: s.similarity,
-            targetFeedback: { title: `Feedback ${s.targetId}` },
-          })),
-      );
-    });
+    mockPrisma.feedbackDuplicateSuggestion.upsert.mockImplementation(
+      ({ create, update, where }) => {
+        const key = `${where.sourceId_targetId.sourceId}:${where.sourceId_targetId.targetId}`;
+        const existing = mockPrisma._store.findIndex(
+          (s) => `${s.sourceId}:${s.targetId}` === key,
+        );
+        if (existing >= 0) {
+          mockPrisma._store[existing].similarity = update.similarity;
+        } else {
+          mockPrisma._store.push({ ...create });
+        }
+        return Promise.resolve(create);
+      },
+    );
+    mockPrisma.feedbackDuplicateSuggestion.findMany.mockImplementation(
+      ({ where }) => {
+        return Promise.resolve(
+          mockPrisma._store
+            .filter((s) => s.sourceId === where?.sourceId)
+            .map((s) => ({
+              targetId: s.targetId,
+              similarity: s.similarity,
+              targetFeedback: { title: `Feedback ${s.targetId}` },
+            })),
+        );
+      },
+    );
   });
 
   // ── Embedding-based suggestions ──────────────────────────────────────────
 
   describe('generateSuggestions — embedding path', () => {
-    const embedding = Array.from({ length: 1536 }, (_, i) => Math.sin(i) * 0.001);
+    const embedding = Array.from(
+      { length: 1536 },
+      (_, i) => Math.sin(i) * 0.001,
+    );
 
     it('should call $queryRaw with workspaceId and feedbackId for tenant isolation', async () => {
       mockPrisma.$queryRaw.mockResolvedValueOnce([]);
@@ -127,13 +138,19 @@ describe('DuplicateDetectionService', () => {
 
     it('should persist suggestions for each similar feedback found', async () => {
       mockPrisma.$queryRaw.mockResolvedValueOnce([
-        { id: 'fb-similar-1', title: 'WiFi drops constantly', similarity: 0.95 },
+        {
+          id: 'fb-similar-1',
+          title: 'WiFi drops constantly',
+          similarity: 0.95,
+        },
         { id: 'fb-similar-2', title: 'Network unstable', similarity: 0.91 },
       ]);
 
       await service.generateSuggestions('ws-tenant-a', 'fb-source', embedding);
 
-      expect(mockPrisma.feedbackDuplicateSuggestion.upsert).toHaveBeenCalledTimes(2);
+      expect(
+        mockPrisma.feedbackDuplicateSuggestion.upsert,
+      ).toHaveBeenCalledTimes(2);
     });
 
     it('should not persist suggestions when no similar feedback is found', async () => {
@@ -141,7 +158,9 @@ describe('DuplicateDetectionService', () => {
 
       await service.generateSuggestions('ws-tenant-a', 'fb-source', embedding);
 
-      expect(mockPrisma.feedbackDuplicateSuggestion.upsert).not.toHaveBeenCalled();
+      expect(
+        mockPrisma.feedbackDuplicateSuggestion.upsert,
+      ).not.toHaveBeenCalled();
     });
 
     it('should use upsert to safely handle re-processing without duplicate rows', async () => {
@@ -155,20 +174,29 @@ describe('DuplicateDetectionService', () => {
       await service.generateSuggestions('ws-tenant-a', 'fb-source', embedding);
 
       // upsert called twice but store should only have one entry
-      expect(mockPrisma.feedbackDuplicateSuggestion.upsert).toHaveBeenCalledTimes(2);
-      const storeEntries = mockPrisma._store.filter((s) => s.sourceId === 'fb-source');
+      expect(
+        mockPrisma.feedbackDuplicateSuggestion.upsert,
+      ).toHaveBeenCalledTimes(2);
+      const storeEntries = mockPrisma._store.filter(
+        (s) => s.sourceId === 'fb-source',
+      );
       expect(storeEntries).toHaveLength(1);
     });
 
     it('should persist the exact similarity score from the vector query', async () => {
       const exactSimilarity = 0.9347;
       mockPrisma.$queryRaw.mockResolvedValueOnce([
-        { id: 'fb-similar-1', title: 'WiFi drops', similarity: exactSimilarity },
+        {
+          id: 'fb-similar-1',
+          title: 'WiFi drops',
+          similarity: exactSimilarity,
+        },
       ]);
 
       await service.generateSuggestions('ws-tenant-a', 'fb-source', embedding);
 
-      const upsertCall = mockPrisma.feedbackDuplicateSuggestion.upsert.mock.calls[0][0];
+      const upsertCall =
+        mockPrisma.feedbackDuplicateSuggestion.upsert.mock.calls[0][0];
       expect(upsertCall.create.similarity).toBe(exactSimilarity);
     });
 
@@ -211,7 +239,8 @@ describe('DuplicateDetectionService', () => {
       await service.generateSuggestions('ws-tenant-a', 'fb-source'); // no embedding
 
       // Only the WiFi-related item should produce a suggestion (keyword overlap)
-      const upsertCalls = mockPrisma.feedbackDuplicateSuggestion.upsert.mock.calls;
+      const upsertCalls =
+        mockPrisma.feedbackDuplicateSuggestion.upsert.mock.calls;
       const targetIds = upsertCalls.map((c) => c[0].create.targetId);
       expect(targetIds).toContain('fb-similar');
       expect(targetIds).not.toContain('fb-unrelated');
@@ -223,7 +252,9 @@ describe('DuplicateDetectionService', () => {
       await service.generateSuggestions('ws-tenant-a', 'fb-nonexistent');
 
       expect(mockPrisma.feedback.findMany).not.toHaveBeenCalled();
-      expect(mockPrisma.feedbackDuplicateSuggestion.upsert).not.toHaveBeenCalled();
+      expect(
+        mockPrisma.feedbackDuplicateSuggestion.upsert,
+      ).not.toHaveBeenCalled();
     });
 
     it('should return early if source feedback has no usable text', async () => {
@@ -235,7 +266,9 @@ describe('DuplicateDetectionService', () => {
 
       await service.generateSuggestions('ws-tenant-a', 'fb-empty');
 
-      expect(mockPrisma.feedbackDuplicateSuggestion.upsert).not.toHaveBeenCalled();
+      expect(
+        mockPrisma.feedbackDuplicateSuggestion.upsert,
+      ).not.toHaveBeenCalled();
     });
   });
 
@@ -249,7 +282,11 @@ describe('DuplicateDetectionService', () => {
         { id: 'fb-dup-1', title: 'WiFi drops', similarity: 0.93 },
       ]);
 
-      const results = await service.findDuplicates('ws-tenant-a', 'fb-source', embedding);
+      const results = await service.findDuplicates(
+        'ws-tenant-a',
+        'fb-source',
+        embedding,
+      );
 
       expect(results).toHaveLength(1);
       expect(results[0]).toMatchObject({
@@ -262,7 +299,11 @@ describe('DuplicateDetectionService', () => {
       mockPrisma.$queryRaw.mockResolvedValueOnce([]);
       mockPrisma.feedbackDuplicateSuggestion.findMany.mockResolvedValueOnce([]);
 
-      const results = await service.findDuplicates('ws-tenant-a', 'fb-source', embedding);
+      const results = await service.findDuplicates(
+        'ws-tenant-a',
+        'fb-source',
+        embedding,
+      );
 
       expect(results).toEqual([]);
     });

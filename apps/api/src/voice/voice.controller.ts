@@ -82,7 +82,10 @@ export class VoiceController {
     @Param('workspaceId') workspaceId: string,
     @Param('uploadAssetId') uploadAssetId: string,
   ) {
-    const result = await this.voiceService.getUpload(workspaceId, uploadAssetId);
+    const result = await this.voiceService.getUpload(
+      workspaceId,
+      uploadAssetId,
+    );
     if (!result) throw new NotFoundException('Upload not found');
     return result;
   }

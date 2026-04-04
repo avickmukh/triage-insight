@@ -29,10 +29,7 @@ import { CiqEngineService } from '../ciq/ciq-engine.service';
  */
 @Global()
 @Module({
-  imports: [
-    PrismaModule,
-
-  ],
+  imports: [PrismaModule],
   controllers: [AiController, DuplicateSuggestionsController],
   providers: [
     CiqEngineService,

@@ -56,7 +56,10 @@ export class PlanLimitService {
     });
 
     // Check total seat limit
-    if (!this.isUnlimited(plan.seatLimit) && currentTotal >= (plan.seatLimit as number)) {
+    if (
+      !this.isUnlimited(plan.seatLimit) &&
+      currentTotal >= (plan.seatLimit as number)
+    ) {
       throw new ForbiddenException(
         `Your ${plan.displayName} plan allows up to ${plan.seatLimit} staff seats. ` +
           `Please upgrade to add more members.`,
@@ -249,7 +252,11 @@ export class PlanLimitService {
           where: { workspaceId, createdAt: { gte: startOfMonth } },
         }),
         this.prisma.feedback.count({
-          where: { workspaceId, sourceType: 'VOICE', createdAt: { gte: startOfMonth } },
+          where: {
+            workspaceId,
+            sourceType: 'VOICE',
+            createdAt: { gte: startOfMonth },
+          },
         }),
       ]);
 
@@ -267,11 +274,13 @@ export class PlanLimitService {
       // survey responses — stub until Survey module is built
       surveyResponsesThisMonth: {
         used: 0,
-        limit: this.isUnlimited(plan.surveyResponseLimit) ? null : plan.surveyResponseLimit,
+        limit: this.isUnlimited(plan.surveyResponseLimit)
+          ? null
+          : plan.surveyResponseLimit,
         unlimited: this.isUnlimited(plan.surveyResponseLimit),
       },
       plan: {
-        planType: plan.planType as BillingPlan,
+        planType: plan.planType,
         displayName: plan.displayName,
         priceMonthly: plan.priceMonthly,
       },

@@ -49,7 +49,8 @@ const MOCK_NARRATION = {
   topIssues: ['Slow API response times affect 40% of enterprise users.'],
   emergingTrends: ['Mobile usage increasing — latency more noticeable on 3G.'],
   recommendations: ['Schedule DB optimisation sprint for next cycle.'],
-  narrativeSummary: 'API latency is the top issue this week. Immediate action required.',
+  narrativeSummary:
+    'API latency is the top issue this week. Immediate action required.',
 };
 
 // ── Mocks ──────────────────────────────────────────────────────────────────────
@@ -81,12 +82,13 @@ const mockConfigService = {
  * Returns a jest.SpyInstance that resolves with MOCK_NARRATION by default.
  */
 function spyCallLlm(service: DigestService, resolveWith = MOCK_NARRATION) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return jest.spyOn(service as any, 'callLlm').mockResolvedValue(resolveWith);
 }
 
-function spyCallLlmThrows(service: DigestService, error = new Error('OpenAI timeout')) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+function spyCallLlmThrows(
+  service: DigestService,
+  error = new Error('OpenAI timeout'),
+) {
   return jest.spyOn(service as any, 'callLlm').mockRejectedValue(error);
 }
 
@@ -111,8 +113,8 @@ describe('DigestService', () => {
     // Default mock responses
     mockPrisma.theme.findMany.mockResolvedValue([makeTheme()]);
     mockPrisma.feedback.aggregate
-      .mockResolvedValueOnce({ _avg: { sentiment: 0.4 }, _count: { id: 12 } })  // current period
-      .mockResolvedValueOnce({ _avg: { sentiment: 0.3 }, _count: { id: 8 } });  // prior period
+      .mockResolvedValueOnce({ _avg: { sentiment: 0.4 }, _count: { id: 12 } }) // current period
+      .mockResolvedValueOnce({ _avg: { sentiment: 0.3 }, _count: { id: 8 } }); // prior period
     mockPrisma.issueSpikeEvent.findMany.mockResolvedValue([]);
     mockPrisma.digestRun.create.mockResolvedValue({
       id: 'digest-run-001',
@@ -224,7 +226,9 @@ describe('DigestService', () => {
       await service.generateDigest(WORKSPACE_ID);
       const createArgs = mockPrisma.digestRun.create.mock.calls[0][0];
       const theme = createArgs.data.summary.topThemes[0];
-      expect(theme.crossSourceInsight).toContain('feedback, support, and voice');
+      expect(theme.crossSourceInsight).toContain(
+        'feedback, support, and voice',
+      );
     });
   });
 
@@ -235,16 +239,29 @@ describe('DigestService', () => {
       mockPrisma.theme.findMany.mockResolvedValue([]);
       mockPrisma.feedback.aggregate
         .mockResolvedValueOnce({ _avg: { sentiment: null }, _count: { id: 0 } })
-        .mockResolvedValueOnce({ _avg: { sentiment: null }, _count: { id: 0 } });
+        .mockResolvedValueOnce({
+          _avg: { sentiment: null },
+          _count: { id: 0 },
+        });
     });
 
     it('does not throw when there are no themes or feedback', async () => {
-      spyCallLlm(service, { topIssues: [], emergingTrends: [], recommendations: [], narrativeSummary: 'No activity this week.' });
+      spyCallLlm(service, {
+        topIssues: [],
+        emergingTrends: [],
+        recommendations: [],
+        narrativeSummary: 'No activity this week.',
+      });
       await expect(service.generateDigest(WORKSPACE_ID)).resolves.toBeDefined();
     });
 
     it('persists an empty topThemes array', async () => {
-      spyCallLlm(service, { topIssues: [], emergingTrends: [], recommendations: [], narrativeSummary: 'No activity this week.' });
+      spyCallLlm(service, {
+        topIssues: [],
+        emergingTrends: [],
+        recommendations: [],
+        narrativeSummary: 'No activity this week.',
+      });
       await service.generateDigest(WORKSPACE_ID);
       const createArgs = mockPrisma.digestRun.create.mock.calls[0][0];
       expect(createArgs.data.summary.topThemes).toEqual([]);
@@ -304,7 +321,10 @@ describe('DigestService', () => {
     it('sets trend to "stable" when change is within ±0.05', async () => {
       mockPrisma.feedback.aggregate
         .mockResolvedValueOnce({ _avg: { sentiment: 0.4 }, _count: { id: 10 } })
-        .mockResolvedValueOnce({ _avg: { sentiment: 0.42 }, _count: { id: 8 } });
+        .mockResolvedValueOnce({
+          _avg: { sentiment: 0.42 },
+          _count: { id: 8 },
+        });
       spyCallLlm(service);
       await service.generateDigest(WORKSPACE_ID);
       const createArgs = mockPrisma.digestRun.create.mock.calls[0][0];
@@ -316,7 +336,12 @@ describe('DigestService', () => {
 
   describe('getLatest', () => {
     it('returns the most recent DigestRun for a workspace', async () => {
-      const mockRun = { id: 'run-latest', workspaceId: WORKSPACE_ID, sentAt: new Date().toISOString(), summary: {} };
+      const mockRun = {
+        id: 'run-latest',
+        workspaceId: WORKSPACE_ID,
+        sentAt: new Date().toISOString(),
+        summary: {},
+      };
       mockPrisma.digestRun.findFirst.mockResolvedValue(mockRun);
       const result = await service.getLatest(WORKSPACE_ID);
       expect(result).toEqual(mockRun);
@@ -340,8 +365,16 @@ describe('DigestService', () => {
   describe('getHistory', () => {
     const mockHistory = [
       { id: 'run-3', sentAt: new Date().toISOString(), summary: {} },
-      { id: 'run-2', sentAt: new Date(Date.now() - 7 * 86400000).toISOString(), summary: {} },
-      { id: 'run-1', sentAt: new Date(Date.now() - 14 * 86400000).toISOString(), summary: {} },
+      {
+        id: 'run-2',
+        sentAt: new Date(Date.now() - 7 * 86400000).toISOString(),
+        summary: {},
+      },
+      {
+        id: 'run-1',
+        sentAt: new Date(Date.now() - 14 * 86400000).toISOString(),
+        summary: {},
+      },
     ];
 
     it('returns digest history ordered newest first', async () => {
@@ -374,7 +407,11 @@ describe('DigestService', () => {
       mockPrisma.digestRun.findMany.mockResolvedValue([]);
       await service.getHistory(WORKSPACE_ID);
       const args = mockPrisma.digestRun.findMany.mock.calls[0][0];
-      expect(args.select).toMatchObject({ id: true, sentAt: true, summary: true });
+      expect(args.select).toMatchObject({
+        id: true,
+        sentAt: true,
+        summary: true,
+      });
     });
   });
 });

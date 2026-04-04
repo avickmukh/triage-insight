@@ -73,68 +73,169 @@ const DOMAIN_TAXONOMY: DomainKeywords[] = [
   {
     domain: 'core_workflow_blocked',
     primary: [
-      'login', 'logout', 'auth', 'authentication', 'payment', 'billing',
-      'checkout', 'export', 'import', 'api', 'sync', 'webhook', 'crash',
-      'broken', 'blocked', 'cannot', 'unable', 'data loss', 'not working',
+      'login',
+      'logout',
+      'auth',
+      'authentication',
+      'payment',
+      'billing',
+      'checkout',
+      'export',
+      'import',
+      'api',
+      'sync',
+      'webhook',
+      'crash',
+      'broken',
+      'blocked',
+      'cannot',
+      'unable',
+      'data loss',
+      'not working',
     ],
     secondary: [
-      'error', 'fail', 'failed', 'failure', 'down', 'offline', 'unavailable',
-      'integration', 'connect', 'connection',
+      'error',
+      'fail',
+      'failed',
+      'failure',
+      'down',
+      'offline',
+      'unavailable',
+      'integration',
+      'connect',
+      'connection',
     ],
   },
   {
     domain: 'permissions_access',
     primary: [
-      'permission', 'permissions', 'role', 'roles', 'access', 'forbidden',
-      'unauthorized', 'denied', 'sso', 'saml', 'oauth', 'privilege',
+      'permission',
+      'permissions',
+      'role',
+      'roles',
+      'access',
+      'forbidden',
+      'unauthorized',
+      'denied',
+      'sso',
+      'saml',
+      'oauth',
+      'privilege',
     ],
     secondary: [
-      'admin', 'share', 'sharing', 'invite', 'visibility', 'restrict',
-      'restriction', 'policy',
+      'admin',
+      'share',
+      'sharing',
+      'invite',
+      'visibility',
+      'restrict',
+      'restriction',
+      'policy',
     ],
   },
   {
     domain: 'performance_latency',
     primary: [
-      'slow', 'timeout', 'latency', 'freeze', 'hang', 'unresponsive',
-      'lag', 'laggy', 'loading forever', 'takes too long',
+      'slow',
+      'timeout',
+      'latency',
+      'freeze',
+      'hang',
+      'unresponsive',
+      'lag',
+      'laggy',
+      'loading forever',
+      'takes too long',
     ],
     secondary: [
-      'load', 'loading', 'performance', 'speed', 'delay', 'wait', 'waiting',
-      'spinner', 'stuck',
+      'load',
+      'loading',
+      'performance',
+      'speed',
+      'delay',
+      'wait',
+      'waiting',
+      'spinner',
+      'stuck',
     ],
   },
   {
     domain: 'navigation_confusion',
     primary: [
-      'confusing', 'hard to find', 'cant find', "can't find", 'lost',
-      'navigation', 'menu', 'sidebar', 'breadcrumb',
+      'confusing',
+      'hard to find',
+      'cant find',
+      "can't find",
+      'lost',
+      'navigation',
+      'menu',
+      'sidebar',
+      'breadcrumb',
     ],
     secondary: [
-      'search', 'filter', 'sort', 'find', 'unclear', 'where is',
-      'how do i', 'not intuitive', 'dashboard',
+      'search',
+      'filter',
+      'sort',
+      'find',
+      'unclear',
+      'where is',
+      'how do i',
+      'not intuitive',
+      'dashboard',
     ],
   },
   {
     domain: 'reporting_visibility',
     primary: [
-      'report', 'reports', 'analytics', 'chart', 'charts', 'graph',
-      'metric', 'metrics', 'insight', 'insights', 'audit log',
+      'report',
+      'reports',
+      'analytics',
+      'chart',
+      'charts',
+      'graph',
+      'metric',
+      'metrics',
+      'insight',
+      'insights',
+      'audit log',
     ],
     secondary: [
-      'visibility', 'tracking', 'history', 'log', 'logs', 'export data',
-      'download', 'csv', 'excel',
+      'visibility',
+      'tracking',
+      'history',
+      'log',
+      'logs',
+      'export data',
+      'download',
+      'csv',
+      'excel',
     ],
   },
   {
     domain: 'missing_configuration',
     primary: [
-      'feature request', 'missing feature', 'add support', 'please add',
-      'would love', 'wish', 'limit', 'quota', 'plan', 'upgrade',
+      'feature request',
+      'missing feature',
+      'add support',
+      'please add',
+      'would love',
+      'wish',
+      'limit',
+      'quota',
+      'plan',
+      'upgrade',
     ],
     secondary: [
-      'configure', 'configuration', 'setting', 'settings', 'customise',
-      'customize', 'option', 'options', 'support for', 'integrate',
+      'configure',
+      'configuration',
+      'setting',
+      'settings',
+      'customise',
+      'customize',
+      'option',
+      'options',
+      'support for',
+      'integrate',
     ],
   },
 ];
@@ -185,7 +286,7 @@ export class IntentClassifierService {
   async classify(text: string, useLlm = false): Promise<IntentClassification> {
     const keywordResult = this.classifyByKeyword(text);
 
-    if (!useLlm && keywordResult.confidence >= 0.70) {
+    if (!useLlm && keywordResult.confidence >= 0.7) {
       return keywordResult;
     }
 
@@ -199,7 +300,9 @@ export class IntentClassifierService {
     try {
       const llmResult = await this.classifyByLlm(text);
       // If LLM returns higher confidence, prefer it; otherwise keep keyword result
-      return llmResult.confidence >= keywordResult.confidence ? llmResult : keywordResult;
+      return llmResult.confidence >= keywordResult.confidence
+        ? llmResult
+        : keywordResult;
     } catch (err) {
       this.logger.warn(
         `[IntentClassifier] LLM classification failed — using keyword fallback: ${(err as Error).message}`,
@@ -222,7 +325,7 @@ export class IntentClassifierService {
     for (const { id, text } of texts) {
       const keywordResult = this.classifyByKeyword(text);
       results.set(id, keywordResult);
-      if (keywordResult.confidence < 0.70) {
+      if (keywordResult.confidence < 0.7) {
         needsLlm.push({ id, text });
       }
     }
@@ -253,7 +356,7 @@ export class IntentClassifierService {
     const lower = text.toLowerCase();
 
     let bestDomain: IntentDomain = 'minor_ux';
-    let bestConfidence = 0.30; // default for no-match
+    let bestConfidence = 0.3; // default for no-match
     let secondaryDomain: IntentDomain | null = null;
     let matchCount = 0;
 
@@ -262,23 +365,23 @@ export class IntentClassifierService {
       const secondaryMatch = secondary.some((kw) => lower.includes(kw));
 
       if (primaryMatch) {
-        const conf = 0.90;
+        const conf = 0.9;
         if (conf > bestConfidence) {
-          if (bestConfidence >= 0.70) secondaryDomain = bestDomain;
+          if (bestConfidence >= 0.7) secondaryDomain = bestDomain;
           bestDomain = domain;
           bestConfidence = conf;
           matchCount++;
-        } else if (conf >= 0.70 && !secondaryDomain) {
+        } else if (conf >= 0.7 && !secondaryDomain) {
           secondaryDomain = domain;
         }
       } else if (secondaryMatch) {
-        const conf = 0.70;
+        const conf = 0.7;
         if (conf > bestConfidence) {
-          if (bestConfidence >= 0.70) secondaryDomain = bestDomain;
+          if (bestConfidence >= 0.7) secondaryDomain = bestDomain;
           bestDomain = domain;
           bestConfidence = conf;
           matchCount++;
-        } else if (conf >= 0.70 && !secondaryDomain) {
+        } else if (conf >= 0.7 && !secondaryDomain) {
           secondaryDomain = domain;
         }
       }
@@ -316,9 +419,10 @@ export class IntentClassifierService {
     };
 
     const domain = this.validateDomain(parsed.domain) ?? 'minor_ux';
-    const confidence = typeof parsed.confidence === 'number'
-      ? Math.min(1, Math.max(0, parsed.confidence))
-      : 0.60;
+    const confidence =
+      typeof parsed.confidence === 'number'
+        ? Math.min(1, Math.max(0, parsed.confidence))
+        : 0.6;
     const secondaryDomain = parsed.secondary_domain
       ? this.validateDomain(parsed.secondary_domain)
       : null;
@@ -334,7 +438,9 @@ export class IntentClassifierService {
 
   // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-  private validateDomain(value: string | undefined | null): IntentDomain | null {
+  private validateDomain(
+    value: string | undefined | null,
+  ): IntentDomain | null {
     const valid: IntentDomain[] = [
       'core_workflow_blocked',
       'permissions_access',
@@ -344,6 +450,8 @@ export class IntentClassifierService {
       'missing_configuration',
       'minor_ux',
     ];
-    return valid.includes(value as IntentDomain) ? (value as IntentDomain) : null;
+    return valid.includes(value as IntentDomain)
+      ? (value as IntentDomain)
+      : null;
   }
 }

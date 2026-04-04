@@ -50,11 +50,13 @@ export class TrendComputationService {
     const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
 
     // Count signals per theme in current and previous windows using a single query
-    const rows = await this.prisma.$queryRaw<Array<{
-      themeId: string;
-      currentWeek: bigint;
-      prevWeek: bigint;
-    }>>`
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        themeId: string;
+        currentWeek: bigint;
+        prevWeek: bigint;
+      }>
+    >`
       SELECT
         tf."themeId",
         COUNT(CASE WHEN f."createdAt" >= ${weekAgo} AND f."createdAt" < ${now} THEN 1 END)         AS "currentWeek",
@@ -67,7 +69,9 @@ export class TrendComputationService {
       GROUP BY tf."themeId";
     `;
 
-    let up = 0, stable = 0, down = 0;
+    let up = 0,
+      stable = 0,
+      down = 0;
 
     for (const row of rows) {
       const current = Number(row.currentWeek);
@@ -84,8 +88,8 @@ export class TrendComputationService {
         trendDelta >= this.TREND_UP_THRESHOLD
           ? 'UP'
           : trendDelta <= this.TREND_DOWN_THRESHOLD
-          ? 'DOWN'
-          : 'STABLE';
+            ? 'DOWN'
+            : 'STABLE';
 
       await this.prisma.theme.update({
         where: { id: row.themeId },
@@ -123,10 +127,12 @@ export class TrendComputationService {
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
 
-    const rows = await this.prisma.$queryRaw<Array<{
-      currentWeek: bigint;
-      prevWeek: bigint;
-    }>>`
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        currentWeek: bigint;
+        prevWeek: bigint;
+      }>
+    >`
       SELECT
         COUNT(CASE WHEN f."createdAt" >= ${weekAgo} AND f."createdAt" < ${now} THEN 1 END)         AS "currentWeek",
         COUNT(CASE WHEN f."createdAt" >= ${twoWeeksAgo} AND f."createdAt" < ${weekAgo} THEN 1 END) AS "prevWeek"
@@ -149,8 +155,8 @@ export class TrendComputationService {
       trendDelta >= this.TREND_UP_THRESHOLD
         ? 'UP'
         : trendDelta <= this.TREND_DOWN_THRESHOLD
-        ? 'DOWN'
-        : 'STABLE';
+          ? 'DOWN'
+          : 'STABLE';
 
     await this.prisma.theme.update({
       where: { id: themeId },
@@ -163,6 +169,11 @@ export class TrendComputationService {
       },
     });
 
-    return { trendDirection, trendDelta, currentWeekSignals: current, prevWeekSignals: prev };
+    return {
+      trendDirection,
+      trendDelta,
+      currentWeekSignals: current,
+      prevWeekSignals: prev,
+    };
   }
 }

@@ -32,18 +32,13 @@ async function bootstrap() {
         ? { maxAge: 31536000, includeSubDomains: true, preload: true }
         : false,
       // Allow Swagger UI to load its own scripts in development
-      contentSecurityPolicy: isProduction
-        ? undefined
-        : false,
+      contentSecurityPolicy: isProduction ? undefined : false,
     }),
   );
 
   // ── Stripe Webhook Raw Body ───────────────────────────────────────────────
   // Must be registered BEFORE the global JSON parser
-  app.use(
-    '/api/v1/billing/webhook',
-    express.raw({ type: 'application/json' }),
-  );
+  app.use('/api/v1/billing/webhook', express.raw({ type: 'application/json' }));
 
   // ── CORS ──────────────────────────────────────────────────────────────────
   // In production: read allowed origins from CORS_ORIGIN env var (comma-separated).
@@ -51,7 +46,10 @@ async function bootstrap() {
   // Credentials are enabled so the browser sends cookies/auth headers.
   const corsOriginEnv = configService.get<string>('CORS_ORIGIN', '');
   const productionOrigins = corsOriginEnv
-    ? corsOriginEnv.split(',').map((o) => o.trim()).filter(Boolean)
+    ? corsOriginEnv
+        .split(',')
+        .map((o) => o.trim())
+        .filter(Boolean)
     : [];
 
   const developmentOrigins = [

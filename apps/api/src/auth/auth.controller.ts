@@ -1,4 +1,14 @@
-import { Controller, Post, Patch, Body, Get, UseGuards, Req, Query, Param } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Patch,
+  Body,
+  Get,
+  UseGuards,
+  Req,
+  Query,
+  Param,
+} from '@nestjs/common';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { SignUpDto } from './dto/signup.dto';
@@ -50,7 +60,10 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Post('logout')
-  logout(@Req() req: AuthenticatedRequest, @Body() refreshTokenDto: RefreshTokenDto) {
+  logout(
+    @Req() req: AuthenticatedRequest,
+    @Body() refreshTokenDto: RefreshTokenDto,
+  ) {
     return this.authService.logout(req.user.sub, refreshTokenDto.refreshToken);
   }
 
@@ -62,13 +75,19 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Patch('me')
-  updateProfile(@Req() req: AuthenticatedRequest, @Body() dto: UpdateProfileDto) {
+  updateProfile(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: UpdateProfileDto,
+  ) {
     return this.authService.updateProfile(req.user.sub, dto);
   }
 
   @UseGuards(JwtAuthGuard)
   @Patch('me/password')
-  changePassword(@Req() req: AuthenticatedRequest, @Body() dto: ChangePasswordDto) {
+  changePassword(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: ChangePasswordDto,
+  ) {
     return this.authService.changePassword(req.user.sub, dto);
   }
 

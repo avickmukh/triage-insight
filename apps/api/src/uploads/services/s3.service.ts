@@ -18,7 +18,10 @@ export class S3Service {
     this.bucket = this.configService.get<string>('AWS_S3_BUCKET', '');
     const region = this.configService.get<string>('AWS_S3_REGION', 'us-east-1');
     const accessKeyId = this.configService.get<string>('AWS_ACCESS_KEY_ID', '');
-    const secretAccessKey = this.configService.get<string>('AWS_SECRET_ACCESS_KEY', '');
+    const secretAccessKey = this.configService.get<string>(
+      'AWS_SECRET_ACCESS_KEY',
+      '',
+    );
 
     this.configured = !!(this.bucket && accessKeyId && secretAccessKey);
 
@@ -30,7 +33,11 @@ export class S3Service {
     }
   }
 
-  async createPresignedUrl(workspaceId: string, fileName: string, contentType: string) {
+  async createPresignedUrl(
+    workspaceId: string,
+    fileName: string,
+    contentType: string,
+  ) {
     if (!this.configured || !this.s3Client) {
       throw new ServiceUnavailableException(
         'File uploads are not configured. Please set AWS_S3_BUCKET, AWS_ACCESS_KEY_ID, and AWS_SECRET_ACCESS_KEY.',
@@ -45,7 +52,9 @@ export class S3Service {
       ContentType: contentType,
     });
 
-    const signedUrl = await getSignedUrl(this.s3Client, command, { expiresIn: 3600 });
+    const signedUrl = await getSignedUrl(this.s3Client, command, {
+      expiresIn: 3600,
+    });
 
     return { signedUrl, key };
   }

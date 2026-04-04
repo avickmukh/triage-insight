@@ -1,4 +1,3 @@
-
 import {
   Injectable,
   NestInterceptor,
@@ -46,7 +45,9 @@ export class LoggingInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       tap(() => {
-        const response = context.switchToHttp().getResponse<{ statusCode: number }>();
+        const response = context
+          .switchToHttp()
+          .getResponse<{ statusCode: number }>();
         const durationMs = Date.now() - startedAt;
         this.logger.log(
           JSON.stringify({

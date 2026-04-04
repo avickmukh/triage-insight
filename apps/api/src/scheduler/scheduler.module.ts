@@ -5,11 +5,7 @@ import { DigestModule } from '../digest/digest.module';
 import { DigestScheduler } from './digest.scheduler';
 
 @Module({
-  imports: [
-    ScheduleModule.forRoot(),
-    PrismaModule,
-    DigestModule,
-  ],
+  imports: [ScheduleModule.forRoot(), PrismaModule, DigestModule],
   providers: [DigestScheduler],
 })
 export class SchedulerModule {}

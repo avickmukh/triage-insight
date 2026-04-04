@@ -1,5 +1,16 @@
-import { IsString, IsOptional, IsNumber, IsEnum, Min, Max } from 'class-validator';
-import { AccountPriority, CustomerLifecycleStage, CustomerSegment } from '@prisma/client';
+import {
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsEnum,
+  Min,
+  Max,
+} from 'class-validator';
+import {
+  AccountPriority,
+  CustomerLifecycleStage,
+  CustomerSegment,
+} from '@prisma/client';
 
 export class CreateCustomerDto {
   @IsString()

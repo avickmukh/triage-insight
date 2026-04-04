@@ -46,14 +46,18 @@ export class TokenRevocationStep {
     }
 
     // Identify users whose ONLY remaining workspace is this one
-    const usersWithSingleMembership = await this.prisma.workspaceMember.groupBy({
-      by: ['userId'],
-      where: { userId: { in: userIds } },
-      _count: { workspaceId: true },
-      having: { workspaceId: { _count: { equals: 1 } } },
-    });
+    const usersWithSingleMembership = await this.prisma.workspaceMember.groupBy(
+      {
+        by: ['userId'],
+        where: { userId: { in: userIds } },
+        _count: { workspaceId: true },
+        having: { workspaceId: { _count: { equals: 1 } } },
+      },
+    );
 
-    const singleMembershipUserIds = usersWithSingleMembership.map((u) => u.userId);
+    const singleMembershipUserIds = usersWithSingleMembership.map(
+      (u) => u.userId,
+    );
 
     let revokedCount = 0;
     let resetCount = 0;

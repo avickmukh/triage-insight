@@ -4,9 +4,7 @@ import { DealController } from './deal.controller';
 import { DealService } from './deal.service';
 
 @Module({
-  imports: [
-    PrismaModule,
-  ],
+  imports: [PrismaModule],
   controllers: [DealController],
   providers: [DealService],
   exports: [DealService],

@@ -6,15 +6,17 @@ import { DashboardCacheService } from './services/dashboard-cache.service';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
-  imports: [
-    PrismaModule,
-  ],
+  imports: [PrismaModule],
   controllers: [DashboardController],
   providers: [
     DashboardAggregationService,
     ExecutiveInsightService,
     DashboardCacheService,
   ],
-  exports: [DashboardAggregationService, ExecutiveInsightService, DashboardCacheService],
+  exports: [
+    DashboardAggregationService,
+    ExecutiveInsightService,
+    DashboardCacheService,
+  ],
 })
 export class DashboardModule {}

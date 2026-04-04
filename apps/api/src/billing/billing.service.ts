@@ -72,7 +72,8 @@ export class BillingService implements OnModuleInit {
       where: { userId },
       include: { workspace: true },
     });
-    if (!membership) throw new NotFoundException('You are not a member of any workspace.');
+    if (!membership)
+      throw new NotFoundException('You are not a member of any workspace.');
     return membership.workspace;
   }
 
@@ -240,7 +241,8 @@ export class BillingService implements OnModuleInit {
     }
 
     const trialDaysRemaining =
-      workspace.trialEndsAt && workspace.billingStatus === BillingStatus.TRIALING
+      workspace.trialEndsAt &&
+      workspace.billingStatus === BillingStatus.TRIALING
         ? Math.max(
             0,
             Math.ceil(
@@ -298,9 +300,17 @@ export class BillingService implements OnModuleInit {
   // ── Plans ──────────────────────────────────────────────────────────────────
 
   async listPlans() {
-    const ORDER: BillingPlan[] = [BillingPlan.FREE, BillingPlan.PRO, BillingPlan.BUSINESS];
-    const plans = await this.prisma.plan.findMany({ where: { isActive: true } });
-    return plans.sort((a, b) => ORDER.indexOf(a.planType) - ORDER.indexOf(b.planType));
+    const ORDER: BillingPlan[] = [
+      BillingPlan.FREE,
+      BillingPlan.PRO,
+      BillingPlan.BUSINESS,
+    ];
+    const plans = await this.prisma.plan.findMany({
+      where: { isActive: true },
+    });
+    return plans.sort(
+      (a, b) => ORDER.indexOf(a.planType) - ORDER.indexOf(b.planType),
+    );
   }
 
   // ── Stripe Checkout ────────────────────────────────────────────────────────
@@ -320,7 +330,9 @@ export class BillingService implements OnModuleInit {
     const workspace = await this.resolveWorkspace(userId);
     await this.assertAdmin(userId, workspace.id);
 
-    const plan = await this.prisma.plan.findUnique({ where: { planType: dto.targetPlan } });
+    const plan = await this.prisma.plan.findUnique({
+      where: { planType: dto.targetPlan },
+    });
     if (!plan) throw new NotFoundException(`Plan ${dto.targetPlan} not found`);
     if (!plan.stripePriceId) {
       throw new BadRequestException(
@@ -329,10 +341,15 @@ export class BillingService implements OnModuleInit {
       );
     }
     if (plan.priceMonthly === 0) {
-      throw new BadRequestException('Cannot create a Stripe Checkout session for a free plan.');
+      throw new BadRequestException(
+        'Cannot create a Stripe Checkout session for a free plan.',
+      );
     }
 
-    const stripeCustomerId = await this.getOrCreateStripeCustomer(workspace, stripe);
+    const stripeCustomerId = await this.getOrCreateStripeCustomer(
+      workspace,
+      stripe,
+    );
 
     // If already subscribed, use Customer Portal for plan changes
     if (workspace.stripeSubscriptionId) {
@@ -343,9 +360,10 @@ export class BillingService implements OnModuleInit {
       return { url: portalSession.url, mode: 'portal' as const };
     }
 
-    const subscriptionData: Stripe.Checkout.SessionCreateParams.SubscriptionData = {
-      metadata: { workspaceId: workspace.id, targetPlan: dto.targetPlan },
-    };
+    const subscriptionData: Stripe.Checkout.SessionCreateParams.SubscriptionData =
+      {
+        metadata: { workspaceId: workspace.id, targetPlan: dto.targetPlan },
+      };
     if (plan.trialDays > 0 && workspace.trialStatus !== TrialStatus.EXPIRED) {
       subscriptionData.trial_period_days = plan.trialDays;
     }
@@ -361,7 +379,11 @@ export class BillingService implements OnModuleInit {
       allow_promotion_codes: true,
     });
 
-    return { url: session.url, sessionId: session.id, mode: 'checkout' as const };
+    return {
+      url: session.url,
+      sessionId: session.id,
+      mode: 'checkout' as const,
+    };
   }
 
   // ── Stripe Customer Portal ─────────────────────────────────────────────────
@@ -421,7 +443,10 @@ export class BillingService implements OnModuleInit {
           this.prisma.invoice.upsert({
             where: { stripeInvoiceId: inv.id },
             update: this.stripeInvoiceToDb(workspace.id, inv) as any,
-            create: { workspaceId: workspace.id, ...this.stripeInvoiceToDb(workspace.id, inv) } as any,
+            create: {
+              workspaceId: workspace.id,
+              ...this.stripeInvoiceToDb(workspace.id, inv),
+            } as any,
           }),
         ),
       );
@@ -462,10 +487,16 @@ export class BillingService implements OnModuleInit {
     let event: Stripe.Event;
     try {
       if (webhookSecret && stripeSignature) {
-        event = stripe.webhooks.constructEvent(rawBody, stripeSignature, webhookSecret);
+        event = stripe.webhooks.constructEvent(
+          rawBody,
+          stripeSignature,
+          webhookSecret,
+        );
       } else {
         event = JSON.parse(rawBody.toString()) as Stripe.Event;
-        this.logger.warn('Stripe webhook received without signature verification (dev mode)');
+        this.logger.warn(
+          'Stripe webhook received without signature verification (dev mode)',
+        );
       }
     } catch (err) {
       this.logger.error('Stripe webhook signature verification failed', err);
@@ -476,23 +507,23 @@ export class BillingService implements OnModuleInit {
 
     switch (event.type) {
       case 'checkout.session.completed':
-        await this.handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
+        await this.handleCheckoutCompleted(event.data.object);
         break;
       case 'customer.subscription.updated':
-        await this.handleSubscriptionUpdated(event.data.object as Stripe.Subscription);
+        await this.handleSubscriptionUpdated(event.data.object);
         break;
       case 'customer.subscription.deleted':
-        await this.handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
+        await this.handleSubscriptionDeleted(event.data.object);
         break;
       case 'invoice.payment_succeeded':
-        await this.handleInvoicePaymentSucceeded(event.data.object as Stripe.Invoice);
+        await this.handleInvoicePaymentSucceeded(event.data.object);
         break;
       case 'invoice.payment_failed':
-        await this.handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
+        await this.handleInvoicePaymentFailed(event.data.object);
         break;
       case 'invoice.created':
       case 'invoice.finalized':
-        await this.upsertInvoiceFromStripe(event.data.object as Stripe.Invoice);
+        await this.upsertInvoiceFromStripe(event.data.object);
         break;
       default:
         this.logger.debug(`Unhandled Stripe event: ${event.type}`);
@@ -507,12 +538,17 @@ export class BillingService implements OnModuleInit {
     const workspaceId = session.metadata?.workspaceId;
     const targetPlan = session.metadata?.targetPlan as BillingPlan | undefined;
     if (!workspaceId || !targetPlan) {
-      this.logger.warn('checkout.session.completed missing metadata', session.id);
+      this.logger.warn(
+        'checkout.session.completed missing metadata',
+        session.id,
+      );
       return;
     }
 
     const subscription = session.subscription
-      ? await this.requireStripe().subscriptions.retrieve(session.subscription as string)
+      ? await this.requireStripe().subscriptions.retrieve(
+          session.subscription as string,
+        )
       : null;
 
     await this.prisma.workspace.update({
@@ -541,7 +577,9 @@ export class BillingService implements OnModuleInit {
       where: { stripeSubscriptionId: subscription.id },
     });
     if (!workspace) {
-      this.logger.warn(`No workspace found for subscription ${subscription.id}`);
+      this.logger.warn(
+        `No workspace found for subscription ${subscription.id}`,
+      );
       return;
     }
 
@@ -558,7 +596,9 @@ export class BillingService implements OnModuleInit {
         billingPlan: plan?.planType ?? workspace.billingPlan,
         billingStatus,
         trialStatus:
-          subscription.status === 'trialing' ? TrialStatus.ACTIVE : workspace.trialStatus,
+          subscription.status === 'trialing'
+            ? TrialStatus.ACTIVE
+            : workspace.trialStatus,
         trialEndsAt: subscription.trial_end
           ? new Date(subscription.trial_end * 1000)
           : workspace.trialEndsAt,
@@ -568,7 +608,9 @@ export class BillingService implements OnModuleInit {
           : new Date((subscription.billing_cycle_anchor + 2592000) * 1000),
       },
     });
-    this.logger.log(`Workspace ${workspace.id} subscription updated: ${subscription.status}`);
+    this.logger.log(
+      `Workspace ${workspace.id} subscription updated: ${subscription.status}`,
+    );
   }
 
   private async handleSubscriptionDeleted(subscription: Stripe.Subscription) {
@@ -587,12 +629,17 @@ export class BillingService implements OnModuleInit {
         currentPeriodEnd: null,
       },
     });
-    this.logger.log(`Workspace ${workspace.id} subscription canceled — downgraded to FREE`);
+    this.logger.log(
+      `Workspace ${workspace.id} subscription canceled — downgraded to FREE`,
+    );
   }
 
   private async handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
     await this.upsertInvoiceFromStripe(invoice);
-    const _subId = invoice.parent?.type === 'subscription_details' ? invoice.parent.subscription_details?.subscription : null;
+    const _subId =
+      invoice.parent?.type === 'subscription_details'
+        ? invoice.parent.subscription_details?.subscription
+        : null;
     if (_subId) {
       const workspace = await this.prisma.workspace.findFirst({
         where: { stripeSubscriptionId: _subId as string },
@@ -608,7 +655,10 @@ export class BillingService implements OnModuleInit {
 
   private async handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
     await this.upsertInvoiceFromStripe(invoice);
-    const _subId = invoice.parent?.type === 'subscription_details' ? invoice.parent.subscription_details?.subscription : null;
+    const _subId =
+      invoice.parent?.type === 'subscription_details'
+        ? invoice.parent.subscription_details?.subscription
+        : null;
     if (_subId) {
       const workspace = await this.prisma.workspace.findFirst({
         where: { stripeSubscriptionId: _subId as string },
@@ -618,7 +668,9 @@ export class BillingService implements OnModuleInit {
           where: { id: workspace.id },
           data: { billingStatus: BillingStatus.PAST_DUE },
         });
-        this.logger.warn(`Workspace ${workspace.id} marked PAST_DUE after failed payment`);
+        this.logger.warn(
+          `Workspace ${workspace.id} marked PAST_DUE after failed payment`,
+        );
       }
     }
   }
@@ -677,7 +729,9 @@ export class BillingService implements OnModuleInit {
     return customer.id;
   }
 
-  private stripeToBillingStatus(status: Stripe.Subscription.Status): BillingStatus {
+  private stripeToBillingStatus(
+    status: Stripe.Subscription.Status,
+  ): BillingStatus {
     switch (status) {
       case 'active':
         return BillingStatus.ACTIVE;
@@ -696,9 +750,10 @@ export class BillingService implements OnModuleInit {
   private stripeInvoiceToDb(workspaceId: string, invoice: Stripe.Invoice) {
     return {
       stripeInvoiceId: invoice.id,
-      stripeSubscriptionId: invoice.parent?.type === 'subscription_details'
-        ? (invoice.parent.subscription_details?.subscription as string | null)
-        : null,
+      stripeSubscriptionId:
+        invoice.parent?.type === 'subscription_details'
+          ? (invoice.parent.subscription_details?.subscription as string | null)
+          : null,
       number: invoice.number ?? null,
       status: invoice.status ?? 'open',
       amountDue: invoice.amount_due,
@@ -706,8 +761,12 @@ export class BillingService implements OnModuleInit {
       currency: invoice.currency,
       invoicePdfUrl: invoice.invoice_pdf ?? null,
       hostedInvoiceUrl: invoice.hosted_invoice_url ?? null,
-      periodStart: invoice.period_start ? new Date(invoice.period_start * 1000) : null,
-      periodEnd: invoice.period_end ? new Date(invoice.period_end * 1000) : null,
+      periodStart: invoice.period_start
+        ? new Date(invoice.period_start * 1000)
+        : null,
+      periodEnd: invoice.period_end
+        ? new Date(invoice.period_end * 1000)
+        : null,
       paidAt: invoice.status_transitions?.paid_at
         ? new Date(invoice.status_transitions.paid_at * 1000)
         : null,

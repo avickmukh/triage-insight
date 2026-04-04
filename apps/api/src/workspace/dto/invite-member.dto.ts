@@ -1,4 +1,10 @@
-import { IsEmail, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsEmail,
+  IsEnum,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 import { WorkspaceRole } from '@prisma/client';
 
 export class InviteMemberDto {

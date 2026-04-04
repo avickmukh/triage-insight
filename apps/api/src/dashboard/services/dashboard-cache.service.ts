@@ -7,14 +7,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 
 interface CacheEntry<T> {
-  data:      T;
+  data: T;
   expiresAt: number;
 }
 
 @Injectable()
 export class DashboardCacheService {
   private readonly logger = new Logger(DashboardCacheService.name);
-  private readonly store  = new Map<string, CacheEntry<unknown>>();
+  private readonly store = new Map<string, CacheEntry<unknown>>();
   private readonly TTL_MS = 15 * 60 * 1000; // 15 minutes
 
   private key(workspaceId: string, surface: string): string {
@@ -46,7 +46,9 @@ export class DashboardCacheService {
       for (const k of this.store.keys()) {
         if (k.startsWith(`${workspaceId}:`)) this.store.delete(k);
       }
-      this.logger.log(`[CACHE] Invalidated all dashboard surfaces for workspace ${workspaceId}`);
+      this.logger.log(
+        `[CACHE] Invalidated all dashboard surfaces for workspace ${workspaceId}`,
+      );
     }
   }
 

@@ -41,12 +41,16 @@ describe('SentimentService', () => {
 
   describe('scoreText (lexicon scoring)', () => {
     it('returns a positive score for clearly positive text', () => {
-      const score = (service as any).scoreText('excellent great love working perfectly');
+      const score = (service as any).scoreText(
+        'excellent great love working perfectly',
+      );
       expect(score).toBeGreaterThan(0);
     });
 
     it('returns a negative score for clearly negative text', () => {
-      const score = (service as any).scoreText('broken terrible crash bug error failure');
+      const score = (service as any).scoreText(
+        'broken terrible crash bug error failure',
+      );
       expect(score).toBeLessThan(0);
     });
 
@@ -83,8 +87,16 @@ describe('SentimentService', () => {
 
     it('calls $executeRaw once per ticket', async () => {
       prisma.supportTicket.findMany.mockResolvedValue([
-        { id: 't-1', subject: 'Login broken', description: 'Cannot log in at all' },
-        { id: 't-2', subject: 'Great feature', description: 'Love the new dashboard' },
+        {
+          id: 't-1',
+          subject: 'Login broken',
+          description: 'Cannot log in at all',
+        },
+        {
+          id: 't-2',
+          subject: 'Great feature',
+          description: 'Love the new dashboard',
+        },
       ]);
       prisma.$executeRaw.mockResolvedValue(1);
 
@@ -99,7 +111,9 @@ describe('SentimentService', () => {
       ]);
       prisma.$executeRaw.mockResolvedValue(1);
 
-      await expect(service.scoreWorkspaceTickets('ws-1')).resolves.toEqual({ scored: 1 });
+      await expect(service.scoreWorkspaceTickets('ws-1')).resolves.toEqual({
+        scored: 1,
+      });
     });
   });
 
@@ -156,7 +170,9 @@ describe('SentimentService', () => {
           themeId: 'theme-1',
         },
       ]);
-      prisma.theme.findMany.mockResolvedValue([{ id: 'theme-1', title: 'Authentication Issues' }]);
+      prisma.theme.findMany.mockResolvedValue([
+        { id: 'theme-1', title: 'Authentication Issues' },
+      ]);
 
       const result = await service.getNegativeTrends('ws-1', 5);
       expect(result).toHaveLength(1);
@@ -189,7 +205,7 @@ describe('SentimentService', () => {
         {
           id: 'c-3',
           title: 'Slow load',
-          avgSentiment: '-0.4',   // raw SQL may return strings
+          avgSentiment: '-0.4', // raw SQL may return strings
           negativeTicketPct: '0.5',
           ticketCount: '8',
           arrExposure: '12000',

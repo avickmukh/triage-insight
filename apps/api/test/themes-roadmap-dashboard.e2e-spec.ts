@@ -96,7 +96,11 @@ const mockPrisma = {
     create: jest.fn().mockResolvedValue(mockWorkspace),
   },
   workspaceMember: {
-    findFirst: jest.fn().mockResolvedValue({ userId: USER_ID, workspaceId: WORKSPACE_ID, role: 'OWNER' }),
+    findFirst: jest.fn().mockResolvedValue({
+      userId: USER_ID,
+      workspaceId: WORKSPACE_ID,
+      role: 'OWNER',
+    }),
   },
   feedback: {
     findUnique: jest.fn(),
@@ -105,7 +109,9 @@ const mockPrisma = {
     create: jest.fn(),
     update: jest.fn(),
     count: jest.fn().mockResolvedValue(0),
-    aggregate: jest.fn().mockResolvedValue({ _avg: { sentiment: 0 }, _count: { id: 0 } }),
+    aggregate: jest
+      .fn()
+      .mockResolvedValue({ _avg: { sentiment: 0 }, _count: { id: 0 } }),
   },
   theme: {
     findUnique: jest.fn().mockResolvedValue(mockTheme),
@@ -186,7 +192,11 @@ beforeEach(() => {
   // Restore default mocks after clearAllMocks
   mockPrisma.workspace.findFirst.mockResolvedValue(mockWorkspace);
   mockPrisma.workspace.findUnique.mockResolvedValue(mockWorkspace);
-  mockPrisma.workspaceMember.findFirst.mockResolvedValue({ userId: USER_ID, workspaceId: WORKSPACE_ID, role: 'OWNER' });
+  mockPrisma.workspaceMember.findFirst.mockResolvedValue({
+    userId: USER_ID,
+    workspaceId: WORKSPACE_ID,
+    role: 'OWNER',
+  });
   mockPrisma.theme.findUnique.mockResolvedValue(mockTheme);
   mockPrisma.theme.findFirst.mockResolvedValue(mockTheme);
   mockPrisma.theme.findMany.mockResolvedValue([mockTheme]);
@@ -200,7 +210,10 @@ beforeEach(() => {
   mockPrisma.roadmapItem.update.mockResolvedValue(mockRoadmapItem);
   mockPrisma.feedback.findMany.mockResolvedValue([]);
   mockPrisma.feedback.count.mockResolvedValue(0);
-  mockPrisma.feedback.aggregate.mockResolvedValue({ _avg: { sentiment: 0 }, _count: { id: 0 } });
+  mockPrisma.feedback.aggregate.mockResolvedValue({
+    _avg: { sentiment: 0 },
+    _count: { id: 0 },
+  });
   mockPrisma.aiJobLog.upsert.mockResolvedValue({});
   mockPrisma.$queryRaw.mockResolvedValue([]);
   mockQueue.add.mockResolvedValue({});
@@ -217,7 +230,10 @@ describe('Themes API', () => {
     const res = await request(app.getHttpServer())
       .post(BASE)
       .set('Authorization', `Bearer ${authToken}`)
-      .send({ title: 'Checkout Performance', description: 'Users report slow checkout' })
+      .send({
+        title: 'Checkout Performance',
+        description: 'Users report slow checkout',
+      })
       .expect(201);
 
     expect(res.body).toHaveProperty('id', 'theme-e2e-1');
@@ -245,12 +261,18 @@ describe('Themes API', () => {
       .expect(200);
 
     expect(res.body).toHaveProperty('id', 'theme-e2e-1');
-    expect(res.body).toHaveProperty('aiSummary', 'Checkout is consistently slow for users on mobile.');
+    expect(res.body).toHaveProperty(
+      'aiSummary',
+      'Checkout is consistently slow for users on mobile.',
+    );
     expect(res.body).toHaveProperty('aiConfidence', 0.87);
   });
 
   it('PATCH /themes/:id — should update a theme title', async () => {
-    mockPrisma.theme.update.mockResolvedValueOnce({ ...mockTheme, title: 'Updated Title' });
+    mockPrisma.theme.update.mockResolvedValueOnce({
+      ...mockTheme,
+      title: 'Updated Title',
+    });
 
     const res = await request(app.getHttpServer())
       .patch(`${BASE}/theme-e2e-1`)
@@ -315,7 +337,10 @@ describe('Roadmap API', () => {
   });
 
   it('PATCH /roadmap/:id — should update roadmap item status', async () => {
-    mockPrisma.roadmapItem.update.mockResolvedValueOnce({ ...mockRoadmapItem, status: 'IN_PROGRESS' });
+    mockPrisma.roadmapItem.update.mockResolvedValueOnce({
+      ...mockRoadmapItem,
+      status: 'IN_PROGRESS',
+    });
 
     const res = await request(app.getHttpServer())
       .patch(`${BASE}/roadmap-e2e-1`)

@@ -25,18 +25,30 @@ export class QueuePurgeStep {
 
   constructor(
     private readonly purgeService: PurgeService,
-    @InjectQueue(QUEUE_NAMES.AI_ANALYSIS) private readonly aiAnalysisQueue: Queue,
-    @InjectQueue(QUEUE_NAMES.CIQ_SCORING) private readonly ciqScoringQueue: Queue,
-    @InjectQueue(QUEUE_NAMES.VOICE_TRANSCRIPTION) private readonly voiceTranscriptionQueue: Queue,
-    @InjectQueue(QUEUE_NAMES.VOICE_EXTRACTION) private readonly voiceExtractionQueue: Queue,
-    @InjectQueue(QUEUE_NAMES.SURVEY_INTELLIGENCE) private readonly surveyIntelligenceQueue: Queue,
-    @InjectQueue(QUEUE_NAMES.SUPPORT_SYNC) private readonly supportSyncQueue: Queue,
-    @InjectQueue(QUEUE_NAMES.SUPPORT_CLUSTERING) private readonly supportClusteringQueue: Queue,
-    @InjectQueue(QUEUE_NAMES.SUPPORT_SPIKE_DETECTION) private readonly supportSpikeQueue: Queue,
-    @InjectQueue(QUEUE_NAMES.CUSTOMER_SIGNAL_AGGREGATION) private readonly customerSignalQueue: Queue,
-    @InjectQueue(QUEUE_NAMES.THEME_CLUSTERING) private readonly themeClusteringQueue: Queue,
-    @InjectQueue(QUEUE_NAMES.PRIORITIZATION) private readonly prioritizationQueue: Queue,
-    @InjectQueue(QUEUE_NAMES.DASHBOARD_REFRESH) private readonly dashboardRefreshQueue: Queue,
+    @InjectQueue(QUEUE_NAMES.AI_ANALYSIS)
+    private readonly aiAnalysisQueue: Queue,
+    @InjectQueue(QUEUE_NAMES.CIQ_SCORING)
+    private readonly ciqScoringQueue: Queue,
+    @InjectQueue(QUEUE_NAMES.VOICE_TRANSCRIPTION)
+    private readonly voiceTranscriptionQueue: Queue,
+    @InjectQueue(QUEUE_NAMES.VOICE_EXTRACTION)
+    private readonly voiceExtractionQueue: Queue,
+    @InjectQueue(QUEUE_NAMES.SURVEY_INTELLIGENCE)
+    private readonly surveyIntelligenceQueue: Queue,
+    @InjectQueue(QUEUE_NAMES.SUPPORT_SYNC)
+    private readonly supportSyncQueue: Queue,
+    @InjectQueue(QUEUE_NAMES.SUPPORT_CLUSTERING)
+    private readonly supportClusteringQueue: Queue,
+    @InjectQueue(QUEUE_NAMES.SUPPORT_SPIKE_DETECTION)
+    private readonly supportSpikeQueue: Queue,
+    @InjectQueue(QUEUE_NAMES.CUSTOMER_SIGNAL_AGGREGATION)
+    private readonly customerSignalQueue: Queue,
+    @InjectQueue(QUEUE_NAMES.THEME_CLUSTERING)
+    private readonly themeClusteringQueue: Queue,
+    @InjectQueue(QUEUE_NAMES.PRIORITIZATION)
+    private readonly prioritizationQueue: Queue,
+    @InjectQueue(QUEUE_NAMES.DASHBOARD_REFRESH)
+    private readonly dashboardRefreshQueue: Queue,
   ) {}
 
   async execute(deletionRequestId: string, workspaceId: string): Promise<void> {

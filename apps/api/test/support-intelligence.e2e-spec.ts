@@ -99,7 +99,9 @@ describe('Support Intelligence API (e2e)', () => {
 
     it('accepts optional limit query param', async () => {
       const mockSentimentService = app.get(SentimentService);
-      const spy = jest.spyOn(mockSentimentService, 'getNegativeTrends').mockResolvedValue([]);
+      const spy = jest
+        .spyOn(mockSentimentService, 'getNegativeTrends')
+        .mockResolvedValue([]);
 
       await request(app.getHttpServer())
         .get(`/workspaces/${workspaceId}/support/negative-trends?limit=5`)
@@ -154,10 +156,12 @@ describe('Support Intelligence API (e2e)', () => {
   describe('POST /workspaces/:id/support/score-sentiment', () => {
     it('returns 200 with scored and clustersUpdated counts', async () => {
       const mockSentimentService = app.get(SentimentService);
-      jest.spyOn(mockSentimentService, 'runFullSentimentPass').mockResolvedValue({
-        scored: 42,
-        clustersUpdated: 7,
-      });
+      jest
+        .spyOn(mockSentimentService, 'runFullSentimentPass')
+        .mockResolvedValue({
+          scored: 42,
+          clustersUpdated: 7,
+        });
 
       const res = await request(app.getHttpServer())
         .post(`/workspaces/${workspaceId}/support/score-sentiment`)

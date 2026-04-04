@@ -130,7 +130,7 @@ Rules:
       title:
         typeof parsed.title === 'string' && parsed.title.trim().length > 0
           ? parsed.title.trim()
-          : label ?? 'Voice Feedback',
+          : (label ?? 'Voice Feedback'),
       summary:
         typeof parsed.summary === 'string' && parsed.summary.trim().length > 0
           ? parsed.summary.trim()
@@ -144,7 +144,9 @@ Rules:
         1,
       ),
       confidenceScore: this.clamp(
-        typeof parsed.confidenceScore === 'number' ? parsed.confidenceScore : 0.5,
+        typeof parsed.confidenceScore === 'number'
+          ? parsed.confidenceScore
+          : 0.5,
         0,
         1,
       ),
@@ -153,11 +155,15 @@ Rules:
         0,
         1,
       ),
-      churnSignal: typeof parsed.churnSignal === 'boolean' ? parsed.churnSignal : false,
+      churnSignal:
+        typeof parsed.churnSignal === 'boolean' ? parsed.churnSignal : false,
     };
   }
 
-  private fallbackResult(transcript: string, label?: string): VoiceIntelligenceResult {
+  private fallbackResult(
+    transcript: string,
+    label?: string,
+  ): VoiceIntelligenceResult {
     return {
       title: label ?? 'Voice Feedback',
       summary: `Voice recording transcript (${transcript.length} characters). Manual review recommended.`,

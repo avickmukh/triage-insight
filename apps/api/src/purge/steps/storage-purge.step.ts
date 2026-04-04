@@ -36,7 +36,10 @@ export class StoragePurgeStep {
     this.bucket = this.configService.get<string>('AWS_S3_BUCKET', '');
     const region = this.configService.get<string>('AWS_S3_REGION', 'us-east-1');
     const accessKeyId = this.configService.get<string>('AWS_ACCESS_KEY_ID', '');
-    const secretAccessKey = this.configService.get<string>('AWS_SECRET_ACCESS_KEY', '');
+    const secretAccessKey = this.configService.get<string>(
+      'AWS_SECRET_ACCESS_KEY',
+      '',
+    );
 
     this.configured = !!(this.bucket && accessKeyId && secretAccessKey);
 

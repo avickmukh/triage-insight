@@ -16,14 +16,14 @@
  * AI assists decision-making — it does NOT auto-create roadmap items.
  *
  * RPS formula:
- *   RPS = 35% CIQ + 20% Velocity + 15% Sentiment + 15% Source Mix + 10% Recency + 5% Resurfacing
+ *   RPS = 33% CIQ + 19% Velocity + 14% Sentiment + 14% Source Mix + 10% Recency + 5% Confidence + 5% Resurfacing
  *
  * Suggestion type thresholds:
- *   ADD_TO_ROADMAP   → RPS ≥ 70 and not already on roadmap
- *   INCREASE_PRIORITY → RPS ≥ 55 and already on roadmap at lower priority
- *   DECREASE_PRIORITY → RPS < 30 and already on roadmap
- *   MONITOR          → RPS 30–69 (moderate signals, not yet strong enough to act on)
- *   NO_ACTION        → RPS < 30 and not on roadmap
+ *   ADD_TO_ROADMAP   → RPS ≥ 65 and not already on roadmap
+ *   INCREASE_PRIORITY → RPS ≥ 70 and already on roadmap at lower priority
+ *   DECREASE_PRIORITY → RPS < 25 and already on roadmap
+ *   MONITOR          → RPS 40–69 (moderate signals, not yet strong enough to act on)
+ *   NO_ACTION        → RPS < 40 and not on roadmap
  */
 
 import { useState } from 'react';
@@ -58,11 +58,11 @@ const SUGGESTION_META: Record<AiSuggestionType, {
   border: string;
   description: string;
 }> = {
-  ADD_TO_ROADMAP:     { icon: '🔥', label: 'Add to Roadmap',     bg: '#fff3cd', color: '#b8860b', border: '#f0e6b0', description: 'RPS ≥ 70 — strong signals, not yet on roadmap' },
-  INCREASE_PRIORITY:  { icon: '⬆',  label: 'Increase Priority',  bg: '#e8f7f7', color: '#20A4A4', border: '#b2e4e4', description: 'RPS ≥ 55 — signals growing, already on roadmap at lower priority' },
-  DECREASE_PRIORITY:  { icon: '⬇',  label: 'Decrease Priority',  bg: '#fdecea', color: '#c62828', border: '#f5c6cb', description: 'RPS < 30 — signals declining, already on roadmap' },
-  MONITOR:            { icon: '👁',  label: 'Monitor',            bg: '#f0f5ff', color: '#1a56db', border: '#c7d9fb', description: 'RPS 30–69 — moderate signals, not yet strong enough to act on' },
-  NO_ACTION:          { icon: '—',   label: 'No Action',          bg: '#f8f9fa', color: '#6C757D', border: '#dee2e6', description: 'RPS < 30 — weak signals, not on roadmap' },
+  ADD_TO_ROADMAP:     { icon: '🔥', label: 'Add to Roadmap',     bg: '#fff3cd', color: '#b8860b', border: '#f0e6b0', description: 'RPS ≥ 65 — strong signals, not yet on roadmap' },
+  INCREASE_PRIORITY:  { icon: '⬆',  label: 'Increase Priority',  bg: '#e8f7f7', color: '#20A4A4', border: '#b2e4e4', description: 'RPS ≥ 70 — signals growing, already on roadmap at lower priority' },
+  DECREASE_PRIORITY:  { icon: '⬇',  label: 'Decrease Priority',  bg: '#fdecea', color: '#c62828', border: '#f5c6cb', description: 'RPS < 25 — signals declining, already on roadmap' },
+  MONITOR:            { icon: '👁',  label: 'Monitor',            bg: '#f0f5ff', color: '#1a56db', border: '#c7d9fb', description: 'RPS 40–69 — moderate signals, not yet strong enough to act on' },
+  NO_ACTION:          { icon: '—',   label: 'No Action',          bg: '#f8f9fa', color: '#6C757D', border: '#dee2e6', description: 'RPS < 40 — weak signals, not on roadmap' },
 };
 
 const CONFIDENCE_META: Record<AiConfidenceLevel, { label: string; color: string; bg: string }> = {
@@ -230,20 +230,26 @@ function SuggestionCard({ item, orgSlug }: { item: AiRoadmapSuggestion; orgSlug:
       {/* ── Score breakdown (collapsible detail) ── */}
       <details style={{ marginBottom: '0.75rem' }}>
         <summary style={{ fontSize: '0.75rem', color: '#6C757D', cursor: 'pointer', userSelect: 'none', fontWeight: 500 }}>
-          ▸ Score breakdown
+          ▸ Score breakdown (RPS = CIQ×33% + Velocity×19% + Sentiment×14% + Source×14% + Recency×10% + Confidence×5% + Resurfacing×5%)
         </summary>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.375rem', marginTop: '0.5rem' }}>
-          {[
-            { label: 'CIQ Score',     value: item.breakdown.ciqScore,         weight: '35%' },
-            { label: 'Velocity',      value: item.breakdown.velocityScore,     weight: '20%' },
-            { label: 'Sentiment',     value: item.breakdown.sentimentScore,    weight: '15%' },
-            { label: 'Source Mix',    value: item.breakdown.sourceScore,       weight: '15%' },
-            { label: 'Recency',       value: item.breakdown.recencyScore,      weight: '10%' },
-            { label: 'Resurfacing',   value: item.breakdown.resurfacingBonus,  weight: '5%'  },
-          ].map(({ label, value, weight }) => (
-            <div key={label} style={{ background: '#f8f9fa', borderRadius: '0.375rem', padding: '0.375rem 0.5rem' }}>
-              <p style={{ margin: 0, fontSize: '0.65rem', color: '#6C757D', fontWeight: 500 }}>{label} <span style={{ color: '#adb5bd' }}>({weight})</span></p>
-              <p style={{ margin: '0.1rem 0 0', fontSize: '0.8125rem', fontWeight: 700, color: '#0a2540' }}>{value.toFixed(1)}</p>
+          {(item.breakdown.scoreBreakdown ?? [
+            { factor: 'CIQ Score',        rawScore: item.breakdown.ciqScore,        weight: 0.33, contribution: item.breakdown.ciqScore * 0.33 },
+            { factor: 'Signal Velocity',  rawScore: item.breakdown.velocityScore,   weight: 0.19, contribution: item.breakdown.velocityScore * 0.19 },
+            { factor: 'Sentiment',        rawScore: item.breakdown.sentimentScore,  weight: 0.14, contribution: item.breakdown.sentimentScore * 0.14 },
+            { factor: 'Source Coverage',  rawScore: item.breakdown.sourceScore,     weight: 0.14, contribution: item.breakdown.sourceScore * 0.14 },
+            { factor: 'Recency',          rawScore: item.breakdown.recencyScore,    weight: 0.10, contribution: item.breakdown.recencyScore * 0.10 },
+            { factor: 'Confidence',       rawScore: item.breakdown.confidenceScore ?? 0, weight: 0.05, contribution: (item.breakdown.confidenceScore ?? 0) * 0.05 },
+            { factor: 'Resurfacing Bonus',rawScore: item.breakdown.resurfacingBonus,weight: 0.05, contribution: item.breakdown.resurfacingBonus * 0.05 },
+          ]).map(({ factor, rawScore, weight, contribution }) => (
+            <div key={factor} style={{ background: '#f8f9fa', borderRadius: '0.375rem', padding: '0.375rem 0.5rem' }}>
+              <p style={{ margin: 0, fontSize: '0.65rem', color: '#6C757D', fontWeight: 500 }}>
+                {factor} <span style={{ color: '#adb5bd' }}>({Math.round(weight * 100)}%)</span>
+              </p>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.375rem', marginTop: '0.1rem' }}>
+                <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0a2540' }}>{rawScore.toFixed(1)}</span>
+                <span style={{ fontSize: '0.65rem', color: '#20A4A4', fontWeight: 600 }}>+{contribution.toFixed(1)} pts</span>
+              </div>
             </div>
           ))}
         </div>
@@ -427,10 +433,26 @@ export default function AiRoadmapSuggestionsPage() {
           {[1, 2, 3, 4, 5].map(i => <SkeletonCard key={i} />)}
         </div>
       ) : filtered.length === 0 ? (
-        <div style={{ ...CARD, textAlign: 'center', padding: '3rem', color: '#6C757D' }}>
-          {suggestions.length === 0
-            ? 'No active themes found. Add feedback to themes to generate suggestions.'
-            : `No themes in the "${SUGGESTION_META[activeTab].label}" category right now.`}
+        <div style={{ ...CARD, textAlign: 'center', padding: '3rem' }}>
+          {suggestions.length === 0 ? (
+            <div>
+              <p style={{ color: '#6C757D', marginBottom: '0.5rem', fontWeight: 600 }}>No active themes found.</p>
+              <p style={{ color: '#adb5bd', fontSize: '0.875rem' }}>Add feedback to themes and run the AI pipeline to generate suggestions.</p>
+            </div>
+          ) : (
+            <div>
+              <p style={{ color: '#6C757D', marginBottom: '0.5rem', fontWeight: 600 }}>
+                No themes in the &ldquo;{SUGGESTION_META[activeTab].label}&rdquo; category right now.
+              </p>
+              <p style={{ color: '#adb5bd', fontSize: '0.8125rem', margin: 0 }}>
+                {SUGGESTION_META[activeTab].description}.
+                {activeTab === 'ADD_TO_ROADMAP' && ' Themes need RPS ≥ 65 to appear here.'}
+                {activeTab === 'INCREASE_PRIORITY' && ' Themes on the roadmap need RPS ≥ 70 to appear here.'}
+                {activeTab === 'DECREASE_PRIORITY' && ' Roadmap themes need RPS < 25 to appear here.'}
+                {activeTab === 'MONITOR' && ' Themes with RPS 40–69 appear here.'}
+              </p>
+            </div>
+          )}
         </div>
       ) : (
         <div style={{ display: 'grid', gap: '0.875rem' }}>

@@ -29,10 +29,26 @@ export class ThemeLabelService {
 
   /** Generic labels to reject and retry. */
   private readonly GENERIC_LABELS = new Set([
-    'user feedback', 'product issue', 'bug report', 'feature request',
-    'customer complaint', 'general feedback', 'misc issue', 'other',
-    'unknown', 'untitled', 'new theme', 'theme', 'issue', 'problem',
-    'request', 'feedback', 'complaint', 'suggestion', 'error', 'failure',
+    'user feedback',
+    'product issue',
+    'bug report',
+    'feature request',
+    'customer complaint',
+    'general feedback',
+    'misc issue',
+    'other',
+    'unknown',
+    'untitled',
+    'new theme',
+    'theme',
+    'issue',
+    'problem',
+    'request',
+    'feedback',
+    'complaint',
+    'suggestion',
+    'error',
+    'failure',
   ]);
 
   constructor(private readonly prisma: PrismaService) {
@@ -80,15 +96,21 @@ export class ThemeLabelService {
     }
 
     const keywords = parseKeywords(theme.topKeywords);
-    const sampleTitles = theme.feedbacks.map((f) => f.feedback.title).filter(Boolean);
+    const sampleTitles = theme.feedbacks
+      .map((f) => f.feedback.title)
+      .filter(Boolean);
     const sampleDescriptions = theme.feedbacks
       .map((f) => f.feedback.description)
       .filter((d): d is string => !!d)
       .slice(0, 3);
 
     const label =
-      (await this.callLLM(theme.title, keywords, sampleTitles, sampleDescriptions)) ??
-      this.ngramHeuristicLabel(theme.title, keywords, sampleTitles);
+      (await this.callLLM(
+        theme.title,
+        keywords,
+        sampleTitles,
+        sampleDescriptions,
+      )) ?? this.ngramHeuristicLabel(theme.title, keywords, sampleTitles);
 
     await this.prisma.theme.update({
       where: { id: themeId },
@@ -105,13 +127,26 @@ export class ThemeLabelService {
    *
    * Processes PROVISIONAL, STABLE, and AI_GENERATED themes.
    */
-  async generateLabelsForWorkspace(workspaceId: string): Promise<{ processed: number }> {
-    const cutoff = new Date(Date.now() - this.LABEL_TTL_DAYS * 24 * 60 * 60 * 1000);
+  async generateLabelsForWorkspace(
+    workspaceId: string,
+  ): Promise<{ processed: number }> {
+    const cutoff = new Date(
+      Date.now() - this.LABEL_TTL_DAYS * 24 * 60 * 60 * 1000,
+    );
 
     const themes = await this.prisma.theme.findMany({
       where: {
         workspaceId,
-        status: { in: ['AI_GENERATED', 'PROVISIONAL', 'STABLE', 'VERIFIED', 'RESURFACED', 'REOPENED'] },
+        status: {
+          in: [
+            'AI_GENERATED',
+            'PROVISIONAL',
+            'STABLE',
+            'VERIFIED',
+            'RESURFACED',
+            'REOPENED',
+          ],
+        },
         OR: [
           { shortLabel: null },
           { shortLabelAt: null },
@@ -128,7 +163,9 @@ export class ThemeLabelService {
         await this.generateLabel(id);
         processed++;
       } catch (err) {
-        this.logger.warn(`[Label] Failed for theme ${id}: ${(err as Error).message}`);
+        this.logger.warn(
+          `[Label] Failed for theme ${id}: ${(err as Error).message}`,
+        );
       }
     }
 
@@ -162,7 +199,10 @@ export class ThemeLabelService {
       if (sampleDescriptions.length > 0) {
         evidenceLines.push(
           `Sample feedback excerpts:\n${sampleDescriptions
-            .map((d) => `  - "${d.slice(0, 80).trim()}${d.length > 80 ? '…' : ''}"`)  
+            .map(
+              (d) =>
+                `  - "${d.slice(0, 80).trim()}${d.length > 80 ? '…' : ''}"`,
+            )
             .join('\n')}`,
         );
       }
@@ -199,7 +239,9 @@ export class ThemeLabelService {
 
       // Reject generic labels
       if (!label || this.GENERIC_LABELS.has(label.toLowerCase())) {
-        this.logger.debug(`[Label] LLM returned generic label "${label}" — falling back`);
+        this.logger.debug(
+          `[Label] LLM returned generic label "${label}" — falling back`,
+        );
         return null;
       }
 
@@ -252,18 +294,81 @@ export class ThemeLabelService {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const NGRAM_STOP = new Set([
-  'a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by',
-  'from', 'is', 'are', 'was', 'were', 'be', 'been', 'not', 'no', 'this', 'that', 'it', 'its',
-  'i', 'we', 'you', 'he', 'she', 'they', 'my', 'our', 'your', 'his', 'her', 'their',
-  'get', 'got', 'please', 'need', 'want', 'use', 'using', 'used', 'make', 'made',
-  'cant', 'dont', 'doesnt', 'isnt', 'wasnt', 'wont',
+  'a',
+  'an',
+  'the',
+  'and',
+  'or',
+  'but',
+  'in',
+  'on',
+  'at',
+  'to',
+  'for',
+  'of',
+  'with',
+  'by',
+  'from',
+  'is',
+  'are',
+  'was',
+  'were',
+  'be',
+  'been',
+  'not',
+  'no',
+  'this',
+  'that',
+  'it',
+  'its',
+  'i',
+  'we',
+  'you',
+  'he',
+  'she',
+  'they',
+  'my',
+  'our',
+  'your',
+  'his',
+  'her',
+  'their',
+  'get',
+  'got',
+  'please',
+  'need',
+  'want',
+  'use',
+  'using',
+  'used',
+  'make',
+  'made',
+  'cant',
+  'dont',
+  'doesnt',
+  'isnt',
+  'wasnt',
+  'wont',
 ]);
 
 const GENERIC_NGRAMS = new Set([
-  'user feedback', 'product issue', 'bug report', 'feature request',
-  'customer complaint', 'general feedback', 'misc issue', 'other issue',
-  'app issue', 'app problem', 'app error', 'app bug', 'app crash',
-  'not working', 'does not work', 'doesnt work', 'not loading',
+  'user feedback',
+  'product issue',
+  'bug report',
+  'feature request',
+  'customer complaint',
+  'general feedback',
+  'misc issue',
+  'other issue',
+  'app issue',
+  'app problem',
+  'app error',
+  'app bug',
+  'app crash',
+  'not working',
+  'does not work',
+  'doesnt work',
+  'not loading',
 ]);
 
 function isGenericNgram(ngram: string): boolean {
@@ -275,7 +380,11 @@ function isGenericNgram(ngram: string): boolean {
  * Returns n-grams sorted by frequency (descending), filtered to exclude
  * n-grams that start or end with stop words.
  */
-function extractNgrams(sentences: string[], minN: number, maxN: number): string[] {
+function extractNgrams(
+  sentences: string[],
+  minN: number,
+  maxN: number,
+): string[] {
   const freq: Record<string, number> = {};
   for (const sentence of sentences) {
     const tokens = sentence
@@ -286,7 +395,8 @@ function extractNgrams(sentences: string[], minN: number, maxN: number): string[
     for (let n = minN; n <= maxN; n++) {
       for (let i = 0; i <= tokens.length - n; i++) {
         const gram = tokens.slice(i, i + n);
-        if (NGRAM_STOP.has(gram[0]) || NGRAM_STOP.has(gram[gram.length - 1])) continue;
+        if (NGRAM_STOP.has(gram[0]) || NGRAM_STOP.has(gram[gram.length - 1]))
+          continue;
         const key = gram.join(' ');
         freq[key] = (freq[key] ?? 0) + 1;
       }

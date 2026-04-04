@@ -27,7 +27,12 @@
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { AccountPriority, DealStage, DealStatus, ThemeStatus } from '@prisma/client';
+import {
+  AccountPriority,
+  DealStage,
+  DealStatus,
+  ThemeStatus,
+} from '@prisma/client';
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
@@ -48,18 +53,18 @@ function clamp100(v: number): number {
 }
 
 const ACCOUNT_PRIORITY_MAP: Record<AccountPriority, number> = {
-  [AccountPriority.LOW]:      1,
-  [AccountPriority.MEDIUM]:   2,
-  [AccountPriority.HIGH]:     3,
+  [AccountPriority.LOW]: 1,
+  [AccountPriority.MEDIUM]: 2,
+  [AccountPriority.HIGH]: 3,
   [AccountPriority.CRITICAL]: 4,
 };
 
 const DEAL_STAGE_WEIGHT: Record<DealStage, number> = {
   [DealStage.PROSPECTING]: 0.1,
-  [DealStage.QUALIFYING]:  0.3,
-  [DealStage.PROPOSAL]:    0.6,
+  [DealStage.QUALIFYING]: 0.3,
+  [DealStage.PROPOSAL]: 0.6,
   [DealStage.NEGOTIATION]: 0.8,
-  [DealStage.CLOSED_WON]:  1.0,
+  [DealStage.CLOSED_WON]: 1.0,
   [DealStage.CLOSED_LOST]: 0.0,
 };
 
@@ -150,7 +155,14 @@ export interface DealRankingItem {
 }
 
 export interface StrategicSignal {
-  type: 'theme' | 'feedback' | 'deal' | 'customer' | 'voice' | 'survey' | 'support';
+  type:
+    | 'theme'
+    | 'feedback'
+    | 'deal'
+    | 'customer'
+    | 'voice'
+    | 'survey'
+    | 'support';
   entityId: string;
   entityTitle: string;
   signal: string;
@@ -160,18 +172,35 @@ export interface StrategicSignal {
 }
 
 export interface StrategicSignalsOutput {
-  topThemes: Array<{ themeId: string; title: string; ciqScore: number; roadmapLinked: boolean }>;
+  topThemes: Array<{
+    themeId: string;
+    title: string;
+    ciqScore: number;
+    roadmapLinked: boolean;
+  }>;
   roadmapRecommendations: Array<{
     themeId: string;
     title: string;
     ciqScore: number;
     currentStatus: string | null;
-    recommendation: 'promote_to_planned' | 'promote_to_committed' | 'already_committed' | 'monitor';
+    recommendation:
+      | 'promote_to_planned'
+      | 'promote_to_committed'
+      | 'already_committed'
+      | 'monitor';
     rationale: string;
   }>;
   signals: StrategicSignal[];
-  voiceSentimentSummary: { avgSentiment: number; urgentCount: number; complaintCount: number };
-  surveyDemandSummary: { avgCiqWeight: number; validationCount: number; featureValidationCount: number };
+  voiceSentimentSummary: {
+    avgSentiment: number;
+    urgentCount: number;
+    complaintCount: number;
+  };
+  surveyDemandSummary: {
+    avgCiqWeight: number;
+    validationCount: number;
+    featureValidationCount: number;
+  };
   supportSpikeSummary: { spikeCount: number; negativeSentimentCount: number };
 }
 
@@ -221,7 +250,8 @@ export class CiqEngineService {
 
     const ranked: FeatureRankingItem[] = feedbacks.map((fb) => {
       const arrValue = fb.customer?.arrValue ?? 0;
-      const priorityRaw = fb.customer?.accountPriority ?? AccountPriority.MEDIUM;
+      const priorityRaw =
+        fb.customer?.accountPriority ?? AccountPriority.MEDIUM;
       const priorityNum = ACCOUNT_PRIORITY_MAP[priorityRaw];
       const sentiment = fb.sentiment ?? 0;
       const voteCount = fb.votes.length;
@@ -229,22 +259,58 @@ export class CiqEngineService {
       const themeCount = fb.themes.length;
       const isRecent = fb.createdAt > thirtyDaysAgo;
 
-      const normArr      = logNorm(arrValue, 7);
+      const normArr = logNorm(arrValue, 7);
       const normPriority = (priorityNum / 4) * 100;
-      const normSentimentUrgency = sentiment < 0 ? Math.abs(sentiment) * 100 : 0;
-      const normVotes    = countNorm(voteCount, 50);
-      const normCluster  = countNorm(duplicateClusterSize, 10);
-      const normTheme    = themeCount > 0 ? 15 : 0;
-      const normRecency  = isRecent ? 10 : 0;
+      const normSentimentUrgency =
+        sentiment < 0 ? Math.abs(sentiment) * 100 : 0;
+      const normVotes = countNorm(voteCount, 50);
+      const normCluster = countNorm(duplicateClusterSize, 10);
+      const normTheme = themeCount > 0 ? 15 : 0;
+      const normRecency = isRecent ? 10 : 0;
 
       const breakdown: Record<string, CiqScoreBreakdown> = {
-        customerArr:       { value: normArr,              weight: 0.30, contribution: normArr * 0.30,              label: 'Customer ARR' },
-        accountPriority:   { value: normPriority,         weight: 0.20, contribution: normPriority * 0.20,         label: 'Account priority' },
-        sentimentUrgency:  { value: normSentimentUrgency, weight: 0.15, contribution: normSentimentUrgency * 0.15, label: 'Sentiment urgency' },
-        voteSignal:        { value: normVotes,            weight: 0.15, contribution: normVotes * 0.15,            label: 'Portal votes' },
-        duplicateCluster:  { value: normCluster,          weight: 0.10, contribution: normCluster * 0.10,          label: 'Duplicate cluster size' },
-        themeSignal:       { value: normTheme,            weight: 0.05, contribution: normTheme * 0.05,            label: 'Theme cluster signal' },
-        recencySignal:     { value: normRecency,          weight: 0.05, contribution: normRecency * 0.05,          label: 'Recent activity (30d)' },
+        customerArr: {
+          value: normArr,
+          weight: 0.3,
+          contribution: normArr * 0.3,
+          label: 'Customer ARR',
+        },
+        accountPriority: {
+          value: normPriority,
+          weight: 0.2,
+          contribution: normPriority * 0.2,
+          label: 'Account priority',
+        },
+        sentimentUrgency: {
+          value: normSentimentUrgency,
+          weight: 0.15,
+          contribution: normSentimentUrgency * 0.15,
+          label: 'Sentiment urgency',
+        },
+        voteSignal: {
+          value: normVotes,
+          weight: 0.15,
+          contribution: normVotes * 0.15,
+          label: 'Portal votes',
+        },
+        duplicateCluster: {
+          value: normCluster,
+          weight: 0.1,
+          contribution: normCluster * 0.1,
+          label: 'Duplicate cluster size',
+        },
+        themeSignal: {
+          value: normTheme,
+          weight: 0.05,
+          contribution: normTheme * 0.05,
+          label: 'Theme cluster signal',
+        },
+        recencySignal: {
+          value: normRecency,
+          weight: 0.05,
+          contribution: normRecency * 0.05,
+          label: 'Recent activity (30d)',
+        },
       };
 
       const ciqScore = clamp100(
@@ -252,23 +318,21 @@ export class CiqEngineService {
       );
 
       return {
-        feedbackId:   fb.id,
-        title:        fb.title,
-        ciqScore:     parseFloat(ciqScore.toFixed(2)),
-        impactScore:  fb.impactScore,
+        feedbackId: fb.id,
+        title: fb.title,
+        ciqScore: parseFloat(ciqScore.toFixed(2)),
+        impactScore: fb.impactScore,
         voteCount,
-        sentiment:    fb.sentiment,
+        sentiment: fb.sentiment,
         customerName: fb.customer?.name ?? null,
-        customerArr:  arrValue,
+        customerArr: arrValue,
         themeCount,
         breakdown,
       };
     });
 
     // Sort by live ciqScore and return top N
-    return ranked
-      .sort((a, b) => b.ciqScore - a.ciqScore)
-      .slice(0, limit);
+    return ranked.sort((a, b) => b.ciqScore - a.ciqScore).slice(0, limit);
   }
 
   // ─── 2. Theme Ranking ──────────────────────────────────────────────────────
@@ -294,11 +358,11 @@ export class CiqEngineService {
         lastScoredAt: true,
         signalBreakdown: true,
         // Unified source counts persisted by CiqService.persistThemeScore()
-        feedbackCount:    true,
-        voiceCount:       true,
-        supportCount:     true,
+        feedbackCount: true,
+        voiceCount: true,
+        supportCount: true,
         totalSignalCount: true,
-        aiConfidence:       true,
+        aiConfidence: true,
         autoMergeCandidate: true,
         feedbacks: {
           select: {
@@ -341,13 +405,16 @@ export class CiqEngineService {
       );
       const uniqueCustomerCount = uniqueCustomerIds.size;
       const arrValue = activeFeedback.reduce(
-        (s, tf) => s + (tf.feedback.customer?.arrValue ?? 0), 0,
+        (s, tf) => s + (tf.feedback.customer?.arrValue ?? 0),
+        0,
       );
 
       // ── Deal signals ──────────────────────────────────────────────────────
       const dealInfluenceValue = theme.dealLinks.reduce((s, dl) => {
         if (dl.deal.status === DealStatus.LOST) return s;
-        return s + dl.deal.annualValue * (DEAL_STAGE_WEIGHT[dl.deal.stage] ?? 0);
+        return (
+          s + dl.deal.annualValue * (DEAL_STAGE_WEIGHT[dl.deal.stage] ?? 0)
+        );
       }, 0);
 
       // ── Voice signals (from feedback metadata.intelligence) ───────────────
@@ -357,20 +424,23 @@ export class CiqEngineService {
         const meta = tf.feedback.metadata as Record<string, unknown> | null;
         const intel = meta?.intelligence as Record<string, unknown> | null;
         if (intel) {
-          const urgency = typeof intel.urgencySignal === 'number' ? intel.urgencySignal : 0;
-          const churn   = typeof intel.churnSignal   === 'number' ? intel.churnSignal   : 0;
+          const urgency =
+            typeof intel.urgencySignal === 'number' ? intel.urgencySignal : 0;
+          const churn =
+            typeof intel.churnSignal === 'number' ? intel.churnSignal : 0;
           voiceUrgencySum += urgency;
           if (urgency > 0.5 || churn > 0.5) voiceComplaintCount++;
         }
       }
       const voiceSignalScore = clamp100(
-        countNorm(voiceComplaintCount, 5) * 0.5 + logNorm(voiceUrgencySum, 2) * 0.5,
+        countNorm(voiceComplaintCount, 5) * 0.5 +
+          logNorm(voiceUrgencySum, 2) * 0.5,
       );
 
       // ── Survey signals (SurveyResponse.ciqWeight for linked surveys) ──────
       // We approximate via CustomerSignal rows with signalType containing 'survey'
-      const surveySignals = theme.customerSignals.filter(
-        (s) => s.signalType.toLowerCase().includes('survey'),
+      const surveySignals = theme.customerSignals.filter((s) =>
+        s.signalType.toLowerCase().includes('survey'),
       );
       const surveySignalScore = clamp100(
         surveySignals.reduce((s, sig) => s + sig.strength, 0) * 20,
@@ -378,27 +448,63 @@ export class CiqEngineService {
 
       // ── Support signals ───────────────────────────────────────────────────
       const supportSignals = theme.customerSignals.filter(
-        (s) => s.signalType.toLowerCase().includes('support') ||
-               s.signalType.toLowerCase().includes('spike'),
+        (s) =>
+          s.signalType.toLowerCase().includes('support') ||
+          s.signalType.toLowerCase().includes('spike'),
       );
       const supportSignalScore = clamp100(
         supportSignals.reduce((s, sig) => s + sig.strength, 0) * 20,
       );
 
       // ── Composite CIQ score ───────────────────────────────────────────────
-      const normFreq       = countNorm(feedbackCount, 50);
-      const normCustomers  = countNorm(uniqueCustomerCount, 20);
-      const normArr        = logNorm(arrValue, 7);
-      const normDeal       = logNorm(dealInfluenceValue, 7);
+      const normFreq = countNorm(feedbackCount, 50);
+      const normCustomers = countNorm(uniqueCustomerCount, 20);
+      const normArr = logNorm(arrValue, 7);
+      const normDeal = logNorm(dealInfluenceValue, 7);
 
       const breakdown: Record<string, CiqScoreBreakdown> = {
-        feedbackFrequency: { value: normFreq,          weight: 0.20, contribution: normFreq * 0.20,          label: 'Feedback frequency' },
-        uniqueCustomers:   { value: normCustomers,     weight: 0.15, contribution: normCustomers * 0.15,     label: 'Unique customers' },
-        arrRevenue:        { value: normArr,            weight: 0.25, contribution: normArr * 0.25,            label: 'Customer ARR' },
-        dealInfluence:     { value: normDeal,           weight: 0.20, contribution: normDeal * 0.20,           label: 'Deal pipeline influence' },
-        voiceSignal:       { value: voiceSignalScore,   weight: 0.10, contribution: voiceSignalScore * 0.10,   label: 'Voice complaint / urgency' },
-        surveySignal:      { value: surveySignalScore,  weight: 0.05, contribution: surveySignalScore * 0.05,  label: 'Survey demand validation' },
-        supportSignal:     { value: supportSignalScore, weight: 0.05, contribution: supportSignalScore * 0.05, label: 'Support spike signal' },
+        feedbackFrequency: {
+          value: normFreq,
+          weight: 0.2,
+          contribution: normFreq * 0.2,
+          label: 'Feedback frequency',
+        },
+        uniqueCustomers: {
+          value: normCustomers,
+          weight: 0.15,
+          contribution: normCustomers * 0.15,
+          label: 'Unique customers',
+        },
+        arrRevenue: {
+          value: normArr,
+          weight: 0.25,
+          contribution: normArr * 0.25,
+          label: 'Customer ARR',
+        },
+        dealInfluence: {
+          value: normDeal,
+          weight: 0.2,
+          contribution: normDeal * 0.2,
+          label: 'Deal pipeline influence',
+        },
+        voiceSignal: {
+          value: voiceSignalScore,
+          weight: 0.1,
+          contribution: voiceSignalScore * 0.1,
+          label: 'Voice complaint / urgency',
+        },
+        surveySignal: {
+          value: surveySignalScore,
+          weight: 0.05,
+          contribution: surveySignalScore * 0.05,
+          label: 'Survey demand validation',
+        },
+        supportSignal: {
+          value: supportSignalScore,
+          weight: 0.05,
+          contribution: supportSignalScore * 0.05,
+          label: 'Support spike signal',
+        },
       };
 
       const ciqScore = clamp100(
@@ -408,47 +514,53 @@ export class CiqEngineService {
       // Use persisted counts from Theme row when available (set by unified CIQ scorer),
       // otherwise fall back to live-computed counts from the feedback join.
       const persistedFeedbackCount = theme.feedbackCount ?? feedbackCount;
-      const persistedVoiceCount    = theme.voiceCount    ?? 0;
-      const persistedSupportCount  = theme.supportCount  ?? 0;
+      const persistedVoiceCount = theme.voiceCount ?? 0;
+      const persistedSupportCount = theme.supportCount ?? 0;
       // Use live feedbackCount (from join) as primary fallback — persisted totalSignalCount may be null
       // before CIQ scoring has run. This ensures themes always appear in the ranking.
-      const liveSignalCount = feedbackCount + (theme.voiceCount ?? 0) + (theme.supportCount ?? 0);
-      const persistedTotalSignals  = theme.totalSignalCount ?? liveSignalCount;
+      const liveSignalCount =
+        feedbackCount + (theme.voiceCount ?? 0) + (theme.supportCount ?? 0);
+      const persistedTotalSignals = theme.totalSignalCount ?? liveSignalCount;
 
       // ── Near-duplicate penalty (20% CIQ reduction for merge candidates) ────
       const isNearDuplicate = theme.autoMergeCandidate ?? false;
       const effectiveCiqScore = isNearDuplicate
-        ? parseFloat((ciqScore * 0.80).toFixed(2))
+        ? parseFloat((ciqScore * 0.8).toFixed(2))
         : parseFloat(ciqScore.toFixed(2));
 
       return {
-        themeId:            theme.id,
-        title:              theme.title,
-        status:             theme.status,
-        ciqScore:           effectiveCiqScore,
-        priorityScore:      theme.priorityScore,
-        revenueInfluence:   theme.revenueInfluence ?? 0,
-        feedbackCount:      persistedFeedbackCount,
+        themeId: theme.id,
+        title: theme.title,
+        status: theme.status,
+        ciqScore: effectiveCiqScore,
+        priorityScore: theme.priorityScore,
+        revenueInfluence: theme.revenueInfluence ?? 0,
+        feedbackCount: persistedFeedbackCount,
         uniqueCustomerCount,
         dealInfluenceValue,
-        voiceSignalScore:   parseFloat(voiceSignalScore.toFixed(2)),
-        surveySignalScore:  parseFloat(surveySignalScore.toFixed(2)),
+        voiceSignalScore: parseFloat(voiceSignalScore.toFixed(2)),
+        surveySignalScore: parseFloat(surveySignalScore.toFixed(2)),
         supportSignalScore: parseFloat(supportSignalScore.toFixed(2)),
-        voiceCount:         persistedVoiceCount,
-        supportCount:       persistedSupportCount,
-        totalSignalCount:   persistedTotalSignals,
-        lastScoredAt:       theme.lastScoredAt,
-        aiConfidence:       theme.aiConfidence ?? null,
+        voiceCount: persistedVoiceCount,
+        supportCount: persistedSupportCount,
+        totalSignalCount: persistedTotalSignals,
+        lastScoredAt: theme.lastScoredAt,
+        aiConfidence: theme.aiConfidence ?? null,
         isNearDuplicate,
         // drs / signalLabels / eligibility are not computed here (CIQ engine is
         // the live-scoring path; DRS is computed by ThemeRankingEngine).
         // Provide sensible defaults so the interface is satisfied.
-        drs:          effectiveCiqScore,
+        drs: effectiveCiqScore,
         signalLabels: isNearDuplicate ? ['Near-duplicate'] : [],
-        eligibility:  (persistedTotalSignals < 1 ? 'INELIGIBLE' : isNearDuplicate ? 'PENALISED' : 'ELIGIBLE') as 'ELIGIBLE' | 'PENALISED' | 'INELIGIBLE',
+        eligibility:
+          persistedTotalSignals < 1
+            ? 'INELIGIBLE'
+            : isNearDuplicate
+              ? 'PENALISED'
+              : 'ELIGIBLE',
         breakdown,
       };
-    })
+    });
     // All non-archived themes are returned regardless of signal count.
     // Themes with 0 signals are ranked last (priorityScore=null, ciqScore=0).
     // This ensures the ranking page is never empty when themes exist.
@@ -503,21 +615,49 @@ export class CiqEngineService {
 
       // Segment multiplier
       const segmentMultiplier =
-        c.segment === 'ENTERPRISE' ? 1.3 :
-        c.segment === 'MID_MARKET' ? 1.1 : 1.0;
+        c.segment === 'ENTERPRISE'
+          ? 1.3
+          : c.segment === 'MID_MARKET'
+            ? 1.1
+            : 1.0;
 
-      const normArr      = logNorm(arrValue, 7) * segmentMultiplier;
+      const normArr = logNorm(arrValue, 7) * segmentMultiplier;
       const normPriority = (priorityNum / 4) * 100;
       const normFeedback = countNorm(feedbackCount, 20);
-      const normDeals    = countNorm(dealCount, 5);
-      const normChurn    = churnRisk; // already 0–100
+      const normDeals = countNorm(dealCount, 5);
+      const normChurn = churnRisk; // already 0–100
 
       const breakdown: Record<string, CiqScoreBreakdown> = {
-        customerArr:       { value: clamp100(normArr),  weight: 0.35, contribution: clamp100(normArr) * 0.35,  label: 'ARR × segment weight' },
-        accountPriority:   { value: normPriority,       weight: 0.20, contribution: normPriority * 0.20,       label: 'Account priority' },
-        feedbackVolume:    { value: normFeedback,       weight: 0.20, contribution: normFeedback * 0.20,       label: 'Feedback volume' },
-        dealPipeline:      { value: normDeals,          weight: 0.15, contribution: normDeals * 0.15,          label: 'Deal pipeline activity' },
-        churnRiskPenalty:  { value: normChurn,          weight: 0.10, contribution: normChurn * 0.10,          label: 'Churn risk signal' },
+        customerArr: {
+          value: clamp100(normArr),
+          weight: 0.35,
+          contribution: clamp100(normArr) * 0.35,
+          label: 'ARR × segment weight',
+        },
+        accountPriority: {
+          value: normPriority,
+          weight: 0.2,
+          contribution: normPriority * 0.2,
+          label: 'Account priority',
+        },
+        feedbackVolume: {
+          value: normFeedback,
+          weight: 0.2,
+          contribution: normFeedback * 0.2,
+          label: 'Feedback volume',
+        },
+        dealPipeline: {
+          value: normDeals,
+          weight: 0.15,
+          contribution: normDeals * 0.15,
+          label: 'Deal pipeline activity',
+        },
+        churnRiskPenalty: {
+          value: normChurn,
+          weight: 0.1,
+          contribution: normChurn * 0.1,
+          label: 'Churn risk signal',
+        },
       };
 
       const ciqScore = clamp100(
@@ -525,26 +665,24 @@ export class CiqEngineService {
       );
 
       return {
-        customerId:           c.id,
-        name:                 c.name,
-        companyName:          c.companyName,
-        segment:              c.segment,
+        customerId: c.id,
+        name: c.name,
+        companyName: c.companyName,
+        segment: c.segment,
         arrValue,
-        ciqScore:             parseFloat(ciqScore.toFixed(2)),
-        ciqInfluenceScore:    c.ciqInfluenceScore ?? 0,
-        featureDemandScore:   c.featureDemandScore ?? 0,
+        ciqScore: parseFloat(ciqScore.toFixed(2)),
+        ciqInfluenceScore: c.ciqInfluenceScore ?? 0,
+        featureDemandScore: c.featureDemandScore ?? 0,
         supportIntensityScore: c.supportIntensityScore ?? 0,
-        healthScore:          c.healthScore ?? 0,
+        healthScore: c.healthScore ?? 0,
         dealCount,
         feedbackCount,
-        churnRisk:            churnRisk,
+        churnRisk: churnRisk,
         breakdown,
       };
     });
 
-    return ranked
-      .sort((a, b) => b.ciqScore - a.ciqScore)
-      .slice(0, limit);
+    return ranked.sort((a, b) => b.ciqScore - a.ciqScore).slice(0, limit);
   }
 
   // ─── 4. Strategic Signals ─────────────────────────────────────────────────
@@ -557,90 +695,93 @@ export class CiqEngineService {
    *   - Support spike summary
    *   - Composite signal list for the intelligence feed
    */
-  async getStrategicSignals(workspaceId: string): Promise<StrategicSignalsOutput> {
-    const [themes, surveyResponses, supportSpikes, customerSignals] = await Promise.all([
-      // Top 20 non-archived themes with roadmap linkage (AI_GENERATED + VERIFIED)
-      this.prisma.theme.findMany({
-        where: { workspaceId, status: { not: ThemeStatus.ARCHIVED } },
-        select: {
-          id: true,
-          title: true,
-          priorityScore: true,
-          ciqScore: true,
-          pinned: true,
-          roadmapItems: {
-            select: { id: true, status: true },
-            take: 1,
-            orderBy: { createdAt: 'desc' },
-          },
-          feedbacks: {
-            select: {
-              feedback: {
-                select: {
-                  metadata: true,
-                  sentiment: true,
-                  ciqScore: true,
-                  createdAt: true,
+  async getStrategicSignals(
+    workspaceId: string,
+  ): Promise<StrategicSignalsOutput> {
+    const [themes, surveyResponses, supportSpikes, customerSignals] =
+      await Promise.all([
+        // Top 20 non-archived themes with roadmap linkage (AI_GENERATED + VERIFIED)
+        this.prisma.theme.findMany({
+          where: { workspaceId, status: { not: ThemeStatus.ARCHIVED } },
+          select: {
+            id: true,
+            title: true,
+            priorityScore: true,
+            ciqScore: true,
+            pinned: true,
+            roadmapItems: {
+              select: { id: true, status: true },
+              take: 1,
+              orderBy: { createdAt: 'desc' },
+            },
+            feedbacks: {
+              select: {
+                feedback: {
+                  select: {
+                    metadata: true,
+                    sentiment: true,
+                    ciqScore: true,
+                    createdAt: true,
+                  },
                 },
               },
             },
           },
-        },
-        orderBy: [
-          { priorityScore: { sort: 'desc', nulls: 'last' } },
-          { pinned: 'desc' },
-        ],
-        take: 20,
-      }),
+          orderBy: [
+            { priorityScore: { sort: 'desc', nulls: 'last' } },
+            { pinned: 'desc' },
+          ],
+          take: 20,
+        }),
 
-      // Survey responses with ciqWeight for demand validation
-      this.prisma.surveyResponse.findMany({
-        where: { workspaceId, ciqWeight: { not: null } },
-        select: {
-          id: true,
-          ciqWeight: true,
-          sentimentScore: true,
-          submittedAt: true,
-          survey: { select: { title: true, surveyType: true } },
-        },
-        orderBy: { submittedAt: 'desc' },
-        take: 100,
-      }),
+        // Survey responses with ciqWeight for demand validation
+        this.prisma.surveyResponse.findMany({
+          where: { workspaceId, ciqWeight: { not: null } },
+          select: {
+            id: true,
+            ciqWeight: true,
+            sentimentScore: true,
+            submittedAt: true,
+            survey: { select: { title: true, surveyType: true } },
+          },
+          orderBy: { submittedAt: 'desc' },
+          take: 100,
+        }),
 
-      // Support spike events
-      this.prisma.issueSpikeEvent.findMany({
-        where: { workspaceId },
-        select: {
-          id: true,
-          windowStart: true,
-          ticketCount: true,
-          clusterId: true,
-        },
-        orderBy: { windowStart: 'desc' },
-        take: 20,
-      }),
+        // Support spike events
+        this.prisma.issueSpikeEvent.findMany({
+          where: { workspaceId },
+          select: {
+            id: true,
+            windowStart: true,
+            ticketCount: true,
+            clusterId: true,
+          },
+          orderBy: { windowStart: 'desc' },
+          take: 20,
+        }),
 
-      // Customer signals for voice/support types
-      this.prisma.customerSignal.findMany({
-        where: { workspaceId },
-        select: {
-          id: true,
-          signalType: true,
-          strength: true,
-          createdAt: true,
-          customer: { select: { name: true } },
-          theme: { select: { title: true } },
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 50,
-      }),
-    ]);
+        // Customer signals for voice/support types
+        this.prisma.customerSignal.findMany({
+          where: { workspaceId },
+          select: {
+            id: true,
+            signalType: true,
+            strength: true,
+            createdAt: true,
+            customer: { select: { name: true } },
+            theme: { select: { title: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 50,
+        }),
+      ]);
 
     // ── Top themes ────────────────────────────────────────────────────────────
     const topThemes = themes.slice(0, 10).map((t) => ({
-      themeId:       t.id,
-      title:         t.title,
-      ciqScore:      parseFloat((t.ciqScore ?? t.priorityScore ?? 0).toFixed(2)),
+      themeId: t.id,
+      title: t.title,
+      ciqScore: parseFloat((t.ciqScore ?? t.priorityScore ?? 0).toFixed(2)),
       roadmapLinked: t.roadmapItems.length > 0,
     }));
 
@@ -653,7 +794,10 @@ export class CiqEngineService {
       let rationale: string;
 
       if (score >= 70) {
-        if (latestRoadmapStatus === 'COMMITTED' || latestRoadmapStatus === 'SHIPPED') {
+        if (
+          latestRoadmapStatus === 'COMMITTED' ||
+          latestRoadmapStatus === 'SHIPPED'
+        ) {
           recommendation = 'already_committed';
           rationale = `High CIQ score (${score.toFixed(0)}) — already committed or shipped.`;
         } else {
@@ -669,10 +813,10 @@ export class CiqEngineService {
       }
 
       return {
-        themeId:         t.id,
-        title:           t.title,
-        ciqScore:        parseFloat(score.toFixed(2)),
-        currentStatus:   latestRoadmapStatus,
+        themeId: t.id,
+        title: t.title,
+        ciqScore: parseFloat(score.toFixed(2)),
+        currentStatus: latestRoadmapStatus,
         recommendation,
         rationale,
       };
@@ -689,34 +833,45 @@ export class CiqEngineService {
           const meta = tf.feedback.metadata as Record<string, unknown>;
           const intel = meta.intelligence as Record<string, unknown>;
           return {
-            sentiment:    tf.feedback.sentiment ?? 0,
-            urgency:      typeof intel.urgencySignal === 'number' ? intel.urgencySignal : 0,
-            churn:        typeof intel.churnSignal   === 'number' ? intel.churnSignal   : 0,
-            createdAt:    tf.feedback.createdAt,
+            sentiment: tf.feedback.sentiment ?? 0,
+            urgency:
+              typeof intel.urgencySignal === 'number' ? intel.urgencySignal : 0,
+            churn:
+              typeof intel.churnSignal === 'number' ? intel.churnSignal : 0,
+            createdAt: tf.feedback.createdAt,
           };
         }),
     );
 
-    const avgSentiment = voiceFeedbacks.length > 0
-      ? voiceFeedbacks.reduce((s, v) => s + v.sentiment, 0) / voiceFeedbacks.length
-      : 0;
-    const urgentCount    = voiceFeedbacks.filter((v) => v.urgency > 0.5).length;
-    const complaintCount = voiceFeedbacks.filter((v) => v.churn > 0.5 || v.urgency > 0.7).length;
+    const avgSentiment =
+      voiceFeedbacks.length > 0
+        ? voiceFeedbacks.reduce((s, v) => s + v.sentiment, 0) /
+          voiceFeedbacks.length
+        : 0;
+    const urgentCount = voiceFeedbacks.filter((v) => v.urgency > 0.5).length;
+    const complaintCount = voiceFeedbacks.filter(
+      (v) => v.churn > 0.5 || v.urgency > 0.7,
+    ).length;
 
     // ── Survey demand summary ─────────────────────────────────────────────────
-    const avgCiqWeight = surveyResponses.length > 0
-      ? surveyResponses.reduce((s, r) => s + (r.ciqWeight ?? 0), 0) / surveyResponses.length
-      : 0;
+    const avgCiqWeight =
+      surveyResponses.length > 0
+        ? surveyResponses.reduce((s, r) => s + (r.ciqWeight ?? 0), 0) /
+          surveyResponses.length
+        : 0;
     const validationCount = surveyResponses.length;
     const featureValidationCount = surveyResponses.filter(
-      (r) => r.survey.surveyType === 'FEATURE_VALIDATION' || r.survey.surveyType === 'ROADMAP_VALIDATION',
+      (r) =>
+        r.survey.surveyType === 'FEATURE_VALIDATION' ||
+        r.survey.surveyType === 'ROADMAP_VALIDATION',
     ).length;
 
     // ── Support spike summary ─────────────────────────────────────────────────
     const spikeCount = supportSpikes.length;
     const negativeSentimentCount = customerSignals.filter(
-      (s) => s.signalType.toLowerCase().includes('negative') ||
-             s.signalType.toLowerCase().includes('churn'),
+      (s) =>
+        s.signalType.toLowerCase().includes('negative') ||
+        s.signalType.toLowerCase().includes('churn'),
     ).length;
 
     // ── Signal feed ───────────────────────────────────────────────────────────
@@ -728,24 +883,28 @@ export class CiqEngineService {
       const feedbackCount = t.feedbacks?.length ?? 0;
       if (score >= 30 && t.roadmapItems.length === 0) {
         signals.push({
-          type:         'theme',
-          entityId:     t.id,
-          entityTitle:  t.title,
-          signal:       'high_ciq_no_roadmap',
-          strength:     score / 100,
-          detail:       `Theme "${t.title}" has CIQ score ${score.toFixed(0)} but no roadmap item.`,
-          detectedAt:   new Date(),
+          type: 'theme',
+          entityId: t.id,
+          entityTitle: t.title,
+          signal: 'high_ciq_no_roadmap',
+          strength: score / 100,
+          detail: `Theme "${t.title}" has CIQ score ${score.toFixed(0)} but no roadmap item.`,
+          detectedAt: new Date(),
         });
-      } else if (score === 0 && feedbackCount >= 1 && t.roadmapItems.length === 0) {
+      } else if (
+        score === 0 &&
+        feedbackCount >= 1 &&
+        t.roadmapItems.length === 0
+      ) {
         // Theme has feedback but hasn't been CIQ-scored yet — surface as pending signal
         signals.push({
-          type:         'feedback',
-          entityId:     t.id,
-          entityTitle:  t.title,
-          signal:       'pending_ciq_scoring',
-          strength:     Math.min(0.5, feedbackCount / 10),
-          detail:       `Theme "${t.title}" has ${feedbackCount} feedback item${feedbackCount !== 1 ? 's' : ''} awaiting CIQ scoring.`,
-          detectedAt:   new Date(),
+          type: 'feedback',
+          entityId: t.id,
+          entityTitle: t.title,
+          signal: 'pending_ciq_scoring',
+          strength: Math.min(0.5, feedbackCount / 10),
+          detail: `Theme "${t.title}" has ${feedbackCount} feedback item${feedbackCount !== 1 ? 's' : ''} awaiting CIQ scoring.`,
+          detectedAt: new Date(),
         });
       }
     }
@@ -753,39 +912,41 @@ export class CiqEngineService {
     // Support spikes
     for (const spike of supportSpikes.slice(0, 5)) {
       signals.push({
-        type:         'support',
-        entityId:     spike.id,
-        entityTitle:  `Support cluster ${spike.clusterId.slice(0, 8)}`,
-        signal:       'support_spike',
-        strength:     Math.min(1, spike.ticketCount / 20),
-        detail:       `Support spike detected: ${spike.ticketCount} tickets in cluster.`,
-        detectedAt:   spike.windowStart,
+        type: 'support',
+        entityId: spike.id,
+        entityTitle: `Support cluster ${spike.clusterId.slice(0, 8)}`,
+        signal: 'support_spike',
+        strength: Math.min(1, spike.ticketCount / 20),
+        detail: `Support spike detected: ${spike.ticketCount} tickets in cluster.`,
+        detectedAt: spike.windowStart,
       });
     }
 
     // High-urgency voice signals
     for (const v of voiceFeedbacks.filter((v) => v.urgency > 0.7).slice(0, 5)) {
       signals.push({
-        type:         'voice',
-        entityId:     'voice-signal',
-        entityTitle:  'Voice feedback',
-        signal:       'high_urgency_voice',
-        strength:     v.urgency,
-        detail:       `High-urgency voice signal detected (urgency=${v.urgency.toFixed(2)}).`,
-        detectedAt:   v.createdAt,
+        type: 'voice',
+        entityId: 'voice-signal',
+        entityTitle: 'Voice feedback',
+        signal: 'high_urgency_voice',
+        strength: v.urgency,
+        detail: `High-urgency voice signal detected (urgency=${v.urgency.toFixed(2)}).`,
+        detectedAt: v.createdAt,
       });
     }
 
     // High-weight survey responses
-    for (const r of surveyResponses.filter((r) => (r.ciqWeight ?? 0) >= 0.7).slice(0, 5)) {
+    for (const r of surveyResponses
+      .filter((r) => (r.ciqWeight ?? 0) >= 0.7)
+      .slice(0, 5)) {
       signals.push({
-        type:         'survey',
-        entityId:     r.id,
-        entityTitle:  r.survey.title,
-        signal:       'high_demand_survey',
-        strength:     r.ciqWeight ?? 0,
-        detail:       `Survey "${r.survey.title}" response with high demand validation weight (${(r.ciqWeight ?? 0).toFixed(2)}).`,
-        detectedAt:   r.submittedAt,
+        type: 'survey',
+        entityId: r.id,
+        entityTitle: r.survey.title,
+        signal: 'high_demand_survey',
+        strength: r.ciqWeight ?? 0,
+        detail: `Survey "${r.survey.title}" response with high demand validation weight (${(r.ciqWeight ?? 0).toFixed(2)}).`,
+        detectedAt: r.submittedAt,
       });
     }
 
@@ -802,7 +963,7 @@ export class CiqEngineService {
         complaintCount,
       },
       surveyDemandSummary: {
-        avgCiqWeight:           parseFloat(avgCiqWeight.toFixed(3)),
+        avgCiqWeight: parseFloat(avgCiqWeight.toFixed(3)),
         validationCount,
         featureValidationCount,
       },
@@ -819,14 +980,19 @@ export class CiqEngineService {
    * Persist ciqScore back to a Feedback row.
    * Called by CiqScoringProcessor after FEEDBACK_SCORED jobs.
    */
-  async persistFeedbackCiqScore(feedbackId: string, ciqScore: number): Promise<void> {
+  async persistFeedbackCiqScore(
+    feedbackId: string,
+    ciqScore: number,
+  ): Promise<void> {
     try {
       await this.prisma.feedback.update({
         where: { id: feedbackId },
         data: { ciqScore: parseFloat(ciqScore.toFixed(2)) },
       });
     } catch (err) {
-      this.logger.warn(`Failed to persist feedback ciqScore: ${(err as Error).message}`);
+      this.logger.warn(
+        `Failed to persist feedback ciqScore: ${(err as Error).message}`,
+      );
     }
   }
 
@@ -841,7 +1007,9 @@ export class CiqEngineService {
         data: { ciqScore: parseFloat(ciqScore.toFixed(2)) },
       });
     } catch (err) {
-      this.logger.warn(`Failed to persist theme ciqScore: ${(err as Error).message}`);
+      this.logger.warn(
+        `Failed to persist theme ciqScore: ${(err as Error).message}`,
+      );
     }
   }
 
@@ -856,7 +1024,9 @@ export class CiqEngineService {
         data: { ciqScore: parseFloat(ciqScore.toFixed(2)) },
       });
     } catch (err) {
-      this.logger.warn(`Failed to persist deal ciqScore: ${(err as Error).message}`);
+      this.logger.warn(
+        `Failed to persist deal ciqScore: ${(err as Error).message}`,
+      );
     }
   }
 
@@ -879,18 +1049,21 @@ export class CiqEngineService {
     if (!deal) return 0;
 
     const stageWeight = DEAL_STAGE_WEIGHT[deal.stage] ?? 0;
-    const dealValue   = deal.annualValue * stageWeight * deal.influenceWeight;
-    const arrValue    = deal.customer?.arrValue ?? 0;
-    const priorityNum = ACCOUNT_PRIORITY_MAP[deal.customer?.accountPriority ?? AccountPriority.MEDIUM];
-    const themeCount  = deal.themeLinks.length;
+    const dealValue = deal.annualValue * stageWeight * deal.influenceWeight;
+    const arrValue = deal.customer?.arrValue ?? 0;
+    const priorityNum =
+      ACCOUNT_PRIORITY_MAP[
+        deal.customer?.accountPriority ?? AccountPriority.MEDIUM
+      ];
+    const themeCount = deal.themeLinks.length;
 
-    const normDeal     = logNorm(dealValue, 7);
-    const normArr      = logNorm(arrValue, 7);
+    const normDeal = logNorm(dealValue, 7);
+    const normArr = logNorm(arrValue, 7);
     const normPriority = (priorityNum / 4) * 100;
-    const normTheme    = countNorm(themeCount, 5);
+    const normTheme = countNorm(themeCount, 5);
 
     const ciqScore = clamp100(
-      normDeal * 0.40 + normArr * 0.30 + normPriority * 0.20 + normTheme * 0.10,
+      normDeal * 0.4 + normArr * 0.3 + normPriority * 0.2 + normTheme * 0.1,
     );
 
     await this.persistDealCiqScore(dealId, ciqScore);

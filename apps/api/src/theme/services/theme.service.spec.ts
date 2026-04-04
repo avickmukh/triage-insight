@@ -66,7 +66,10 @@ describe('ThemeService', () => {
         { provide: ThemeRepository, useValue: mockThemeRepository },
         { provide: AuditService, useValue: mockAuditService },
         { provide: PrismaService, useValue: mockPrisma },
-        { provide: getQueueToken(AI_CLUSTERING_QUEUE), useValue: mockClusteringQueue },
+        {
+          provide: getQueueToken(AI_CLUSTERING_QUEUE),
+          useValue: mockClusteringQueue,
+        },
       ],
     }).compile();
 
@@ -83,10 +86,20 @@ describe('ThemeService', () => {
     it('should create a theme and write an audit log', async () => {
       mockThemeRepository.create.mockResolvedValue(mockTheme);
 
-      const result = await service.create('ws-1', 'user-1', { title: 'Bug Reports' });
+      const result = await service.create('ws-1', 'user-1', {
+        title: 'Bug Reports',
+      });
 
-      expect(mockThemeRepository.create).toHaveBeenCalledWith('ws-1', expect.objectContaining({ title: 'Bug Reports' }));
-      expect(mockAuditService.logAction).toHaveBeenCalledWith('ws-1', 'user-1', AuditLogAction.THEME_CREATE, expect.any(Object));
+      expect(mockThemeRepository.create).toHaveBeenCalledWith(
+        'ws-1',
+        expect.objectContaining({ title: 'Bug Reports' }),
+      );
+      expect(mockAuditService.logAction).toHaveBeenCalledWith(
+        'ws-1',
+        'user-1',
+        AuditLogAction.THEME_CREATE,
+        expect.any(Object),
+      );
       expect(result.title).toBe('Bug Reports');
     });
   });
@@ -108,7 +121,9 @@ describe('ThemeService', () => {
     it('should throw NotFoundException when theme does not exist', async () => {
       mockThemeRepository.findById.mockResolvedValue(null);
 
-      await expect(service.findOne('ws-1', 'nonexistent')).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('ws-1', 'nonexistent')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -120,10 +135,19 @@ describe('ThemeService', () => {
       const updated = { ...mockTheme, title: 'Renamed' };
       mockThemeRepository.update.mockResolvedValue(updated);
 
-      const result = await service.update('ws-1', 'user-1', 'theme-1', { title: 'Renamed' });
+      const result = await service.update('ws-1', 'user-1', 'theme-1', {
+        title: 'Renamed',
+      });
 
-      expect(mockThemeRepository.update).toHaveBeenCalledWith('theme-1', { title: 'Renamed' });
-      expect(mockAuditService.logAction).toHaveBeenCalledWith('ws-1', 'user-1', AuditLogAction.THEME_UPDATE, expect.any(Object));
+      expect(mockThemeRepository.update).toHaveBeenCalledWith('theme-1', {
+        title: 'Renamed',
+      });
+      expect(mockAuditService.logAction).toHaveBeenCalledWith(
+        'ws-1',
+        'user-1',
+        AuditLogAction.THEME_UPDATE,
+        expect.any(Object),
+      );
       expect(result.title).toBe('Renamed');
     });
   });
@@ -132,21 +156,31 @@ describe('ThemeService', () => {
 
   describe('merge', () => {
     it('should throw BadRequestException when target is in source list', async () => {
-      await expect(service.merge('ws-1', 'user-1', 'theme-1', ['theme-1'])).rejects.toThrow(BadRequestException);
+      await expect(
+        service.merge('ws-1', 'user-1', 'theme-1', ['theme-1']),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should run merge inside a transaction', async () => {
-      mockPrisma.$transaction.mockImplementation(async (fn: (tx: typeof mockPrisma) => Promise<unknown>) => fn(mockPrisma));
+      mockPrisma.$transaction.mockImplementation(
+        async (fn: (tx: typeof mockPrisma) => Promise<unknown>) =>
+          fn(mockPrisma),
+      );
       mockThemeRepository.findById.mockResolvedValue(mockTheme);
 
       await service.merge('ws-1', 'user-1', 'theme-1', ['theme-2', 'theme-3']);
 
       expect(mockPrisma.$transaction).toHaveBeenCalled();
       expect(mockPrisma.themeFeedback.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { themeId: { in: ['theme-2', 'theme-3'] } }, data: { themeId: 'theme-1' } }),
+        expect.objectContaining({
+          where: { themeId: { in: ['theme-2', 'theme-3'] } },
+          data: { themeId: 'theme-1' },
+        }),
       );
       expect(mockPrisma.theme.deleteMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: { in: ['theme-2', 'theme-3'] }, workspaceId: 'ws-1' } }),
+        expect.objectContaining({
+          where: { id: { in: ['theme-2', 'theme-3'] }, workspaceId: 'ws-1' },
+        }),
       );
     });
   });
@@ -156,7 +190,10 @@ describe('ThemeService', () => {
   describe('split', () => {
     it('should create a new theme and move feedback inside a transaction', async () => {
       const newTheme = { ...mockTheme, id: 'theme-new', title: 'New Theme' };
-      mockPrisma.$transaction.mockImplementation(async (fn: (tx: typeof mockPrisma) => Promise<unknown>) => fn(mockPrisma));
+      mockPrisma.$transaction.mockImplementation(
+        async (fn: (tx: typeof mockPrisma) => Promise<unknown>) =>
+          fn(mockPrisma),
+      );
       mockPrisma.theme.create.mockResolvedValue(newTheme);
 
       const result = await service.split('ws-1', 'user-1', 'theme-1', {
@@ -166,7 +203,9 @@ describe('ThemeService', () => {
 
       expect(mockPrisma.theme.create).toHaveBeenCalled();
       expect(mockPrisma.themeFeedback.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { themeId: 'theme-1', feedbackId: { in: ['fb-1', 'fb-2'] } } }),
+        expect.objectContaining({
+          where: { themeId: 'theme-1', feedbackId: { in: ['fb-1', 'fb-2'] } },
+        }),
       );
       expect(result.title).toBe('New Theme');
     });
@@ -178,8 +217,13 @@ describe('ThemeService', () => {
     it('should dispatch a job to the clustering queue', async () => {
       const result = await service.triggerReclustering('ws-1');
 
-      expect(mockClusteringQueue.add).toHaveBeenCalledWith({ workspaceId: 'ws-1' });
-      expect(result).toMatchObject({ message: expect.any(String), jobId: 'job-1' });
+      expect(mockClusteringQueue.add).toHaveBeenCalledWith({
+        workspaceId: 'ws-1',
+      });
+      expect(result).toMatchObject({
+        message: expect.any(String),
+        jobId: 'job-1',
+      });
     });
   });
 });

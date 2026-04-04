@@ -31,9 +31,12 @@ const mockTheme = {
   workspaceId: WORKSPACE_ID,
   title: 'Slow checkout experience',
   description: 'Users report slowness during checkout',
-  aiSummary: 'Checkout latency is degrading conversion rates across mobile users.',
-  aiExplanation: 'This theme directly impacts revenue. A 200ms improvement in checkout speed correlates with a 1.5% lift in conversion.',
-  aiRecommendation: 'Prioritise server-side rendering of the checkout page and defer non-critical JS bundles.',
+  aiSummary:
+    'Checkout latency is degrading conversion rates across mobile users.',
+  aiExplanation:
+    'This theme directly impacts revenue. A 200ms improvement in checkout speed correlates with a 1.5% lift in conversion.',
+  aiRecommendation:
+    'Prioritise server-side rendering of the checkout page and defer non-critical JS bundles.',
   aiConfidence: 0.82,
   feedbacks: [
     {
@@ -104,9 +107,15 @@ function buildMockPrisma(overrides?: {
       findUnique: jest.fn().mockResolvedValue(overrides?.theme ?? mockTheme),
     },
     roadmapItem: {
-      findFirst: jest.fn().mockResolvedValue(overrides?.existingRoadmapItem ?? null),
+      findFirst: jest
+        .fn()
+        .mockResolvedValue(overrides?.existingRoadmapItem ?? null),
       create: jest.fn().mockResolvedValue(mockRoadmapItem),
-      findUnique: jest.fn().mockResolvedValue({ ...mockRoadmapItem, feedbacks: [], _count: { feedbacks: 2 } }),
+      findUnique: jest.fn().mockResolvedValue({
+        ...mockRoadmapItem,
+        feedbacks: [],
+        _count: { feedbacks: 2 },
+      }),
     },
     auditLog: {
       create: jest.fn().mockResolvedValue({}),
@@ -135,7 +144,9 @@ function buildMockQueue() {
 
 // ─── Test Setup ───────────────────────────────────────────────────────────────
 
-async function buildApp(prismaOverrides?: Parameters<typeof buildMockPrisma>[0]): Promise<INestApplication> {
+async function buildApp(
+  prismaOverrides?: Parameters<typeof buildMockPrisma>[0],
+): Promise<INestApplication> {
   const module: TestingModule = await Test.createTestingModule({
     imports: [AppModule],
   })
@@ -162,7 +173,11 @@ jest.mock('../src/auth/guards/jwt-auth.guard', () => ({
   JwtAuthGuard: class {
     canActivate(context: import('@nestjs/common').ExecutionContext) {
       const req = context.switchToHttp().getRequest();
-      req.user = { sub: USER_ID, email: 'test@example.com', workspaceId: WORKSPACE_ID };
+      req.user = {
+        sub: USER_ID,
+        email: 'test@example.com',
+        workspaceId: WORKSPACE_ID,
+      };
       return true;
     }
   },
@@ -170,7 +185,9 @@ jest.mock('../src/auth/guards/jwt-auth.guard', () => ({
 
 jest.mock('../src/workspace/guards/roles.guard', () => ({
   RolesGuard: class {
-    canActivate() { return true; }
+    canActivate() {
+      return true;
+    }
   },
 }));
 
@@ -179,12 +196,18 @@ jest.mock('../src/workspace/guards/roles.guard', () => ({
 describe('Promote to Roadmap — Preview Endpoint', () => {
   let app: INestApplication;
 
-  beforeAll(async () => { app = await buildApp(); });
-  afterAll(async () => { await app.close(); });
+  beforeAll(async () => {
+    app = await buildApp();
+  });
+  afterAll(async () => {
+    await app.close();
+  });
 
   it('GET /roadmap/from-theme/:themeId/preview — returns AI-prefilled suggestion', async () => {
     const res = await request(app.getHttpServer())
-      .get(`/api/v1/workspaces/${WORKSPACE_ID}/roadmap/from-theme/${THEME_ID}/preview`)
+      .get(
+        `/api/v1/workspaces/${WORKSPACE_ID}/roadmap/from-theme/${THEME_ID}/preview`,
+      )
       .expect(200);
 
     expect(res.body).toMatchObject({
@@ -200,7 +223,9 @@ describe('Promote to Roadmap — Preview Endpoint', () => {
 
   it('GET /roadmap/from-theme/:themeId/preview — includes top feedback items', async () => {
     const res = await request(app.getHttpServer())
-      .get(`/api/v1/workspaces/${WORKSPACE_ID}/roadmap/from-theme/${THEME_ID}/preview`)
+      .get(
+        `/api/v1/workspaces/${WORKSPACE_ID}/roadmap/from-theme/${THEME_ID}/preview`,
+      )
       .expect(200);
 
     expect(res.body.topFeedback).toHaveLength(2);
@@ -213,18 +238,24 @@ describe('Promote to Roadmap — Preview Endpoint', () => {
 
   it('GET /roadmap/from-theme/:themeId/preview — builds rich suggestedDescription from AI fields', async () => {
     const res = await request(app.getHttpServer())
-      .get(`/api/v1/workspaces/${WORKSPACE_ID}/roadmap/from-theme/${THEME_ID}/preview`)
+      .get(
+        `/api/v1/workspaces/${WORKSPACE_ID}/roadmap/from-theme/${THEME_ID}/preview`,
+      )
       .expect(200);
 
-    expect(res.body.suggestedDescription).toContain(mockTheme.aiSummary!);
+    expect(res.body.suggestedDescription).toContain(mockTheme.aiSummary);
     expect(res.body.suggestedDescription).toContain('Why it matters:');
     expect(res.body.suggestedDescription).toContain('Suggested action:');
   });
 
   it('GET /roadmap/from-theme/:themeId/preview — sets alreadyPromoted=true when roadmap item exists', async () => {
-    const appWithExisting = await buildApp({ existingRoadmapItem: mockRoadmapItem });
+    const appWithExisting = await buildApp({
+      existingRoadmapItem: mockRoadmapItem,
+    });
     const res = await request(appWithExisting.getHttpServer())
-      .get(`/api/v1/workspaces/${WORKSPACE_ID}/roadmap/from-theme/${THEME_ID}/preview`)
+      .get(
+        `/api/v1/workspaces/${WORKSPACE_ID}/roadmap/from-theme/${THEME_ID}/preview`,
+      )
       .expect(200);
 
     expect(res.body.alreadyPromoted).toBe(true);
@@ -235,7 +266,9 @@ describe('Promote to Roadmap — Preview Endpoint', () => {
   it('GET /roadmap/from-theme/:themeId/preview — 404 when theme not found', async () => {
     const appNoTheme = await buildApp({ theme: null });
     await request(appNoTheme.getHttpServer())
-      .get(`/api/v1/workspaces/${WORKSPACE_ID}/roadmap/from-theme/nonexistent/preview`)
+      .get(
+        `/api/v1/workspaces/${WORKSPACE_ID}/roadmap/from-theme/nonexistent/preview`,
+      )
       .expect(404);
     await appNoTheme.close();
   });
@@ -244,8 +277,12 @@ describe('Promote to Roadmap — Preview Endpoint', () => {
 describe('Promote to Roadmap — Create Endpoint', () => {
   let app: INestApplication;
 
-  beforeAll(async () => { app = await buildApp(); });
-  afterAll(async () => { await app.close(); });
+  beforeAll(async () => {
+    app = await buildApp();
+  });
+  afterAll(async () => {
+    await app.close();
+  });
 
   it('POST /roadmap/from-theme/:themeId — creates roadmap item with AI-enriched description', async () => {
     const res = await request(app.getHttpServer())
@@ -278,7 +315,9 @@ describe('Promote to Roadmap — Create Endpoint', () => {
   });
 
   it('POST /roadmap/from-theme/:themeId — 400 when roadmap item already exists for theme', async () => {
-    const appWithExisting = await buildApp({ existingRoadmapItem: mockRoadmapItem });
+    const appWithExisting = await buildApp({
+      existingRoadmapItem: mockRoadmapItem,
+    });
     await request(appWithExisting.getHttpServer())
       .post(`/api/v1/workspaces/${WORKSPACE_ID}/roadmap/from-theme/${THEME_ID}`)
       .send({})
@@ -311,7 +350,9 @@ describe('Promote to Roadmap — Tenant Isolation', () => {
     // Theme mock returns null when workspaceId doesn't match — simulated by returning null
     const appCrossWorkspace = await buildApp({ theme: null });
     await request(appCrossWorkspace.getHttpServer())
-      .get(`/api/v1/workspaces/${OTHER_WORKSPACE_ID}/roadmap/from-theme/${THEME_ID}/preview`)
+      .get(
+        `/api/v1/workspaces/${OTHER_WORKSPACE_ID}/roadmap/from-theme/${THEME_ID}/preview`,
+      )
       .expect(404);
     await appCrossWorkspace.close();
   });
@@ -319,7 +360,9 @@ describe('Promote to Roadmap — Tenant Isolation', () => {
   it('POST create — cannot promote theme from a different workspace', async () => {
     const appCrossWorkspace = await buildApp({ theme: null });
     await request(appCrossWorkspace.getHttpServer())
-      .post(`/api/v1/workspaces/${OTHER_WORKSPACE_ID}/roadmap/from-theme/${THEME_ID}`)
+      .post(
+        `/api/v1/workspaces/${OTHER_WORKSPACE_ID}/roadmap/from-theme/${THEME_ID}`,
+      )
       .send({})
       .expect(404);
     await appCrossWorkspace.close();
