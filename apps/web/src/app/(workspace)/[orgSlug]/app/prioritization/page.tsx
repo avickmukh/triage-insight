@@ -146,7 +146,7 @@ export default function PrioritizationPage() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
                 {themes.map((t, i) => (
-                  <div key={t.themeId} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <div key={t.themeId ?? `theme-${i}`} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6C757D', minWidth: 18 }}>#{i + 1}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>

@@ -264,6 +264,24 @@ function FeedbackRow({
 
   const statusStyle = FEEDBACK_STATUS_COLORS[item.status] ?? { bg: '#f0f4f8', color: '#6C757D' };
   const confidence = item.confidence != null ? `${Math.round(item.confidence * 100)}%` : null;
+  // matchReason is stored as a Json object in the DB; coerce to a readable string defensively
+  const matchReasonStr: string | null =
+    item.matchReason == null
+      ? null
+      : typeof item.matchReason === 'string'
+        ? item.matchReason
+        : typeof item.matchReason === 'object'
+          ? (() => {
+              const mr = item.matchReason as Record<string, unknown>;
+              const parts: string[] = [];
+              if (typeof mr.hybridScore === 'number') parts.push(`Hybrid: ${Math.round(mr.hybridScore * 100)}%`);
+              if (typeof mr.embeddingScore === 'number') parts.push(`semantic ${Math.round(mr.embeddingScore * 100)}%`);
+              if (typeof mr.keywordScore === 'number') parts.push(`keyword ${Math.round(mr.keywordScore * 100)}%`);
+              if (Array.isArray(mr.matchedKeywords) && mr.matchedKeywords.length > 0)
+                parts.push(`matched: ${(mr.matchedKeywords as string[]).slice(0, 3).join(', ')}`);
+              return parts.length > 0 ? parts.join(' · ') : 'AI-matched via semantic clustering';
+            })()
+          : String(item.matchReason);
 
   return (
     <div
@@ -291,8 +309,8 @@ function FeedbackRow({
           </span>
           {item.assignedBy === 'ai' && confidence && (
             <span
-              title={item.matchReason
-                ? `AI matched this feedback to the theme with ${confidence} semantic similarity. Reason: ${item.matchReason}`
+              title={matchReasonStr
+                ? `AI matched this feedback to the theme with ${confidence} semantic similarity. Reason: ${matchReasonStr}`
                 : `AI matched this feedback to the theme with ${confidence} semantic similarity`}
               style={{
                 fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: '999px',
@@ -302,16 +320,16 @@ function FeedbackRow({
               AI match · {confidence}
             </span>
           )}
-          {item.assignedBy === 'ai' && item.matchReason && (
+          {item.assignedBy === 'ai' && matchReasonStr && (
             <span
-              title={item.matchReason}
+              title={matchReasonStr}
               style={{
                 fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: '999px',
                 background: '#f0f9ff', color: '#0369a1', fontWeight: 500, cursor: 'help',
                 maxWidth: '18rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}
             >
-              💬 {item.matchReason.length > 60 ? item.matchReason.slice(0, 57) + '…' : item.matchReason}
+              💬 {matchReasonStr.length > 60 ? matchReasonStr.slice(0, 57) + '…' : matchReasonStr}
             </span>
           )}
           {item.assignedBy === 'manual' && (

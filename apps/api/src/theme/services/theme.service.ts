@@ -148,13 +148,40 @@ export class ThemeService {
     ).length;
 
     // Flatten linked feedback for the response — include matchReason for explainability
-    const linkedFeedback = theme.feedbacks.map((tf) => ({
-      ...tf.feedback,
-      assignedAt: tf.assignedAt,
-      assignedBy: tf.assignedBy,
-      confidence: tf.confidence,
-      matchReason: tf.matchReason,
-    }));
+    // matchReason is stored as a Json object in the DB (clustering metadata);
+    // convert it to a human-readable string so the frontend can render it safely.
+    const linkedFeedback = theme.feedbacks.map((tf) => {
+      let matchReasonStr: string | null = null;
+      if (tf.matchReason != null) {
+        const mr = tf.matchReason as Record<string, unknown>;
+        const parts: string[] = [];
+        if (typeof mr.hybridScore === 'number') {
+          parts.push(`Hybrid similarity: ${Math.round(mr.hybridScore * 100)}%`);
+        }
+        if (typeof mr.embeddingScore === 'number') {
+          parts.push(`semantic ${Math.round(mr.embeddingScore * 100)}%`);
+        }
+        if (typeof mr.keywordScore === 'number') {
+          parts.push(`keyword ${Math.round(mr.keywordScore * 100)}%`);
+        }
+        if (Array.isArray(mr.matchedKeywords) && mr.matchedKeywords.length > 0) {
+          parts.push(
+            `matched: ${(mr.matchedKeywords as string[]).slice(0, 4).join(', ')}`,
+          );
+        }
+        matchReasonStr =
+          parts.length > 0
+            ? parts.join(' · ')
+            : 'AI-matched via semantic clustering';
+      }
+      return {
+        ...tf.feedback,
+        assignedAt: tf.assignedAt,
+        assignedBy: tf.assignedBy,
+        confidence: tf.confidence,
+        matchReason: matchReasonStr,
+      };
+    });
 
     // Pipeline processing state — surfaces what has / hasn't run yet
     const pipelineState = {
