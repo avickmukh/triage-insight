@@ -159,7 +159,7 @@ export default function CiqDashboardPage() {
   // UI state
   const [themeSearch, setThemeSearch] = useState('');
   const [featureSearch, setFeatureSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<'themes' | 'features' | 'customers' | 'signals'>('themes');
+  const [activeTab, setActiveTab] = useState<'features' | 'customers' | 'signals'>('features');
   const [promoteModal, setPromoteModal] = useState<{ themeId: string; themeTitle: string } | null>(null);
   const [recomputeMsg, setRecomputeMsg] = useState<string | null>(null);
 
@@ -275,7 +275,7 @@ export default function CiqDashboardPage() {
               value={kpiCritical}
               sub="CIQ score ≥ 70"
               color={kpiCritical > 0 ? '#b91c1c' : '#0a2540'}
-              onClick={() => setActiveTab('themes')}
+              onClick={() => router.push(routes.intelligenceThemes)}
             />
             <KpiCard
               label="Roadmap Actions"
@@ -300,15 +300,24 @@ export default function CiqDashboardPage() {
               label="Themes Scored"
               value={themeRanking?.length ?? 0}
               sub="Active themes with CIQ"
-              onClick={() => setActiveTab('themes')}
+              onClick={() => router.push(routes.intelligenceThemes)}
             />
+          </div>
+
+          {/* ── Theme Ranking redirect card ── */}
+          <div style={{ ...CARD, marginBottom: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f0f9ff', border: '1px solid #bae6fd' }}>
+            <div>
+              <p style={{ margin: 0, fontWeight: 700, color: '#0a2540', fontSize: '0.9rem' }}>Theme Ranking</p>
+              <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: '#6C757D' }}>Full ranked table of all active themes by CIQ score — with DRS, eligibility chips, trend, and signal breakdown.</p>
+            </div>
+            <Link href={routes.intelligenceThemes}
+              style={{ padding: '0.5rem 1.1rem', background: '#0a2540', color: '#fff', borderRadius: '0.5rem', textDecoration: 'none', fontSize: '0.82rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+              View Theme Ranking →
+            </Link>
           </div>
 
           {/* ── Tab Navigation ── */}
           <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
-            <button style={TAB_STYLE(activeTab === 'themes')} onClick={() => setActiveTab('themes')}>
-              Themes ({filteredThemes.length})
-            </button>
             <button style={TAB_STYLE(activeTab === 'features')} onClick={() => setActiveTab('features')}>
               Features ({filteredFeatures.length})
             </button>
@@ -320,8 +329,8 @@ export default function CiqDashboardPage() {
             </button>
           </div>
 
-          {/* ── Themes Tab ── */}
-          {activeTab === 'themes' && (
+          {/* ── Themes Tab removed — see Theme Ranking page ── */}
+          {false && (
             <div style={CARD}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
                 <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#0a2540', margin: 0 }}>

@@ -202,7 +202,10 @@ function DigestContent() {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0A2540', marginBottom: '0.375rem' }}>Weekly AI Digest</h1>
-          <p style={{ color: '#6C757D', fontSize: '0.9rem', margin: 0 }}>AI-generated intelligence briefing — top issues, trends, and recommended actions from your workspace signals.</p>
+          <p style={{ color: '#6C757D', fontSize: '0.9rem', margin: 0 }}><strong>Narrative briefing, delivered weekly.</strong> AI-generated summary of top issues, trends, and recommended actions — formatted for sharing with stakeholders.</p>
+          <p style={{ fontSize: '0.8rem', color: '#6C757D', margin: '0.25rem 0 0' }}>For an interactive decision-grade view with CIQ scores and groupings, see{' '}
+            <a href="../executive-dashboard" style={{ color: '#20A4A4', textDecoration: 'underline', fontWeight: 600 }}>Executive Dashboard</a>.
+          </p>
         </div>
         <button onClick={handleGenerate} disabled={generating || generated} style={{ padding: '0.5rem 1.25rem', borderRadius: '0.5rem', border: 'none', background: generating || generated ? '#adb5bd' : '#0A2540', color: '#fff', fontSize: '0.82rem', fontWeight: 600, cursor: generating || generated ? 'not-allowed' : 'pointer', flexShrink: 0 }}>
           {generating ? 'Generating…' : generated ? 'Queued ✓' : 'Generate now'}

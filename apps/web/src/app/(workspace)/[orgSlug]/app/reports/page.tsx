@@ -463,7 +463,12 @@ export default function ReportsPage() {
             Enterprise Reports
           </h1>
           <p style={{ fontSize: '0.875rem', color: '#6C757D', margin: '0.25rem 0 0 0' }}>
-            Revenue-aware product intelligence derived from CIQ scoring outputs.
+            <strong>Revenue-aware product intelligence.</strong> Structured reports derived from CIQ scoring outputs — with date-range filtering, ARR exposure, and exportable data.
+          </p>
+          <p style={{ fontSize: '0.8rem', color: '#6C757D', margin: '0.2rem 0 0' }}>
+            For a narrative weekly briefing, see{' '}
+            <a href="../digest" style={{ color: '#20A4A4', textDecoration: 'underline', fontWeight: 600 }}>Weekly AI Digest</a>. For real-time decision view, see{' '}
+            <a href="../executive-dashboard" style={{ color: '#20A4A4', textDecoration: 'underline', fontWeight: 600 }}>Executive Dashboard</a>.
           </p>
         </div>
         <DateRangeFilter filter={filter} onChange={setFilter} />

@@ -21,6 +21,10 @@ import {
   Brain,
   Package2,
   ChevronRight,
+  FileText,
+  LayoutDashboard,
+  BookOpen,
+  ListOrdered,
 } from "lucide-react";
 import { appRoutes, orgAdminRoutes } from "@/lib/routes";
 
@@ -51,10 +55,10 @@ export function Sidebar({ orgSlug: orgSlugProp }: { orgSlug?: string }) {
       title: 'SIGNALS',
       subtitle: 'Raw incoming data from all sources',
       items: [
-        { href: r.inbox,           icon: Inbox,           label: 'Inbox' },
-        { href: r.voice,           icon: Mic,             label: 'Voice' },
-        { href: r.surveys,         icon: ClipboardList,   label: 'Surveys' },
-        { href: r.support.overview,icon: HeadphonesIcon,  label: 'Support' },
+        { href: r.inbox,            icon: Inbox,          label: 'Inbox' },
+        { href: r.voice,            icon: Mic,            label: 'Voice' },
+        { href: r.surveys,          icon: ClipboardList,  label: 'Surveys' },
+        { href: r.support.overview, icon: HeadphonesIcon, label: 'Support' },
       ],
     },
     {
@@ -62,8 +66,9 @@ export function Sidebar({ orgSlug: orgSlugProp }: { orgSlug?: string }) {
       title: 'THEMES',
       subtitle: 'AI-grouped problems and customer context',
       items: [
-        { href: r.themes,    icon: Layers, label: 'All Themes' },
-        { href: r.customers, icon: Users,  label: 'Customers' },
+        { href: r.themes,               icon: Layers,      label: 'All Themes' },
+        { href: r.customers,            icon: Users,       label: 'Customers' },
+        { href: r.intelligenceCustomers,icon: BarChart2,   label: 'Customer Ranking' },
       ],
     },
     {
@@ -71,10 +76,11 @@ export function Sidebar({ orgSlug: orgSlugProp }: { orgSlug?: string }) {
       title: 'PRIORITIZATION',
       subtitle: 'Business scoring and ranked impact',
       items: [
-        { href: r.ciq,                        icon: Zap,       label: 'CIQ Scoring' },
-        { href: r.intelligenceThemes,          icon: TrendingUp,label: 'Theme Ranking' },
-        { href: r.intelligenceFeatures,        icon: BarChart2, label: 'Feature Ranking' },
-        { href: r.prioritizationOpportunities, icon: DollarSign,label: 'Revenue Opps' },
+        { href: r.ciq,                        icon: Zap,          label: 'CIQ Scoring' },
+        { href: r.intelligenceThemes,          icon: TrendingUp,   label: 'Theme Ranking' },
+        { href: r.intelligenceFeatures,        icon: ListOrdered,  label: 'Feature CIQ Ranking' },
+        { href: r.prioritizationFeatures,      icon: BarChart2,    label: 'Feature Priority' },
+        { href: r.prioritizationOpportunities, icon: DollarSign,   label: 'Revenue Opps' },
       ],
     },
     {
@@ -82,9 +88,20 @@ export function Sidebar({ orgSlug: orgSlugProp }: { orgSlug?: string }) {
       title: 'DECISIONS',
       subtitle: 'Act on insights and plan what to build',
       items: [
-        { href: r.roadmap,            icon: Map,          label: 'Roadmap' },
-        { href: r.roadmapAiSuggestions,icon: Lightbulb,   label: 'AI Suggestions' },
-        { href: r.actionPlan,          icon: CalendarCheck,label: 'Action Plan' },
+        { href: r.roadmap,              icon: Map,          label: 'Roadmap' },
+        { href: r.prioritizationRoadmap,icon: Lightbulb,   label: 'Roadmap Recs' },
+        { href: r.roadmapAiSuggestions, icon: Brain,        label: 'AI Suggestions' },
+        { href: r.actionPlan,           icon: CalendarCheck,label: 'Action Plan' },
+      ],
+    },
+    {
+      id: 'reports',
+      title: 'REPORTS',
+      subtitle: 'Summaries and executive views',
+      items: [
+        { href: r.executiveDashboard, icon: LayoutDashboard, label: 'Exec Dashboard' },
+        { href: r.digest,             icon: BookOpen,         label: 'Digest' },
+        { href: r.reports,            icon: FileText,         label: 'Reports' },
       ],
     },
   ];

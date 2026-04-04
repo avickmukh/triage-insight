@@ -74,7 +74,11 @@ export default function RoadmapRecommendationsPage() {
           </div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0a2540', margin: 0 }}>Roadmap Recommendations</h1>
           <p style={{ color: '#6C757D', margin: '0.25rem 0 0', fontSize: '0.875rem' }}>
-            AI-generated promote / deprioritise recommendations based on 4-dimension CIQ scoring
+            <strong>Promote or deprioritise existing roadmap items</strong> based on 4-dimension CIQ scoring — urgency score, revenue opp score, and rationale.
+          </p>
+          <p style={{ fontSize: '0.8rem', color: '#6C757D', margin: '0.2rem 0 0' }}>
+            For AI-generated new action suggestions (not tied to existing roadmap items), see{' '}
+            <a href="../../roadmap/ai-suggestions" style={{ color: '#20A4A4', textDecoration: 'underline', fontWeight: 600 }}>AI Suggestions</a>.
           </p>
         </div>
         {!isLoading && items.length > 0 && (

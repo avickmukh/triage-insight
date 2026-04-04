@@ -62,7 +62,11 @@ export default function FeaturesPage() {
           </div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0a2540', margin: 0 }}>Feature Priority Ranking</h1>
           <p style={{ color: '#6C757D', margin: '0.25rem 0 0', fontSize: '0.875rem' }}>
-            Feedback items ranked by Demand Strength · Revenue Impact · Strategic Importance · Urgency
+            <strong>Priority Score = business decision score.</strong> Ranked by Demand Strength · Revenue Impact · Strategic Importance · Urgency.
+          </p>
+          <p style={{ fontSize: '0.8rem', color: '#6C757D', margin: '0.2rem 0 0' }}>
+            For signal-intelligence scoring (CIQ), see{' '}
+            <a href="../../intelligence/features" style={{ color: '#20A4A4', textDecoration: 'underline', fontWeight: 600 }}>Feature CIQ Ranking</a>.
           </p>
         </div>
         {data && (

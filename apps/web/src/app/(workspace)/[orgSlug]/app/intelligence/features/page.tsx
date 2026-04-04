@@ -48,12 +48,13 @@ export default function IntelligenceFeaturesPage() {
   return (
     <div style={{ padding: '2rem', maxWidth: 1400, margin: '0 auto' }}>
       <div style={{ marginBottom: '1.5rem' }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0a2540', margin: '0 0 0.25rem' }}>Feature Ranking</h1>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0a2540', margin: '0 0 0.25rem' }}>Feature CIQ Ranking</h1>
         <p style={{ color: '#6C757D', margin: 0, fontSize: '0.875rem' }}>
-          Feedback items ranked by composite CIQ score — ARR weight, vote count, sentiment, recency, and deal influence.
+          <strong>CIQ Score = signal intelligence.</strong> Feedback items ranked by composite CIQ score — ARR weight, vote count, sentiment, recency, and deal influence.
         </p>
-        <p style={{ fontSize: '0.8rem', color: '#1a73e8', margin: '0.4rem 0 0' }}>
-          <span style={{ fontWeight: 600 }}>Next:</span> Promote top features to the Roadmap, or view Revenue Opps for monetisation context.
+        <p style={{ fontSize: '0.8rem', color: '#6C757D', margin: '0.3rem 0 0' }}>
+          For business-decision scoring (Demand · Revenue Impact · Urgency), see{' '}
+          <a href="../prioritization/features" style={{ color: '#20A4A4', textDecoration: 'underline', fontWeight: 600 }}>Feature Priority Ranking</a>.
         </p>
       </div>
 

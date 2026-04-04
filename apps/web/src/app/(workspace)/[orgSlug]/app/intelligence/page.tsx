@@ -530,12 +530,21 @@ export default function IntelligencePage() {
 
             {/* Roadmap Recommendations */}
             <div style={CARD}>
-              <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#0a2540', margin: '0 0 1rem' }}>
-                Roadmap Recommendations
-              </h2>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#0a2540', margin: 0 }}>
+                  Roadmap Recommendations
+                </h2>
+                <Link href={routes.prioritizationRoadmap}
+                  style={{ fontSize: '0.8rem', color: '#20A4A4', textDecoration: 'none', fontWeight: 500 }}>
+                  View full →
+                </Link>
+              </div>
+              <p style={{ fontSize: '0.75rem', color: '#6C757D', margin: '-0.5rem 0 0.75rem' }}>Preview — top 5 only. Full scored recommendations with urgency and revenue scores are on the{' '}
+                <Link href={routes.prioritizationRoadmap} style={{ color: '#20A4A4', textDecoration: 'underline' }}>Roadmap Recommendations</Link> page.
+              </p>
               {signals?.roadmapRecommendations && signals.roadmapRecommendations.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {signals.roadmapRecommendations.slice(0, 8).map((rec) => {
+                  {signals.roadmapRecommendations.slice(0, 5).map((rec) => {
                     const style = RECOMMENDATION_COLORS[rec.recommendation] ?? RECOMMENDATION_COLORS.monitor;
                     const canPromote = rec.recommendation === 'promote_to_planned' || rec.recommendation === 'promote_to_committed';
                     return (

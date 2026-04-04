@@ -568,8 +568,11 @@ export default function ExecutiveDashboardPage() {
           </span>
         </div>
         <p style={{ fontSize: '0.875rem', color: '#6C757D', margin: '0 0 0.25rem' }}>
-          Decision-grade intelligence across all signal sources. No hallucination — every reason is
-          derived directly from your data.
+          <strong>Decision-grade intelligence for leadership.</strong> Grouped by Top Problems, Rising Issues, Revenue Impact, and Recommended Actions. Every reason is derived directly from your data — no hallucination.
+        </p>
+        <p style={{ fontSize: '0.8rem', color: '#6C757D', margin: '0.2rem 0 0' }}>
+          For a weekly narrative digest, see{' '}
+          <a href="../digest" style={{ color: '#20A4A4', textDecoration: 'underline', fontWeight: 600 }}>Weekly AI Digest</a>.
         </p>
         <p style={{ fontSize: '0.75rem', color: '#adb5bd', margin: 0 }}>
           Generated {new Date(data.generatedAt).toLocaleString()} · Scores: CIQ (0–100) · Actions: 🔴 High / 🟡 Medium / 🟢 Low
