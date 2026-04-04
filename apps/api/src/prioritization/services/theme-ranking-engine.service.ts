@@ -54,8 +54,13 @@ import { PrismaService } from '../../prisma/prisma.service';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-/** Minimum total signal count for a theme to be eligible for top-N ranking. */
-export const MIN_SIGNALS = 3;
+/** Minimum total signal count for a theme to be eligible for top-N ranking.
+ * Lowered from 3 to 1: themes with even a single signal should appear in the
+ * Executive Dashboard and Action Plan. The WEAK_SIGNAL_THRESHOLD (6) and
+ * WEAK_SIGNAL_PENALTY (0.90) already rank low-signal themes lower without
+ * hiding them entirely.
+ */
+export const MIN_SIGNALS = 1;
 
 /** Themes with fewer than this many signals get a "Needs more data" label. */
 export const WEAK_SIGNAL_THRESHOLD = 6;
@@ -64,21 +69,21 @@ export const WEAK_SIGNAL_THRESHOLD = 6;
 export const LOW_CONF_THRESHOLD = 0.25;
 
 /** DRS multiplier for near-duplicate themes (autoMergeCandidate = true). */
-export const NEAR_DUP_PENALTY = 0.80;
+export const NEAR_DUP_PENALTY = 0.8;
 
 /** DRS multiplier for themes with very low AI confidence. */
 export const LOW_CONF_PENALTY = 0.85;
 
 /** DRS multiplier for themes with fewer than WEAK_SIGNAL_THRESHOLD signals. */
-export const WEAK_SIGNAL_PENALTY = 0.90;
+export const WEAK_SIGNAL_PENALTY = 0.9;
 
 // ─── DRS weights (must sum to 1.0) ───────────────────────────────────────────
 
-const W_CIQ  = 0.30;
-const W_VEL  = 0.20;
-const W_REC  = 0.18;
-const W_RES  = 0.15;
-const W_DIV  = 0.10;
+const W_CIQ = 0.3;
+const W_VEL = 0.2;
+const W_REC = 0.18;
+const W_RES = 0.15;
+const W_DIV = 0.1;
 const W_CONF = 0.07;
 
 // ─── Output types ─────────────────────────────────────────────────────────────
@@ -97,80 +102,80 @@ export type SignalQualityLabel =
 
 /** Rank-eligibility status for a theme. */
 export type EligibilityStatus =
-  | 'ELIGIBLE'          // passes all hard gates, no soft penalties
-  | 'PENALISED'         // passes hard gates but has soft penalties applied
-  | 'INELIGIBLE';       // fails a hard gate — excluded from top-N
+  | 'ELIGIBLE' // passes all hard gates, no soft penalties
+  | 'PENALISED' // passes hard gates but has soft penalties applied
+  | 'INELIGIBLE'; // fails a hard gate — excluded from top-N
 
 /** DRS score breakdown for explainability. */
 export interface DrsBreakdown {
-  ciq:           { raw: number; weight: number; contribution: number };
-  velocity:      { raw: number; weight: number; contribution: number };
-  recency:       { raw: number; weight: number; contribution: number };
-  resurfacing:   { raw: number; weight: number; contribution: number };
+  ciq: { raw: number; weight: number; contribution: number };
+  velocity: { raw: number; weight: number; contribution: number };
+  recency: { raw: number; weight: number; contribution: number };
+  resurfacing: { raw: number; weight: number; contribution: number };
   sourceDiversity: { raw: number; weight: number; contribution: number };
-  aiConfidence:  { raw: number; weight: number; contribution: number };
+  aiConfidence: { raw: number; weight: number; contribution: number };
   penalties: {
     nearDuplicate: boolean;
     lowConfidence: boolean;
-    weakSignal:    boolean;
-    multiplier:    number;
+    weakSignal: boolean;
+    multiplier: number;
   };
 }
 
 /** A fully-ranked theme entry returned by ThemeRankingEngine. */
 export interface RankedTheme {
-  themeId:          string;
-  title:            string;
-  shortLabel:       string | null;
-  status:           string;
+  themeId: string;
+  title: string;
+  shortLabel: string | null;
+  status: string;
   /** Raw CIQ score (0–100). */
-  ciqScore:         number;
+  ciqScore: number;
   /** Decision Ranking Score — the composite score used for all top-N rankings. */
-  drs:              number;
-  eligibility:      EligibilityStatus;
-  signalLabels:     SignalQualityLabel[];
+  drs: number;
+  eligibility: EligibilityStatus;
+  signalLabels: SignalQualityLabel[];
   /** Human-readable explanation sentence built from real DB values. */
-  reason:           string;
+  reason: string;
   signals: {
     totalSignalCount: number;
-    feedbackCount:    number;
-    voiceCount:       number;
-    supportCount:     number;
-    surveyCount:      number;
-    sourceDiversity:  number;   // 1–4 distinct source types present
-    trendDelta:       number | null;
-    resurfaceCount:   number;
+    feedbackCount: number;
+    voiceCount: number;
+    supportCount: number;
+    surveyCount: number;
+    sourceDiversity: number; // 1–4 distinct source types present
+    trendDelta: number | null;
+    resurfaceCount: number;
     revenueInfluence: number;
-    lastEvidenceAt:   Date | null;
-    negativePct:      number | null;
+    lastEvidenceAt: Date | null;
+    negativePct: number | null;
   };
-  aiConfidence:     number | null;
-  isNearDuplicate:  boolean;
-  breakdown:        DrsBreakdown;
+  aiConfidence: number | null;
+  isNearDuplicate: boolean;
+  breakdown: DrsBreakdown;
 }
 
 // ─── Prisma select shape ──────────────────────────────────────────────────────
 
 const THEME_SELECT = {
-  id:                    true,
-  title:                 true,
-  shortLabel:            true,
-  status:                true,
-  ciqScore:              true,
-  priorityScore:         true,
-  aiConfidence:          true,
-  autoMergeCandidate:    true,
-  trendDelta:            true,
-  resurfaceCount:        true,
-  resurfacedAt:          true,
-  lastEvidenceAt:        true,
-  feedbackCount:         true,
-  supportCount:          true,
-  voiceCount:            true,
-  surveyCount:           true,
-  totalSignalCount:      true,
-  revenueInfluence:      true,
-  signalBreakdown:       true,
+  id: true,
+  title: true,
+  shortLabel: true,
+  status: true,
+  ciqScore: true,
+  priorityScore: true,
+  aiConfidence: true,
+  autoMergeCandidate: true,
+  trendDelta: true,
+  resurfaceCount: true,
+  resurfacedAt: true,
+  lastEvidenceAt: true,
+  feedbackCount: true,
+  supportCount: true,
+  voiceCount: true,
+  surveyCount: true,
+  totalSignalCount: true,
+  revenueInfluence: true,
+  signalBreakdown: true,
   sentimentDistribution: true,
   roadmapItems: {
     select: { id: true, status: true },
@@ -272,21 +277,19 @@ export class ThemeRankingEngine {
    */
   async getTopN(workspaceId: string, n = 5): Promise<RankedTheme[]> {
     const all = await this.rankThemes(workspaceId);
-    return all
-      .filter((t) => t.eligibility !== 'INELIGIBLE')
-      .slice(0, n);
+    return all.filter((t) => t.eligibility !== 'INELIGIBLE').slice(0, n);
   }
 
   // ─── Core scoring ────────────────────────────────────────────────────────────
 
   scoreTheme(row: ThemeRow, now: number): RankedTheme {
-    const ciq   = clamp(row.ciqScore ?? row.priorityScore ?? 0);
+    const ciq = clamp(row.ciqScore ?? row.priorityScore ?? 0);
     const delta = row.trendDelta ?? 0;
-    const totalSignals  = row.totalSignalCount ?? row.feedbackCount ?? 0;
+    const totalSignals = row.totalSignalCount ?? row.feedbackCount ?? 0;
     const feedbackCount = row.feedbackCount ?? 0;
-    const voiceCount    = row.voiceCount    ?? 0;
-    const supportCount  = row.supportCount  ?? 0;
-    const surveyCount   = row.surveyCount   ?? 0;
+    const voiceCount = row.voiceCount ?? 0;
+    const supportCount = row.supportCount ?? 0;
+    const surveyCount = row.surveyCount ?? 0;
     const resurfaceCount = row.resurfaceCount ?? 0;
     const revenueInfluence = row.revenueInfluence ?? 0;
     const aiConf = row.aiConfidence ?? null;
@@ -295,35 +298,37 @@ export class ThemeRankingEngine {
     // ── Source diversity (1–4 distinct source types present) ─────────────────
     const sourceDiversity = [
       feedbackCount > 0,
-      voiceCount    > 0,
-      supportCount  > 0,
-      surveyCount   > 0,
+      voiceCount > 0,
+      supportCount > 0,
+      surveyCount > 0,
     ].filter(Boolean).length;
 
     // ── Normalised component scores (0–100) ──────────────────────────────────
-    const normVelocity   = clamp(((delta + 50) / 100) * 100);
-    let normRecency      = 0;
+    const normVelocity = clamp(((delta + 50) / 100) * 100);
+    let normRecency = 0;
     if (row.lastEvidenceAt) {
-      const ageDays = (now - new Date(row.lastEvidenceAt).getTime()) / 86_400_000;
+      const ageDays =
+        (now - new Date(row.lastEvidenceAt).getTime()) / 86_400_000;
       normRecency = clamp(100 * Math.exp(-ageDays / 30));
     }
-    const normResurface  = clamp(resurfaceCount * 25);
-    const normDiversity  = clamp((sourceDiversity / 4) * 100);
-    const normConf       = clamp((aiConf ?? 0) * 100);
+    const normResurface = clamp(resurfaceCount * 25);
+    const normDiversity = clamp((sourceDiversity / 4) * 100);
+    const normConf = clamp((aiConf ?? 0) * 100);
 
     // ── Raw DRS ───────────────────────────────────────────────────────────────
     const rawDrs =
-      W_CIQ  * ciq          +
-      W_VEL  * normVelocity  +
-      W_REC  * normRecency   +
-      W_RES  * normResurface +
-      W_DIV  * normDiversity +
+      W_CIQ * ciq +
+      W_VEL * normVelocity +
+      W_REC * normRecency +
+      W_RES * normResurface +
+      W_DIV * normDiversity +
       W_CONF * normConf;
 
     // ── Soft penalties ────────────────────────────────────────────────────────
-    const penaltyNearDup   = isNearDuplicate;
-    const penaltyLowConf   = aiConf !== null && aiConf < LOW_CONF_THRESHOLD;
-    const penaltyWeakSig   = totalSignals > 0 && totalSignals < WEAK_SIGNAL_THRESHOLD;
+    const penaltyNearDup = isNearDuplicate;
+    const penaltyLowConf = aiConf !== null && aiConf < LOW_CONF_THRESHOLD;
+    const penaltyWeakSig =
+      totalSignals > 0 && totalSignals < WEAK_SIGNAL_THRESHOLD;
 
     let multiplier = 1.0;
     if (penaltyNearDup) multiplier *= NEAR_DUP_PENALTY;
@@ -345,11 +350,13 @@ export class ThemeRankingEngine {
     // ── Sentiment ─────────────────────────────────────────────────────────────
     let negativePct: number | null = null;
     const dist = row.sentimentDistribution as {
-      positive?: number; neutral?: number; negative?: number;
+      positive?: number;
+      neutral?: number;
+      negative?: number;
     } | null;
     if (dist) {
       const pos = dist.positive ?? 0;
-      const neu = dist.neutral  ?? 0;
+      const neu = dist.neutral ?? 0;
       const neg = dist.negative ?? 0;
       const total = pos + neu + neg;
       if (total >= 3) negativePct = neg / total;
@@ -357,39 +364,71 @@ export class ThemeRankingEngine {
 
     // ── Signal quality labels ─────────────────────────────────────────────────
     const signalLabels = this.computeSignalLabels({
-      totalSignals, sourceDiversity, aiConf, delta, revenueInfluence,
-      resurfaceCount, isNearDuplicate,
+      totalSignals,
+      sourceDiversity,
+      aiConf,
+      delta,
+      revenueInfluence,
+      resurfaceCount,
+      isNearDuplicate,
     });
 
     // ── Reason sentence ───────────────────────────────────────────────────────
     const reason = this.buildReason({
-      ciq, delta, totalSignals, resurfaceCount, revenueInfluence,
-      aiConf, isNearDuplicate, negativePct, signalLabels,
+      ciq,
+      delta,
+      totalSignals,
+      resurfaceCount,
+      revenueInfluence,
+      aiConf,
+      isNearDuplicate,
+      negativePct,
+      signalLabels,
       signalBreakdown: row.signalBreakdown,
     });
 
     // ── Breakdown ─────────────────────────────────────────────────────────────
     const breakdown: DrsBreakdown = {
-      ciq:           { raw: ciq,          weight: W_CIQ,  contribution: W_CIQ  * ciq          },
-      velocity:      { raw: normVelocity,  weight: W_VEL,  contribution: W_VEL  * normVelocity  },
-      recency:       { raw: normRecency,   weight: W_REC,  contribution: W_REC  * normRecency   },
-      resurfacing:   { raw: normResurface, weight: W_RES,  contribution: W_RES  * normResurface },
-      sourceDiversity: { raw: normDiversity, weight: W_DIV, contribution: W_DIV * normDiversity },
-      aiConfidence:  { raw: normConf,      weight: W_CONF, contribution: W_CONF * normConf      },
+      ciq: { raw: ciq, weight: W_CIQ, contribution: W_CIQ * ciq },
+      velocity: {
+        raw: normVelocity,
+        weight: W_VEL,
+        contribution: W_VEL * normVelocity,
+      },
+      recency: {
+        raw: normRecency,
+        weight: W_REC,
+        contribution: W_REC * normRecency,
+      },
+      resurfacing: {
+        raw: normResurface,
+        weight: W_RES,
+        contribution: W_RES * normResurface,
+      },
+      sourceDiversity: {
+        raw: normDiversity,
+        weight: W_DIV,
+        contribution: W_DIV * normDiversity,
+      },
+      aiConfidence: {
+        raw: normConf,
+        weight: W_CONF,
+        contribution: W_CONF * normConf,
+      },
       penalties: {
         nearDuplicate: penaltyNearDup,
         lowConfidence: penaltyLowConf,
-        weakSignal:    penaltyWeakSig,
-        multiplier:    parseFloat(multiplier.toFixed(4)),
+        weakSignal: penaltyWeakSig,
+        multiplier: parseFloat(multiplier.toFixed(4)),
       },
     };
 
     return {
-      themeId:         row.id,
-      title:           row.title,
-      shortLabel:      row.shortLabel ?? null,
-      status:          row.status,
-      ciqScore:        Math.round(ciq),
+      themeId: row.id,
+      title: row.title,
+      shortLabel: row.shortLabel ?? null,
+      status: row.status,
+      ciqScore: Math.round(ciq),
       drs,
       eligibility,
       signalLabels,
@@ -401,13 +440,13 @@ export class ThemeRankingEngine {
         supportCount,
         surveyCount,
         sourceDiversity,
-        trendDelta:       delta !== 0 ? delta : null,
+        trendDelta: delta !== 0 ? delta : null,
         resurfaceCount,
         revenueInfluence,
-        lastEvidenceAt:   row.lastEvidenceAt ?? null,
+        lastEvidenceAt: row.lastEvidenceAt ?? null,
         negativePct,
       },
-      aiConfidence:    aiConf,
+      aiConfidence: aiConf,
       isNearDuplicate,
       breakdown,
     };
@@ -416,12 +455,12 @@ export class ThemeRankingEngine {
   // ─── Signal quality labels ───────────────────────────────────────────────────
 
   private computeSignalLabels(p: {
-    totalSignals:    number;
+    totalSignals: number;
     sourceDiversity: number;
-    aiConf:          number | null;
-    delta:           number;
+    aiConf: number | null;
+    delta: number;
     revenueInfluence: number;
-    resurfaceCount:  number;
+    resurfaceCount: number;
     isNearDuplicate: boolean;
   }): SignalQualityLabel[] {
     const labels: SignalQualityLabel[] = [];
@@ -430,7 +469,7 @@ export class ThemeRankingEngine {
     if (
       p.totalSignals >= 10 &&
       p.sourceDiversity >= 2 &&
-      (p.aiConf ?? 0) >= 0.60
+      (p.aiConf ?? 0) >= 0.6
     ) {
       labels.push('Strong signal');
     }
@@ -458,7 +497,11 @@ export class ThemeRankingEngine {
     }
 
     // Emerging: small but growing
-    if (p.totalSignals >= MIN_SIGNALS && p.totalSignals < WEAK_SIGNAL_THRESHOLD && p.delta > 5) {
+    if (
+      p.totalSignals >= MIN_SIGNALS &&
+      p.totalSignals < WEAK_SIGNAL_THRESHOLD &&
+      p.delta > 5
+    ) {
       labels.push('Emerging issue');
     }
 
@@ -481,15 +524,15 @@ export class ThemeRankingEngine {
   // ─── Reason sentence ─────────────────────────────────────────────────────────
 
   private buildReason(p: {
-    ciq:             number;
-    delta:           number;
-    totalSignals:    number;
-    resurfaceCount:  number;
+    ciq: number;
+    delta: number;
+    totalSignals: number;
+    resurfaceCount: number;
     revenueInfluence: number;
-    aiConf:          number | null;
+    aiConf: number | null;
     isNearDuplicate: boolean;
-    negativePct:     number | null;
-    signalLabels:    SignalQualityLabel[];
+    negativePct: number | null;
+    signalLabels: SignalQualityLabel[];
     signalBreakdown: unknown;
   }): string {
     const parts: string[] = [];
@@ -497,11 +540,15 @@ export class ThemeRankingEngine {
     parts.push(`CIQ ${Math.round(p.ciq)}/100`);
 
     if (p.totalSignals > 0) {
-      parts.push(`${p.totalSignals} total signal${p.totalSignals !== 1 ? 's' : ''}`);
+      parts.push(
+        `${p.totalSignals} total signal${p.totalSignals !== 1 ? 's' : ''}`,
+      );
     }
 
-    if (p.delta > 10)  parts.push(`+${Math.round(p.delta)}% signal velocity WoW`);
-    if (p.delta < -10) parts.push(`${Math.round(p.delta)}% signal velocity WoW`);
+    if (p.delta > 10)
+      parts.push(`+${Math.round(p.delta)}% signal velocity WoW`);
+    if (p.delta < -10)
+      parts.push(`${Math.round(p.delta)}% signal velocity WoW`);
 
     if (p.resurfaceCount > 0) {
       parts.push(`resurfaced ${p.resurfaceCount}× after shipping`);

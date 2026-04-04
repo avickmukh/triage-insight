@@ -204,8 +204,14 @@ export default function ActionPlanPage() {
       {/* Empty state */}
       {data.items.length === 0 && (
         <div style={{ ...CARD, textAlign: 'center', color: '#6C757D', padding: '3rem' }}>
-          <p style={{ fontSize: '1rem', fontWeight: 600 }}>Nothing urgent this week.</p>
-          <p style={{ fontSize: '0.875rem' }}>Upload feedback or run the AI pipeline to generate themes.</p>
+          <p style={{ fontSize: '1rem', fontWeight: 700, color: '#0A2540', margin: '0 0 0.5rem' }}>Nothing urgent this week.</p>
+          <p style={{ fontSize: '0.875rem', margin: '0 0 0.5rem' }}>
+            The Action Plan requires themes to have at least 1 signal (feedback, voice, support, or survey)
+            and a CIQ score. Once the CIQ engine has scored your themes, this list will populate automatically.
+          </p>
+          <p style={{ fontSize: '0.8rem', margin: 0 }}>
+            Tip: Go to <strong>CIQ Scoring</strong> and trigger a recompute, or verify that feedback has been ingested and themes have been clustered.
+          </p>
         </div>
       )}
 

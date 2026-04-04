@@ -544,6 +544,36 @@ export default function ExecutiveDashboardPage() {
     data.recommendedActions.length +
     data.revenueImpact.length;
 
+  if (totalThemes === 0) {
+    return (
+      <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto' }}>
+        <h1 style={{ fontSize: '1.6rem', fontWeight: 800, color: '#0A2540', marginBottom: '1.5rem' }}>
+          Executive Decision Dashboard
+        </h1>
+        <div
+          style={{
+            ...CARD,
+            padding: '2.5rem',
+            textAlign: 'center',
+            color: '#6C757D',
+          }}
+        >
+          <p style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0A2540', margin: '0 0 0.5rem' }}>
+            No ranked themes yet
+          </p>
+          <p style={{ fontSize: '0.875rem', margin: '0 0 0.75rem' }}>
+            The Executive Dashboard requires themes to have at least 1 signal (feedback, voice, support, or survey)
+            and a CIQ score. Once the CIQ engine has scored your themes, this dashboard will populate automatically.
+          </p>
+          <p style={{ fontSize: '0.8rem', margin: 0 }}>
+            Tip: Go to <strong>CIQ Scoring</strong> and trigger a recompute, or verify that feedback has been
+            ingested and themes have been clustered.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto' }}>
 
