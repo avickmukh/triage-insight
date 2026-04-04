@@ -129,43 +129,48 @@ function AuthenticatedShell({ slug, pathname, children }: { slug: string; pathna
           {/* Nav */}
           <nav style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '0.75rem 0' }}>
 
-            {/* Workspace */}
-            <NavGroup label="Workspace" open={sidebarOpen}>
+            {/* Home */}
+            <NavGroup label="" open={sidebarOpen}>
               <SideNavItem href={r.dashboard} pathname={pathname} open={sidebarOpen} icon={<IconGrid/>}>Home</SideNavItem>
-              <SideNavItem href={r.inbox}     pathname={pathname} open={sidebarOpen} icon={<IconInbox/>}>Inbox</SideNavItem>
-              <SideNavItem href={r.themes}    pathname={pathname} open={sidebarOpen} icon={<IconTheme/>}>Themes</SideNavItem>
-              <SideNavItem href={r.roadmap}   pathname={pathname} open={sidebarOpen} icon={<IconRoadmap/>}>Roadmap</SideNavItem>
             </NavGroup>
 
-            {/* Intelligence Hub — promoted to top-level */}
-            <NavGroup label="Intelligence Hub" open={sidebarOpen}>
-              <SideNavItem href={r.ciq}                   pathname={pathname} open={sidebarOpen} icon={<IconIntelligence/>}>CIQ Dashboard</SideNavItem>
-              <SideNavItem href={r.intelligence}          pathname={pathname} open={sidebarOpen} icon={<IconIntelligence/>}>CIQ Overview</SideNavItem>
-              <SideNavItem href={r.intelligenceThemes}    pathname={pathname} open={sidebarOpen} icon={<IconThemeRank/>}>Theme Ranking</SideNavItem>
-              <SideNavItem href={r.intelligenceFeatures}  pathname={pathname} open={sidebarOpen} icon={<IconFeatureRank/>}>Feature Ranking</SideNavItem>
-              <SideNavItem href={r.intelligenceCustomers} pathname={pathname} open={sidebarOpen} icon={<IconCustomerIQ/>}>Customer Ranking</SideNavItem>
-            </NavGroup>
-
-            {/* Prioritization Engine — promoted to top-level */}
-            <NavGroup label="Prioritization" open={sidebarOpen}>
-              <SideNavItem href={r.prioritization}              pathname={pathname} open={sidebarOpen} icon={<IconPriority/>}>Engine</SideNavItem>
-              <SideNavItem href={r.prioritizationFeatures}      pathname={pathname} open={sidebarOpen} icon={<IconFeaturePriority/>}>Feature Priority Ranking</SideNavItem>
-              <SideNavItem href={r.prioritizationOpportunities} pathname={pathname} open={sidebarOpen} icon={<IconOpportunity/>}>Revenue Opportunities</SideNavItem>
-              <SideNavItem href={r.prioritizationRoadmap}       pathname={pathname} open={sidebarOpen} icon={<IconRoadmapAlign/>}>Roadmap Fit</SideNavItem>
-            </NavGroup>
-
-            {/* Customers & Revenue */}
-            <NavGroup label="Customers" open={sidebarOpen}>
-              <SideNavItem href={r.customers} pathname={pathname} open={sidebarOpen} icon={<IconCustomers/>}>Customers</SideNavItem>
-              <SideNavItem href={r.reports}   pathname={pathname} open={sidebarOpen} icon={<IconReports/>}>Reports</SideNavItem>
-            </NavGroup>
-
-            {/* Signals */}
+            {/* SIGNALS */}
             <NavGroup label="Signals" open={sidebarOpen}>
-              <SideNavItem href={r.feedbackSource}   pathname={pathname} open={sidebarOpen} icon={<IconFeedback/>}>Feedback</SideNavItem>
+              <SideNavItem href={r.inbox}            pathname={pathname} open={sidebarOpen} icon={<IconInbox/>}>Inbox</SideNavItem>
               <SideNavItem href={r.voice}            pathname={pathname} open={sidebarOpen} icon={<IconVoice/>}>Voice</SideNavItem>
               <SideNavItem href={r.surveys}          pathname={pathname} open={sidebarOpen} icon={<IconSurveys/>}>Surveys</SideNavItem>
               <SideNavItem href={r.support.overview} pathname={pathname} open={sidebarOpen} icon={<IconSupport/>}>Support</SideNavItem>
+            </NavGroup>
+
+            {/* THEMES */}
+            <NavGroup label="Themes" open={sidebarOpen}>
+              <SideNavItem href={r.themes}               pathname={pathname} open={sidebarOpen} icon={<IconTheme/>}>All Themes</SideNavItem>
+              <SideNavItem href={r.customers}            pathname={pathname} open={sidebarOpen} icon={<IconCustomers/>}>Customers</SideNavItem>
+              <SideNavItem href={r.intelligenceCustomers} pathname={pathname} open={sidebarOpen} icon={<IconCustomerIQ/>}>Customer Ranking</SideNavItem>
+            </NavGroup>
+
+            {/* PRIORITIZATION */}
+            <NavGroup label="Prioritization" open={sidebarOpen}>
+              <SideNavItem href={r.ciq}                        pathname={pathname} open={sidebarOpen} icon={<IconIntelligence/>}>CIQ Scoring</SideNavItem>
+              <SideNavItem href={r.intelligenceThemes}         pathname={pathname} open={sidebarOpen} icon={<IconThemeRank/>}>Theme Ranking</SideNavItem>
+              <SideNavItem href={r.intelligenceFeatures}       pathname={pathname} open={sidebarOpen} icon={<IconFeatureRank/>}>Feature CIQ Ranking</SideNavItem>
+              <SideNavItem href={r.prioritizationFeatures}     pathname={pathname} open={sidebarOpen} icon={<IconFeaturePriority/>}>Feature Priority</SideNavItem>
+              <SideNavItem href={r.prioritizationOpportunities} pathname={pathname} open={sidebarOpen} icon={<IconOpportunity/>}>Revenue Opps</SideNavItem>
+            </NavGroup>
+
+            {/* DECISIONS */}
+            <NavGroup label="Decisions" open={sidebarOpen}>
+              <SideNavItem href={r.roadmap}               pathname={pathname} open={sidebarOpen} icon={<IconRoadmap/>}>Roadmap</SideNavItem>
+              <SideNavItem href={r.prioritizationRoadmap} pathname={pathname} open={sidebarOpen} icon={<IconRoadmapAlign/>}>Roadmap Recs</SideNavItem>
+              <SideNavItem href={r.roadmapAiSuggestions}  pathname={pathname} open={sidebarOpen} icon={<IconBrain/>}>AI Suggestions</SideNavItem>
+              <SideNavItem href={r.actionPlan}            pathname={pathname} open={sidebarOpen} icon={<IconCalendar/>}>Action Plan</SideNavItem>
+            </NavGroup>
+
+            {/* REPORTS */}
+            <NavGroup label="Reports" open={sidebarOpen}>
+              <SideNavItem href={r.executiveDashboard} pathname={pathname} open={sidebarOpen} icon={<IconDashboard/>}>Exec Dashboard</SideNavItem>
+              <SideNavItem href={r.digest}             pathname={pathname} open={sidebarOpen} icon={<IconBook/>}>Digest</SideNavItem>
+              <SideNavItem href={r.reports}            pathname={pathname} open={sidebarOpen} icon={<IconReports/>}>Reports</SideNavItem>
             </NavGroup>
 
             {/* Admin */}
@@ -175,7 +180,7 @@ function AuthenticatedShell({ slug, pathname, children }: { slug: string; pathna
                 <SideNavItem href={ra.billing}      pathname={pathname} open={sidebarOpen} icon={<IconBilling/>}>Billing</SideNavItem>
                 <SideNavItem href={ra.integrations} pathname={pathname} open={sidebarOpen} icon={<IconIntegrations/>}>Integrations</SideNavItem>
                 <SideNavItem href={ra.settings}     pathname={pathname} open={sidebarOpen} icon={<IconSettings/>}>Settings</SideNavItem>
-                <SideNavItem href={ra.auditLog}    pathname={pathname} open={sidebarOpen} icon={<IconAuditLog/>}>Audit Log</SideNavItem>
+                <SideNavItem href={ra.auditLog}     pathname={pathname} open={sidebarOpen} icon={<IconAuditLog/>}>Audit Log</SideNavItem>
               </NavGroup>
             )}
           </nav>
@@ -208,34 +213,37 @@ function AuthenticatedShell({ slug, pathname, children }: { slug: string; pathna
               </button>
             </div>
             <nav style={{ flex: 1, padding: '0.75rem 0' }}>
-              <NavGroupDrawer label="Workspace">
+              <NavGroupDrawer label="">
                 <DrawerNavItem href={r.dashboard} pathname={pathname} icon={<IconGrid/>}>Home</DrawerNavItem>
-                <DrawerNavItem href={r.inbox}     pathname={pathname} icon={<IconInbox/>}>Inbox</DrawerNavItem>
-                <DrawerNavItem href={r.themes}    pathname={pathname} icon={<IconTheme/>}>Themes</DrawerNavItem>
-                <DrawerNavItem href={r.roadmap}   pathname={pathname} icon={<IconRoadmap/>}>Roadmap</DrawerNavItem>
-              </NavGroupDrawer>
-              <NavGroupDrawer label="Intelligence Hub">
-                <DrawerNavItem href={r.ciq}                   pathname={pathname} icon={<IconIntelligence/>}>CIQ Dashboard</DrawerNavItem>
-                <DrawerNavItem href={r.intelligence}          pathname={pathname} icon={<IconIntelligence/>}>CIQ Overview</DrawerNavItem>
-                <DrawerNavItem href={r.intelligenceThemes}    pathname={pathname} icon={<IconThemeRank/>}>Theme Ranking</DrawerNavItem>
-                <DrawerNavItem href={r.intelligenceFeatures}  pathname={pathname} icon={<IconFeatureRank/>}>Feature Ranking</DrawerNavItem>
-                <DrawerNavItem href={r.intelligenceCustomers} pathname={pathname} icon={<IconCustomerIQ/>}>Customer Ranking</DrawerNavItem>
-              </NavGroupDrawer>
-              <NavGroupDrawer label="Prioritization">
-                <DrawerNavItem href={r.prioritization}              pathname={pathname} icon={<IconPriority/>}>Engine</DrawerNavItem>
-                <DrawerNavItem href={r.prioritizationFeatures}      pathname={pathname} icon={<IconFeaturePriority/>}>Feature Priority Ranking</DrawerNavItem>
-                <DrawerNavItem href={r.prioritizationOpportunities} pathname={pathname} icon={<IconOpportunity/>}>Revenue Opportunities</DrawerNavItem>
-                <DrawerNavItem href={r.prioritizationRoadmap}       pathname={pathname} icon={<IconRoadmapAlign/>}>Roadmap Fit</DrawerNavItem>
-              </NavGroupDrawer>
-              <NavGroupDrawer label="Customers">
-                <DrawerNavItem href={r.customers} pathname={pathname} icon={<IconCustomers/>}>Customers</DrawerNavItem>
-                <DrawerNavItem href={r.reports}   pathname={pathname} icon={<IconReports/>}>Reports</DrawerNavItem>
               </NavGroupDrawer>
               <NavGroupDrawer label="Signals">
-                <DrawerNavItem href={r.feedbackSource}   pathname={pathname} icon={<IconFeedback/>}>Feedback</DrawerNavItem>
+                <DrawerNavItem href={r.inbox}            pathname={pathname} icon={<IconInbox/>}>Inbox</DrawerNavItem>
                 <DrawerNavItem href={r.voice}            pathname={pathname} icon={<IconVoice/>}>Voice</DrawerNavItem>
                 <DrawerNavItem href={r.surveys}          pathname={pathname} icon={<IconSurveys/>}>Surveys</DrawerNavItem>
                 <DrawerNavItem href={r.support.overview} pathname={pathname} icon={<IconSupport/>}>Support</DrawerNavItem>
+              </NavGroupDrawer>
+              <NavGroupDrawer label="Themes">
+                <DrawerNavItem href={r.themes}               pathname={pathname} icon={<IconTheme/>}>All Themes</DrawerNavItem>
+                <DrawerNavItem href={r.customers}            pathname={pathname} icon={<IconCustomers/>}>Customers</DrawerNavItem>
+                <DrawerNavItem href={r.intelligenceCustomers} pathname={pathname} icon={<IconCustomerIQ/>}>Customer Ranking</DrawerNavItem>
+              </NavGroupDrawer>
+              <NavGroupDrawer label="Prioritization">
+                <DrawerNavItem href={r.ciq}                        pathname={pathname} icon={<IconIntelligence/>}>CIQ Scoring</DrawerNavItem>
+                <DrawerNavItem href={r.intelligenceThemes}         pathname={pathname} icon={<IconThemeRank/>}>Theme Ranking</DrawerNavItem>
+                <DrawerNavItem href={r.intelligenceFeatures}       pathname={pathname} icon={<IconFeatureRank/>}>Feature CIQ Ranking</DrawerNavItem>
+                <DrawerNavItem href={r.prioritizationFeatures}     pathname={pathname} icon={<IconFeaturePriority/>}>Feature Priority</DrawerNavItem>
+                <DrawerNavItem href={r.prioritizationOpportunities} pathname={pathname} icon={<IconOpportunity/>}>Revenue Opps</DrawerNavItem>
+              </NavGroupDrawer>
+              <NavGroupDrawer label="Decisions">
+                <DrawerNavItem href={r.roadmap}               pathname={pathname} icon={<IconRoadmap/>}>Roadmap</DrawerNavItem>
+                <DrawerNavItem href={r.prioritizationRoadmap} pathname={pathname} icon={<IconRoadmapAlign/>}>Roadmap Recs</DrawerNavItem>
+                <DrawerNavItem href={r.roadmapAiSuggestions}  pathname={pathname} icon={<IconBrain/>}>AI Suggestions</DrawerNavItem>
+                <DrawerNavItem href={r.actionPlan}            pathname={pathname} icon={<IconCalendar/>}>Action Plan</DrawerNavItem>
+              </NavGroupDrawer>
+              <NavGroupDrawer label="Reports">
+                <DrawerNavItem href={r.executiveDashboard} pathname={pathname} icon={<IconDashboard/>}>Exec Dashboard</DrawerNavItem>
+                <DrawerNavItem href={r.digest}             pathname={pathname} icon={<IconBook/>}>Digest</DrawerNavItem>
+                <DrawerNavItem href={r.reports}            pathname={pathname} icon={<IconReports/>}>Reports</DrawerNavItem>
               </NavGroupDrawer>
               {isAdmin && (
                 <NavGroupDrawer label="Admin">
@@ -243,7 +251,7 @@ function AuthenticatedShell({ slug, pathname, children }: { slug: string; pathna
                   <DrawerNavItem href={ra.billing}      pathname={pathname} icon={<IconBilling/>}>Billing</DrawerNavItem>
                   <DrawerNavItem href={ra.integrations} pathname={pathname} icon={<IconIntegrations/>}>Integrations</DrawerNavItem>
                   <DrawerNavItem href={ra.settings}     pathname={pathname} icon={<IconSettings/>}>Settings</DrawerNavItem>
-                  <DrawerNavItem href={ra.auditLog}    pathname={pathname} icon={<IconAuditLog/>}>Audit Log</DrawerNavItem>
+                  <DrawerNavItem href={ra.auditLog}     pathname={pathname} icon={<IconAuditLog/>}>Audit Log</DrawerNavItem>
                 </NavGroupDrawer>
               )}
             </nav>
@@ -523,6 +531,14 @@ function IconFeedback()     { return <svg {...ip}><path d="M21 15a2 2 0 0 1-2 2H
 function IconVoice()        { return <svg {...ip}><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>; }
 function IconSurveys()      { return <svg {...ip}><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>; }
 function IconSupport()      { return <svg {...ip}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>; }
+
+// Decisions
+function IconBrain()        { return <svg {...ip}><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.46 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.46 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2z"/></svg>; }
+function IconCalendar()     { return <svg {...ip}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>; }
+
+// Reports
+function IconDashboard()    { return <svg {...ip}><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>; }
+function IconBook()         { return <svg {...ip}><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>; }
 
 // Admin
 function IconMembers()      { return <svg {...ip}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>; }
