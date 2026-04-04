@@ -19,6 +19,7 @@ import { appRoutes } from '@/lib/routes';
 import { PromoteToRoadmapModal } from '@/components/roadmap/PromoteToRoadmapModal';
 import { UnifiedTopIssue, TopPriorityTheme } from '@/lib/api-types';
 import { useTopPriorityThemes } from '@/hooks/use-themes';
+import { PageHeader } from '@/components/shared/ui/page-header';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const CARD: React.CSSProperties = {
@@ -401,9 +402,12 @@ export default function IntelligencePage() {
       {/* ── Header ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0a2540', margin: 0 }}>
-            Unified Intelligence Hub
-          </h1>
+          <PageHeader
+            stage="insights"
+            title="Unified Intelligence Hub"
+            description="Cross-source analysis combining feedback, voice, and support signals into ranked themes."
+            nextAction="Review CIQ scores on the Impact Dashboard to understand business priority."
+          />
           <p style={{ color: '#6C757D', margin: '0.25rem 0 0', fontSize: '0.875rem' }}>
             Cross-source signals from feedback, support tickets, voice, and surveys — unified into a single intelligence layer
           </p>

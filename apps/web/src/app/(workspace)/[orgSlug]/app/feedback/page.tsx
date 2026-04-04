@@ -41,6 +41,7 @@ import {
   WorkspaceRole,
 } from '@/lib/api-types';
 import { appRoutes, orgAdminRoutes } from '@/lib/routes';
+import { PageHeader } from '@/components/shared/ui/page-header';
 
 // ─── Design tokens (shared across source pages) ───────────────────────────────
 const C = {
@@ -612,17 +613,13 @@ export default function FeedbackSourcePage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
 
       {/* ── Page header ──────────────────────────────────────────────────── */}
+      <PageHeader
+        stage="signals"
+        title="Feedback Source"
+        description="Manage how direct product feedback enters TriageInsight — manual submission, CSV import, and the public portal. All channels feed the same theme clustering and CIQ priority pipeline."
+        nextAction="After uploading, view clustered themes in Theme Insights or check the Impact Dashboard for CIQ scores."
+      />
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: C.navy, margin: 0 }}>
-            Feedback Source
-          </h1>
-          <p style={{ color: C.muted, marginTop: '0.35rem', fontSize: '0.9rem', maxWidth: 560 }}>
-            Manage how direct product feedback enters TriageInsight — manual submission,
-            CSV import, and the public portal. All channels feed the same theme clustering
-            and CIQ priority pipeline as voice, survey, and support.
-          </p>
-        </div>
         <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
           <button
             onClick={() => refetch()}

@@ -9,6 +9,7 @@ import { useRecalculateAllThemes } from '@/hooks/use-ciq';
 import { Theme, ThemeStatus, WorkspaceRole } from '@/lib/api-types';
 import { CiqImpactBadge } from '@/components/ciq/CiqImpactBadge';
 import { appRoutes } from '@/lib/routes';
+import { PageHeader } from '@/components/shared/ui/page-header';
 
 // ─── Design tokens (matching TriageInsight shell) ─────────────────────────────
 const CARD: React.CSSProperties = {
@@ -488,15 +489,13 @@ export default function ThemesPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       {/* ── Header ── */}
+      <PageHeader
+        stage="insights"
+        title="Theme Intelligence"
+        description="AI-clustered feedback themes — automatically grouped from feedback, voice, and support signals."
+        nextAction="Click a theme to view its CIQ breakdown, then promote high-priority themes to your roadmap."
+      />
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0a2540', margin: 0 }}>
-            Theme Intelligence
-          </h1>
-          <p style={{ fontSize: '0.875rem', color: '#6C757D', margin: '0.25rem 0 0' }}>
-            AI-clustered feedback themes for your workspace
-          </p>
-        </div>
         {canEdit && (
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
             <button

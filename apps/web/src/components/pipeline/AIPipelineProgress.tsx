@@ -52,6 +52,21 @@ const STAGE_LABELS: Record<string, string> = {
   FAILED:     'Some items failed — retrying automatically…',
 };
 
+/** Ordered pipeline steps for the step-indicator UI */
+const PIPELINE_STEPS = [
+  { stage: 'UPLOADED',   label: 'Upload',   icon: '⬆' },
+  { stage: 'QUEUED',     label: 'Queue',    icon: '⏳' },
+  { stage: 'ANALYZING',  label: 'Embed',    icon: '🔍' },
+  { stage: 'CLUSTERING', label: 'Cluster',  icon: '🧩' },
+  { stage: 'COMPLETED',  label: 'Done',     icon: '✅' },
+];
+
+/** Returns the step index (0-based) for a given stage string */
+function getStepIndex(stage: string): number {
+  const idx = PIPELINE_STEPS.findIndex(s => s.stage === stage);
+  return idx === -1 ? 0 : idx;
+}
+
 export function markPipelineStarted(workspaceId: string, batchId?: string) {
   try {
     localStorage.setItem(LS_RUNNING_KEY(workspaceId), String(Date.now()));
@@ -299,6 +314,55 @@ export function AIPipelineProgress({ workspaceId, batchId: propBatchId, onComple
         </div>
       )}
 
+      {/* ── Pipeline step indicator ── */}
+      {!isCompleted && !isFailed && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          marginTop: '0.75rem', gap: '0.25rem',
+        }}>
+          {PIPELINE_STEPS.map((step, idx) => {
+            const currentStep = getStepIndex(stage);
+            const isDone    = idx < currentStep;
+            const isActive  = idx === currentStep;
+            const isPending = idx > currentStep;
+            return (
+              <div key={step.stage} style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+                <div style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem',
+                  flex: '0 0 auto',
+                }}>
+                  <div style={{
+                    width: 28, height: 28, borderRadius: '50%',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '0.75rem',
+                    background: isDone ? '#20A4A4' : isActive ? '#1a73e8' : '#e9ecef',
+                    color: isDone || isActive ? '#fff' : '#adb5bd',
+                    fontWeight: 700,
+                    boxShadow: isActive ? '0 0 0 3px #90caf940' : 'none',
+                    transition: 'all 0.3s ease',
+                  }}>
+                    {isDone ? '✓' : step.icon}
+                  </div>
+                  <span style={{
+                    fontSize: '0.62rem', fontWeight: isActive ? 700 : 400,
+                    color: isDone ? '#20A4A4' : isActive ? '#1a73e8' : '#adb5bd',
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {step.label}
+                  </span>
+                </div>
+                {idx < PIPELINE_STEPS.length - 1 && (
+                  <div style={{
+                    flex: 1, height: 2, margin: '0 0.25rem', marginBottom: '1rem',
+                    background: isDone ? '#20A4A4' : '#e9ecef',
+                    transition: 'background 0.3s ease',
+                  }} />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
       {status.failed > 0 && (
         <p style={{ fontSize: '0.75rem', color: '#c62828', margin: '0.5rem 0 0' }}>
           ⚠ {status.failed} item{status.failed > 1 ? 's' : ''} failed — retrying automatically.

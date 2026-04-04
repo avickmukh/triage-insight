@@ -33,6 +33,8 @@ import { appRoutes } from '@/lib/routes';
 import { CiqImpactBadge } from '@/components/ciq/CiqImpactBadge';
 import { PromoteToRoadmapModal } from '@/components/roadmap/PromoteToRoadmapModal';
 import { ThemeRankingItem, FeatureRankingItem, CustomerRankingItem } from '@/lib/api-types';
+import { PageHeader } from '@/components/shared/ui/page-header';
+import { CiqBreakdownBar } from '@/components/ciq/CiqBreakdownBar';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const CARD: React.CSSProperties = {
@@ -176,6 +178,7 @@ export default function CiqDashboardPage() {
     if (!themeRanking || themeRanking.length === 0) return false;
     return themeRanking.every(t => !t.priorityScore && t.ciqScore === 0);
   }, [themeRanking]);
+  const [expandedTheme, setExpandedTheme] = React.useState<string | null>(null);
 
   const filteredFeatures = useMemo(() => {
     if (!featureRanking) return [];
@@ -217,15 +220,13 @@ export default function CiqDashboardPage() {
     <div style={{ padding: '2rem', maxWidth: 1400, margin: '0 auto' }}>
 
       {/* ── Header ── */}
+      <PageHeader
+        stage="impact"
+        title="Impact Dashboard"
+        description="Customer Intelligence Quotient — unified scoring based on feedback, support tickets, and voice signals."
+        nextAction="Run Recompute CIQ to score all active themes, then explore Prioritization Engine for action."
+      />
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0a2540', margin: 0 }}>
-            CIQ Dashboard
-          </h1>
-          <p style={{ color: '#6C757D', margin: '0.25rem 0 0', fontSize: '0.875rem' }}>
-            Customer Intelligence Quotient — unified scoring based on feedback, support tickets, and voice signals
-          </p>
-        </div>
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <Link href={routes.intelligence}
             style={{ padding: '0.45rem 1rem', background: '#f0f4f8', color: '#0a2540', borderRadius: '0.5rem', textDecoration: 'none', fontSize: '0.82rem', fontWeight: 500 }}>
@@ -368,12 +369,13 @@ export default function CiqDashboardPage() {
                         <th style={{ padding: '0.5rem 0.75rem', textAlign: 'left', color: '#6C757D', fontWeight: 600, width: 140 }}>Source Mix</th>
                         <th style={{ padding: '0.5rem 0.75rem', textAlign: 'right', color: '#6C757D', fontWeight: 600, width: 60 }}>Signals</th>
                         <th style={{ padding: '0.5rem 0.75rem', textAlign: 'right', color: '#6C757D', fontWeight: 600, width: 60 }}>Customers</th>
+                        <th style={{ padding: '0.5rem 0.75rem', textAlign: 'center', color: '#6C757D', fontWeight: 600, width: 40 }}></th>
                         <th style={{ padding: '0.5rem 0.75rem', textAlign: 'center', color: '#6C757D', fontWeight: 600, width: 120 }}>Action</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredThemes.map((theme: ThemeRankingItem, i) => (
-                        <tr key={theme.themeId} style={{ borderBottom: '1px solid #f0f4f8' }}>
+                      {filteredThemes.map((theme: ThemeRankingItem, i) => (<React.Fragment key={theme.themeId}>
+                        <tr style={{ borderBottom: '1px solid #f0f4f8' }}>
                           <td style={{ padding: '0.6rem 0.75rem', color: '#adb5bd', fontWeight: 700, fontSize: '0.75rem' }}>
                             {i + 1}
                           </td>
@@ -411,6 +413,19 @@ export default function CiqDashboardPage() {
                           </td>
                           <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center' }}>
                             <button
+                              onClick={() => setExpandedTheme(expandedTheme === theme.themeId ? null : theme.themeId)}
+                              title={expandedTheme === theme.themeId ? 'Hide breakdown' : 'Show CIQ breakdown'}
+                              style={{
+                                background: 'transparent', border: 'none',
+                                cursor: 'pointer', fontSize: '0.9rem', color: '#6C757D',
+                                padding: '0.2rem 0.4rem',
+                              }}
+                            >
+                              {expandedTheme === theme.themeId ? '▲' : '▼'}
+                            </button>
+                          </td>
+                          <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center' }}>
+                            <button
                               onClick={() => setPromoteModal({ themeId: theme.themeId, themeTitle: theme.title })}
                               style={{
                                 padding: '0.25rem 0.6rem',
@@ -428,7 +443,17 @@ export default function CiqDashboardPage() {
                             </button>
                           </td>
                         </tr>
-                      ))}
+                        {expandedTheme === theme.themeId && (
+                          <tr>
+                            <td colSpan={9} style={{ padding: '0.75rem 1rem 1rem', background: '#f8fafc', borderBottom: '2px solid #e9ecef' }}>
+                              <CiqBreakdownBar
+                                breakdown={theme.breakdown}
+                                totalScore={theme.ciqScore}
+                              />
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>))}
                     </tbody>
                   </table>
                 </div>

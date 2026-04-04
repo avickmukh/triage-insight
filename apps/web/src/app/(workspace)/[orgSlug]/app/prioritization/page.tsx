@@ -15,6 +15,7 @@ import { usePrioritizedThemes, usePrioritizationOpportunities, useRoadmapRecomme
 import { useWorkspace } from '@/hooks/use-workspace';
 import { appRoutes } from '@/lib/routes';
 import { RoadmapRecommendationType } from '@/lib/api-types';
+import { PageHeader } from '@/components/shared/ui/page-header';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const CARD: React.CSSProperties = {
@@ -85,15 +86,13 @@ export default function PrioritizationPage() {
   return (
     <div style={{ padding: '2rem', maxWidth: 1400, margin: '0 auto' }}>
       {/* ── Header ── */}
+      <PageHeader
+        stage="decisions"
+        title="Prioritization Engine"
+        description="4-dimension CIQ scoring: Demand Strength · Revenue Impact · Strategic Importance · Urgency Signals."
+        nextAction="Promote top-ranked themes to your roadmap or assign to sprint planning."
+      />
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0a2540', margin: 0 }}>
-            Prioritization Engine
-          </h1>
-          <p style={{ color: '#6C757D', margin: '0.25rem 0 0', fontSize: '0.875rem' }}>
-            4-dimension CIQ scoring: Demand Strength · Revenue Impact · Strategic Importance · Urgency Signals
-          </p>
-        </div>
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
           <Link href={routes.prioritizationFeatures}
             style={{ padding: '0.5rem 1rem', background: '#f0f4f8', color: '#0a2540', borderRadius: '0.5rem', textDecoration: 'none', fontSize: '0.875rem', fontWeight: 500 }}>
