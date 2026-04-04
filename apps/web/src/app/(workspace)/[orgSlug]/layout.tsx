@@ -137,6 +137,7 @@ function AuthenticatedShell({ slug, pathname, children }: { slug: string; pathna
             {/* SIGNALS */}
             <NavGroup label="Signals" open={sidebarOpen}>
               <SideNavItem href={r.inbox}            pathname={pathname} open={sidebarOpen} icon={<IconInbox/>}>Inbox</SideNavItem>
+              <SideNavItem href={r.feedbackSource}   pathname={pathname} open={sidebarOpen} icon={<IconFeedback/>}>Feedback</SideNavItem>
               <SideNavItem href={r.voice}            pathname={pathname} open={sidebarOpen} icon={<IconVoice/>}>Voice</SideNavItem>
               <SideNavItem href={r.surveys}          pathname={pathname} open={sidebarOpen} icon={<IconSurveys/>}>Surveys</SideNavItem>
               <SideNavItem href={r.support.overview} pathname={pathname} open={sidebarOpen} icon={<IconSupport/>}>Support</SideNavItem>
@@ -218,6 +219,7 @@ function AuthenticatedShell({ slug, pathname, children }: { slug: string; pathna
               </NavGroupDrawer>
               <NavGroupDrawer label="Signals">
                 <DrawerNavItem href={r.inbox}            pathname={pathname} icon={<IconInbox/>}>Inbox</DrawerNavItem>
+                <DrawerNavItem href={r.feedbackSource}   pathname={pathname} icon={<IconFeedback/>}>Feedback</DrawerNavItem>
                 <DrawerNavItem href={r.voice}            pathname={pathname} icon={<IconVoice/>}>Voice</DrawerNavItem>
                 <DrawerNavItem href={r.surveys}          pathname={pathname} icon={<IconSurveys/>}>Surveys</DrawerNavItem>
                 <DrawerNavItem href={r.support.overview} pathname={pathname} icon={<IconSupport/>}>Support</DrawerNavItem>
