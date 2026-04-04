@@ -5,15 +5,25 @@
  * Displays AI-generated roadmap suggestions for all active themes.
  * Each suggestion shows:
  *   - Suggestion type badge (ADD_TO_ROADMAP / INCREASE_PRIORITY / DECREASE_PRIORITY / MONITOR / NO_ACTION)
- *   - Roadmap Priority Score (RPS) with breakdown bar
+ *   - Roadmap Priority Score (RPS) with breakdown bar and formula tooltip
  *   - CIQ Score
  *   - Reason sentence (deterministic, based on real signals)
  *   - Confidence level (HIGH / MEDIUM / LOW) + explanation
  *   - Signal summary (total signals, source mix, velocity WoW%)
  *   - Dominant driver
- *   - "Add to roadmap" button (links to promote modal — does NOT auto-create)
+ *   - "Add to roadmap" button on every card (links to theme detail — does NOT auto-create)
  *
  * AI assists decision-making — it does NOT auto-create roadmap items.
+ *
+ * RPS formula:
+ *   RPS = 35% CIQ + 20% Velocity + 15% Sentiment + 15% Source Mix + 10% Recency + 5% Resurfacing
+ *
+ * Suggestion type thresholds:
+ *   ADD_TO_ROADMAP   → RPS ≥ 70 and not already on roadmap
+ *   INCREASE_PRIORITY → RPS ≥ 55 and already on roadmap at lower priority
+ *   DECREASE_PRIORITY → RPS < 30 and already on roadmap
+ *   MONITOR          → RPS 30–69 (moderate signals, not yet strong enough to act on)
+ *   NO_ACTION        → RPS < 30 and not on roadmap
  */
 
 import { useState } from 'react';
@@ -46,12 +56,13 @@ const SUGGESTION_META: Record<AiSuggestionType, {
   bg: string;
   color: string;
   border: string;
+  description: string;
 }> = {
-  ADD_TO_ROADMAP:     { icon: '🔥', label: 'Add to Roadmap',     bg: '#fff3cd', color: '#b8860b', border: '#f0e6b0' },
-  INCREASE_PRIORITY:  { icon: '⬆',  label: 'Increase Priority',  bg: '#e8f7f7', color: '#20A4A4', border: '#b2e4e4' },
-  DECREASE_PRIORITY:  { icon: '⬇',  label: 'Decrease Priority',  bg: '#fdecea', color: '#c62828', border: '#f5c6cb' },
-  MONITOR:            { icon: '👁',  label: 'Monitor',            bg: '#f0f5ff', color: '#1a56db', border: '#c7d9fb' },
-  NO_ACTION:          { icon: '—',   label: 'No Action',          bg: '#f8f9fa', color: '#6C757D', border: '#dee2e6' },
+  ADD_TO_ROADMAP:     { icon: '🔥', label: 'Add to Roadmap',     bg: '#fff3cd', color: '#b8860b', border: '#f0e6b0', description: 'RPS ≥ 70 — strong signals, not yet on roadmap' },
+  INCREASE_PRIORITY:  { icon: '⬆',  label: 'Increase Priority',  bg: '#e8f7f7', color: '#20A4A4', border: '#b2e4e4', description: 'RPS ≥ 55 — signals growing, already on roadmap at lower priority' },
+  DECREASE_PRIORITY:  { icon: '⬇',  label: 'Decrease Priority',  bg: '#fdecea', color: '#c62828', border: '#f5c6cb', description: 'RPS < 30 — signals declining, already on roadmap' },
+  MONITOR:            { icon: '👁',  label: 'Monitor',            bg: '#f0f5ff', color: '#1a56db', border: '#c7d9fb', description: 'RPS 30–69 — moderate signals, not yet strong enough to act on' },
+  NO_ACTION:          { icon: '—',   label: 'No Action',          bg: '#f8f9fa', color: '#6C757D', border: '#dee2e6', description: 'RPS < 30 — weak signals, not on roadmap' },
 };
 
 const CONFIDENCE_META: Record<AiConfidenceLevel, { label: string; color: string; bg: string }> = {
@@ -59,6 +70,10 @@ const CONFIDENCE_META: Record<AiConfidenceLevel, { label: string; color: string;
   MEDIUM: { label: 'Medium Confidence', color: '#f57c00', bg: '#fff3e8' },
   LOW:    { label: 'Low Confidence',    color: '#c62828', bg: '#fdecea' },
 };
+
+// ─── RPS formula tooltip ──────────────────────────────────────────────────────
+
+const RPS_FORMULA = 'RPS = 35% CIQ + 20% Velocity + 15% Sentiment + 15% Source Mix + 10% Recency + 5% Resurfacing';
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -92,9 +107,6 @@ function SuggestionCard({ item, orgSlug }: { item: AiRoadmapSuggestion; orgSlug:
   const meta       = SUGGESTION_META[item.suggestionType];
   const confMeta   = CONFIDENCE_META[item.confidence];
   const routes     = appRoutes(orgSlug);
-  const isActionable = item.suggestionType === 'ADD_TO_ROADMAP' ||
-                       item.suggestionType === 'INCREASE_PRIORITY' ||
-                       item.suggestionType === 'DECREASE_PRIORITY';
 
   return (
     <div style={{
@@ -107,14 +119,17 @@ function SuggestionCard({ item, orgSlug }: { item: AiRoadmapSuggestion; orgSlug:
       {/* ── Header row ── */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
         <div style={{ flex: 1, minWidth: 200 }}>
-          {/* Suggestion type badge */}
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
-            fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.04em',
-            color: meta.color, background: meta.bg,
-            padding: '0.2rem 0.6rem', borderRadius: '999px',
-            marginBottom: '0.4rem',
-          }}>
+          {/* Suggestion type badge with tooltip */}
+          <span
+            title={meta.description}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+              fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.04em',
+              color: meta.color, background: meta.bg,
+              padding: '0.2rem 0.6rem', borderRadius: '999px',
+              marginBottom: '0.4rem', cursor: 'help',
+            }}
+          >
             {meta.icon} {meta.label}
           </span>
           {/* Theme title */}
@@ -131,7 +146,12 @@ function SuggestionCard({ item, orgSlug }: { item: AiRoadmapSuggestion; orgSlug:
         {/* RPS + CIQ scores */}
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexShrink: 0 }}>
           <div style={{ textAlign: 'center' }}>
-            <p style={{ margin: 0, fontSize: '0.65rem', color: '#6C757D', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em' }}>RPS</p>
+            <p
+              title={RPS_FORMULA}
+              style={{ margin: 0, fontSize: '0.65rem', color: '#6C757D', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em', cursor: 'help', textDecoration: 'underline dotted #adb5bd' }}
+            >
+              RPS
+            </p>
             <p style={{ margin: 0, fontSize: '1.125rem', fontWeight: 700, color: item.roadmapPriorityScore >= 70 ? '#20A4A4' : item.roadmapPriorityScore >= 40 ? '#f57c00' : '#c62828' }}>
               {Math.round(item.roadmapPriorityScore)}
             </p>
@@ -148,7 +168,15 @@ function SuggestionCard({ item, orgSlug }: { item: AiRoadmapSuggestion; orgSlug:
 
       {/* ── RPS bar ── */}
       <div style={{ marginBottom: '0.75rem' }}>
-        <p style={{ margin: '0 0 0.25rem', fontSize: '0.7rem', color: '#6C757D', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Roadmap Priority Score</p>
+        <p
+          title={RPS_FORMULA}
+          style={{ margin: '0 0 0.25rem', fontSize: '0.7rem', color: '#6C757D', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em', cursor: 'help' }}
+        >
+          Roadmap Priority Score
+          <span style={{ marginLeft: '0.35rem', fontSize: '0.65rem', color: '#adb5bd', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
+            (35% CIQ · 20% Velocity · 15% Sentiment · 15% Sources · 10% Recency · 5% Resurfacing)
+          </span>
+        </p>
         <RpsBar score={item.roadmapPriorityScore} />
       </div>
 
@@ -202,7 +230,7 @@ function SuggestionCard({ item, orgSlug }: { item: AiRoadmapSuggestion; orgSlug:
       {/* ── Score breakdown (collapsible detail) ── */}
       <details style={{ marginBottom: '0.75rem' }}>
         <summary style={{ fontSize: '0.75rem', color: '#6C757D', cursor: 'pointer', userSelect: 'none', fontWeight: 500 }}>
-          Score breakdown
+          ▸ Score breakdown
         </summary>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.375rem', marginTop: '0.5rem' }}>
           {[
@@ -226,37 +254,59 @@ function SuggestionCard({ item, orgSlug }: { item: AiRoadmapSuggestion; orgSlug:
         )}
       </details>
 
-      {/* ── Actions ── */}
-      {isActionable && (
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          {item.suggestionType === 'ADD_TO_ROADMAP' && !item.roadmapItemId && (
-            <Link
-              href={`${routes.themes}/${item.themeId}`}
-              style={{
-                fontSize: '0.8125rem', fontWeight: 600,
-                color: '#fff', background: '#20A4A4',
-                padding: '0.375rem 0.875rem', borderRadius: '0.5rem',
-                textDecoration: 'none', display: 'inline-block',
-              }}
-            >
-              + Add to Roadmap
-            </Link>
-          )}
-          {item.roadmapItemId && (
-            <Link
-              href={`${routes.roadmap}/${item.roadmapItemId}`}
-              style={{
-                fontSize: '0.8125rem', fontWeight: 600,
-                color: '#1a56db', background: '#f0f5ff',
-                padding: '0.375rem 0.875rem', borderRadius: '0.5rem',
-                textDecoration: 'none', display: 'inline-block',
-              }}
-            >
-              View Roadmap Item →
-            </Link>
-          )}
-        </div>
-      )}
+      {/* ── Actions — always shown ── */}
+      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        {/* View theme detail */}
+        <Link
+          href={`${routes.themes}/${item.themeId}`}
+          style={{
+            fontSize: '0.8125rem', fontWeight: 600,
+            color: '#0a2540', background: '#f0f4f8',
+            padding: '0.375rem 0.875rem', borderRadius: '0.5rem',
+            textDecoration: 'none', display: 'inline-block',
+            border: '1px solid #dee2e6',
+          }}
+        >
+          View Theme →
+        </Link>
+
+        {/* Add to roadmap — shown when not already on roadmap */}
+        {!item.roadmapItemId && (
+          <Link
+            href={`${routes.themes}/${item.themeId}?action=add-to-roadmap`}
+            style={{
+              fontSize: '0.8125rem', fontWeight: 600,
+              color: '#fff', background: '#20A4A4',
+              padding: '0.375rem 0.875rem', borderRadius: '0.5rem',
+              textDecoration: 'none', display: 'inline-block',
+            }}
+          >
+            + Add to Roadmap
+          </Link>
+        )}
+
+        {/* Already on roadmap — view it */}
+        {item.roadmapItemId && (
+          <Link
+            href={`${routes.roadmap}/${item.roadmapItemId}`}
+            style={{
+              fontSize: '0.8125rem', fontWeight: 600,
+              color: '#1a56db', background: '#f0f5ff',
+              padding: '0.375rem 0.875rem', borderRadius: '0.5rem',
+              textDecoration: 'none', display: 'inline-block',
+            }}
+          >
+            View Roadmap Item →
+          </Link>
+        )}
+
+        {/* Monitor note */}
+        {item.suggestionType === 'MONITOR' && (
+          <span style={{ fontSize: '0.75rem', color: '#6C757D', fontStyle: 'italic' }}>
+            RPS {Math.round(item.roadmapPriorityScore)}/100 — moderate signals, not yet strong enough to act on
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -286,20 +336,17 @@ export default function AiRoadmapSuggestionsPage() {
   const suggestions = data?.data ?? [];
   const summary     = data?.summary;
 
-  // Filter tabs
-  const tabs: { key: AiSuggestionType | 'ALL'; label: string }[] = [
-    { key: 'ALL',              label: `All (${suggestions.length})` },
-    { key: 'ADD_TO_ROADMAP',   label: `🔥 Add (${summary?.addToRoadmap ?? 0})` },
-    { key: 'INCREASE_PRIORITY',label: `⬆ Increase (${summary?.increasePriority ?? 0})` },
-    { key: 'DECREASE_PRIORITY',label: `⬇ Decrease (${summary?.decreasePriority ?? 0})` },
-    { key: 'MONITOR',          label: `👁 Monitor (${summary?.monitor ?? 0})` },
+  // Filter tabs — no "All" tab; default to ADD_TO_ROADMAP
+  const tabs: { key: AiSuggestionType; label: string; count: number }[] = [
+    { key: 'ADD_TO_ROADMAP',    label: '🔥 Add to Roadmap',    count: summary?.addToRoadmap ?? 0 },
+    { key: 'INCREASE_PRIORITY', label: '⬆ Increase Priority',  count: summary?.increasePriority ?? 0 },
+    { key: 'DECREASE_PRIORITY', label: '⬇ Decrease Priority',  count: summary?.decreasePriority ?? 0 },
+    { key: 'MONITOR',           label: '👁 Monitor',            count: summary?.monitor ?? 0 },
   ];
 
-  const [activeTab, setActiveTab] = useState<AiSuggestionType | 'ALL'>('ALL');
+  const [activeTab, setActiveTab] = useState<AiSuggestionType>('ADD_TO_ROADMAP');
 
-  const filtered = activeTab === 'ALL'
-    ? suggestions.filter(s => s.suggestionType !== 'NO_ACTION')
-    : suggestions.filter(s => s.suggestionType === activeTab);
+  const filtered = suggestions.filter(s => s.suggestionType === activeTab);
 
   return (
     <div style={{ padding: '2rem', maxWidth: 1200, margin: '0 auto' }}>
@@ -313,9 +360,14 @@ export default function AiRoadmapSuggestionsPage() {
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0a2540', margin: '0 0 0.25rem' }}>
           AI Roadmap Suggestions
         </h1>
-        <p style={{ color: '#6C757D', margin: 0, fontSize: '0.875rem' }}>
+        <p style={{ color: '#6C757D', margin: '0 0 0.25rem', fontSize: '0.875rem' }}>
           AI-assisted prioritisation based on CIQ scoring, signal velocity, sentiment, and cross-source evidence.
           Suggestions are explainable and human-reviewable — AI does not auto-create roadmap items.
+        </p>
+        <p style={{ color: '#adb5bd', margin: 0, fontSize: '0.78rem' }}>
+          <strong style={{ color: '#6C757D' }}>RPS formula:</strong>{' '}
+          {RPS_FORMULA}.
+          Hover any RPS label for details.
         </p>
       </div>
 
@@ -323,15 +375,28 @@ export default function AiRoadmapSuggestionsPage() {
       {!isLoading && summary && (
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
           {[
-            { label: 'Add to Roadmap',    value: summary.addToRoadmap,     color: '#b8860b', bg: '#fff3cd' },
-            { label: 'Increase Priority', value: summary.increasePriority, color: '#20A4A4', bg: '#e8f7f7' },
-            { label: 'Decrease Priority', value: summary.decreasePriority, color: '#c62828', bg: '#fdecea' },
-            { label: 'Monitor',           value: summary.monitor,          color: '#1a56db', bg: '#f0f5ff' },
-          ].map(({ label, value, color, bg }) => (
-            <div key={label} style={{ ...CARD, flex: 1, minWidth: 120, padding: '0.875rem 1rem', background: bg, border: `1px solid ${color}28` }}>
+            { key: 'ADD_TO_ROADMAP'    as AiSuggestionType, label: 'Add to Roadmap',    value: summary.addToRoadmap,     color: '#b8860b', bg: '#fff3cd', description: 'RPS ≥ 70 — strong signals, not yet on roadmap' },
+            { key: 'INCREASE_PRIORITY' as AiSuggestionType, label: 'Increase Priority', value: summary.increasePriority, color: '#20A4A4', bg: '#e8f7f7', description: 'RPS ≥ 55 — growing signals, already on roadmap' },
+            { key: 'DECREASE_PRIORITY' as AiSuggestionType, label: 'Decrease Priority', value: summary.decreasePriority, color: '#c62828', bg: '#fdecea', description: 'RPS < 30 — declining signals, already on roadmap' },
+            { key: 'MONITOR'           as AiSuggestionType, label: 'Monitor',           value: summary.monitor,          color: '#1a56db', bg: '#f0f5ff', description: 'RPS 30–69 — moderate signals, not yet strong enough to act on' },
+          ].map(({ key, label, value, color, bg, description }) => (
+            <button
+              key={label}
+              title={description}
+              onClick={() => setActiveTab(key)}
+              style={{
+                ...CARD,
+                flex: 1, minWidth: 120, padding: '0.875rem 1rem',
+                background: activeTab === key ? bg : '#fff',
+                border: activeTab === key ? `2px solid ${color}` : `1px solid ${color}28`,
+                cursor: 'pointer', textAlign: 'left',
+                outline: 'none',
+              }}
+            >
               <p style={{ margin: 0, fontSize: '0.7rem', color, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</p>
               <p style={{ margin: '0.125rem 0 0', fontSize: '1.5rem', fontWeight: 700, color }}>{value}</p>
-            </div>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.65rem', color: '#adb5bd', fontWeight: 400 }}>{description}</p>
+            </button>
           ))}
         </div>
       )}
@@ -351,7 +416,7 @@ export default function AiRoadmapSuggestionsPage() {
               cursor: 'pointer', transition: 'all 0.15s',
             }}
           >
-            {tab.label}
+            {tab.label} ({tab.count})
           </button>
         ))}
       </div>
@@ -365,7 +430,7 @@ export default function AiRoadmapSuggestionsPage() {
         <div style={{ ...CARD, textAlign: 'center', padding: '3rem', color: '#6C757D' }}>
           {suggestions.length === 0
             ? 'No active themes found. Add feedback to themes to generate suggestions.'
-            : 'No suggestions in this category.'}
+            : `No themes in the "${SUGGESTION_META[activeTab].label}" category right now.`}
         </div>
       ) : (
         <div style={{ display: 'grid', gap: '0.875rem' }}>
