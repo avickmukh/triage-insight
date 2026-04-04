@@ -120,11 +120,16 @@ function SourceMixBar({
   );
 }
 
-function KpiCard({ label, value, sub, color = '#0a2540' }: {
-  label: string; value: string | number; sub?: string; color?: string;
+function KpiCard({ label, value, sub, color = '#0a2540', onClick }: {
+  label: string; value: string | number; sub?: string; color?: string; onClick?: () => void;
 }) {
   return (
-    <div style={{ ...CARD, flex: 1, minWidth: 150 }}>
+    <div
+      onClick={onClick}
+      style={{ ...CARD, flex: 1, minWidth: 150, cursor: onClick ? 'pointer' : 'default', transition: 'box-shadow 0.15s' }}
+      onMouseEnter={onClick ? (e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 12px rgba(10,37,64,0.12)'; } : undefined}
+      onMouseLeave={onClick ? (e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = '0 1px 4px rgba(10,37,64,0.06)'; } : undefined}
+    >
       <p style={{ margin: 0, fontSize: '0.7rem', color: '#6C757D', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</p>
       <p style={{ margin: '0.25rem 0 0', fontSize: '1.5rem', fontWeight: 700, color }}>{value}</p>
       {sub && <p style={{ margin: '0.125rem 0 0', fontSize: '0.72rem', color: '#6C757D' }}>{sub}</p>}
@@ -145,7 +150,7 @@ export default function CiqDashboardPage() {
   // Data hooks
   const { data: signals, isLoading: signalsLoading } = useCiqStrategicSignals();
   const { data: themeRanking, isLoading: themesLoading } = useCiqThemeRanking(20);
-  const { data: featureRanking, isLoading: featuresLoading } = useCiqFeatureRanking(20);
+  const { data: featureRanking, isLoading: featuresLoading } = useCiqFeatureRanking(100);
   const { data: customerRanking, isLoading: customersLoading } = useCiqCustomerRanking(10);
   const recompute = useCiqRecompute();
 
@@ -263,12 +268,14 @@ export default function CiqDashboardPage() {
               value={kpiCritical}
               sub="CIQ score ≥ 70"
               color={kpiCritical > 0 ? '#b91c1c' : '#0a2540'}
+              onClick={() => setActiveTab('themes')}
             />
             <KpiCard
               label="Roadmap Actions"
               value={kpiRecs}
               sub="Promote / commit signals"
               color={kpiRecs > 0 ? '#b8860b' : '#0a2540'}
+              onClick={() => router.push(routes.roadmap)}
             />
             <KpiCard
               label="Voice Urgent"
@@ -286,6 +293,7 @@ export default function CiqDashboardPage() {
               label="Themes Scored"
               value={themeRanking?.length ?? 0}
               sub="Active themes with CIQ"
+              onClick={() => setActiveTab('themes')}
             />
           </div>
 

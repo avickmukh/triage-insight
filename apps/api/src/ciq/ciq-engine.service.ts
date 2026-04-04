@@ -446,8 +446,8 @@ export class CiqEngineService {
         breakdown,
       };
     })
-    // ── Min-signal guard: exclude themes with fewer than 3 total signals ────
-    .filter((t) => t.totalSignalCount >= 3);
+    // ── Min-signal guard: exclude themes with no signals (show all themes with ≥1 signal) ────
+    .filter((t) => t.totalSignalCount >= 1);
   }
 
   // ─── 3. Customer Ranking ──────────────────────────────────────────────────
@@ -718,10 +718,11 @@ export class CiqEngineService {
     // ── Signal feed ───────────────────────────────────────────────────────────
     const signals: StrategicSignal[] = [];
 
-    // High-CIQ themes without roadmap linkage
+    // High-CIQ themes without roadmap linkage; also surface unscored themes with feedback
     for (const t of themes) {
       const score = t.ciqScore ?? t.priorityScore ?? 0;
-      if (score >= 60 && t.roadmapItems.length === 0) {
+      const feedbackCount = t.feedbacks?.length ?? 0;
+      if (score >= 30 && t.roadmapItems.length === 0) {
         signals.push({
           type:         'theme',
           entityId:     t.id,
@@ -729,6 +730,17 @@ export class CiqEngineService {
           signal:       'high_ciq_no_roadmap',
           strength:     score / 100,
           detail:       `Theme "${t.title}" has CIQ score ${score.toFixed(0)} but no roadmap item.`,
+          detectedAt:   new Date(),
+        });
+      } else if (score === 0 && feedbackCount >= 1 && t.roadmapItems.length === 0) {
+        // Theme has feedback but hasn't been CIQ-scored yet — surface as pending signal
+        signals.push({
+          type:         'feedback',
+          entityId:     t.id,
+          entityTitle:  t.title,
+          signal:       'pending_ciq_scoring',
+          strength:     Math.min(0.5, feedbackCount / 10),
+          detail:       `Theme "${t.title}" has ${feedbackCount} feedback item${feedbackCount !== 1 ? 's' : ''} awaiting CIQ scoring.`,
           detectedAt:   new Date(),
         });
       }
