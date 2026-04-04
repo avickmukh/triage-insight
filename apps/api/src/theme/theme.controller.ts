@@ -60,13 +60,20 @@ export class ThemeController {
 
   @Post()
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
-  create(@Param('workspaceId') workspaceId: string, @Req() req: AuthenticatedRequest, @Body() createThemeDto: CreateThemeDto) {
+  create(
+    @Param('workspaceId') workspaceId: string,
+    @Req() req: AuthenticatedRequest,
+    @Body() createThemeDto: CreateThemeDto,
+  ) {
     return this.themeService.create(workspaceId, req.user.sub, createThemeDto);
   }
 
   @Get()
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
-  findAll(@Param('workspaceId') workspaceId: string, @Query() query: QueryThemeDto) {
+  findAll(
+    @Param('workspaceId') workspaceId: string,
+    @Query() query: QueryThemeDto,
+  ) {
     return this.themeService.findAll(workspaceId, query);
   }
 
@@ -78,8 +85,16 @@ export class ThemeController {
 
   @Post('feedback')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
-  moveFeedback(@Param('workspaceId') workspaceId: string, @Req() req: AuthenticatedRequest, @Body() moveFeedbackDto: MoveFeedbackDto) {
-    return this.themeService.moveFeedback(workspaceId, req.user.sub, moveFeedbackDto);
+  moveFeedback(
+    @Param('workspaceId') workspaceId: string,
+    @Req() req: AuthenticatedRequest,
+    @Body() moveFeedbackDto: MoveFeedbackDto,
+  ) {
+    return this.themeService.moveFeedback(
+      workspaceId,
+      req.user.sub,
+      moveFeedbackDto,
+    );
   }
 
   /**
@@ -102,7 +117,9 @@ export class ThemeController {
   @Get('source-summary')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
   getSourceSummary(@Param('workspaceId') workspaceId: string) {
-    return this.unifiedAggregationService.getWorkspaceSourceSummary(workspaceId);
+    return this.unifiedAggregationService.getWorkspaceSourceSummary(
+      workspaceId,
+    );
   }
 
   /**
@@ -123,8 +140,18 @@ export class ThemeController {
 
   @Patch(':id')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
-  update(@Param('workspaceId') workspaceId: string, @Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() updateThemeDto: UpdateThemeDto) {
-    return this.themeService.update(workspaceId, req.user.sub, id, updateThemeDto);
+  update(
+    @Param('workspaceId') workspaceId: string,
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() updateThemeDto: UpdateThemeDto,
+  ) {
+    return this.themeService.update(
+      workspaceId,
+      req.user.sub,
+      id,
+      updateThemeDto,
+    );
   }
 
   /**
@@ -161,7 +188,12 @@ export class ThemeController {
     @Param('id') id: string,
     @Param('feedbackId') feedbackId: string,
   ) {
-    return this.themeService.addFeedback(workspaceId, req.user.sub, id, feedbackId);
+    return this.themeService.addFeedback(
+      workspaceId,
+      req.user.sub,
+      id,
+      feedbackId,
+    );
   }
 
   /** DELETE /workspaces/:workspaceId/themes/:id/feedback/:feedbackId — unlink feedback */
@@ -173,19 +205,44 @@ export class ThemeController {
     @Param('id') id: string,
     @Param('feedbackId') feedbackId: string,
   ) {
-    return this.themeService.removeFeedback(workspaceId, req.user.sub, id, feedbackId);
+    return this.themeService.removeFeedback(
+      workspaceId,
+      req.user.sub,
+      id,
+      feedbackId,
+    );
   }
 
   @Post(':id/merge')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
-  mergeThemes(@Param('workspaceId') workspaceId: string, @Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() mergeThemesDto: MergeThemesDto) {
-    return this.themeService.merge(workspaceId, req.user.sub, id, mergeThemesDto.sourceThemeIds);
+  mergeThemes(
+    @Param('workspaceId') workspaceId: string,
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() mergeThemesDto: MergeThemesDto,
+  ) {
+    return this.themeService.merge(
+      workspaceId,
+      req.user.sub,
+      id,
+      mergeThemesDto.sourceThemeIds,
+    );
   }
 
   @Post(':id/split')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
-  splitTheme(@Param('workspaceId') workspaceId: string, @Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() splitThemeDto: SplitThemeDto) {
-    return this.themeService.split(workspaceId, req.user.sub, id, splitThemeDto);
+  splitTheme(
+    @Param('workspaceId') workspaceId: string,
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() splitThemeDto: SplitThemeDto,
+  ) {
+    return this.themeService.split(
+      workspaceId,
+      req.user.sub,
+      id,
+      splitThemeDto,
+    );
   }
 
   /**
@@ -267,7 +324,9 @@ export class ThemeController {
     @Param('workspaceId') workspaceId: string,
     @Param('id') themeId: string,
   ) {
-    return this.themeLabelService.generateLabel(themeId).then((label) => ({ label }));
+    return this.themeLabelService
+      .generateLabel(themeId)
+      .then((label) => ({ label }));
   }
 
   /**
@@ -291,7 +350,10 @@ export class ThemeController {
     @Param('workspaceId') workspaceId: string,
     @Query('limit', new DefaultValuePipe(3), ParseIntPipe) limit: number,
   ) {
-    return this.unifiedAggregationService.getTopPriorityThemes(workspaceId, limit);
+    return this.unifiedAggregationService.getTopPriorityThemes(
+      workspaceId,
+      limit,
+    );
   }
 
   /**
@@ -362,10 +424,9 @@ export class ThemeController {
    */
   @Post(':id/generate-insight')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
-  generateInsight(
-    @Param('id') themeId: string,
-  ) {
-    return this.explainableInsightsService.generateImpactSentence(themeId)
+  generateInsight(@Param('id') themeId: string) {
+    return this.explainableInsightsService
+      .generateImpactSentence(themeId)
       .then((sentence) => ({ sentence }));
   }
 
@@ -375,10 +436,10 @@ export class ThemeController {
    */
   @Post('generate-insights')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
-  generateInsights(
-    @Param('workspaceId') workspaceId: string,
-  ) {
-    return this.explainableInsightsService.generateInsightsForWorkspace(workspaceId);
+  generateInsights(@Param('workspaceId') workspaceId: string) {
+    return this.explainableInsightsService.generateInsightsForWorkspace(
+      workspaceId,
+    );
   }
 
   /**
@@ -387,10 +448,32 @@ export class ThemeController {
    */
   @Post('run-trends')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR)
-  runTrends(
-    @Param('workspaceId') workspaceId: string,
-  ) {
+  runTrends(@Param('workspaceId') workspaceId: string) {
     return this.trendComputationService.computeWorkspaceTrends(workspaceId);
+  }
+
+  /**
+   * GET /workspaces/:workspaceId/themes/:id/similar
+   * Returns up to 5 similar themes (by vector similarity) for the merge suggestion panel.
+   * Includes mergeReason, embeddingSimilarity, and keywordSimilarity for explainability.
+   */
+  @Get(':id/similar')
+  @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
+  getSimilarThemes(
+    @Param('workspaceId') workspaceId: string,
+    @Param('id') themeId: string,
+  ) {
+    return this.autoMergeService
+      .detectAndMerge(workspaceId, {
+        autoExecute: false,
+        anchorThemeId: themeId,
+      })
+      .then((result) => ({
+        themeId,
+        suggestions: result.suggestions,
+        bootstrapMode: result.bootstrapMode,
+        effectiveThreshold: result.effectiveThreshold,
+      }));
   }
 
   // ── Support Spike → Theme Linking (Step 4 Gap Fix) ───────────────────────────
@@ -420,6 +503,11 @@ export class ThemeController {
     @Req() req: AuthenticatedRequest,
     @Body() body: { clusterId: string },
   ) {
-    return this.themeService.linkSupportCluster(workspaceId, req.user.sub, id, body.clusterId);
+    return this.themeService.linkSupportCluster(
+      workspaceId,
+      req.user.sub,
+      id,
+      body.clusterId,
+    );
   }
 }

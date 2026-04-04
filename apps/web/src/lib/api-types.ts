@@ -236,8 +236,9 @@ export interface Feedback {
   comments?: FeedbackComment[];
   confidence?: number | null;
   assignedBy?: string | null;
+  /** Human-readable explanation of why this feedback was matched to the theme (AI-generated) */
+  matchReason?: string | null;
 }
-
 export interface ThemeFeedback {
   id?: string;
   themeId: string;
@@ -344,16 +345,62 @@ export interface Theme {
   trendDirection?: 'UP' | 'STABLE' | 'DOWN' | null;
   /** Percentage change in signal count vs. previous week */
   trendDelta?: number | null;
+  /** Signal count in the current 7-day window */
+  currentWeekSignals?: number | null;
+  /** Signal count in the previous 7-day window */
+  prevWeekSignals?: number | null;
+  /** Timestamp of the last trend computation run */
+  lastTrendedAt?: string | null;
+  // ─── Resurfacing fields ─────────────────────────────────────────────────────────────────────────────────────────────────
+  /** Count of times fresh evidence arrived after a linked roadmap item was SHIPPED */
+  resurfaceCount?: number | null;
+  /** Timestamp of last resurfacing event */
+  resurfacedAt?: string | null;
+  /** Count of signals received in the last 30 days */
+  recentSignalCount?: number | null;
+  /** Timestamp of the most recent evidence attachment (any source) */
+  lastEvidenceAt?: string | null;
+  // ─── CIQ sub-scores ─────────────────────────────────────────────────────────────────────────────────────────────────
+  /** CIQ composite score (mirrors priorityScore) */
+  ciqScore?: number | null;
+  /** Normalised 0–100 revenue impact score */
+  revenueScore?: number | null;
+  /** Urgency score (0–100): support spike + negative voice trend + escalation flags */
+  urgencyScore?: number | null;
+  // ─── Semantic confidence breakdown (detail endpoint only) ─────────────────────────────────────────────────────────────────────────────────────────────────
+  /** Total count of linked feedback items (raw ThemeFeedback count) */
+  totalLinkedFeedback?: number | null;
+  /** Count of AI-assigned links with confidence >= 0.75 */
+  highConfidenceCount?: number | null;
+  /** Count of AI-assigned links with confidence < 0.75 */
+  lowConfidenceCount?: number | null;
+  /** Count of manually-assigned links */
+  manualCount?: number | null;
+  // ─── AI label + impact ─────────────────────────────────────────────────────────────────────────────────────────────────
   /** AI-generated short label (≤ 6 words, specific) */
   shortLabel?: string | null;
   /** AI-generated impact sentence */
   impactSentence?: string | null;
+  /** AI-generated cross-source insight sentence */
+  crossSourceInsight?: string | null;
+  /** Sentiment distribution JSON: { positive: n, neutral: n, negative: n } */
+  sentimentDistribution?: { positive: number; neutral: number; negative: number } | null;
+  // ─── Auto-merge state ─────────────────────────────────────────────────────────────────────────────────────────────────
   /** Whether this theme is flagged as an auto-merge candidate */
   autoMergeCandidate?: boolean;
   /** The themeId this theme should be merged into */
   autoMergeTargetId?: string | null;
   /** Auto-merge similarity score (0–1) */
   autoMergeSimilarity?: number | null;
+  // ─── Pipeline processing state (detail endpoint only) ─────────────────────────────────────────────────────────────────────────────────────────────────
+  pipelineState?: {
+    clustered: boolean;
+    scored: boolean;
+    narrated: boolean;
+    lastScoredAt: string | null;
+    lastNarratedAt: string | null;
+    lastAggregatedAt: string | null;
+  } | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -373,13 +420,31 @@ export interface TopPriorityTheme {
   priorityRank: number;
 }
 
-/** Auto-merge suggestion returned by GET /themes/auto-merge/suggestions */
+/** Auto-merge suggestion returned by GET /themes/auto-merge/suggestions or /themes/:id/similar */
 export interface AutoMergeSuggestion {
   sourceId: string;
   sourceTitle: string;
   targetId: string;
   targetTitle: string;
+  /** Hybrid score (embedding × 0.7 + keyword × 0.3) */
   similarity: number;
+  /** Raw embedding cosine similarity */
+  embeddingSimilarity?: number;
+  /** Keyword Jaccard overlap */
+  keywordSimilarity?: number;
+  /** Human-readable explanation of why these themes are similar */
+  mergeReason?: string;
+  sourceSize?: number;
+  targetSize?: number;
+  bootstrapMode?: boolean;
+}
+
+/** Similar-themes response from GET /themes/:id/similar */
+export interface SimilarThemesResponse {
+  themeId: string;
+  suggestions: AutoMergeSuggestion[];
+  bootstrapMode: boolean;
+  effectiveThreshold?: number;
 }
 
 export interface ThemeListResponse {

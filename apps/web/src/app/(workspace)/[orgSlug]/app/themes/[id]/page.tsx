@@ -15,9 +15,11 @@ import { CiqImpactBadge } from '@/components/ciq/CiqImpactBadge';
 import { CiqSignalBreakdown } from '@/components/ciq/CiqSignalBreakdown';
 import { PromoteToRoadmapModal } from '@/components/roadmap/PromoteToRoadmapModal';
 import {
+  AutoMergeSuggestion,
   CiqScoreOutput,
   FeedbackSourceType,
   FeedbackStatus,
+  SimilarThemesResponse,
   ThemeLinkedFeedback,
   ThemeStatus,
   UpdateThemeDto,
@@ -289,13 +291,27 @@ function FeedbackRow({
           </span>
           {item.assignedBy === 'ai' && confidence && (
             <span
-              title={`AI matched this feedback to the theme with ${confidence} semantic similarity`}
+              title={item.matchReason
+                ? `AI matched this feedback to the theme with ${confidence} semantic similarity. Reason: ${item.matchReason}`
+                : `AI matched this feedback to the theme with ${confidence} semantic similarity`}
               style={{
                 fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: '999px',
                 background: '#e3f2fd', color: '#1565c0', fontWeight: 600, cursor: 'help',
               }}
             >
               AI match · {confidence}
+            </span>
+          )}
+          {item.assignedBy === 'ai' && item.matchReason && (
+            <span
+              title={item.matchReason}
+              style={{
+                fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: '999px',
+                background: '#f0f9ff', color: '#0369a1', fontWeight: 500, cursor: 'help',
+                maxWidth: '18rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}
+            >
+              💬 {item.matchReason.length > 60 ? item.matchReason.slice(0, 57) + '…' : item.matchReason}
             </span>
           )}
           {item.assignedBy === 'manual' && (
@@ -456,9 +472,13 @@ export default function ThemeDetailPage() {
   const [showEdit, setShowEdit] = useState(false);
   const [feedbackSearch, setFeedbackSearch] = useState('');
 
-  // ── Support Spikes state (Step 4 Gap Fix) ──────────────────────────────────
+  // ── Support Spikes state ──────────────────────────────────────────────────
   const [linkedSpikes, setLinkedSpikes] = useState<LinkedSpikesResponse | null>(null);
   const [spikesLoading, setSpikesLoading] = useState(false);
+
+  // ── Similar Themes state ──────────────────────────────────────────────────
+  const [similarThemes, setSimilarThemes] = useState<SimilarThemesResponse | null>(null);
+  const [similarLoading, setSimilarLoading] = useState(false);
 
   // Fetch linked support spikes when workspaceId + themeId are available
   const fetchLinkedSpikes = async () => {
@@ -476,6 +496,23 @@ export default function ThemeDetailPage() {
   // Trigger once when theme data is available
   if (theme && !linkedSpikes && !spikesLoading && workspaceId && themeId) {
     fetchLinkedSpikes();
+  }
+
+  // Fetch similar themes for the merge suggestion panel
+  const fetchSimilarThemes = async () => {
+    if (!workspaceId || !themeId) return;
+    setSimilarLoading(true);
+    try {
+      const res = await apiClient.themes.getSimilarThemes(workspaceId, themeId);
+      setSimilarThemes(res);
+    } catch {
+      // Non-critical — panel will just be empty
+    } finally {
+      setSimilarLoading(false);
+    }
+  };
+  if (theme && !similarThemes && !similarLoading && workspaceId && themeId) {
+    fetchSimilarThemes();
   }
 
   // ── Loading ──
@@ -683,12 +720,26 @@ export default function ThemeDetailPage() {
           }}
         >
           <div>
-            <span style={{ fontSize: '0.75rem', color: '#adb5bd', display: 'block', marginBottom: '0.25rem' }}>
-              Feedback Signals
+            <span
+              title={[
+                `Total cross-source signals: ${theme.totalSignalCount ?? theme.feedbackCount ?? 0}`,
+                theme.feedbackCount ? `  · Feedback: ${theme.feedbackCount}` : null,
+                (theme.voiceCount ?? 0) > 0 ? `  · Voice: ${theme.voiceCount}` : null,
+                (theme.supportCount ?? 0) > 0 ? `  · Support: ${theme.supportCount}` : null,
+                (theme.surveyCount ?? 0) > 0 ? `  · Survey: ${theme.surveyCount}` : null,
+              ].filter(Boolean).join('\n')}
+              style={{ fontSize: '0.75rem', color: '#adb5bd', display: 'block', marginBottom: '0.25rem', cursor: 'help' }}
+            >
+              Total Signals
             </span>
             <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0a2540' }}>
-              {theme.feedbackCount}
+              {theme.totalSignalCount ?? theme.feedbackCount ?? 0}
             </span>
+            {(theme.totalSignalCount ?? 0) > (theme.feedbackCount ?? 0) && (
+              <span style={{ fontSize: '0.7rem', color: '#6C757D', display: 'block', marginTop: '0.1rem' }}>
+                {theme.feedbackCount} direct
+              </span>
+            )}
           </div>
           <div>
             <span style={{ fontSize: '0.75rem', color: '#adb5bd', display: 'block', marginBottom: '0.375rem' }}>
@@ -1449,7 +1500,166 @@ export default function ThemeDetailPage() {
         )}
       </div>
 
-      {/* ── Support Spikes Panel (Step 4 Gap Fix) ── */}
+      {/* ── Pipeline Freshness Panel ── */}
+      {theme.pipelineState && (
+        <div style={{ ...CARD, border: '1px solid #e2e8f0', background: '#f8fafc' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.875rem' }}>
+            <span style={{ fontSize: '0.9rem' }}>⚙️</span>
+            <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#374151', margin: 0 }}>Pipeline Status</h3>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(9rem, 1fr))', gap: '0.625rem' }}>
+            {[
+              {
+                label: 'Clustered',
+                done: theme.pipelineState.clustered,
+                ts: null,
+                tip: theme.pipelineState.clustered
+                  ? 'Feedback has been semantically clustered into this theme'
+                  : 'Clustering has not run yet — trigger a recluster from the Themes list',
+              },
+              {
+                label: 'CIQ Scored',
+                done: theme.pipelineState.scored,
+                ts: theme.pipelineState.lastScoredAt,
+                tip: theme.pipelineState.scored
+                  ? `Last scored: ${theme.pipelineState.lastScoredAt ? new Date(theme.pipelineState.lastScoredAt).toLocaleString() : 'unknown'}`
+                  : 'CIQ scoring has not run yet — click Recalculate in the Priority Intelligence panel',
+              },
+              {
+                label: 'AI Narrated',
+                done: theme.pipelineState.narrated,
+                ts: theme.pipelineState.lastNarratedAt,
+                tip: theme.pipelineState.narrated
+                  ? `Last narrated: ${theme.pipelineState.lastNarratedAt ? new Date(theme.pipelineState.lastNarratedAt).toLocaleString() : 'unknown'}`
+                  : 'AI narration has not run yet — it runs automatically after CIQ scoring',
+              },
+              {
+                label: 'Aggregated',
+                done: theme.pipelineState.lastAggregatedAt != null,
+                ts: theme.pipelineState.lastAggregatedAt,
+                tip: theme.pipelineState.lastAggregatedAt
+                  ? `Last aggregated: ${new Date(theme.pipelineState.lastAggregatedAt).toLocaleString()}`
+                  : 'Signal aggregation has not run yet',
+              },
+            ].map((step) => (
+              <div
+                key={step.label}
+                title={step.tip}
+                style={{
+                  background: step.done ? '#f0fdf4' : '#fff',
+                  border: `1px solid ${step.done ? '#bbf7d0' : '#e2e8f0'}`,
+                  borderRadius: '0.5rem',
+                  padding: '0.5rem 0.625rem',
+                  cursor: 'help',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.2rem' }}>
+                  <span style={{ fontSize: '0.75rem' }}>{step.done ? '✅' : '⏳'}</span>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: step.done ? '#15803d' : '#6C757D' }}>{step.label}</span>
+                </div>
+                {step.ts && (
+                  <div style={{ fontSize: '0.65rem', color: '#9ca3af' }}>
+                    {new Date(step.ts).toLocaleDateString()}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Similar Themes / Merge Suggestion Panel ── */}
+      {(similarLoading || (similarThemes && similarThemes.suggestions.length > 0)) && (
+        <div style={{ ...CARD, border: '1px solid #fde68a', background: 'linear-gradient(135deg, #fffbeb 0%, #fef9e7 100%)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.875rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ fontSize: '0.9rem' }}>🔀</span>
+              <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#92400e', margin: 0 }}>Similar Themes</h3>
+              {similarThemes?.bootstrapMode && (
+                <span
+                  title="Bootstrap mode: similarity threshold is relaxed because the workspace has fewer than 20 themes. Suggestions may be less precise."
+                  style={{ fontSize: '0.65rem', background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a', borderRadius: '999px', padding: '0.1rem 0.45rem', fontWeight: 700, cursor: 'help' }}
+                >
+                  Bootstrap mode
+                </span>
+              )}
+            </div>
+            <span style={{ fontSize: '0.72rem', color: '#92400e' }}>These themes may overlap — review before merging</span>
+          </div>
+          {similarLoading ? (
+            <p style={{ fontSize: '0.85rem', color: '#adb5bd', margin: 0 }}>Checking for similar themes…</p>
+          ) : similarThemes && similarThemes.suggestions.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+              {similarThemes.suggestions.slice(0, 5).map((s: AutoMergeSuggestion) => {
+                const isSource = s.sourceId === themeId;
+                const otherId   = isSource ? s.targetId   : s.sourceId;
+                const otherTitle = isSource ? s.targetTitle : s.sourceTitle;
+                const simPct = Math.round(s.similarity * 100);
+                return (
+                  <div
+                    key={otherId}
+                    style={{
+                      display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+                      gap: '0.75rem', padding: '0.75rem 0.875rem',
+                      background: '#fff', border: '1px solid #fde68a', borderRadius: '0.625rem',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
+                        <span
+                          title={`Hybrid similarity score: ${simPct}% (embedding ×0.7 + keyword ×0.3)`}
+                          style={{
+                            fontSize: '0.7rem', fontWeight: 700, padding: '0.15rem 0.5rem',
+                            borderRadius: '999px', cursor: 'help',
+                            background: simPct >= 85 ? '#fee2e2' : simPct >= 70 ? '#fef3c7' : '#f0f4f8',
+                            color: simPct >= 85 ? '#b91c1c' : simPct >= 70 ? '#92400e' : '#495057',
+                          }}
+                        >
+                          {simPct}% match
+                        </span>
+                        {s.embeddingSimilarity != null && (
+                          <span style={{ fontSize: '0.65rem', color: '#9ca3af' }}
+                            title={`Embedding: ${Math.round(s.embeddingSimilarity * 100)}% · Keyword: ${s.keywordSimilarity != null ? Math.round(s.keywordSimilarity * 100) + '%' : 'n/a'}`}
+                          >
+                            emb {Math.round(s.embeddingSimilarity * 100)}%
+                          </span>
+                        )}
+                      </div>
+                      <Link
+                        href={r.themeItem(otherId)}
+                        style={{ fontWeight: 600, fontSize: '0.875rem', color: '#0a2540', textDecoration: 'none' }}
+                      >
+                        {otherTitle}
+                      </Link>
+                      {s.mergeReason && (
+                        <p style={{ fontSize: '0.78rem', color: '#6C757D', margin: '0.2rem 0 0', lineHeight: 1.4 }}>
+                          {s.mergeReason}
+                        </p>
+                      )}
+                    </div>
+                    {canEdit && (
+                      <Link
+                        href={r.themeItem(otherId)}
+                        style={{
+                          fontSize: '0.75rem', fontWeight: 600, padding: '0.3rem 0.7rem',
+                          borderRadius: '0.375rem', border: '1px solid #fde68a',
+                          background: '#fffbeb', color: '#92400e', textDecoration: 'none',
+                          whiteSpace: 'nowrap', flexShrink: 0,
+                        }}
+                      >
+                        Review →
+                      </Link>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      {/* ── Support Spikes Panel ── */}
       {(spikesLoading || (linkedSpikes && linkedSpikes.totalClusters > 0)) && (
         <div style={CARD}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>

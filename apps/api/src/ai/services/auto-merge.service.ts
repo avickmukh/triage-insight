@@ -124,10 +124,12 @@ export class AutoMergeService {
     // ── Load themes with embeddings ─────────────────────────────────────────
     // NOTE: embedding is Unsupported("vector") in Prisma — must use raw SQL to
     // filter for non-null, then fetch metadata via findMany.
-    const themesWithEmbedding = await this.prisma.$queryRaw<Array<{
-      id: string;
-      feedbackCount: number;
-    }>>`
+    const themesWithEmbedding = await this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        feedbackCount: number;
+      }>
+    >`
       SELECT t.id, COALESCE(t."feedbackCount", 0)::int AS "feedbackCount"
       FROM "Theme" t
       WHERE t."workspaceId" = ${workspaceId}
@@ -155,7 +157,9 @@ export class AutoMergeService {
     }
 
     // ── Detect bootstrap mode ───────────────────────────────────────────────
-    const size1Count = themesWithEmbedding.filter((t) => t.feedbackCount <= 1).length;
+    const size1Count = themesWithEmbedding.filter(
+      (t) => t.feedbackCount <= 1,
+    ).length;
     const size1Ratio = size1Count / totalActiveThemes;
     const bootstrapMode =
       totalActiveThemes <= this.BOOTSTRAP_THEME_COUNT ||
@@ -186,7 +190,11 @@ export class AutoMergeService {
     // ── Reset auto-merge flags for this workspace ───────────────────────────
     await this.prisma.theme.updateMany({
       where: { workspaceId },
-      data: { autoMergeCandidate: false, autoMergeTargetId: null, autoMergeSimilarity: null },
+      data: {
+        autoMergeCandidate: false,
+        autoMergeTargetId: null,
+        autoMergeSimilarity: null,
+      },
     });
 
     // ── Determine which themes to scan ─────────────────────────────────────
@@ -229,13 +237,15 @@ export class AutoMergeService {
         const themeKeywords = parseKeywords(theme.topKeywords);
 
         // ── AUTO_MERGE_CANDIDATES_FOUND ────────────────────────────────────
-        const candidates = await this.prisma.$queryRaw<Array<{
-          id: string;
-          title: string;
-          similarity: number;
-          topKeywords: string | null;
-          feedbackCount: number;
-        }>>`
+        const candidates = await this.prisma.$queryRaw<
+          Array<{
+            id: string;
+            title: string;
+            similarity: number;
+            topKeywords: string | null;
+            feedbackCount: number;
+          }>
+        >`
           SELECT
             t.id,
             t.title,
@@ -267,7 +277,8 @@ export class AutoMergeService {
           const candidateKeywords = parseKeywords(candidate.topKeywords);
           const keywordScore = computeJaccard(themeKeywords, candidateKeywords);
           const hybridScore =
-            candidate.similarity * this.EMBEDDING_WEIGHT + keywordScore * this.KEYWORD_WEIGHT;
+            candidate.similarity * this.EMBEDDING_WEIGHT +
+            keywordScore * this.KEYWORD_WEIGHT;
 
           // ── AUTO_MERGE_BEST_CANDIDATE ──────────────────────────────────
           this.logger.debug(
@@ -299,15 +310,33 @@ export class AutoMergeService {
               ? theme.id
               : candidate.id;
           const sourceId = targetId === theme.id ? candidate.id : theme.id;
-          const targetTitle = targetId === theme.id ? theme.title : candidate.title;
-          const sourceTitle = sourceId === theme.id ? theme.title : candidate.title;
-          const sourceSize = sourceId === theme.id ? themeSize : candidate.feedbackCount;
-          const targetSize = targetId === theme.id ? themeSize : candidate.feedbackCount;
+          const targetTitle =
+            targetId === theme.id ? theme.title : candidate.title;
+          const sourceTitle =
+            sourceId === theme.id ? theme.title : candidate.title;
+          const sourceSize =
+            sourceId === theme.id ? themeSize : candidate.feedbackCount;
+          const targetSize =
+            targetId === theme.id ? themeSize : candidate.feedbackCount;
+
+          // Build human-readable merge reason for explainability UI
+          const mergeReason = [
+            `embedding similarity ${(candidate.similarity * 100).toFixed(0)}%`,
+            keywordScore > 0
+              ? `keyword overlap ${(keywordScore * 100).toFixed(0)}%`
+              : null,
+            bootstrapMode ? 'bootstrap mode (relaxed threshold)' : null,
+          ]
+            .filter(Boolean)
+            .join(' + ');
 
           suggestions.push({
             sourceId,
             targetId,
             similarity: hybridScore,
+            embeddingSimilarity: candidate.similarity,
+            keywordSimilarity: keywordScore,
+            mergeReason,
             sourceTitle,
             targetTitle,
             sourceSize,
@@ -317,7 +346,13 @@ export class AutoMergeService {
 
           if (autoExecute) {
             try {
-              await this.executeMerge(workspaceId, targetId, sourceId, userId, hybridScore);
+              await this.executeMerge(
+                workspaceId,
+                targetId,
+                sourceId,
+                userId,
+                hybridScore,
+              );
               mergedSourceIds.add(sourceId);
               // ── AUTO_MERGE_SUCCESS ───────────────────────────────────
               this.logger.log(
@@ -420,7 +455,10 @@ export class AutoMergeService {
       for (const link of sourceLinks) {
         await tx.themeFeedback.upsert({
           where: {
-            themeId_feedbackId: { themeId: targetThemeId, feedbackId: link.feedbackId },
+            themeId_feedbackId: {
+              themeId: targetThemeId,
+              feedbackId: link.feedbackId,
+            },
           },
           create: {
             themeId: targetThemeId,
@@ -502,15 +540,21 @@ export class AutoMergeService {
    * Get all pending auto-merge suggestions for a workspace.
    * Returns themes flagged as autoMergeCandidate=true with their target theme details.
    */
-  async getSuggestions(workspaceId: string): Promise<Array<{
-    sourceId: string;
-    sourceTitle: string;
-    targetId: string;
-    targetTitle: string;
-    similarity: number;
-  }>> {
+  async getSuggestions(workspaceId: string): Promise<
+    Array<{
+      sourceId: string;
+      sourceTitle: string;
+      targetId: string;
+      targetTitle: string;
+      similarity: number;
+    }>
+  > {
     const candidates = await this.prisma.theme.findMany({
-      where: { workspaceId, autoMergeCandidate: true, autoMergeTargetId: { not: null } },
+      where: {
+        workspaceId,
+        autoMergeCandidate: true,
+        autoMergeTargetId: { not: null },
+      },
       select: {
         id: true,
         title: true,
@@ -551,10 +595,17 @@ export class AutoMergeService {
    * Dismiss an auto-merge suggestion for a theme — clears the candidate flag
    * without executing a merge.
    */
-  async dismissAutoMerge(workspaceId: string, themeId: string): Promise<{ ok: boolean }> {
+  async dismissAutoMerge(
+    workspaceId: string,
+    themeId: string,
+  ): Promise<{ ok: boolean }> {
     await this.prisma.theme.update({
       where: { id: themeId, workspaceId },
-      data: { autoMergeCandidate: false, autoMergeTargetId: null, autoMergeSimilarity: null },
+      data: {
+        autoMergeCandidate: false,
+        autoMergeTargetId: null,
+        autoMergeSimilarity: null,
+      },
     });
     return { ok: true };
   }
@@ -562,7 +613,10 @@ export class AutoMergeService {
   /**
    * Alias for dismissAutoMerge used by the theme controller dismiss endpoint.
    */
-  async dismissMergeCandidate(workspaceId: string, themeId: string): Promise<{ ok: boolean }> {
+  async dismissMergeCandidate(
+    workspaceId: string,
+    themeId: string,
+  ): Promise<{ ok: boolean }> {
     return this.dismissAutoMerge(workspaceId, themeId);
   }
 
@@ -591,7 +645,14 @@ export class AutoMergeService {
 export interface MergeSuggestion {
   sourceId: string;
   targetId: string;
+  /** Hybrid score (embedding × 0.7 + keyword × 0.3) */
   similarity: number;
+  /** Raw embedding cosine similarity */
+  embeddingSimilarity?: number;
+  /** Keyword Jaccard overlap */
+  keywordSimilarity?: number;
+  /** Human-readable explanation of why these themes are similar */
+  mergeReason?: string;
   sourceTitle: string;
   targetTitle: string;
   sourceSize: number;

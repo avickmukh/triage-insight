@@ -505,6 +505,9 @@ const apiClient = {
     /** POST /workspaces/:id/themes/:themeId/generate-insight — generate AI impact sentence */
     generateInsight: (workspaceId: string, themeId: string): Promise<{ sentence: string | null }> =>
       api.post(`/workspaces/${workspaceId}/themes/${themeId}/generate-insight`).then(handleResponse),
+    /** GET /workspaces/:id/themes/:themeId/similar — returns similar themes for merge suggestion panel */
+    getSimilarThemes: (workspaceId: string, themeId: string): Promise<import('./api-types').SimilarThemesResponse> =>
+      api.get(`/workspaces/${workspaceId}/themes/${themeId}/similar`).then(handleResponse),
   },
 
   roadmap: {

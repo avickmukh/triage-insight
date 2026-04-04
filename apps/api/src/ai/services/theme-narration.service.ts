@@ -11,6 +11,16 @@ export interface ThemeNarrationInput {
   avgSentiment: number | null;
   priorityScore: number | null;
   urgencyScore: number | null;
+  // Extended cross-source context
+  trendDirection?: string | null;
+  trendDelta?: number | null;
+  totalSignalCount?: number | null;
+  voiceCount?: number | null;
+  supportCount?: number | null;
+  surveyCount?: number | null;
+  resurfaceCount?: number | null;
+  crossSourceInsight?: string | null;
+  dominantSignal?: string | null;
 }
 
 export interface ThemeNarrationOutput {
@@ -26,13 +36,11 @@ export class ThemeNarrationService {
   private readonly openai: OpenAI | null;
 
   constructor(private readonly configService: ConfigService) {
-    const apiKey =  this.configService.get<string>('OPENAI_API_KEY', '');
+    const apiKey = this.configService.get<string>('OPENAI_API_KEY', '');
 
     // Keep service alive even when AI is disabled.
     // This avoids boot failure in local/dev/test environments.
-    this.openai = apiKey
-      ? new OpenAI({ apiKey })
-      : null;
+    this.openai = apiKey ? new OpenAI({ apiKey }) : null;
   }
 
   /**
@@ -49,9 +57,13 @@ export class ThemeNarrationService {
    * - Returns null on any failure
    * - Caller can use buildFallback() when AI is unavailable or response is invalid
    */
-  async narrate(input: ThemeNarrationInput): Promise<ThemeNarrationOutput | null> {
+  async narrate(
+    input: ThemeNarrationInput,
+  ): Promise<ThemeNarrationOutput | null> {
     if (!this.openai) {
-      this.logger.warn(`[${input.themeId}] OPENAI_API_KEY not set — skipping narration`);
+      this.logger.warn(
+        `[${input.themeId}] OPENAI_API_KEY not set — skipping narration`,
+      );
       return null;
     }
 
@@ -74,7 +86,9 @@ export class ThemeNarrationService {
       const explanation =
         typeof parsed.explanation === 'string' ? parsed.explanation.trim() : '';
       const recommendation =
-        typeof parsed.recommendation === 'string' ? parsed.recommendation.trim() : '';
+        typeof parsed.recommendation === 'string'
+          ? parsed.recommendation.trim()
+          : '';
 
       let confidence =
         typeof parsed.confidence === 'number' ? parsed.confidence : NaN;
@@ -85,7 +99,12 @@ export class ThemeNarrationService {
       }
 
       // Reject incomplete outputs so caller can use deterministic fallback.
-      if (!summary || !explanation || !recommendation || !Number.isFinite(confidence)) {
+      if (
+        !summary ||
+        !explanation ||
+        !recommendation ||
+        !Number.isFinite(confidence)
+      ) {
         this.logger.warn(
           `[${input.themeId}] Narration response missing required fields — raw: ${raw.slice(0, 300)}`,
         );
@@ -119,7 +138,9 @@ export class ThemeNarrationService {
    * - Increase consistency by forcing structure and signal-based reasoning
    * - Keep token usage reasonable
    */
-  private buildMessages(input: ThemeNarrationInput): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
+  private buildMessages(
+    input: ThemeNarrationInput,
+  ): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
     const sentimentLabel = this.getSentimentLabel(input.avgSentiment);
 
     const samples = this.buildRepresentativeSamples(input.feedbackSamples);
@@ -140,6 +161,48 @@ Rules:
 - Return valid JSON only
 `.trim();
 
+    // Build cross-source context lines
+    const crossSourceLines: string[] = [];
+    if (input.totalSignalCount != null && input.totalSignalCount > 0) {
+      crossSourceLines.push(
+        `- Total cross-source signals: ${input.totalSignalCount}`,
+      );
+    }
+    if (input.voiceCount != null && input.voiceCount > 0) {
+      crossSourceLines.push(`- Voice signals: ${input.voiceCount}`);
+    }
+    if (input.supportCount != null && input.supportCount > 0) {
+      crossSourceLines.push(`- Support ticket signals: ${input.supportCount}`);
+    }
+    if (input.surveyCount != null && input.surveyCount > 0) {
+      crossSourceLines.push(`- Survey signals: ${input.surveyCount}`);
+    }
+    if (input.trendDirection && input.trendDelta != null) {
+      const trendSign = input.trendDelta > 0 ? '+' : '';
+      crossSourceLines.push(
+        `- Trend: ${input.trendDirection} (${trendSign}${input.trendDelta.toFixed(1)}% vs last week)`,
+      );
+    }
+    if (input.resurfaceCount != null && input.resurfaceCount > 0) {
+      crossSourceLines.push(
+        `- Resurfaced ${input.resurfaceCount} time(s) after a roadmap item was shipped`,
+      );
+    }
+    if (input.crossSourceInsight) {
+      crossSourceLines.push(
+        `- Cross-source insight: ${input.crossSourceInsight}`,
+      );
+    }
+    if (input.dominantSignal) {
+      crossSourceLines.push(
+        `- Dominant signal pattern: "${input.dominantSignal}"`,
+      );
+    }
+    const crossSourceSection =
+      crossSourceLines.length > 0
+        ? `\nCross-source context:\n${crossSourceLines.join('\n')}`
+        : '';
+
     const userPrompt = `
 Analyze this feedback theme.
 
@@ -150,7 +213,7 @@ Signal summary:
 - Feedback count: ${input.feedbackCount}
 - Average sentiment: ${sentimentLabel} (${input.avgSentiment?.toFixed(2) ?? 'n/a'})
 - CIQ priority score: ${input.priorityScore != null ? `${Math.round(input.priorityScore * 100)}%` : 'not available'}
-- Urgency score: ${input.urgencyScore != null ? `${Math.round(input.urgencyScore)}/100` : 'not available'}
+- Urgency score: ${input.urgencyScore != null ? `${Math.round(input.urgencyScore)}/100` : 'not available'}${crossSourceSection}
 
 Representative feedback samples:
 ${samples}
@@ -208,7 +271,9 @@ Return exactly this JSON shape:
   /**
    * Converts sentiment score into a simple label for readability in prompt.
    */
-  private getSentimentLabel(avgSentiment: number | null): 'positive' | 'negative' | 'neutral' | 'unknown' {
+  private getSentimentLabel(
+    avgSentiment: number | null,
+  ): 'positive' | 'negative' | 'neutral' | 'unknown' {
     if (avgSentiment == null) return 'unknown';
     if (avgSentiment >= 0.3) return 'positive';
     if (avgSentiment <= -0.3) return 'negative';
@@ -237,10 +302,10 @@ Return exactly this JSON shape:
           sample.sentiment == null
             ? 'unknown'
             : sample.sentiment >= 0.3
-            ? 'positive'
-            : sample.sentiment <= -0.3
-            ? 'negative'
-            : 'neutral';
+              ? 'positive'
+              : sample.sentiment <= -0.3
+                ? 'negative'
+                : 'neutral';
 
         return `${index + 1}. [${sentiment}] "${sample.text.slice(0, 220)}"`;
       })
@@ -272,7 +337,11 @@ Return exactly this JSON shape:
     }
 
     // Very weak theme but model returned unrealistically high confidence.
-    if (input.feedbackCount <= 2 && metadataRichness <= 1 && modelConfidence > 0.75) {
+    if (
+      input.feedbackCount <= 2 &&
+      metadataRichness <= 1 &&
+      modelConfidence > 0.75
+    ) {
       return 0.45;
     }
 
@@ -290,10 +359,10 @@ Return exactly this JSON shape:
       input.avgSentiment == null
         ? 'mixed'
         : input.avgSentiment >= 0.3
-        ? 'positive'
-        : input.avgSentiment <= -0.3
-        ? 'negative'
-        : 'neutral';
+          ? 'positive'
+          : input.avgSentiment <= -0.3
+            ? 'negative'
+            : 'neutral';
 
     const summary =
       `"${input.title}" has ${input.feedbackCount} signal${input.feedbackCount !== 1 ? 's' : ''}` +
