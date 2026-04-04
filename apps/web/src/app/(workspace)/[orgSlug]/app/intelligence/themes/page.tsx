@@ -192,6 +192,7 @@ export default function IntelligenceThemesPage() {
           <p style={{ fontWeight: 700, color: '#0a2540', fontSize: '1.05rem', margin: '0 0 0.5rem' }}>No theme rankings yet</p>
           <p style={{ color: '#6C757D', fontSize: '0.875rem', maxWidth: '440px', margin: '0 auto 0.5rem', lineHeight: 1.6 }}>
             CIQ scores are calculated automatically once themes have linked feedback.
+            If themes exist but rankings are empty, click <strong>Recompute CIQ</strong> on the CIQ Dashboard to trigger scoring.
           </p>
           <p style={{ color: '#6C757D', fontSize: '0.825rem', maxWidth: '440px', margin: '0 auto 1.5rem', lineHeight: 1.6 }}>
             <strong>How it works:</strong> Add feedback → AI clusters it into themes → CIQ scoring runs automatically → rankings appear here within minutes.

@@ -171,6 +171,12 @@ export default function CiqDashboardPage() {
     return themeRanking.filter(t => t.title.toLowerCase().includes(q));
   }, [themeRanking, themeSearch]);
 
+  // Detect "scoring in progress" state: themes exist but none have a CIQ score yet
+  const scoringInProgress = useMemo(() => {
+    if (!themeRanking || themeRanking.length === 0) return false;
+    return themeRanking.every(t => !t.priorityScore && t.ciqScore === 0);
+  }, [themeRanking]);
+
   const filteredFeatures = useMemo(() => {
     if (!featureRanking) return [];
     if (!featureSearch.trim()) return featureRanking;
@@ -344,7 +350,11 @@ export default function CiqDashboardPage() {
 
               {filteredThemes.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '2rem', color: '#6C757D', fontSize: '0.875rem' }}>
-                  {themeSearch ? 'No themes match your search.' : 'No theme ranking data yet.'}
+                  {themeSearch
+                    ? 'No themes match your search.'
+                    : scoringInProgress
+                    ? '⏳ CIQ scoring is in progress — rankings will appear shortly. Click Recompute CIQ to trigger now.'
+                    : 'No theme ranking data yet. Add feedback to get started.'}
                 </div>
               ) : (
                 <div style={{ overflowX: 'auto' }}>

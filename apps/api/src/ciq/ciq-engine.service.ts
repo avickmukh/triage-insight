@@ -410,7 +410,10 @@ export class CiqEngineService {
       const persistedFeedbackCount = theme.feedbackCount ?? feedbackCount;
       const persistedVoiceCount    = theme.voiceCount    ?? 0;
       const persistedSupportCount  = theme.supportCount  ?? 0;
-      const persistedTotalSignals  = theme.totalSignalCount ?? (feedbackCount + (theme.supportCount ?? 0));
+      // Use live feedbackCount (from join) as primary fallback — persisted totalSignalCount may be null
+      // before CIQ scoring has run. This ensures themes always appear in the ranking.
+      const liveSignalCount = feedbackCount + (theme.voiceCount ?? 0) + (theme.supportCount ?? 0);
+      const persistedTotalSignals  = theme.totalSignalCount ?? liveSignalCount;
 
       // ── Near-duplicate penalty (20% CIQ reduction for merge candidates) ────
       const isNearDuplicate = theme.autoMergeCandidate ?? false;
@@ -442,12 +445,13 @@ export class CiqEngineService {
         // Provide sensible defaults so the interface is satisfied.
         drs:          effectiveCiqScore,
         signalLabels: isNearDuplicate ? ['Near-duplicate'] : [],
-        eligibility:  (persistedTotalSignals < 3 ? 'INELIGIBLE' : isNearDuplicate ? 'PENALISED' : 'ELIGIBLE') as 'ELIGIBLE' | 'PENALISED' | 'INELIGIBLE',
+        eligibility:  (persistedTotalSignals < 1 ? 'INELIGIBLE' : isNearDuplicate ? 'PENALISED' : 'ELIGIBLE') as 'ELIGIBLE' | 'PENALISED' | 'INELIGIBLE',
         breakdown,
       };
     })
-    // ── Min-signal guard: exclude themes with no signals (show all themes with ≥1 signal) ────
-    .filter((t) => t.totalSignalCount >= 1);
+    // All non-archived themes are returned regardless of signal count.
+    // Themes with 0 signals are ranked last (priorityScore=null, ciqScore=0).
+    // This ensures the ranking page is never empty when themes exist.
   }
 
   // ─── 3. Customer Ranking ──────────────────────────────────────────────────

@@ -1394,7 +1394,13 @@ export class ThemeClusteringService {
   }
 
   private async _archiveWeakProvisionalThemes(workspaceId: string): Promise<number> {
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    // Extended from 7 -> 30 days to prevent premature archiving of valid small themes.
+    // Bootstrap workspaces (<= 20 active themes) use 60 days.
+    const activeThemeCount = await this.prisma.theme.count({
+      where: { workspaceId, status: { not: 'ARCHIVED' } },
+    });
+    const ageCutoffDays = activeThemeCount <= 20 ? 60 : 30;
+    const cutoffDate = new Date(Date.now() - ageCutoffDays * 24 * 60 * 60 * 1000);
 
     const weakThemes = await this.prisma.$queryRaw<Array<{ id: string; title: string }>>`
       SELECT t.id, t.title
@@ -1402,20 +1408,52 @@ export class ThemeClusteringService {
       LEFT JOIN "ThemeFeedback" tf ON tf."themeId" = t.id
       WHERE t."workspaceId" = ${workspaceId}
         AND t.status = 'PROVISIONAL'
-        AND t."createdAt" < ${sevenDaysAgo}
+        AND t."createdAt" < ${cutoffDate}
       GROUP BY t.id, t.title
       HAVING COUNT(tf.*) <= 1;
     `;
 
     let archived = 0;
     for (const theme of weakThemes) {
+      // Attempt merge-before-archive: find nearest active neighbour
+      const neighbours = await this.prisma.$queryRaw<Array<{ id: string; sim: number }>>`
+        SELECT t.id, 1 - (t.embedding <=> (SELECT embedding FROM "Theme" WHERE id = ${theme.id})) AS sim
+        FROM "Theme" t
+        WHERE t."workspaceId" = ${workspaceId}
+          AND t.embedding IS NOT NULL
+          AND t.status != 'ARCHIVED'
+          AND t.id != ${theme.id}
+        ORDER BY sim DESC
+        LIMIT 1;
+      `;
+      const nearest = neighbours[0];
+      if (nearest && nearest.sim >= this.WEAK_CLUSTER_MERGE_THRESHOLD) {
+        // Merge feedback into nearest neighbour then archive the source
+        await this.prisma.$executeRaw`
+          INSERT INTO "ThemeFeedback" ("themeId", "feedbackId", "assignedBy", "confidence", "assignedAt")
+          SELECT ${nearest.id}::text, tf."feedbackId", tf."assignedBy", tf."confidence", NOW()
+          FROM "ThemeFeedback" tf WHERE tf."themeId" = ${theme.id}
+          ON CONFLICT ("themeId", "feedbackId") DO NOTHING;
+        `;
+        await this.prisma.themeFeedback.deleteMany({ where: { themeId: theme.id } });
+        this.logger.log(
+          `[REFINE] Merged weak PROVISIONAL "${theme.title}" (${theme.id}) -> ${nearest.id} (sim=${nearest.sim.toFixed(3)}) then archived`,
+        );
+      } else if (nearest && nearest.sim >= 0.30) {
+        // Similarity between 0.30 and WEAK_CLUSTER_MERGE_THRESHOLD -- keep as hidden candidate
+        this.logger.debug(
+          `[REFINE] Keeping weak PROVISIONAL "${theme.title}" as hidden candidate (sim=${nearest.sim.toFixed(3)})`,
+        );
+        continue;
+      } else {
+        this.logger.log(
+          `[REFINE] ARCHIVED isolated PROVISIONAL "${theme.title}" (${theme.id}) [nearest sim=${nearest?.sim?.toFixed(3) ?? 'n/a'}]`,
+        );
+      }
       await this.prisma.theme.update({
         where: { id: theme.id },
         data: { status: 'ARCHIVED' },
       });
-      this.logger.log(
-        `[REFINE] ↓ ARCHIVED weak PROVISIONAL theme: "${theme.title}" (${theme.id})`,
-      );
       archived++;
     }
 
