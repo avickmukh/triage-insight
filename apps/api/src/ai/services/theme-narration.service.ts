@@ -154,15 +154,16 @@ You are a senior product intelligence analyst.
 
 Your job is to analyze a customer feedback theme STRICTLY using only the data provided.
 
-Rules:
-- Do NOT hallucinate, infer hidden causes, or assume facts not present in the input
-- Ground every output in the provided signals: feedback count, sentiment, CIQ, urgency, and feedback samples
-- Be concise, factual, and specific
-- Avoid generic statements unless the data is weak
-- If signal quality is weak or mixed, explicitly reflect that uncertainty
-- Do NOT mention "the provided data" or "the input says" in the final answer
+CRITICAL ANTI-HALLUCINATION RULES:
+- ONLY use facts, words, and concepts that appear in the provided feedback samples or signal metadata
+- Do NOT invent, infer, or assume any cause, feature name, component, or user intent that is not explicitly stated in the samples
+- If the samples mention "payment timeout", you may say "payment timeout". Do NOT say "payment processing failure" unless those exact words appear.
+- If the samples are sparse or ambiguous, say so explicitly in the summary (e.g. "Based on limited signals...")
+- Do NOT generalize from one sample to a universal claim
+- Do NOT mention business impact (revenue, churn, retention) unless the feedback samples explicitly mention it
 - Do NOT use markdown
 - Return valid JSON only
+- The recommendation must name ONLY components or flows that are explicitly mentioned in the feedback samples
 `.trim();
 
     // Build cross-source context lines
@@ -304,7 +305,7 @@ Return exactly this JSON shape:
    * - Prevents the model from drifting into long narrative behavior
    */
   private buildRepresentativeSamples(
-    feedbackSamples: Array<{ text: string; sentiment: number | null }>,
+    feedbackSamples: Array<{ text: string; sentiment: number | null; problemClause?: string }>,
   ): string {
     if (!feedbackSamples.length) {
       return '(no feedback samples available)';
@@ -322,7 +323,10 @@ Return exactly this JSON shape:
                 ? 'negative'
                 : 'neutral';
 
-        return `${index + 1}. [${sentiment}] "${sample.text.slice(0, 220)}"`;
+        // Use the extracted problem clause if available (strips positive prefix noise).
+        // This prevents the LLM from anchoring on positive phrases in the narration.
+        const displayText = sample.problemClause ?? sample.text;
+        return `${index + 1}. [${sentiment}] "${displayText.slice(0, 220)}"`;
       })
       .join('\n');
   }

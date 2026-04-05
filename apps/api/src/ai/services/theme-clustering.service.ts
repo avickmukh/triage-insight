@@ -188,19 +188,19 @@ export class ThemeClusteringService {
     if (!resolvedEmbedding || resolvedEmbedding.length === 0) {
       const feedbackForEmbed = await this.prisma.feedback.findUnique({
         where: { id: feedbackId },
-        select: { title: true, description: true },
+        select: { title: true, description: true, metadata: true },
       });
       if (feedbackForEmbed) {
         try {
-          const compositeText = [
-            feedbackForEmbed.title,
-            feedbackForEmbed.description ?? '',
-          ]
-            .filter(Boolean)
-            .join('\n')
-            .trim();
+          // IMPORTANT: Use the cached problem clause (negative portion only) for clustering.
+          // If not cached yet, fall back to full text.
+          // This ensures the fallback path produces the same embedding as the main path.
+          const meta = (feedbackForEmbed.metadata ?? {}) as Record<string, unknown>;
+          const problemClause = (meta.problemClause as string | undefined)
+            ?? `${feedbackForEmbed.title} ${feedbackForEmbed.description ?? ''}`.trim();
+          const clusteringText = `${feedbackForEmbed.title ? `Title: ${feedbackForEmbed.title}\n` : ''}Problem: ${problemClause}`;
           resolvedEmbedding =
-            await this.embeddingService.generateEmbedding(compositeText);
+            await this.embeddingService.generateEmbedding(clusteringText);
         } catch (err) {
           this.logger.warn(
             `[CLUSTER] Pre-tx embedding failed for feedback ${feedbackId}: ${(err as Error).message}`,

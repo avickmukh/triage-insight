@@ -16,18 +16,20 @@
  *
  * TUNING GUIDE
  * ------------
- * The thresholds below are calibrated for text-embedding-3-small (1536-dim).
- * If you switch to a different model (e.g. text-embedding-3-large), cosine
- * similarity distributions shift and you MUST re-calibrate:
+ * The thresholds below are calibrated for text-embedding-3-small (1536-dim)
+ * with PROBLEM-CLAUSE-ONLY embeddings (not full text).
  *
- *   Model                    | Typical same-topic sim | Typical cross-topic sim
- *   ─────────────────────────┼────────────────────────┼────────────────────────
- *   text-embedding-ada-002   | 0.85–0.95              | 0.70–0.82
- *   text-embedding-3-small   | 0.82–0.93              | 0.65–0.80
- *   text-embedding-3-large   | 0.88–0.97              | 0.72–0.85
+ * With problem-clause embeddings, distinct problems that share a domain
+ * (e.g. "payment timeout" vs "security vulnerability") score ~0.60–0.72
+ * cosine similarity. Same-problem items score ~0.82–0.92.
  *
- * For a new model, run `scripts/calibrate-thresholds.ts` against a labelled
- * dataset to find the optimal NOVELTY_THRESHOLD and MERGE_THRESHOLD values.
+ * This is different from full-text embeddings where all payment-related
+ * feedback scores ~0.88–0.95 (positive prefix dilutes the vector).
+ *
+ *   Input type               | Same-problem sim | Cross-problem sim
+ *   ─────────────────────────┼──────────────────┼──────────────────
+ *   Full text (old)          | 0.88–0.95        | 0.82–0.90  ← collapse
+ *   Problem clause only (new)| 0.82–0.92        | 0.60–0.72  ← separation
  */
 
 // ─── Embedding model ──────────────────────────────────────────────────────────
@@ -72,15 +74,22 @@ export const MERGE_VECTOR_CANDIDATES = 5;
  * Base novelty threshold: if the best candidate score is below this, a new
  * PROVISIONAL theme is created instead of assigning to an existing theme.
  *
- * This is the BASE value; the actual threshold is computed dynamically:
- *   noveltyThreshold = max(NOVELTY_THRESHOLD_MIN, NOVELTY_THRESHOLD_BASE - 0.005 × N)
+ * RAISED from 0.55 → 0.72 to work with problem-clause-only embeddings.
  *
- * Calibrated for text-embedding-3-small.
+ * With problem-clause embeddings:
+ *   - Same problem (e.g. two "payment timeout" items): cosine ~0.85 → assigned ✓
+ *   - Different problems (e.g. "timeout" vs "security"): cosine ~0.62 → new theme ✓
+ *
+ * The dynamic formula still applies:
+ *   noveltyThreshold = max(NOVELTY_THRESHOLD_MIN, NOVELTY_THRESHOLD_BASE - 0.005 × N)
  */
-export const NOVELTY_THRESHOLD_BASE = 0.55;
+export const NOVELTY_THRESHOLD_BASE = 0.72;
 
-/** Floor for the dynamic novelty threshold (never go below this). */
-export const NOVELTY_THRESHOLD_MIN = 0.4;
+/**
+ * Floor for the dynamic novelty threshold (never go below this).
+ * Raised from 0.40 → 0.58 to match the new base threshold.
+ */
+export const NOVELTY_THRESHOLD_MIN = 0.58;
 
 /**
  * When workspace has many themes (> THEME_CAP_GUARDRAIL), accept a match at
@@ -97,29 +106,36 @@ export const THEME_CAP_GUARDRAIL = 20;
  * Auto-merge threshold (normal mode): themes with cosine similarity above
  * this are considered duplicates and merged.
  *
- * Calibrated for text-embedding-3-small. Raise to 0.88 for larger models.
+ * RAISED from 0.85 → 0.92 to only merge near-identical problem descriptions.
+ * With problem-clause embeddings, 0.92+ means the two themes describe
+ * essentially the same specific problem.
  */
-export const AUTO_MERGE_THRESHOLD = 0.85;
+export const AUTO_MERGE_THRESHOLD = 0.92;
 
 /**
  * Auto-merge threshold in bootstrap mode (workspace has < BOOTSTRAP_THEME_COUNT
- * themes). Relaxed to collapse near-duplicates before the workspace grows.
+ * themes).
+ *
+ * RAISED from 0.72 → 0.88 — this was the primary collapse trigger.
+ * Previously, distinct problems with cosine ~0.72 were being merged in bootstrap.
+ * With problem-clause embeddings, 0.88 means only very similar problems merge.
  */
-export const BOOTSTRAP_MERGE_THRESHOLD = 0.72;
+export const BOOTSTRAP_MERGE_THRESHOLD = 0.88;
 
 /**
  * Batch merge threshold used during runClustering finalization.
- * More aggressive than the incremental merge threshold so draft clusters
- * collapse before becoming visible to users.
+ *
+ * RAISED from 0.78 → 0.90 to prevent different-problem themes from collapsing
+ * during batch finalization.
  */
-export const BATCH_MERGE_THRESHOLD = 0.78;
+export const BATCH_MERGE_THRESHOLD = 0.90;
 
 /**
  * Cosine similarity threshold for merging a weak cluster into its nearest
  * neighbour during weak-cluster suppression.
  * If no neighbour exceeds this, the cluster is archived.
  */
-export const WEAK_CLUSTER_MERGE_THRESHOLD = 0.65;
+export const WEAK_CLUSTER_MERGE_THRESHOLD = 0.75;
 
 /** Workspace theme count below which bootstrap merge mode is active. */
 export const BOOTSTRAP_THEME_COUNT = 10;
@@ -136,13 +152,13 @@ export const BOOTSTRAP_SIZE1_RATIO = 0.6;
  * Hybrid scores below this are flagged as potential outliers in the
  * clusterConfidence computation.
  */
-export const OUTLIER_THRESHOLD = 0.45;
+export const OUTLIER_THRESHOLD = 0.55;
 
 /**
  * Confidence score below which a ThemeFeedback link is considered borderline
  * and eligible for reassignment during batch finalization.
  */
-export const BORDERLINE_SCORE_THRESHOLD = 0.6;
+export const BORDERLINE_SCORE_THRESHOLD = 0.65;
 
 /**
  * Minimum feedback count a PROVISIONAL theme must reach after batch

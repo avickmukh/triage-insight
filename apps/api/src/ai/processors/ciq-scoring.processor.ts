@@ -327,7 +327,7 @@ export class CiqScoringProcessor {
             orderBy: { assignedAt: 'desc' },
             include: {
               feedback: {
-                select: { description: true, sentiment: true },
+                select: { description: true, sentiment: true, metadata: true },
               },
             },
           },
@@ -344,10 +344,17 @@ export class CiqScoringProcessor {
         return;
       }
 
-      const feedbackSamples = theme.feedbacks.map((tf) => ({
-        text: tf.feedback.description,
-        sentiment: tf.feedback.sentiment,
-      }));
+      const feedbackSamples = theme.feedbacks.map((tf) => {
+        // Use cached problemClause (negative portion only) if available.
+        // This prevents the LLM from anchoring on positive phrases when generating narration.
+        const meta = (tf.feedback.metadata ?? {}) as Record<string, unknown>;
+        const problemClause = meta.problemClause as string | undefined;
+        return {
+          text: tf.feedback.description,
+          sentiment: tf.feedback.sentiment,
+          problemClause,
+        };
+      });
 
       const sentiments = feedbackSamples
         .map((s) => s.sentiment)

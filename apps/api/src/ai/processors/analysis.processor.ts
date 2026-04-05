@@ -27,6 +27,7 @@ import { JobIdempotencyService } from '../../common/queue/job-idempotency.servic
 import { handleDlq } from '../../common/queue/dlq-handler';
 import { RetryPolicy } from '../../common/queue/retry-policy';
 import { ProblemTypeClassifierService } from '../services/problem-type-classifier.service';
+import { NegativeClauseExtractorService } from '../services/negative-clause-extractor.service';
 
 export const AI_ANALYSIS_QUEUE = 'ai-analysis';
 
@@ -52,6 +53,7 @@ export class AiAnalysisProcessor {
     private readonly themeClusteringService: ThemeClusteringService,
     private readonly idempotencyService: JobIdempotencyService,
     private readonly problemTypeClassifier: ProblemTypeClassifierService,
+    private readonly negativeClauseExtractor: NegativeClauseExtractorService,
   ) {}
 
   /**
@@ -127,21 +129,80 @@ export class AiAnalysisProcessor {
       `[STEP] LOAD ${Date.now() - t0}ms | feedback=${feedbackId}`,
     );
 
-    // ── 1. Generate Embedding ────────────────────────────────────────────────
-    // Use composite text (title + description) so the embedding captures both
-    // the subject and the detail. Using description alone caused false positives
-    // in duplicate detection when titles were completely different topics.
+    // ── 1a. Extract problem clause ───────────────────────────────────────────
+    // Mixed-sentiment feedback ("UI is great BUT payment failed") produces embeddings
+    // that cluster around the domain centroid, not the specific problem.
+    // We extract ONLY the negative/problem portion for clustering.
+    // The full text is preserved for display, CIQ, and narration.
+    // Fail-open: if extraction fails, falls back to full text.
+    const t1a = Date.now();
+    let problemClause = `${feedback.title} ${feedback.description ?? ''}`.trim();
+    let hasMixedSentiment = false;
+    let problemClauseConfidence = 0.5;
+    try {
+      const existingMeta = (feedback.metadata ?? {}) as Record<string, unknown>;
+      const cached = existingMeta.problemClause as string | undefined;
+      if (cached) {
+        problemClause = cached;
+        hasMixedSentiment = (existingMeta.hasMixedSentiment as boolean) ?? false;
+        problemClauseConfidence = (existingMeta.problemClauseConfidence as number) ?? 0.5;
+        this.logger.debug(ctx, `[STEP] PROBLEM_CLAUSE (cached) ${Date.now() - t1a}ms | mixed=${hasMixedSentiment}`);
+      } else {
+        const result = await this.negativeClauseExtractor.extract(
+          feedback.title,
+          feedback.description ?? '',
+        );
+        problemClause = result.problemClause;
+        hasMixedSentiment = result.hasMixedSentiment;
+        problemClauseConfidence = result.confidence;
+        // Cache in metadata to avoid re-extraction on retry
+        await this.prisma.feedback.update({
+          where: { id: feedbackId },
+          data: {
+            metadata: {
+              ...existingMeta,
+              problemClause: result.problemClause,
+              hasMixedSentiment: result.hasMixedSentiment,
+              problemClauseConfidence: result.confidence,
+            },
+          },
+        });
+        this.logger.debug(
+          ctx,
+          `[STEP] PROBLEM_CLAUSE ${Date.now() - t1a}ms | mixed=${hasMixedSentiment} confidence=${result.confidence.toFixed(2)}`,
+        );
+      }
+    } catch (err) {
+      this.logger.stepWarn(ctx, 'PROBLEM_CLAUSE', (err as Error).message);
+      // problemClause remains full text — fail-open
+    }
+
+    // ── 1b. Generate Embedding ───────────────────────────────────────────────
+    // CLUSTERING embedding: uses the problem clause (negative portion only)
+    //   → produces tight, distinct clusters per problem type
+    // DISPLAY/DUPLICATE embedding: uses full composite text
+    //   → preserves full semantic context for duplicate detection
     const t1 = Date.now();
     let embedding: number[] = [];
+    let fullTextEmbedding: number[] = [];
     try {
-      const compositeText = `Title: ${feedback.title}\nDescription: ${feedback.description}`;
-      embedding = await this.embeddingService.generateEmbedding(compositeText);
+      // Clustering embedding: problem clause only (strips positive prefix noise)
+      const clusteringText = `${feedback.title ? `Title: ${feedback.title}\n` : ''}Problem: ${problemClause}`;
+      embedding = await this.embeddingService.generateEmbedding(clusteringText);
+
+      // Full-text embedding for duplicate detection (only if different from clustering text)
+      if (hasMixedSentiment) {
+        const fullText = `Title: ${feedback.title}\nDescription: ${feedback.description}`;
+        fullTextEmbedding = await this.embeddingService.generateEmbedding(fullText);
+      } else {
+        fullTextEmbedding = embedding;
+      }
     } catch (err) {
       this.logger.stepWarn(ctx, 'EMBEDDING', (err as Error).message);
     }
     this.logger.debug(
       ctx,
-      `[STEP] EMBEDDING ${Date.now() - t1}ms | dims=${embedding.length}`,
+      `[STEP] EMBEDDING ${Date.now() - t1}ms | dims=${embedding.length} mixed=${hasMixedSentiment}`,
     );
 
     // ── 2. Analyse Sentiment ─────────────────────────────────────────────────
@@ -190,6 +251,8 @@ export class AiAnalysisProcessor {
     });
 
     if (embedding.length > 0) {
+      // Store the CLUSTERING embedding (problem clause only) in the DB vector column.
+      // This is what pgvector uses for similarity search during theme assignment.
       const vectorStr = `[${embedding.join(',')}]`;
       await this.prisma.$executeRaw`
         UPDATE "Feedback"
@@ -240,12 +303,14 @@ export class AiAnalysisProcessor {
     }
 
     // ── 5. Duplicate detection ────────────────────────────────────────────────────────────────────────────────────
+    // Use fullTextEmbedding (not the problem-clause-only embedding) for duplicate detection
+    // so that near-identical full feedback items are correctly identified as duplicates.
     const t5 = Date.now();
     try {
       await this.duplicateDetectionService.generateSuggestions(
         feedback.workspaceId,
         feedbackId,
-        embedding.length > 0 ? embedding : undefined,
+        fullTextEmbedding.length > 0 ? fullTextEmbedding : undefined,
       );
     } catch (err) {
       this.logger.stepWarn(ctx, 'DUPLICATE_DETECTION', (err as Error).message);
