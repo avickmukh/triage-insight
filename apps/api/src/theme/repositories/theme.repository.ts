@@ -23,13 +23,14 @@ export class ThemeRepository {
       pinned,
       sortBy = ThemeSortBy.CREATED_AT,
     } = query;
-    // When no status filter is provided, exclude PROVISIONAL and ARCHIVED themes from the
-    // default list view. PROVISIONAL themes are draft clusters that have not yet reached
-    // minimum support — they should not appear in the main dashboard until promoted to STABLE.
-    // Callers can pass status=PROVISIONAL explicitly to view the draft queue.
+    // When no status filter is provided, exclude only ARCHIVED themes from the default list view.
+    // PROVISIONAL themes (single-signal draft clusters) ARE shown in the All Themes list so users
+    // can see, manage, and archive them. They are visually distinguished by the amber 'Provisional'
+    // badge and can be filtered to using the Provisional tab.
+    // Callers can pass status=ARCHIVED explicitly to view the archived queue.
     const statusFilter: Prisma.ThemeWhereInput['status'] = status
       ? status
-      : { notIn: [ThemeStatus.ARCHIVED, ThemeStatus.PROVISIONAL] };
+      : { not: ThemeStatus.ARCHIVED };
     const where: Prisma.ThemeWhereInput = {
       workspaceId,
       status: statusFilter,

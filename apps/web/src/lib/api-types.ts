@@ -110,6 +110,12 @@ export enum FeedbackSecondarySource {
 }
 
 export enum ThemeStatus {
+  /** Newly created theme with only 1 signal — draft cluster, not yet stable enough for full CIQ.
+   *  Promoted to STABLE once support >= dynamicMinSupport. Shown in the Provisional tab. */
+  PROVISIONAL = 'PROVISIONAL',
+  /** Theme has reached minimum support threshold and is fully stable.
+   *  Fully participates in CIQ, dashboard, and rankings. */
+  STABLE = 'STABLE',
   /** AI-created theme — participates in CIQ, dashboard, and rankings immediately. */
   AI_GENERATED = 'AI_GENERATED',
   /** Human-reviewed and confirmed — trust signal only, does NOT gate CIQ. */

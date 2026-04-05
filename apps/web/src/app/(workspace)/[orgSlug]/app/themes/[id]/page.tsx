@@ -40,6 +40,8 @@ const CARD: React.CSSProperties = {
 };
 
 const STATUS_COLORS: Record<ThemeStatus, { bg: string; color: string }> = {
+  [ThemeStatus.PROVISIONAL]:  { bg: '#fff8e1', color: '#b45309' },
+  [ThemeStatus.STABLE]:       { bg: '#e0f2fe', color: '#0e7490' },
   [ThemeStatus.AI_GENERATED]: { bg: '#e8f7f7', color: '#20A4A4' },
   [ThemeStatus.VERIFIED]:     { bg: '#e8f5e9', color: '#2e7d32' },
   [ThemeStatus.RESURFACED]:   { bg: '#fff3e0', color: '#e65100' },
