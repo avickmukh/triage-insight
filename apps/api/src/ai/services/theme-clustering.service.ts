@@ -7,6 +7,7 @@ import { EmbeddingService } from './embedding.service';
 import { CIQ_SCORING_QUEUE } from '../processors/ciq-scoring.processor';
 import { AutoMergeService } from './auto-merge.service';
 import { IntentClassifierService } from './intent-classifier.service';
+import { UnifiedAggregationService } from '../../theme/services/unified-aggregation.service';
 import {
   IssueDimensionService,
   IssueDimensions,
@@ -144,6 +145,7 @@ export class ThemeClusteringService {
     private readonly autoMergeService: AutoMergeService,
     private readonly intentClassifier: IntentClassifierService,
     private readonly issueDimensionService: IssueDimensionService,
+    private readonly unifiedAggregationService: UnifiedAggregationService,
   ) {}
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -593,6 +595,31 @@ export class ThemeClusteringService {
       });
     }
 
+    // ── 6.7. M2 FIX: Recompute unified counters BEFORE CIQ scoring ─────────
+    // UnifiedAggregationService.aggregateTheme() is the ONLY service that
+    // correctly computes feedbackCount, voiceCount, supportCount, surveyCount,
+    // and totalSignalCount from live ThemeFeedback rows. It was never called
+    // by the pipeline — only by manual REST endpoints. This caused:
+    //   - totalSignalCount always = 0 (never recomputed after merge)
+    //   - voiceCount / supportCount always stale (0 from initial creation)
+    //   - CIQ scorer reading stale 0 values for voice/support signals
+    // By running aggregation here (after all merges, before CIQ), we ensure
+    // CIQ scoring reads fresh counters from the final stable membership.
+    let aggregated = 0;
+    for (const { id } of activeThemes) {
+      try {
+        await this.unifiedAggregationService.aggregateTheme(id);
+        aggregated++;
+      } catch (aggErr) {
+        this.logger.warn(
+          `${logPrefix} UnifiedAggregation failed for theme ${id}: ${(aggErr as Error).message}`,
+        );
+      }
+    }
+    this.logger.log(
+      `${logPrefix} M2: Recomputed unified counters for ${aggregated}/${activeThemes.length} themes`,
+    );
+
     // ── 7. Enqueue CIQ re-scoring for all surviving themes ────────────────────────────────────────────────────────────────────────────────────
     // CIQ scoring triggers ThemeNarrationService.narrate() inside the CIQ processor.
     // Running narration AFTER finalization ensures the LLM sees the final cluster
@@ -1031,15 +1058,62 @@ export class ThemeClusteringService {
           );
           await this.updateThemeCentroid(this.prisma, nearest.id);
         } else {
-          // No suitable neighbour — archive the isolated weak cluster
-          await this.prisma.theme.update({
-            where: { id: weak.id },
-            data: { status: 'ARCHIVED' },
-          });
-          this.logger.log(
-            `${logPrefix} Archived isolated weak cluster "${weak.title}" (${weak.id}, size=${weak.liveCount}) ` +
-              `[nearest sim=${nearest?.sim?.toFixed(3) ?? 'n/a'} < threshold=${this.WEAK_CLUSTER_MERGE_THRESHOLD}]`,
-          );
+          // M1 FIX: No suitable merge neighbour — but we must NOT simply archive
+          // the theme and leave its ThemeFeedback rows orphaned. Orphaned rows
+          // are linked to an ARCHIVED theme and invisible to all active-theme
+          // queries, causing feedback to silently disappear from the dashboard.
+          //
+          // Strategy: if the nearest active theme exists (even below the merge
+          // threshold), soft-rescue the feedback there. We do NOT merge the
+          // theme metadata — just rescue the evidence.
+          if (nearest) {
+            // Soft rescue: re-point ThemeFeedback rows to the nearest active
+            // theme even though similarity is below the merge threshold.
+            await this.prisma.$executeRaw`
+              INSERT INTO "ThemeFeedback" ("themeId", "feedbackId", "assignedBy", "confidence", "assignedAt")
+              SELECT
+                ${nearest.id}::text,
+                tf."feedbackId",
+                tf."assignedBy",
+                tf."confidence",
+                NOW()
+              FROM "ThemeFeedback" tf
+              WHERE tf."themeId" = ${weak.id}
+              ON CONFLICT ("themeId", "feedbackId") DO NOTHING;
+            `;
+            const rescuedResult = await this.prisma.$queryRaw<Array<{ n: number }>>`
+              SELECT COUNT(*)::int AS n FROM "ThemeFeedback" WHERE "themeId" = ${weak.id};
+            `;
+            const rescuedCount = rescuedResult[0]?.n ?? 0;
+            await this.prisma.themeFeedback.deleteMany({ where: { themeId: weak.id } });
+            // Archive the source theme (preserve for audit trail)
+            await this.prisma.theme.update({
+              where: { id: weak.id },
+              data: { status: 'ARCHIVED' },
+            });
+            // Bump feedbackCount on rescue target (full recount happens in
+            // UnifiedAggregation after finalization)
+            if (rescuedCount > 0) {
+              await this.prisma.theme.update({
+                where: { id: nearest.id },
+                data: { feedbackCount: { increment: rescuedCount } },
+              });
+            }
+            this.logger.log(
+              `${logPrefix} Rescued ${rescuedCount} orphaned feedback from isolated cluster "${weak.title}" (${weak.id}) ` +
+                `→ soft-assigned to "${nearest.title}" (${nearest.id}, sim=${nearest.sim.toFixed(3)}) [below merge threshold]`,
+            );
+          } else {
+            // No active themes at all — archive without rescue (empty workspace)
+            await this.prisma.theme.update({
+              where: { id: weak.id },
+              data: { status: 'ARCHIVED' },
+            });
+            this.logger.log(
+              `${logPrefix} Archived isolated weak cluster "${weak.title}" (${weak.id}, size=${weak.liveCount}) ` +
+                `[no active themes to rescue into]`,
+            );
+          }
         }
         suppressed++;
       } catch (err) {
@@ -1126,6 +1200,17 @@ export class ThemeClusteringService {
         data: { feedbackCount: { increment: affectedFeedbackCount } },
       });
     });
+    // M4 FIX: Recompute unified counters on the target after each batch merge.
+    // Without this, voiceCount/supportCount/totalSignalCount stay stale until
+    // the M2 step at the end of finalization. Running it here means the centroid
+    // refresh (step 4) and confidence refresh (step 6) also see fresh counts.
+    try {
+      await this.unifiedAggregationService.aggregateTheme(targetId);
+    } catch (aggErr) {
+      this.logger.warn(
+        `[BATCH_MERGE] UnifiedAggregation failed for target ${targetId}: ${(aggErr as Error).message}`,
+      );
+    }
     this.logger.log(
       `[BATCH_MERGE] ${logLabel} source=${sourceId} → target=${targetId} ` +
         `feedback_moved=${affectedFeedbackCount}`,

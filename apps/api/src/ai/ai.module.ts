@@ -24,6 +24,10 @@ import { NegativeClauseExtractorService } from './services/negative-clause-extra
 // CiqEngineService is provided here so CiqScoringProcessor can inject it
 // without creating a circular dependency (CiqModule → AiModule → CiqModule)
 import { CiqEngineService } from '../ciq/ciq-engine.service';
+// UnifiedAggregationService is provided here so ThemeClusteringService can
+// call aggregateTheme() directly after finalization (M2 fix: counters must be
+// recomputed before CIQ scoring runs).
+import { UnifiedAggregationService } from '../theme/services/unified-aggregation.service';
 
 /**
  * Marked @Global() so AI services are available in every module without
@@ -55,6 +59,7 @@ import { CiqEngineService } from '../ciq/ciq-engine.service';
     IssueDimensionService,
     ProblemTypeClassifierService,
     NegativeClauseExtractorService,
+    UnifiedAggregationService,
     // NOTE: AiAnalysisProcessor and CiqScoringProcessor are NOT here.
     // They are registered only in WorkerProcessorsModule
     // (apps/worker/src/processors.module.ts) to prevent double-registration
@@ -81,6 +86,7 @@ import { CiqEngineService } from '../ciq/ciq-engine.service';
     IssueDimensionService,
     ProblemTypeClassifierService,
     NegativeClauseExtractorService,
+    UnifiedAggregationService,
   ],
 })
 export class AiModule {}

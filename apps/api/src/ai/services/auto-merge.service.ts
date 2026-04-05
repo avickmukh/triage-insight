@@ -3,6 +3,7 @@ import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CIQ_SCORING_QUEUE } from '../processors/ciq-scoring.processor';
+import { UnifiedAggregationService } from '../../theme/services/unified-aggregation.service';
 import {
   IssueDimensionService,
   IssueDimensions,
@@ -100,6 +101,7 @@ export class AutoMergeService {
     private readonly prisma: PrismaService,
     @InjectQueue(CIQ_SCORING_QUEUE) private readonly ciqQueue: Queue,
     private readonly issueDimensionService: IssueDimensionService,
+    private readonly unifiedAggregationService: UnifiedAggregationService,
   ) {}
 
   // ─── Public API ───────────────────────────────────────────────────────────
@@ -591,6 +593,18 @@ export class AutoMergeService {
         },
       });
     });
+
+    // M3 FIX: Recompute unified counters immediately after merge so the
+    // CIQ scorer reads fresh voiceCount/supportCount/totalSignalCount.
+    // This is the incremental-merge equivalent of the M2 fix in finalization.
+    try {
+      await this.unifiedAggregationService.aggregateTheme(targetThemeId);
+    } catch (aggErr) {
+      this.logger.warn(
+        `[AUTO_MERGE_ERROR] workspace_id=${workspaceId} target_theme_id=${targetThemeId} ` +
+          `reason="UnifiedAggregation failed after merge" error="${(aggErr as Error).message}"`,
+      );
+    }
 
     // Trigger CIQ re-scoring for the merged (target) theme — non-fatal
     try {
