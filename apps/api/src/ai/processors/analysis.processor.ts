@@ -26,6 +26,7 @@ import { JobLogger } from '../../common/queue/job-logger';
 import { JobIdempotencyService } from '../../common/queue/job-idempotency.service';
 import { handleDlq } from '../../common/queue/dlq-handler';
 import { RetryPolicy } from '../../common/queue/retry-policy';
+import { ProblemTypeClassifierService } from '../services/problem-type-classifier.service';
 
 export const AI_ANALYSIS_QUEUE = 'ai-analysis';
 
@@ -50,6 +51,7 @@ export class AiAnalysisProcessor {
     private readonly duplicateDetectionService: DuplicateDetectionService,
     private readonly themeClusteringService: ThemeClusteringService,
     private readonly idempotencyService: JobIdempotencyService,
+    private readonly problemTypeClassifier: ProblemTypeClassifierService,
   ) {}
 
   /**
@@ -197,7 +199,47 @@ export class AiAnalysisProcessor {
     }
     this.logger.debug(ctx, `[STEP] PERSIST ${Date.now() - t4}ms`);
 
-    // ── 5. Duplicate detection ───────────────────────────────────────────────
+    // ── 4.5. Problem-type classification (Stage 1 of intelligent clustering) ─────────────────────
+    // Classify the feedback into a problem_type BEFORE clustering.
+    // ThemeClusteringService uses this to enforce bucketed clustering:
+    // feedback is ONLY assigned to themes with the same problem_type.
+    // Result is cached in Feedback.metadata.problemType to avoid re-classification.
+    const t45 = Date.now();
+    let problemType = 'other';
+    try {
+      const existingMeta = (feedback.metadata ?? {}) as Record<string, unknown>;
+      const cached = existingMeta.problemType as string | undefined;
+      if (cached) {
+        problemType = cached;
+        this.logger.debug(ctx, `[STEP] PROBLEM_TYPE (cached) ${Date.now() - t45}ms | type=${problemType}`);
+      } else {
+        const result = await this.problemTypeClassifier.classify(
+          feedback.title,
+          feedback.description ?? '',
+        );
+        problemType = result.problem_type;
+        // Persist to avoid re-classification on retry
+        await this.prisma.feedback.update({
+          where: { id: feedbackId },
+          data: {
+            metadata: {
+              ...existingMeta,
+              problemType: result.problem_type,
+              problemTypeConfidence: result.confidence,
+            },
+          },
+        });
+        this.logger.debug(
+          ctx,
+          `[STEP] PROBLEM_TYPE ${Date.now() - t45}ms | type=${problemType} confidence=${result.confidence.toFixed(2)}`,
+        );
+      }
+    } catch (err) {
+      this.logger.stepWarn(ctx, 'PROBLEM_TYPE', (err as Error).message);
+      // problemType remains 'other' — fail-open, clustering still proceeds
+    }
+
+    // ── 5. Duplicate detection ────────────────────────────────────────────────────────────────────────────────────
     const t5 = Date.now();
     try {
       await this.duplicateDetectionService.generateSuggestions(

@@ -19,6 +19,7 @@ import { ExplainableInsightsService } from './services/explainable-insights.serv
 import { ClusterRefinementService } from './services/cluster-refinement.service';
 import { IntentClassifierService } from './services/intent-classifier.service';
 import { IssueDimensionService } from './services/issue-dimension.service';
+import { ProblemTypeClassifierService } from './services/problem-type-classifier.service';
 // CiqEngineService is provided here so CiqScoringProcessor can inject it
 // without creating a circular dependency (CiqModule → AiModule → CiqModule)
 import { CiqEngineService } from '../ciq/ciq-engine.service';
@@ -51,6 +52,7 @@ import { CiqEngineService } from '../ciq/ciq-engine.service';
     ClusterRefinementService,
     IntentClassifierService,
     IssueDimensionService,
+    ProblemTypeClassifierService,
     // NOTE: AiAnalysisProcessor and CiqScoringProcessor are NOT here.
     // They are registered only in WorkerProcessorsModule
     // (apps/worker/src/processors.module.ts) to prevent double-registration
@@ -75,6 +77,7 @@ import { CiqEngineService } from '../ciq/ciq-engine.service';
     ClusterRefinementService,
     IntentClassifierService,
     IssueDimensionService,
+    ProblemTypeClassifierService,
   ],
 })
 export class AiModule {}

@@ -28,6 +28,8 @@ import {
   BORDERLINE_SCORE_THRESHOLD,
   BATCH_MERGE_THRESHOLD,
   WEAK_CLUSTER_MERGE_THRESHOLD,
+  BOOTSTRAP_MERGE_THRESHOLD,
+  AUTO_MERGE_THRESHOLD,
 } from '../config/clustering-thresholds.config';
 
 /**
@@ -612,12 +614,39 @@ export class ThemeClusteringService {
       }
     }
 
+    // ── Stage 8: Pipeline validation ────────────────────────────────────────────────────────────────────────────────────
+    // If the entire workspace collapsed into a single theme AND there are
+    // >= 10 feedback items, it's a strong signal that the merge thresholds
+    // were too aggressive. Log a warning with diagnostic info so it can be
+    // investigated. We do NOT automatically re-cluster (that would be
+    // destructive) but we do log enough context to diagnose the issue.
+    const finalThemeCount = await this.prisma.theme.count({
+      where: { workspaceId, status: { not: 'ARCHIVED' } },
+    });
+    const totalFeedback = await this.prisma.feedback.count({
+      where: { workspaceId },
+    });
+    if (finalThemeCount === 1 && totalFeedback >= 10) {
+      this.logger.warn(
+        `${logPrefix} ⚠️ PIPELINE VALIDATION FAILED: workspace collapsed into 1 theme ` +
+          `with ${totalFeedback} feedback items. ` +
+          `This suggests merge thresholds are too aggressive or problem_type classification ` +
+          `is returning 'other' for all items (disabling bucketed clustering). ` +
+          `Check BOOTSTRAP_MERGE_THRESHOLD (${BOOTSTRAP_MERGE_THRESHOLD}) and ` +
+          `AUTO_MERGE_THRESHOLD (${AUTO_MERGE_THRESHOLD}).`,
+      );
+    } else if (finalThemeCount >= 2) {
+      this.logger.log(
+        `${logPrefix} ✅ Pipeline validation passed: ${finalThemeCount} themes from ${totalFeedback} feedback items`,
+      );
+    }
+
     const durationMs = Date.now() - startedAt;
     this.logger.log(
       `${logPrefix} ══ Batch finalization complete in ${durationMs}ms: ` +
         `reassigned=${reassigned}, merged=${merged}, suppressed=${suppressed}, ` +
         `promoted=${promoted}, centroidsUpdated=${centroidsUpdated}, ` +
-        `ciqEnqueued=${ciqEnqueued} ══`,
+        `ciqEnqueued=${ciqEnqueued}, finalThemes=${finalThemeCount} ══`,
     );
 
     return { reassigned, merged, suppressed, promoted, centroidsUpdated };
@@ -1061,6 +1090,7 @@ export class ThemeClusteringService {
         normalizedText: true,
         description: true,
         workspaceId: true,
+        metadata: true,
       },
     });
 
@@ -1138,6 +1168,49 @@ export class ThemeClusteringService {
         `found ${candidates.length} candidates, N=${N}, noveltyThreshold=${noveltyThreshold.toFixed(3)}`,
     );
 
+    // ── Stage 2: Bucketed clustering — filter candidates by problem_type ────────────────────────────────────────────────────────────────────────────────────
+    // Read the feedback's problem_type from metadata (set by ProblemTypeClassifierService
+    // in the analysis processor before this method is called).
+    // CRITICAL: NEVER cluster across different problem_types.
+    // Themes with problem_type 'other' are compatible with everything (catch-all bucket).
+    const feedbackMeta = (feedback.metadata ?? {}) as Record<string, unknown>;
+    const feedbackProblemType = (feedbackMeta.problemType as string | undefined) ?? 'other';
+
+    // For each candidate, read its stored problem_type from signalBreakdown.
+    // Candidates whose problem_type is incompatible are excluded from scoring.
+    const bucketedCandidates: typeof candidates = [];
+    for (const candidate of candidates) {
+      try {
+        const themeRow = await prisma.theme.findUnique({
+          where: { id: candidate.id },
+          select: { signalBreakdown: true },
+        });
+        const breakdown = (themeRow?.signalBreakdown ?? {}) as Record<string, unknown>;
+        const themeProblemType = (breakdown.problemType as string | undefined) ?? 'other';
+        // 'other' is compatible with everything
+        const compatible =
+          feedbackProblemType === 'other' ||
+          themeProblemType === 'other' ||
+          feedbackProblemType === themeProblemType;
+        if (compatible) {
+          bucketedCandidates.push(candidate);
+        } else {
+          this.logger.debug(
+            `[CLUSTER] Skipping candidate "${candidate.title}" (${candidate.id}): ` +
+              `problem_type mismatch (feedback=${feedbackProblemType}, theme=${themeProblemType})`,
+          );
+        }
+      } catch {
+        // On error reading theme metadata, include the candidate (fail-open)
+        bucketedCandidates.push(candidate);
+      }
+    }
+
+    this.logger.debug(
+      `[CLUSTER] Bucketed candidates: ${bucketedCandidates.length}/${candidates.length} ` +
+        `(feedbackProblemType=${feedbackProblemType})`,
+    );
+
     // ── Extract issue dimensions for this feedback (non-blocking, best-effort) ──
     // Dimensions are extracted here and stored in Feedback.metadata so they are
     // available for future re-clustering without re-extraction.
@@ -1181,7 +1254,7 @@ export class ThemeClusteringService {
     let bestSizeBias = 0;
     let bestActionabilityScore = 0;
 
-    for (const candidate of candidates) {
+    for (const candidate of bucketedCandidates) {
       const embeddingScore = candidate.similarity;
 
       let themeKeywords: string[] = [];
@@ -1406,10 +1479,11 @@ export class ThemeClusteringService {
       feedback.title,
       feedbackEmbedding,
       feedback.description ?? undefined,
+      feedbackProblemType,
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────────────────────
   // PRIVATE: MERGE PASS
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -1467,6 +1541,29 @@ export class ThemeClusteringService {
         `;
 
         const sim = result[0]?.sim ?? 0;
+
+        // ── Stage 6: problem_type guard ────────────────────────────────────────────────────────────────────────────────────
+        // NEVER merge themes with different problem_types.
+        // Read from signalBreakdown.problemType (stored when theme was created).
+        // 'other' is the catch-all bucket and is compatible with everything.
+        try {
+          const [targetBreakdown, sourceBreakdown] = await Promise.all([
+            this.prisma.theme.findUnique({ where: { id: target.id }, select: { signalBreakdown: true } }),
+            this.prisma.theme.findUnique({ where: { id: source.id }, select: { signalBreakdown: true } }),
+          ]);
+          const targetPT = ((targetBreakdown?.signalBreakdown ?? {}) as Record<string, unknown>).problemType as string | undefined ?? 'other';
+          const sourcePT = ((sourceBreakdown?.signalBreakdown ?? {}) as Record<string, unknown>).problemType as string | undefined ?? 'other';
+          const ptCompatible = targetPT === 'other' || sourcePT === 'other' || targetPT === sourcePT;
+          if (!ptCompatible) {
+            this.logger.debug(
+              `[MERGE] Skipping merge "${source.title}" → "${target.title}": ` +
+                `problem_type mismatch (${sourcePT} vs ${targetPT})`,
+            );
+            continue;
+          }
+        } catch {
+          // fail-open: if we can't read problem_type, allow the merge
+        }
 
         // Merge condition: high similarity OR (weak source AND close to target)
         const sourceIsWeak = Number(source.liveCount) <= 1;
@@ -2061,6 +2158,7 @@ export class ThemeClusteringService {
     feedbackTitle: string,
     feedbackEmbedding?: number[],
     feedbackDescription?: string,
+    problemType?: string,
   ): Promise<string> {
     const normalised = normalizeThemeTitle(feedbackTitle);
 
@@ -2092,6 +2190,11 @@ export class ThemeClusteringService {
             ? `${(feedbackDescription ?? feedbackTitle).slice(0, 117)}…`
             : (feedbackDescription ?? feedbackTitle),
         lastEvidenceAt: new Date(),
+        // Store problem_type in signalBreakdown so future feedback can check it
+        // during bucketed clustering (Stage 2 of the intelligent pipeline).
+        ...(problemType && problemType !== 'other'
+          ? { signalBreakdown: { problemType } }
+          : {}),
         feedbacks: {
           create: {
             feedbackId,

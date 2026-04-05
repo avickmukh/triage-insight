@@ -349,6 +349,31 @@ export class AutoMergeService {
             continue; // Try next candidate
           }
 
+          // ── Stage 6: problem_type guard ────────────────────────────────────────────────────────────────────────────────────
+          // NEVER auto-merge themes with different problem_types.
+          // This is the hardest guard — even if embedding similarity is 0.99,
+          // two themes with different problem_types represent different issues.
+          try {
+            const [sourcePTRow, targetPTRow] = await Promise.all([
+              this.prisma.theme.findUnique({ where: { id: theme.id }, select: { signalBreakdown: true } }),
+              this.prisma.theme.findUnique({ where: { id: candidate.id }, select: { signalBreakdown: true } }),
+            ]);
+            const sourcePT = ((sourcePTRow?.signalBreakdown ?? {}) as Record<string, unknown>).problemType as string | undefined ?? 'other';
+            const targetPT = ((targetPTRow?.signalBreakdown ?? {}) as Record<string, unknown>).problemType as string | undefined ?? 'other';
+            const ptCompatible = sourcePT === 'other' || targetPT === 'other' || sourcePT === targetPT;
+            if (!ptCompatible) {
+              this.logger.log(
+                `[AUTO_MERGE_SKIP] workspace_id=${workspaceId} ` +
+                  `source_theme_id=${theme.id} source_theme_name="${theme.title}" ` +
+                  `target_theme_id=${candidate.id} target_theme_name="${candidate.title}" ` +
+                  `reason="problem_type mismatch (${sourcePT} vs ${targetPT})"`,
+              );
+              continue;
+            }
+          } catch {
+            // fail-open: if we can't read problem_type, allow the merge
+          }
+
           // Score meets threshold — determine merge direction
           // Larger cluster absorbs smaller; equal size → higher CIQ wins
           const targetId =

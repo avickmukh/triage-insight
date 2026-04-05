@@ -21,6 +21,10 @@ export interface ThemeNarrationInput {
   resurfaceCount?: number | null;
   crossSourceInsight?: string | null;
   dominantSignal?: string | null;
+  /** Actionability signature from IssueDimensionService — used to generate precise theme names */
+  actionabilitySummary?: string | null;
+  /** Problem type from ProblemTypeClassifierService — used to generate precise theme names */
+  problemType?: string | null;
 }
 
 export interface ThemeNarrationOutput {
@@ -203,6 +207,13 @@ Rules:
         ? `\nCross-source context:\n${crossSourceLines.join('\n')}`
         : '';
 
+    // Build actionability context section if available
+    const actionabilitySection = (input.actionabilitySummary || input.problemType)
+      ? `\nActionability context:\n` +
+        (input.problemType ? `- Problem type: ${input.problemType}\n` : '') +
+        (input.actionabilitySummary ? `- Actionability signature: ${input.actionabilitySummary}\n` : '')
+      : '';
+
     const userPrompt = `
 Analyze this feedback theme.
 
@@ -213,7 +224,7 @@ Signal summary:
 - Feedback count: ${input.feedbackCount}
 - Average sentiment: ${sentimentLabel} (${input.avgSentiment?.toFixed(2) ?? 'n/a'})
 - CIQ priority score: ${input.priorityScore != null ? `${Math.round(input.priorityScore * 100)}%` : 'not available'}
-- Urgency score: ${input.urgencyScore != null ? `${Math.round(input.urgencyScore)}/100` : 'not available'}${crossSourceSection}
+- Urgency score: ${input.urgencyScore != null ? `${Math.round(input.urgencyScore)}/100` : 'not available'}${crossSourceSection}${actionabilitySection}
 
 Representative feedback samples:
 ${samples}
@@ -222,9 +233,11 @@ Instructions:
 
 1. summary
 - Write 2-3 sentences
-- Explain the core issue or pattern users are reporting
+- Explain the SPECIFIC core issue or pattern users are reporting
+- Be precise: name the exact failure mode, affected feature, and user intent
 - Mention scale only when justified by feedback count
 - Use the samples as evidence, not imagination
+- If actionability context is provided, use it to be more specific
 
 2. explanation
 - Write 1-2 sentences
@@ -238,7 +251,9 @@ Instructions:
 3. recommendation
 - Write exactly one concrete action
 - It must be practical for product/engineering
+- Name the specific component, feature, or flow to fix
 - Avoid vague advice like "improve experience" or "investigate the issue"
+- Good examples: "Add retry logic to the payment submission handler", "Fix the CSV export timeout for datasets > 10k rows"
 
 4. confidence
 - Return a float from 0 to 1

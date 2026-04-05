@@ -321,6 +321,7 @@ export class CiqScoringProcessor {
           resurfaceCount: true,
           crossSourceInsight: true,
           dominantSignal: true,
+          signalBreakdown: true,
           feedbacks: {
             take: 8,
             orderBy: { assignedAt: 'desc' },
@@ -356,6 +357,12 @@ export class CiqScoringProcessor {
           ? sentiments.reduce((a, b) => a + b, 0) / sentiments.length
           : null;
 
+      // Extract actionability context from signalBreakdown for richer, more precise narration
+      const signalBreakdown = (theme.signalBreakdown ?? {}) as Record<string, unknown>;
+      const dominantDims = signalBreakdown.dominantDimensions as Record<string, string> | undefined;
+      const actionabilitySummary = dominantDims?.actionability_signature ?? null;
+      const problemType = (signalBreakdown.problemType as string | undefined) ?? null;
+
       const input = {
         themeId,
         title: theme.title,
@@ -375,6 +382,9 @@ export class CiqScoringProcessor {
         resurfaceCount: theme.resurfaceCount,
         crossSourceInsight: theme.crossSourceInsight,
         dominantSignal: theme.dominantSignal,
+        // Actionability context for precise theme naming (Stage 5 of intelligent pipeline)
+        actionabilitySummary,
+        problemType,
       };
 
       // Try LLM narration; fall back to rule-based if it returns null
