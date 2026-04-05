@@ -147,24 +147,22 @@ describe('UnifiedAggregationService', () => {
       mockPrisma.theme.findUnique.mockResolvedValue({
         title: 'Checkout Delay',
       });
+      // New impl: supportCount = rows with primarySource=SUPPORT (not supportIssueCluster.aggregate)
       mockPrisma.themeFeedback.findMany.mockResolvedValue([
-        { feedback: { sourceType: 'FEEDBACK', sentiment: 0.5 } },
-        { feedback: { sourceType: 'VOICE', sentiment: -0.8 } },
-        { feedback: { sourceType: 'FEEDBACK', sentiment: -0.3 } },
-        { feedback: { sourceType: 'FEEDBACK', sentiment: 0.0 } },
+        { feedback: { sourceType: 'FEEDBACK', primarySource: 'FEEDBACK', sentiment: 0.5 } },
+        { feedback: { sourceType: 'VOICE', primarySource: 'VOICE', sentiment: -0.8 } },
+        { feedback: { sourceType: 'FEEDBACK', primarySource: 'SUPPORT', sentiment: -0.3 } },
+        { feedback: { sourceType: 'FEEDBACK', primarySource: 'FEEDBACK', sentiment: 0.0 } },
       ]);
-      mockPrisma.supportIssueCluster.aggregate.mockResolvedValue({
-        _sum: { ticketCount: 12 },
-      });
       mockPrisma.theme.update.mockResolvedValue({});
     });
 
     it('should compute correct source counts', async () => {
       const result = await service.aggregateTheme(THEME_ID);
-      expect(result.feedbackCount).toBe(4); // all ThemeFeedback rows
-      expect(result.voiceCount).toBe(1); // only VOICE sourceType
-      expect(result.supportCount).toBe(12); // from cluster aggregate
-      expect(result.totalSignalCount).toBe(17); // 4 + 12 + 1
+      expect(result.feedbackCount).toBe(4);    // all ThemeFeedback rows
+      expect(result.voiceCount).toBe(1);       // rows with sourceType=VOICE
+      expect(result.supportCount).toBe(1);     // rows with primarySource=SUPPORT
+      expect(result.totalSignalCount).toBe(4); // totalSignalCount = feedbackCount (single source of truth)
     });
 
     it('should compute correct sentiment distribution', async () => {
@@ -183,17 +181,20 @@ describe('UnifiedAggregationService', () => {
           data: expect.objectContaining({
             feedbackCount: 4,
             voiceCount: 1,
-            supportCount: 12,
-            totalSignalCount: 17,
+            supportCount: 1,     // 1 row with primarySource=SUPPORT
+            totalSignalCount: 4, // totalSignalCount = feedbackCount
           }),
         }),
       );
     });
 
     it('should handle zero support tickets gracefully', async () => {
-      mockPrisma.supportIssueCluster.aggregate.mockResolvedValue({
-        _sum: { ticketCount: null },
-      });
+      // With the new impl, supportCount = rows with primarySource=SUPPORT.
+      // Override the mock to have no SUPPORT rows.
+      mockPrisma.themeFeedback.findMany.mockResolvedValue([
+        { feedback: { sourceType: 'FEEDBACK', primarySource: 'FEEDBACK', sentiment: 0.5 } },
+        { feedback: { sourceType: 'VOICE', primarySource: 'VOICE', sentiment: -0.8 } },
+      ]);
       const result = await service.aggregateTheme(THEME_ID);
       expect(result.supportCount).toBe(0);
     });
@@ -408,26 +409,29 @@ describe('UnifiedAggregationService', () => {
       });
       mockPrisma.theme.aggregate.mockResolvedValue({ _count: { id: 15 } });
       mockPrisma.theme.count.mockResolvedValue(8);
-      mockPrisma.$queryRaw
+       mockPrisma.$queryRaw
         .mockResolvedValueOnce([{ title: 'Checkout Delay' }]) // topByFeedback
         .mockResolvedValueOnce([{ title: 'Login Issues' }]) // topBySupport
-        .mockResolvedValueOnce([{ title: 'Onboarding Confusion' }]); // topByVoice
+        .mockResolvedValueOnce([{ title: 'Onboarding Confusion' }]) // topByVoice
+        .mockResolvedValueOnce([]); // topBySurvey (4th call added in current impl)
     });
-
     it('should return correct total signal count', async () => {
       const result = await service.getWorkspaceSourceSummary('ws-1');
-      // feedback: 50+20=70, voice: 10, support: 30 → total: 110
+      // Implementation separates SURVEY from feedbackCount:
+      //   feedbackCount = FEEDBACK only (50), surveyCount = 20, voice = 10, support = 30
+      //   total = 50 + 20 + 10 + 30 = 110
       expect(result.totalSignals).toBe(110);
-      expect(result.feedbackCount).toBe(70);
+      expect(result.feedbackCount).toBe(50); // FEEDBACK only (SURVEY is a separate source)
+      expect(result.surveyCount).toBe(20);   // SURVEY tracked separately
       expect(result.voiceCount).toBe(10);
       expect(result.supportCount).toBe(30);
     });
-
     it('should compute correct percentages', async () => {
       const result = await service.getWorkspaceSourceSummary('ws-1');
-      expect(result.feedbackPct).toBe(64); // 70/110 ≈ 63.6 → 64
-      expect(result.voicePct).toBe(9); // 10/110 ≈ 9.1 → 9
-      expect(result.supportPct).toBe(27); // 30/110 ≈ 27.3 → 27
+      // total=110: feedback=50 (45%), survey=20 (18%), voice=10 (9%), support=30 (27%)
+      expect(result.feedbackPct).toBe(45); // 50/110 ≈ 45.5 → 45
+      expect(result.voicePct).toBe(9);     // 10/110 ≈ 9.1 → 9
+      expect(result.supportPct).toBe(27);  // 30/110 ≈ 27.3 → 27
     });
 
     it('should return top theme titles per source', async () => {

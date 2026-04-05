@@ -9,6 +9,7 @@ import { BadRequestException } from '@nestjs/common';
 const mockPrismaService = {
   workspace: {
     findUnique: jest.fn(),
+    findFirst: jest.fn().mockResolvedValue(null),
     update: jest.fn(),
   },
   workspaceMember: {
@@ -47,6 +48,7 @@ const mockStripeInstance = {
   },
   subscriptions: {
     list: jest.fn(),
+    retrieve: jest.fn().mockResolvedValue({ id: 'sub-1', status: 'active', items: { data: [] } }),
   },
   invoices: {
     list: jest.fn(),

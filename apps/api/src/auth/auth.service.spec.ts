@@ -37,13 +37,23 @@ const mockPrismaService = {
     findFirst: jest.fn(),
     delete: jest.fn(),
     deleteMany: jest.fn(),
+    updateMany: jest.fn().mockResolvedValue({ count: 0 }),
   },
   passwordResetToken: {
     create: jest.fn(),
     findFirst: jest.fn(),
+    findUnique: jest.fn(),
     delete: jest.fn(),
+    update: jest.fn().mockResolvedValue({}),
+    updateMany: jest.fn().mockResolvedValue({ count: 0 }),
   },
-  $transaction: jest.fn((fn) => fn(mockPrismaService)),
+  plan: {
+    findUnique: jest.fn().mockResolvedValue(null),
+  },
+  $transaction: jest.fn((fnOrArray) => {
+    if (typeof fnOrArray === 'function') return fnOrArray(mockPrismaService);
+    return Promise.all(fnOrArray);
+  }),
 };
 
 const mockJwtService = {
@@ -116,13 +126,14 @@ describe('AuthService', () => {
       const mockWorkspace = { id: 'new-workspace-id', slug: 'test-user' };
       const mockMembership = { id: 'membership-id' };
 
-      mockPrismaService.$transaction.mockImplementation(async (fn) => {
+      mockPrismaService.$transaction.mockImplementation(async (fnOrArray) => {
         mockPrismaService.user.create.mockResolvedValue(mockUser);
         mockPrismaService.workspace.create.mockResolvedValue(mockWorkspace);
         mockPrismaService.workspaceMember.create.mockResolvedValue(
           mockMembership,
         );
-        return fn(mockPrismaService);
+        if (typeof fnOrArray === 'function') return fnOrArray(mockPrismaService);
+        return Promise.all(fnOrArray);
       });
       mockPrismaService.refreshToken.create.mockResolvedValue({
         token: 'hashed-refresh-token',
@@ -231,7 +242,7 @@ describe('AuthService', () => {
       expect(mockEmailService.send).toHaveBeenCalledWith(
         expect.objectContaining({
           to: 'test@example.com',
-          subject: expect.stringContaining('password'),
+          subject: expect.stringMatching(/password/i),
         }),
       );
     });
@@ -241,7 +252,7 @@ describe('AuthService', () => {
 
   describe('resetPassword', () => {
     it('should throw BadRequestException for an invalid or expired token', async () => {
-      mockPrismaService.passwordResetToken.findFirst.mockResolvedValue(null);
+      mockPrismaService.passwordResetToken.findUnique.mockResolvedValue(null);
 
       await expect(
         service.resetPassword({
@@ -253,41 +264,41 @@ describe('AuthService', () => {
 
     it('should update the user password and delete the token on success', async () => {
       const futureDate = new Date(Date.now() + 3600 * 1000);
-      mockPrismaService.passwordResetToken.findFirst.mockResolvedValue({
+      mockPrismaService.passwordResetToken.findUnique.mockResolvedValue({
         id: 'token-id',
         userId: 'user-id',
         expiresAt: futureDate,
       });
-      mockPrismaService.user.update.mockResolvedValue({ id: 'user-id' });
-      mockPrismaService.passwordResetToken.delete.mockResolvedValue({});
-      mockPrismaService.refreshToken.deleteMany.mockResolvedValue({});
-
+       mockPrismaService.user.update.mockResolvedValue({ id: 'user-id' });
+      mockPrismaService.passwordResetToken.update.mockResolvedValue({});
+      mockPrismaService.refreshToken.updateMany.mockResolvedValue({ count: 1 });
       await service.resetPassword({
         token: 'valid-token',
         password: 'new-password',
       });
-
       expect(mockPrismaService.user.update).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: 'user-id' } }),
       );
-      expect(mockPrismaService.passwordResetToken.delete).toHaveBeenCalledTimes(
-        1,
-      );
+      expect(mockPrismaService.passwordResetToken.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ usedAt: expect.any(Date) }) }),
+      );;
     });
   });
 
   // ── logout ──────────────────────────────────────────────────────────────────
 
   describe('logout', () => {
-    it('should delete the refresh token on logout', async () => {
-      mockPrismaService.refreshToken.findFirst.mockResolvedValue({
-        id: 'rt-id',
-      });
-      mockPrismaService.refreshToken.delete.mockResolvedValue({});
+    it('should revoke the refresh token on logout', async () => {
+      mockPrismaService.refreshToken.updateMany.mockResolvedValue({ count: 1 });
 
       await service.logout('user-id', 'raw-refresh-token');
 
-      expect(mockPrismaService.refreshToken.delete).toHaveBeenCalledTimes(1);
+      expect(mockPrismaService.refreshToken.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ userId: 'user-id' }),
+          data: { revoked: true },
+        }),
+      );
     });
   });
 });

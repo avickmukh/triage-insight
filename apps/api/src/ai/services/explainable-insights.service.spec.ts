@@ -14,6 +14,24 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ExplainableInsightsService } from './explainable-insights.service';
 import { PrismaService } from '../../prisma/prisma.service';
 
+// ─── Mock OpenAI ──────────────────────────────────────────────────────────────
+
+const mockChatCreate = jest.fn().mockResolvedValue({
+  choices: [{ message: { content: 'Mocked AI impact sentence for testing.' } }],
+});
+
+jest.mock('openai', () => {
+  const MockOpenAI = jest.fn().mockImplementation(() => ({
+    chat: {
+      completions: {
+        create: mockChatCreate,
+      },
+    },
+  }));
+  return { __esModule: true, default: MockOpenAI };
+});
+
+
 // ─── Mock ─────────────────────────────────────────────────────────────────────
 
 const mockPrisma = {

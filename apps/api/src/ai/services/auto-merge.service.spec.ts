@@ -19,6 +19,8 @@ import { getQueueToken } from '@nestjs/bull';
 import { AutoMergeService } from './auto-merge.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CIQ_SCORING_QUEUE } from '../processors/ciq-scoring.processor';
+import { IssueDimensionService } from './issue-dimension.service';
+import { UnifiedAggregationService } from '../../theme/services/unified-aggregation.service';
 
 // ─── Mock factories ────────────────────────────────────────────────────────────
 
@@ -74,6 +76,16 @@ const mockCiqQueue = {
   add: jest.fn().mockResolvedValue(undefined),
 };
 
+const mockIssueDimensionService = {
+  extract: jest.fn().mockResolvedValue({}),
+  computeCompatibility: jest.fn().mockReturnValue(1.0),
+};
+
+const mockUnifiedAggregationService = {
+  aggregateTheme: jest.fn().mockResolvedValue({}),
+  aggregateWorkspace: jest.fn().mockResolvedValue({}),
+};
+
 // The $transaction mock executes the callback synchronously with the same mock
 const mockPrisma: Record<string, unknown> = {
   theme: {
@@ -121,6 +133,8 @@ describe('AutoMergeService', () => {
         AutoMergeService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: getQueueToken(CIQ_SCORING_QUEUE), useValue: mockCiqQueue },
+        { provide: IssueDimensionService, useValue: mockIssueDimensionService },
+        { provide: UnifiedAggregationService, useValue: mockUnifiedAggregationService },
       ],
     }).compile();
 
@@ -226,7 +240,7 @@ describe('AutoMergeService', () => {
       const result = await service.detectAndMerge('ws-1');
 
       expect(result.bootstrapMode).toBe(false);
-      expect(result.effectiveThreshold).toBe(0.85);
+      expect(result.effectiveThreshold).toBe(0.82); // recalibrated from 0.85 in commit 43a82ad
     });
   });
 

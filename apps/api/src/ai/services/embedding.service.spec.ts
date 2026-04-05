@@ -27,12 +27,14 @@ const MOCK_EMBEDDING = Array.from(
 const mockOpenAICreate = jest.fn();
 
 jest.mock('openai', () => {
+  const MockOpenAI = jest.fn().mockImplementation(() => ({
+    embeddings: {
+      create: mockOpenAICreate,
+    },
+  }));
   return {
-    default: jest.fn().mockImplementation(() => ({
-      embeddings: {
-        create: mockOpenAICreate,
-      },
-    })),
+    __esModule: true,
+    default: MockOpenAI,
   };
 });
 

@@ -31,11 +31,18 @@ export class EmbeddingService {
         'AI features are not configured. Set OPENAI_API_KEY to enable embeddings.',
       );
     }
-    const response = await this.openai.embeddings.create({
-      model: 'text-embedding-3-large',
-      input: text.replace(/\n/g, ' '),
-      dimensions: EMBEDDING_DIMENSIONS,
-    });
-    return response.data[0].embedding;
+    try {
+      const response = await this.openai.embeddings.create({
+        model: 'text-embedding-3-large',
+        input: text.replace(/\n/g, ' '),
+        dimensions: EMBEDDING_DIMENSIONS,
+      });
+      return response.data[0].embedding;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new ServiceUnavailableException(
+        `Embedding generation failed: ${msg}`,
+      );
+    }
   }
 }

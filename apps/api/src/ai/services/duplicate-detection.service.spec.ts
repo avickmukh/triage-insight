@@ -125,8 +125,8 @@ describe('DuplicateDetectionService', () => {
     );
 
     it('should call $queryRaw with workspaceId and feedbackId for tenant isolation', async () => {
+      mockPrisma.feedback.findFirst.mockResolvedValue({ title: 'WiFi keeps disconnecting', description: 'My WiFi drops every few minutes' });
       mockPrisma.$queryRaw.mockResolvedValueOnce([]);
-
       await service.generateSuggestions('ws-tenant-a', 'fb-source', embedding);
 
       expect(mockPrisma.$queryRaw).toHaveBeenCalledTimes(1);
@@ -137,15 +137,16 @@ describe('DuplicateDetectionService', () => {
     });
 
     it('should persist suggestions for each similar feedback found', async () => {
+      mockPrisma.feedback.findFirst.mockResolvedValue({ title: 'WiFi drops constantly', description: 'WiFi drops constantly in the office' });
       mockPrisma.$queryRaw.mockResolvedValueOnce([
         {
           id: 'fb-similar-1',
           title: 'WiFi drops constantly',
+          description: 'WiFi drops constantly',
           similarity: 0.95,
         },
-        { id: 'fb-similar-2', title: 'Network unstable', similarity: 0.91 },
+        { id: 'fb-similar-2', title: 'WiFi drops constantly', description: 'WiFi drops constantly', similarity: 0.91 },
       ]);
-
       await service.generateSuggestions('ws-tenant-a', 'fb-source', embedding);
 
       expect(
@@ -154,8 +155,8 @@ describe('DuplicateDetectionService', () => {
     });
 
     it('should not persist suggestions when no similar feedback is found', async () => {
+      mockPrisma.feedback.findFirst.mockResolvedValue({ title: 'WiFi keeps disconnecting', description: 'My WiFi drops every few minutes' });
       mockPrisma.$queryRaw.mockResolvedValueOnce([]);
-
       await service.generateSuggestions('ws-tenant-a', 'fb-source', embedding);
 
       expect(
@@ -164,10 +165,10 @@ describe('DuplicateDetectionService', () => {
     });
 
     it('should use upsert to safely handle re-processing without duplicate rows', async () => {
+      mockPrisma.feedback.findFirst.mockResolvedValue({ title: 'WiFi drops', description: 'WiFi drops in the office' });
       mockPrisma.$queryRaw.mockResolvedValue([
-        { id: 'fb-similar-1', title: 'WiFi drops', similarity: 0.95 },
+        { id: 'fb-similar-1', title: 'WiFi drops', description: 'WiFi drops', similarity: 0.95 },
       ]);
-
       // First run
       await service.generateSuggestions('ws-tenant-a', 'fb-source', embedding);
       // Second run (re-processing)
@@ -185,14 +186,15 @@ describe('DuplicateDetectionService', () => {
 
     it('should persist the exact similarity score from the vector query', async () => {
       const exactSimilarity = 0.9347;
+      mockPrisma.feedback.findFirst.mockResolvedValue({ title: 'WiFi drops', description: 'WiFi drops in the office' });
       mockPrisma.$queryRaw.mockResolvedValueOnce([
         {
           id: 'fb-similar-1',
           title: 'WiFi drops',
+          description: 'WiFi drops',
           similarity: exactSimilarity,
         },
       ]);
-
       await service.generateSuggestions('ws-tenant-a', 'fb-source', embedding);
 
       const upsertCall =
@@ -202,8 +204,8 @@ describe('DuplicateDetectionService', () => {
 
     it('should not include the source feedback itself in suggestions', async () => {
       // The SQL query has WHERE id != feedbackId — verify the call includes the exclusion
+      mockPrisma.feedback.findFirst.mockResolvedValue({ title: 'WiFi keeps disconnecting', description: 'My WiFi drops every few minutes' });
       mockPrisma.$queryRaw.mockResolvedValueOnce([]);
-
       await service.generateSuggestions('ws-tenant-a', 'fb-source', embedding);
 
       const rawCall = mockPrisma.$queryRaw.mock.calls[0];
@@ -217,6 +219,7 @@ describe('DuplicateDetectionService', () => {
     it('should use keyword overlap when no embedding is provided', async () => {
       mockPrisma.feedback.findFirst.mockResolvedValueOnce({
         id: 'fb-source',
+        title: 'WiFi disconnects in office',
         normalizedText: 'wifi disconnects office network unstable',
         description: 'WiFi disconnects in the office. Network is unstable.',
       });
@@ -224,9 +227,9 @@ describe('DuplicateDetectionService', () => {
       mockPrisma.feedback.findMany.mockResolvedValueOnce([
         {
           id: 'fb-similar',
-          title: 'Network drops',
-          normalizedText: 'wifi network drops office disconnects',
-          description: 'WiFi network drops in office',
+          title: 'WiFi disconnects in office',
+          normalizedText: 'wifi disconnects office network unstable',
+          description: 'WiFi disconnects in the office. Network is unstable.',
         },
         {
           id: 'fb-unrelated',
@@ -260,6 +263,7 @@ describe('DuplicateDetectionService', () => {
     it('should return early if source feedback has no usable text', async () => {
       mockPrisma.feedback.findFirst.mockResolvedValueOnce({
         id: 'fb-empty',
+        title: '',
         normalizedText: '',
         description: '',
       });
@@ -278,10 +282,10 @@ describe('DuplicateDetectionService', () => {
     const embedding = Array.from({ length: 1536 }, () => 0.1);
 
     it('should return persisted suggestions after generating them', async () => {
+      mockPrisma.feedback.findFirst.mockResolvedValue({ title: 'WiFi drops', description: 'WiFi drops in the office' });
       mockPrisma.$queryRaw.mockResolvedValueOnce([
-        { id: 'fb-dup-1', title: 'WiFi drops', similarity: 0.93 },
+        { id: 'fb-dup-1', title: 'WiFi drops', description: 'WiFi drops', similarity: 0.93 },
       ]);
-
       const results = await service.findDuplicates(
         'ws-tenant-a',
         'fb-source',
@@ -296,9 +300,9 @@ describe('DuplicateDetectionService', () => {
     });
 
     it('should return empty array when no duplicates are found', async () => {
+      mockPrisma.feedback.findFirst.mockResolvedValue({ title: 'WiFi keeps disconnecting', description: 'My WiFi drops every few minutes' });
       mockPrisma.$queryRaw.mockResolvedValueOnce([]);
       mockPrisma.feedbackDuplicateSuggestion.findMany.mockResolvedValueOnce([]);
-
       const results = await service.findDuplicates(
         'ws-tenant-a',
         'fb-source',
@@ -315,8 +319,8 @@ describe('DuplicateDetectionService', () => {
     const embedding = Array.from({ length: 1536 }, () => 0.1);
 
     it('should scope the vector query to the correct workspaceId', async () => {
+      mockPrisma.feedback.findFirst.mockResolvedValue({ title: 'WiFi keeps disconnecting', description: 'My WiFi drops every few minutes' });
       mockPrisma.$queryRaw.mockResolvedValueOnce([]);
-
       await service.generateSuggestions('ws-tenant-a', 'fb-source', embedding);
 
       const rawCall = mockPrisma.$queryRaw.mock.calls[0];
@@ -328,6 +332,7 @@ describe('DuplicateDetectionService', () => {
     it('should scope the heuristic query to the correct workspaceId', async () => {
       mockPrisma.feedback.findFirst.mockResolvedValueOnce({
         id: 'fb-source',
+        title: 'WiFi disconnects',
         normalizedText: 'wifi disconnects',
         description: 'WiFi disconnects',
       });

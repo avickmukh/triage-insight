@@ -14,7 +14,7 @@ const mockPrismaService = {
     update: jest.fn(),
   },
   feedback: {
-    findUnique: jest.fn(),
+    findFirst: jest.fn(),
     create: jest.fn(),
   },
 };
@@ -112,7 +112,7 @@ describe('SlackIngestionService', () => {
       mockSlackService.fetchMessages.mockResolvedValue(mockMessages);
 
       // First message is new, second is a duplicate
-      mockPrismaService.feedback.findUnique
+      mockPrismaService.feedback.findFirst
         .mockResolvedValueOnce(null) // new
         .mockResolvedValueOnce({ id: 'existing-feedback-id' }); // duplicate
 
@@ -153,7 +153,7 @@ describe('SlackIngestionService', () => {
         },
       ]);
 
-      mockPrismaService.feedback.findUnique.mockResolvedValue(null);
+      mockPrismaService.feedback.findFirst.mockResolvedValue(null);
       mockPrismaService.feedback.create.mockRejectedValue(
         new Error('DB error'),
       );

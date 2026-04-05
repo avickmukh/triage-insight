@@ -6,6 +6,8 @@ import { EmbeddingService } from './embedding.service';
 import { CIQ_SCORING_QUEUE } from '../processors/ciq-scoring.processor';
 import { IntentClassifierService } from './intent-classifier.service';
 import { AutoMergeService } from './auto-merge.service';
+import { IssueDimensionService } from './issue-dimension.service';
+import { UnifiedAggregationService } from '../../theme/services/unified-aggregation.service';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
@@ -102,6 +104,16 @@ const mockCiqQueue = {
   add: jest.fn(),
 };
 
+const mockIssueDimensionService = {
+  extract: jest.fn().mockResolvedValue({}),
+  computeCompatibility: jest.fn().mockReturnValue(1.0),
+};
+
+const mockUnifiedAggregationService = {
+  aggregateTheme: jest.fn().mockResolvedValue({}),
+  aggregateWorkspace: jest.fn().mockResolvedValue({}),
+};
+
 // ── Test Suite ────────────────────────────────────────────────────────────────
 
 describe('ThemeClusteringService', () => {
@@ -116,6 +128,8 @@ describe('ThemeClusteringService', () => {
         { provide: getQueueToken(CIQ_SCORING_QUEUE), useValue: mockCiqQueue },
         { provide: IntentClassifierService, useValue: mockIntentClassifier },
         { provide: AutoMergeService, useValue: mockAutoMergeService },
+        { provide: IssueDimensionService, useValue: mockIssueDimensionService },
+        { provide: UnifiedAggregationService, useValue: mockUnifiedAggregationService },
       ],
     }).compile();
 
@@ -395,9 +409,10 @@ describe('ThemeClusteringService', () => {
       mockCiqQueue.add.mockResolvedValue({});
 
       await service.assignFeedbackToTheme('ws-1', 'fb-3', embedding);
-
       // The second update call is from recomputeClusterConfidence
-      const updateCall = mockPrismaService.theme.update.mock.calls[1][0];
+      // (calls[0] = lastEvidenceAt update inside tx, calls[1] = confidence update outside tx)
+      const totalUpdateCalls = mockPrismaService.theme.update.mock.calls.length;
+      const updateCall = mockPrismaService.theme.update.mock.calls[totalUpdateCalls - 1][0];
       expect(updateCall.data.outlierCount).toBe(2);
     });
 

@@ -212,11 +212,19 @@ describe('Counter integrity: feedbackCount is always updated after merge', () =>
     autoMergeSrc = readSrc('ai/services/auto-merge.service.ts');
   });
 
-  it('_executeBatchMerge should increment feedbackCount on target inside transaction', () => {
+  it('_executeBatchMerge should NOT use stale increment inside transaction (aggregation recomputes)', () => {
+    // FIX (bug 3): _executeBatchMerge no longer uses { increment } inside the
+    // transaction. UnifiedAggregationService.aggregateTheme() runs immediately
+    // after the tx and recomputes all counters from live ThemeFeedback rows.
+    // Using increment would leave a stale value in the window between tx commit
+    // and aggregation. The spec verifies the increment is gone.
     const methodStart = clusteringSrc.indexOf('private async _executeBatchMerge(');
     const methodEnd = clusteringSrc.indexOf('M4 FIX:', methodStart);
     const txBody = clusteringSrc.slice(methodStart, methodEnd);
-    expect(txBody).toContain('feedbackCount: { increment: affectedFeedbackCount }');
+    expect(txBody).not.toContain('feedbackCount: { increment: affectedFeedbackCount }');
+    // But the method MUST still call aggregateTheme after the tx
+    const fullMethod = clusteringSrc.slice(methodStart, clusteringSrc.indexOf('// ─── PRIVATE: CORE ASSIGNMENT', methodStart));
+    expect(fullMethod).toContain('await this.unifiedAggregationService.aggregateTheme(targetId)');
   });
 
   it('executeMerge should increment feedbackCount on target inside transaction', () => {
@@ -271,13 +279,31 @@ describe('CIQ scoring: reads fresh counters after aggregation', () => {
     expect(ciqSrc).toContain("s.signalType.toLowerCase().includes('support')");
   });
 
-  it('should use theme.totalSignalCount from DB (fresh after M2) with live fallback', () => {
-    // Line: totalSignalCount: theme.totalSignalCount ?? liveSignalCount
-    expect(ciqSrc).toContain('theme.totalSignalCount ?? liveSignalCount');
+  it('should compute totalSignalCount from live ThemeFeedback rows in scoreThemeForPersistence (not stale DB field)', () => {
+    // FIX (bug 6): totalSignalCount defaults to 0 (not null) so the old
+    // "?? liveSignalCount" fallback in scoreThemeForPersistence never fired.
+    // Now we always use live count from activeFeedback rows.
+    // Note: getThemeRanking still uses the persisted field (it reads from the
+    // already-aggregated Theme row), so we scope this check to scoreThemeForPersistence.
+    const methodStart = ciqSrc.indexOf('async scoreThemeForPersistence(');
+    const methodEnd = ciqSrc.indexOf('async persistCanonicalThemeScore(', methodStart);
+    const methodBody = ciqSrc.slice(methodStart, methodEnd);
+    expect(methodBody).toContain('const liveTotalSignalCount = feedbackCount');
+    expect(methodBody).toContain('totalSignalCount: liveTotalSignalCount');
+    // The old stale-read pattern must be gone from scoreThemeForPersistence
+    expect(methodBody).not.toContain('theme.totalSignalCount ?? liveSignalCount');
   });
 
-  it('should return voiceCount and supportCount from DB (fresh after M2)', () => {
-    expect(ciqSrc).toContain('voiceCount: theme.voiceCount ?? 0');
-    expect(ciqSrc).toContain('supportCount: theme.supportCount ?? 0');
+  it('should compute voiceCount and supportCount from live ThemeFeedback rows (not stale DB fields)', () => {
+    // FIX (bug 5): voiceCount and supportCount are now computed from live
+    // activeFeedback rows, not read from potentially-stale theme.voiceCount /
+    // theme.supportCount DB fields.
+    expect(ciqSrc).toContain('const liveVoiceCount = activeFeedback.filter(');
+    expect(ciqSrc).toContain('const liveSupportCount = activeFeedback.filter(');
+    expect(ciqSrc).toContain('voiceCount: liveVoiceCount');
+    expect(ciqSrc).toContain('supportCount: liveSupportCount');
+    // The old stale-read patterns must be gone
+    expect(ciqSrc).not.toContain('voiceCount: theme.voiceCount ?? 0');
+    expect(ciqSrc).not.toContain('supportCount: theme.supportCount ?? 0');
   });
 });

@@ -57,12 +57,13 @@ const MOCK_NARRATION = {
 
 const mockPrisma = {
   theme: { findMany: jest.fn() },
-  feedback: { aggregate: jest.fn() },
+  feedback: { aggregate: jest.fn(), count: jest.fn().mockResolvedValue(0) },
   issueSpikeEvent: { findMany: jest.fn() },
   digestRun: {
     create: jest.fn(),
     findFirst: jest.fn(),
     findMany: jest.fn(),
+    findUnique: jest.fn().mockResolvedValue(null),
   },
 };
 
@@ -115,6 +116,10 @@ describe('DigestService', () => {
     mockPrisma.feedback.aggregate
       .mockResolvedValueOnce({ _avg: { sentiment: 0.4 }, _count: { id: 12 } }) // current period
       .mockResolvedValueOnce({ _avg: { sentiment: 0.3 }, _count: { id: 8 } }); // prior period
+    // feedback.count: current period = 12, previous period = 8
+    mockPrisma.feedback.count
+      .mockResolvedValueOnce(12)  // current period volume
+      .mockResolvedValueOnce(8);  // previous period volume
     mockPrisma.issueSpikeEvent.findMany.mockResolvedValue([]);
     mockPrisma.digestRun.create.mockResolvedValue({
       id: 'digest-run-001',
@@ -299,9 +304,12 @@ describe('DigestService', () => {
 
   describe('generateDigest — sentiment trend', () => {
     it('sets trend to "improving" when current sentiment > prior + 0.05', async () => {
+      mockPrisma.feedback.aggregate.mockReset();
+      mockPrisma.feedback.count.mockReset();
       mockPrisma.feedback.aggregate
         .mockResolvedValueOnce({ _avg: { sentiment: 0.5 }, _count: { id: 10 } })
         .mockResolvedValueOnce({ _avg: { sentiment: 0.3 }, _count: { id: 8 } });
+      mockPrisma.feedback.count.mockResolvedValueOnce(10).mockResolvedValueOnce(8);
       spyCallLlm(service);
       await service.generateDigest(WORKSPACE_ID);
       const createArgs = mockPrisma.digestRun.create.mock.calls[0][0];
@@ -309,9 +317,12 @@ describe('DigestService', () => {
     });
 
     it('sets trend to "declining" when current sentiment < prior - 0.05', async () => {
+      mockPrisma.feedback.aggregate.mockReset();
+      mockPrisma.feedback.count.mockReset();
       mockPrisma.feedback.aggregate
         .mockResolvedValueOnce({ _avg: { sentiment: 0.1 }, _count: { id: 10 } })
         .mockResolvedValueOnce({ _avg: { sentiment: 0.5 }, _count: { id: 8 } });
+      mockPrisma.feedback.count.mockResolvedValueOnce(10).mockResolvedValueOnce(8);
       spyCallLlm(service);
       await service.generateDigest(WORKSPACE_ID);
       const createArgs = mockPrisma.digestRun.create.mock.calls[0][0];
@@ -319,12 +330,15 @@ describe('DigestService', () => {
     });
 
     it('sets trend to "stable" when change is within ±0.05', async () => {
+      mockPrisma.feedback.aggregate.mockReset();
+      mockPrisma.feedback.count.mockReset();
       mockPrisma.feedback.aggregate
         .mockResolvedValueOnce({ _avg: { sentiment: 0.4 }, _count: { id: 10 } })
         .mockResolvedValueOnce({
           _avg: { sentiment: 0.42 },
           _count: { id: 8 },
         });
+      mockPrisma.feedback.count.mockResolvedValueOnce(10).mockResolvedValueOnce(8);
       spyCallLlm(service);
       await service.generateDigest(WORKSPACE_ID);
       const createArgs = mockPrisma.digestRun.create.mock.calls[0][0];

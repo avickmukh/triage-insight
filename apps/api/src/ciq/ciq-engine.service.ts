@@ -1036,6 +1036,8 @@ export class CiqEngineService {
             feedback: {
               select: {
                 customerId: true, sentiment: true, ciqScore: true, metadata: true,
+                sourceType: true,
+                primarySource: true,
                 customer: { select: { arrValue: true, accountPriority: true } },
               },
             },
@@ -1111,16 +1113,35 @@ export class CiqEngineService {
     const ciqScore = isNearDuplicate
       ? parseFloat((rawCiq * 0.8).toFixed(2))
       : parseFloat(rawCiq.toFixed(2));
-    const liveSignalCount = feedbackCount + (theme.voiceCount ?? 0) + (theme.supportCount ?? 0);
+    // ── FIX (bugs 5 & 6): compute source counts from live ThemeFeedback rows ──
+    // Do NOT read theme.voiceCount / theme.supportCount / theme.totalSignalCount
+    // from the DB row — those fields may be stale (0) if aggregation has not
+    // run yet (e.g. immediately after a merge). Also, theme.totalSignalCount
+    // defaults to 0 (not null) so the previous "?? liveSignalCount" fallback
+    // never fired. We compute everything from the live activeFeedback array.
+    const liveVoiceCount = activeFeedback.filter(
+      (tf) => (tf.feedback.sourceType ?? '').toUpperCase() === 'VOICE' ||
+               (tf.feedback.primarySource ?? '').toUpperCase() === 'VOICE',
+    ).length;
+    const liveSupportCount = activeFeedback.filter(
+      (tf) => (tf.feedback.sourceType ?? '').toUpperCase() === 'SUPPORT' ||
+               (tf.feedback.primarySource ?? '').toUpperCase() === 'SUPPORT',
+    ).length;
+    const liveSurveyCount = activeFeedback.filter(
+      (tf) => (tf.feedback.sourceType ?? '').toUpperCase() === 'SURVEY' ||
+               (tf.feedback.primarySource ?? '').toUpperCase() === 'SURVEY',
+    ).length;
+    // totalSignalCount = total ThemeFeedback rows (single source of truth)
+    const liveTotalSignalCount = feedbackCount;
     return {
       ciqScore,
       breakdown,
       feedbackCount,
       uniqueCustomerCount,
-      voiceCount: theme.voiceCount ?? 0,
-      supportCount: theme.supportCount ?? 0,
-      surveyCount: theme.surveyCount ?? 0,
-      totalSignalCount: theme.totalSignalCount ?? liveSignalCount,
+      voiceCount: liveVoiceCount,
+      supportCount: liveSupportCount,
+      surveyCount: liveSurveyCount,
+      totalSignalCount: liveTotalSignalCount,
       revenueInfluence: arrValue,
       dealInfluenceValue,
     };

@@ -608,9 +608,21 @@ export class AutoMergeService {
 
     // Trigger CIQ re-scoring for the merged (target) theme — non-fatal
     try {
+      // FIX (bug 7): use a unique jobId (timestamp suffix) so BullMQ never
+      // deduplicates this job against a previous incremental THEME_SCORED job.
+      // bypassIdempotency: true ensures the CIQ processor also skips its own
+      // 10-minute TTL guard so the score always reflects the post-merge state.
       await this.ciqQueue.add(
-        { type: 'THEME_SCORED', workspaceId, themeId: targetThemeId },
-        { jobId: `ciq:merge:${workspaceId}:${targetThemeId}`, delay: 2_000 },
+        {
+          type: 'THEME_SCORED',
+          workspaceId,
+          themeId: targetThemeId,
+          bypassIdempotency: true,
+        },
+        {
+          jobId: `ciq:merge:${workspaceId}:${targetThemeId}:${Date.now()}`,
+          delay: 2_000,
+        },
       );
     } catch (queueErr) {
       this.logger.warn(

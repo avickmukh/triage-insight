@@ -1,8 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { getQueueToken } from '@nestjs/bull';
 import { RoadmapService } from './roadmap.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../ai/services/audit.service';
 import { PrioritizationService } from '../../prioritization/services/prioritization.service';
+import { CiqService } from '../../ai/services/ciq.service';
+import { CIQ_SCORING_QUEUE } from '../../ai/processors/ciq-scoring.processor';
 import { NotFoundException } from '@nestjs/common';
 import { RoadmapStatus, AuditLogAction } from '@prisma/client';
 
@@ -28,6 +31,7 @@ describe('RoadmapService', () => {
           useValue: {
             roadmapItem: {
               findUnique: jest.fn(),
+              findFirst: jest.fn().mockResolvedValue(null),
               create: jest.fn(),
               update: jest.fn(),
               findMany: jest.fn(),
@@ -40,6 +44,25 @@ describe('RoadmapService', () => {
         {
           provide: PrioritizationService,
           useValue: { getThemeScoreExplanation: jest.fn() },
+        },
+        {
+          provide: CiqService,
+          useValue: {
+            scoreTheme: jest.fn().mockResolvedValue({
+              priorityScore: 100,
+              confidenceScore: 0.9,
+              revenueImpactScore: 80,
+              revenueImpactValue: 5000,
+              dealInfluenceValue: 2000,
+              signalCount: 10,
+              uniqueCustomerCount: 5,
+            }),
+            scoreRoadmapItem: jest.fn().mockResolvedValue(null),
+          },
+        },
+        {
+          provide: getQueueToken(CIQ_SCORING_QUEUE),
+          useValue: { add: jest.fn().mockResolvedValue({}) },
         },
       ],
     }).compile();
@@ -81,29 +104,22 @@ describe('RoadmapService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('should create a roadmap item from a theme with snapshot values', async () => {
+     it('should create a roadmap item from a theme with snapshot values', async () => {
       prisma.theme.findUnique.mockResolvedValue({
         id: 'theme-1',
         title: 'Theme Title',
       });
-      prioritizationService.getThemeScoreExplanation.mockResolvedValue({
-        priorityScore: 100,
-        revenueImpactValue: 5000,
-        dealInfluenceValue: 2000,
-      });
-      prisma.themeFeedback.count.mockResolvedValue(10);
       prisma.roadmapItem.create.mockResolvedValue({
         ...mockRoadmapItem,
         title: 'Theme Title',
       });
-
+      // ciqService.scoreTheme is already mocked to return priorityScore: 100,
+      // uniqueCustomerCount: 5 in the module providers above.
       const result = await service.createFromTheme('ws-1', 'user-1', 'theme-1');
-
-      expect(
-        prioritizationService.getThemeScoreExplanation,
-      ).toHaveBeenCalledWith('ws-1', 'theme-1');
       expect(prisma.roadmapItem.create).toHaveBeenCalledWith(
-        expect.objectContaining({ priorityScore: 100, customerCount: 10 }),
+        expect.objectContaining({
+          data: expect.objectContaining({ priorityScore: 100, customerCount: 5 }),
+        }),
       );
       expect(result.title).toBe('Theme Title');
     });

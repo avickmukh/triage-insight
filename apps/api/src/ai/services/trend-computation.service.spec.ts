@@ -16,6 +16,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 // ─── Mock ─────────────────────────────────────────────────────────────────────
 
 const mockPrisma = {
+  $queryRaw: jest.fn().mockResolvedValue([]),
   theme: {
     findMany: jest.fn(),
     update: jest.fn(),
@@ -47,16 +48,12 @@ describe('TrendComputationService', () => {
 
   it('should compute UP trend when current week signals exceed previous week by > 10%', async () => {
     // 10 this week vs 6 last week → +67%
-    mockPrisma.theme.findMany.mockResolvedValue([
-      { id: 'theme-1', workspaceId: 'ws-1' },
+    // $queryRaw returns rows with bigint counts
+    mockPrisma.$queryRaw.mockResolvedValue([
+      { themeId: 'theme-1', currentWeek: BigInt(10), prevWeek: BigInt(6) },
     ]);
-    mockPrisma.themeFeedback.count
-      .mockResolvedValueOnce(10) // currentWeek
-      .mockResolvedValueOnce(6); // prevWeek
     mockPrisma.theme.update.mockResolvedValue({});
-
     await service.computeWorkspaceTrends('ws-1');
-
     expect(mockPrisma.theme.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -74,16 +71,11 @@ describe('TrendComputationService', () => {
 
   it('should compute DOWN trend when current week signals are less than previous week by > 10%', async () => {
     // 4 this week vs 10 last week → -60%
-    mockPrisma.theme.findMany.mockResolvedValue([
-      { id: 'theme-1', workspaceId: 'ws-1' },
+    mockPrisma.$queryRaw.mockResolvedValue([
+      { themeId: 'theme-1', currentWeek: BigInt(4), prevWeek: BigInt(10) },
     ]);
-    mockPrisma.themeFeedback.count
-      .mockResolvedValueOnce(4) // currentWeek
-      .mockResolvedValueOnce(10); // prevWeek
     mockPrisma.theme.update.mockResolvedValue({});
-
     await service.computeWorkspaceTrends('ws-1');
-
     const updateCall = mockPrisma.theme.update.mock.calls[0][0];
     expect(updateCall.data.trendDirection).toBe('DOWN');
     expect(updateCall.data.trendDelta).toBeLessThan(0);
@@ -93,16 +85,11 @@ describe('TrendComputationService', () => {
 
   it('should compute STABLE trend when change is within ±10%', async () => {
     // 10 this week vs 10 last week → 0%
-    mockPrisma.theme.findMany.mockResolvedValue([
-      { id: 'theme-1', workspaceId: 'ws-1' },
+    mockPrisma.$queryRaw.mockResolvedValue([
+      { themeId: 'theme-1', currentWeek: BigInt(10), prevWeek: BigInt(10) },
     ]);
-    mockPrisma.themeFeedback.count
-      .mockResolvedValueOnce(10) // currentWeek
-      .mockResolvedValueOnce(10); // prevWeek
     mockPrisma.theme.update.mockResolvedValue({});
-
     await service.computeWorkspaceTrends('ws-1');
-
     const updateCall = mockPrisma.theme.update.mock.calls[0][0];
     expect(updateCall.data.trendDirection).toBe('STABLE');
   });
@@ -110,16 +97,11 @@ describe('TrendComputationService', () => {
   // ── 4. Edge: prevWeek = 0 ───────────────────────────────────────────────────
 
   it('should handle prevWeek = 0 without division errors', async () => {
-    mockPrisma.theme.findMany.mockResolvedValue([
-      { id: 'theme-1', workspaceId: 'ws-1' },
+    mockPrisma.$queryRaw.mockResolvedValue([
+      { themeId: 'theme-1', currentWeek: BigInt(5), prevWeek: BigInt(0) },
     ]);
-    mockPrisma.themeFeedback.count
-      .mockResolvedValueOnce(5) // currentWeek
-      .mockResolvedValueOnce(0); // prevWeek (no data)
     mockPrisma.theme.update.mockResolvedValue({});
-
     await expect(service.computeWorkspaceTrends('ws-1')).resolves.not.toThrow();
-
     const updateCall = mockPrisma.theme.update.mock.calls[0][0];
     // When prevWeek = 0 and currentWeek > 0, direction should be UP
     expect(updateCall.data.trendDirection).toBe('UP');
@@ -128,18 +110,13 @@ describe('TrendComputationService', () => {
   // ── 5. Workspace batch ──────────────────────────────────────────────────────
 
   it('should process all themes in the workspace', async () => {
-    const themes = [
-      { id: 'theme-1', workspaceId: 'ws-1' },
-      { id: 'theme-2', workspaceId: 'ws-1' },
-      { id: 'theme-3', workspaceId: 'ws-1' },
-    ];
-    mockPrisma.theme.findMany.mockResolvedValue(themes);
-    // Return stable counts for all themes
-    mockPrisma.themeFeedback.count.mockResolvedValue(5);
+    mockPrisma.$queryRaw.mockResolvedValue([
+      { themeId: 'theme-1', currentWeek: BigInt(5), prevWeek: BigInt(5) },
+      { themeId: 'theme-2', currentWeek: BigInt(5), prevWeek: BigInt(5) },
+      { themeId: 'theme-3', currentWeek: BigInt(5), prevWeek: BigInt(5) },
+    ]);
     mockPrisma.theme.update.mockResolvedValue({});
-
     const result = await service.computeWorkspaceTrends('ws-1');
-
     expect(mockPrisma.theme.update).toHaveBeenCalledTimes(3);
     expect(result).toEqual(expect.objectContaining({ processed: 3 }));
   });

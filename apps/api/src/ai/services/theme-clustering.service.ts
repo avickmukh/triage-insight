@@ -1194,11 +1194,12 @@ export class ThemeClusteringService {
         data: { status: 'ARCHIVED', autoMergeTargetId: targetId },
       });
 
-      // 4. Update feedbackCount on target
-      await tx.theme.update({
-        where: { id: targetId },
-        data: { feedbackCount: { increment: affectedFeedbackCount } },
-      });
+      // 4. feedbackCount is intentionally NOT updated here via { increment }.
+      //    UnifiedAggregationService.aggregateTheme() runs immediately after
+      //    this transaction and recomputes ALL counters (feedbackCount,
+      //    voiceCount, supportCount, totalSignalCount) from live ThemeFeedback
+      //    rows. An increment here would leave a stale value in the window
+      //    between the tx commit and the aggregation call.
     });
     // M4 FIX: Recompute unified counters on the target after each batch merge.
     // Without this, voiceCount/supportCount/totalSignalCount stay stale until
