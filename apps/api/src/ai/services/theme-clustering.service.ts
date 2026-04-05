@@ -1513,14 +1513,45 @@ export class ThemeClusteringService {
     }
 
     const activeThemeCount = N;
-    const shouldAssignStrong = !!bestThemeId && bestScore >= noveltyThreshold;
+
+    // ── PROVISIONAL affinity boost ────────────────────────────────────────────
+    // PROVISIONAL themes have liveCount=1 (sizeBias≈0) and ciqScore=null
+    // (ciqBias=0), so their hybrid score is naturally lower than a STABLE theme
+    // with the same embedding similarity. Without this boost, a new feedback
+    // that is semantically close to a PROVISIONAL theme but whose hybrid score
+    // falls just below noveltyThreshold will create a SECOND PROVISIONAL theme
+    // instead of merging into the first — causing theme multiplication.
+    //
+    // Fix: if the best candidate is PROVISIONAL and its raw embedding similarity
+    // alone is >= WEAK_CLUSTER_MERGE_THRESHOLD (0.60), lower the effective
+    // threshold to softThreshold (noveltyThreshold × SOFT_MATCH_MULTIPLIER).
+    // This ensures two PROVISIONAL themes about the same topic are consolidated
+    // on the next incoming signal rather than multiplying.
+    const _provisionalBoostCandidate = candidates.find((c) => c.id === bestThemeId);
+    const _isProvisionalCandidate = _provisionalBoostCandidate?.status === 'PROVISIONAL';
+    const _provisionalAffinityActive =
+      _isProvisionalCandidate &&
+      bestEmbeddingScore >= this.WEAK_CLUSTER_MERGE_THRESHOLD;
+    const effectiveThreshold = _provisionalAffinityActive
+      ? softThreshold
+      : noveltyThreshold;
+    if (_provisionalAffinityActive) {
+      this.logger.debug(
+        `[CLUSTER] PROVISIONAL affinity boost: "${_provisionalBoostCandidate?.title}" ` +
+          `(${bestThemeId}) embSim=${bestEmbeddingScore.toFixed(3)} >= ` +
+          `WEAK_CLUSTER_MERGE_THRESHOLD=${this.WEAK_CLUSTER_MERGE_THRESHOLD} — ` +
+          `threshold ${noveltyThreshold.toFixed(3)} → ${softThreshold.toFixed(3)}`,
+      );
+    }
+
+    const shouldAssignStrong = !!bestThemeId && bestScore >= effectiveThreshold;
     const shouldAssignSoft =
       !!bestThemeId &&
       bestScore >= softThreshold &&
       activeThemeCount >= this.THEME_CAP_GUARDRAIL;
 
     if (shouldAssignStrong || shouldAssignSoft) {
-      const bestCandidate = candidates.find((c) => c.id === bestThemeId);
+      const bestCandidate = _provisionalBoostCandidate ?? candidates.find((c) => c.id === bestThemeId);
       let themeKeywordsForReason: string[] = [];
       if (bestCandidate?.topKeywords) {
         try {
