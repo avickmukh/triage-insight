@@ -330,7 +330,7 @@ export class CiqScoringProcessor {
             orderBy: { assignedAt: 'desc' },
             include: {
               feedback: {
-                select: { description: true, sentiment: true, metadata: true },
+                select: { title: true, description: true, sentiment: true, metadata: true },
               },
             },
           },
@@ -348,12 +348,17 @@ export class CiqScoringProcessor {
       }
 
       const feedbackSamples = theme.feedbacks.map((tf) => {
-        // Use cached problemClause (negative portion only) if available.
-        // This prevents the LLM from anchoring on positive phrases when generating narration.
+        // DUAL-REPRESENTATION for narration:
+        // - text: raw description (full context for grounded narration)
+        // - problemClause: extracted complaint phrase (supplementary annotation)
+        // The narration service uses raw text as primary and problemClause as
+        // a supplementary annotation only when it differs meaningfully.
         const meta = (tf.feedback.metadata ?? {}) as Record<string, unknown>;
         const problemClause = meta.problemClause as string | undefined;
+        // Use description as primary; fall back to title if description is empty
+        const rawText = tf.feedback.description || tf.feedback.title || '';
         return {
-          text: tf.feedback.description,
+          text: rawText,
           sentiment: tf.feedback.sentiment,
           problemClause,
         };

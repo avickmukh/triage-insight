@@ -178,23 +178,47 @@ export class AiAnalysisProcessor {
     }
 
     // ── 1b. Generate Embedding ───────────────────────────────────────────────
-    // CLUSTERING embedding: uses the problem clause (negative portion only)
-    //   → produces tight, distinct clusters per problem type
-    // DISPLAY/DUPLICATE embedding: uses full composite text
-    //   → preserves full semantic context for duplicate detection
+    //
+    // DUAL-REPRESENTATION STRATEGY
+    // ─────────────────────────────
+    // Three text representations serve different purposes:
+    //
+    //   clusteringText  (stored in Feedback.embedding, used for pgvector theme search)
+    //     = "${title} — ${problemClause}"
+    //     Title provides domain breadth ("payment", "auth", "export").
+    //     problemClause provides complaint specificity.
+    //     Together they produce embeddings that are semantically broad enough to
+    //     group related issues under one actionable theme, but specific enough
+    //     to separate genuinely different problems.
+    //     WHY NOT problemClause alone: too compressed → over-fragmentation.
+    //     WHY NOT full text alone: positive prefix dilutes the embedding → collapse.
+    //
+    //   fullTextEmbedding  (used for duplicate detection only)
+    //     = full title + description
+    //     Preserves full semantic context for near-duplicate detection.
+    //
+    //   problemClause  (stored in metadata, used for near-duplicate detection)
+    //     = verbatim extracted complaint phrase
+    //     Used by DuplicateDetectionService to find near-identical complaints.
+    //
     const t1 = Date.now();
     let embedding: number[] = [];
     let fullTextEmbedding: number[] = [];
     try {
-      // Clustering embedding: problem clause only (strips positive prefix noise)
-      const clusteringText = `${feedback.title ? `Title: ${feedback.title}\n` : ''}Problem: ${problemClause}`;
+      // CLUSTERING embedding: title + problemClause (dual representation)
+      // This is broader than problemClause-only but narrower than full text.
+      // It groups semantically related problems without collapsing unrelated ones.
+      const clusteringText = feedback.title
+        ? `${feedback.title} — ${problemClause}`
+        : problemClause;
       embedding = await this.embeddingService.generateEmbedding(clusteringText);
 
-      // Full-text embedding for duplicate detection (only if different from clustering text)
+      // DUPLICATE DETECTION embedding: full text (only if mixed sentiment adds context)
       if (hasMixedSentiment) {
-        const fullText = `Title: ${feedback.title}\nDescription: ${feedback.description}`;
+        const fullText = `${feedback.title} ${feedback.description ?? ''}`.trim();
         fullTextEmbedding = await this.embeddingService.generateEmbedding(fullText);
       } else {
+        // For purely negative feedback, the clustering embedding is sufficient for dedup too
         fullTextEmbedding = embedding;
       }
     } catch (err) {

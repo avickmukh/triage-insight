@@ -192,13 +192,15 @@ export class ThemeClusteringService {
       });
       if (feedbackForEmbed) {
         try {
-          // IMPORTANT: Use the cached problem clause (negative portion only) for clustering.
-          // If not cached yet, fall back to full text.
+          // DUAL-REPRESENTATION fallback: title + problemClause (same as analysis.processor.ts).
+          // Title provides domain breadth; problemClause provides complaint specificity.
           // This ensures the fallback path produces the same embedding as the main path.
           const meta = (feedbackForEmbed.metadata ?? {}) as Record<string, unknown>;
           const problemClause = (meta.problemClause as string | undefined)
             ?? `${feedbackForEmbed.title} ${feedbackForEmbed.description ?? ''}`.trim();
-          const clusteringText = `${feedbackForEmbed.title ? `Title: ${feedbackForEmbed.title}\n` : ''}Problem: ${problemClause}`;
+          const clusteringText = feedbackForEmbed.title
+            ? `${feedbackForEmbed.title} — ${problemClause}`
+            : problemClause;
           resolvedEmbedding =
             await this.embeddingService.generateEmbedding(clusteringText);
         } catch (err) {
@@ -1168,16 +1170,29 @@ export class ThemeClusteringService {
         `found ${candidates.length} candidates, N=${N}, noveltyThreshold=${noveltyThreshold.toFixed(3)}`,
     );
 
-    // ── Stage 2: Bucketed clustering — filter candidates by problem_type ────────────────────────────────────────────────────────────────────────────────────
+    // ── Stage 2: Bucketed clustering — soft problem_type guidance ────────────────────────────────────────────────────────────────────────────────────────────
     // Read the feedback's problem_type from metadata (set by ProblemTypeClassifierService
     // in the analysis processor before this method is called).
-    // CRITICAL: NEVER cluster across different problem_types.
-    // Themes with problem_type 'other' are compatible with everything (catch-all bucket).
+    //
+    // DESIGN: problem_type is a SOFT GUIDE, not a hard wall.
+    //
+    // Rationale: Hard blocking across problem_types causes over-fragmentation because:
+    //   1. The classifier may assign slightly different types to related issues
+    //      (e.g. "payment_failure" vs "duplicate_charge" are both payment problems)
+    //   2. A 25-item dataset may not have enough evidence to establish stable types
+    //   3. Business-meaningful consolidation requires grouping related problems
+    //      even when their extracted problem_type labels differ slightly
+    //
+    // Soft-guide behavior:
+    //   - Compatible types (same or 'other'): always included as candidates
+    //   - Incompatible types: included ONLY if embedding similarity >= CROSS_BUCKET_FLOOR
+    //     (very high similarity overrides the type mismatch — the semantics agree)
+    //   - This prevents both collapse (full-text similarity) and fragmentation (hard walls)
+    //
+    const CROSS_BUCKET_FLOOR = 0.80; // Only override type mismatch for near-identical embeddings
     const feedbackMeta = (feedback.metadata ?? {}) as Record<string, unknown>;
     const feedbackProblemType = (feedbackMeta.problemType as string | undefined) ?? 'other';
-
     // For each candidate, read its stored problem_type from signalBreakdown.
-    // Candidates whose problem_type is incompatible are excluded from scoring.
     const bucketedCandidates: typeof candidates = [];
     for (const candidate of candidates) {
       try {
@@ -1187,17 +1202,28 @@ export class ThemeClusteringService {
         });
         const breakdown = (themeRow?.signalBreakdown ?? {}) as Record<string, unknown>;
         const themeProblemType = (breakdown.problemType as string | undefined) ?? 'other';
-        // 'other' is compatible with everything
+        // Compatible: same type, or either side is 'other' (catch-all)
         const compatible =
           feedbackProblemType === 'other' ||
           themeProblemType === 'other' ||
           feedbackProblemType === themeProblemType;
         if (compatible) {
           bucketedCandidates.push(candidate);
+        } else if (candidate.similarity >= CROSS_BUCKET_FLOOR) {
+          // Soft override: very high embedding similarity overrides type mismatch.
+          // This handles cases where the classifier assigned slightly different labels
+          // to what is semantically the same problem.
+          this.logger.debug(
+            `[CLUSTER] Cross-bucket override for "${candidate.title}" (${candidate.id}): ` +
+              `type mismatch (feedback=${feedbackProblemType}, theme=${themeProblemType}) ` +
+              `but similarity=${candidate.similarity.toFixed(3)} >= CROSS_BUCKET_FLOOR=${CROSS_BUCKET_FLOOR}`,
+          );
+          bucketedCandidates.push(candidate);
         } else {
           this.logger.debug(
-            `[CLUSTER] Skipping candidate "${candidate.title}" (${candidate.id}): ` +
-              `problem_type mismatch (feedback=${feedbackProblemType}, theme=${themeProblemType})`,
+            `[CLUSTER] Soft-excluding candidate "${candidate.title}" (${candidate.id}): ` +
+              `problem_type mismatch (feedback=${feedbackProblemType}, theme=${themeProblemType}) ` +
+              `similarity=${candidate.similarity.toFixed(3)} < CROSS_BUCKET_FLOOR=${CROSS_BUCKET_FLOOR}`,
           );
         }
       } catch {
@@ -1205,7 +1231,6 @@ export class ThemeClusteringService {
         bucketedCandidates.push(candidate);
       }
     }
-
     this.logger.debug(
       `[CLUSTER] Bucketed candidates: ${bucketedCandidates.length}/${candidates.length} ` +
         `(feedbackProblemType=${feedbackProblemType})`,
@@ -2244,26 +2269,34 @@ export function computeDynamicMinSupport(N: number): number {
  * Assignment novelty threshold.
  * Below this hybrid score, a feedback item creates a new PROVISIONAL theme.
  *
- * Starts at 0.55 for small workspaces, decreases slightly as workspace grows
- * (more themes = stricter novelty required to create yet another one).
+ * Recalibrated for dual-representation embeddings (title + problemClause):
+ * Starts at 0.62 for small workspaces (N=0), decreases to floor as workspace grows.
+ * More themes = more conservative about creating new ones.
  *
- * Clamped to [0.40, 0.62].
+ * Clamped to [NOVELTY_THRESHOLD_MIN=0.48, NOVELTY_THRESHOLD_BASE=0.62].
  */
 export function computeNoveltyThreshold(N: number): number {
-  return Math.max(0.4, Math.min(0.62, 0.55 - 0.002 * N));
+  // Base: 0.62, floor: 0.48, decay: 0.003 per theme
+  // N=0:  0.62  (fresh workspace, balanced)
+  // N=5:  0.605 (slight decay)
+  // N=10: 0.59  (more conservative)
+  // N=20: 0.56  (approaching floor)
+  // N=46+: 0.48  (floor)
+  return Math.max(0.48, Math.min(0.62, 0.62 - 0.003 * N));
 }
 
 /**
  * Merge threshold.
  * Above this cosine similarity, two themes are candidates for merging.
  *
+ * Recalibrated for dual-representation embeddings:
  * Starts at 0.72 for small workspaces, increases slightly as workspace grows
  * (more themes = more conservative about merging).
  *
- * Clamped to [0.72, 0.90].
+ * Clamped to [0.72, 0.88].
  */
 export function computeMergeThreshold(N: number): number {
-  return Math.max(0.72, Math.min(0.9, 0.72 + 0.002 * N));
+  return Math.max(0.72, Math.min(0.88, 0.72 + 0.002 * N));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

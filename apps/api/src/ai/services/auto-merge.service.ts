@@ -349,10 +349,17 @@ export class AutoMergeService {
             continue; // Try next candidate
           }
 
-          // ── Stage 6: problem_type guard ────────────────────────────────────────────────────────────────────────────────────
-          // NEVER auto-merge themes with different problem_types.
-          // This is the hardest guard — even if embedding similarity is 0.99,
-          // two themes with different problem_types represent different issues.
+          // ── Stage 6: problem_type soft guide ────────────────────────────────────────────────────────────────────────────────────
+          // DESIGN: problem_type is a SOFT GUIDE for merges, not a hard wall.
+          // Rationale: The classifier may assign slightly different labels to
+          // related issues (e.g. "payment_failure" vs "duplicate_charge").
+          // Hard blocking prevents business-meaningful consolidation.
+          //
+          // Soft-guide behavior:
+          //   - Compatible types (same or 'other'): merge allowed
+          //   - Incompatible types: merge blocked UNLESS embedding similarity
+          //     is very high (>= 0.85), which overrides the type mismatch
+          const MERGE_CROSS_BUCKET_FLOOR = 0.85;
           try {
             const [sourcePTRow, targetPTRow] = await Promise.all([
               this.prisma.theme.findUnique({ where: { id: theme.id }, select: { signalBreakdown: true } }),
@@ -361,12 +368,12 @@ export class AutoMergeService {
             const sourcePT = ((sourcePTRow?.signalBreakdown ?? {}) as Record<string, unknown>).problemType as string | undefined ?? 'other';
             const targetPT = ((targetPTRow?.signalBreakdown ?? {}) as Record<string, unknown>).problemType as string | undefined ?? 'other';
             const ptCompatible = sourcePT === 'other' || targetPT === 'other' || sourcePT === targetPT;
-            if (!ptCompatible) {
+            if (!ptCompatible && candidate.similarity < MERGE_CROSS_BUCKET_FLOOR) {
               this.logger.log(
                 `[AUTO_MERGE_SKIP] workspace_id=${workspaceId} ` +
                   `source_theme_id=${theme.id} source_theme_name="${theme.title}" ` +
                   `target_theme_id=${candidate.id} target_theme_name="${candidate.title}" ` +
-                  `reason="problem_type mismatch (${sourcePT} vs ${targetPT})"`,
+                  `reason="problem_type mismatch (${sourcePT} vs ${targetPT}) similarity=${candidate.similarity.toFixed(3)} < MERGE_CROSS_BUCKET_FLOOR"`,
               );
               continue;
             }

@@ -323,10 +323,23 @@ Return exactly this JSON shape:
                 ? 'negative'
                 : 'neutral';
 
-        // Use the extracted problem clause if available (strips positive prefix noise).
-        // This prevents the LLM from anchoring on positive phrases in the narration.
-        const displayText = sample.problemClause ?? sample.text;
-        return `${index + 1}. [${sentiment}] "${displayText.slice(0, 220)}"`;
+        // NARRATION GROUNDING: Use raw text as primary display for richer context.
+        // problemClause is shown as a supplementary "core complaint" annotation
+        // when it differs meaningfully from the raw text (mixed-sentiment feedback).
+        //
+        // WHY: Using only problemClause for narration produces flat, over-compressed
+        // summaries because the clause strips domain context (e.g. "payment failed"
+        // loses the context that it happened "during checkout on mobile").
+        // The LLM needs the full raw text to produce useful, grounded narration.
+        const rawText = sample.text.slice(0, 200);
+        const hasDistinctClause =
+          sample.problemClause &&
+          sample.problemClause !== sample.text &&
+          sample.problemClause.length < sample.text.length * 0.8;
+        const annotation = hasDistinctClause
+          ? ` [core complaint: "${sample.problemClause!.slice(0, 100)}")`
+          : '';
+        return `${index + 1}. [${sentiment}] "${rawText}"${annotation}`;
       })
       .join('\n');
   }
