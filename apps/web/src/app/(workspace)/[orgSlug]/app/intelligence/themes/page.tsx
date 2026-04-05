@@ -221,7 +221,9 @@ export default function IntelligenceThemesPage() {
                   <th style={TH}>#</th>
                   <th style={{ ...TH, textAlign: 'left' }}>Theme</th>
                   <th style={{ ...TH, textAlign: 'left', minWidth: 140 }}>CIQ Score</th>
-                  <th style={{ ...TH, textAlign: 'right', minWidth: 60 }}>DRS</th>
+                  <th style={{ ...TH, textAlign: 'right', minWidth: 80 }}>
+                    <span title="Action Score = CIQ×30% + Velocity×20% + Recency×18% + Resurface×15% + Source Diversity×10% + AI Confidence×7%. Measures how urgently this theme needs a product decision." style={{ cursor: 'help', borderBottom: '1px dashed #adb5bd' }}>Action Score</span>
+                  </th>
                   <th style={{ ...TH, textAlign: 'center' }}>Trend</th>
                   <th style={{ ...TH, textAlign: 'right' }}>Signals</th>
                   <th style={{ ...TH, textAlign: 'right' }}>Customers</th>

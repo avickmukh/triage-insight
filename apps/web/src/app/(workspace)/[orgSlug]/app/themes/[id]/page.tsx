@@ -781,9 +781,11 @@ export default function ThemeDetailPage() {
           </div>
           <div>
             <span style={{ fontSize: '0.75rem', color: '#adb5bd', display: 'block', marginBottom: '0.375rem' }}>
-              Aggregated Priority
+              CIQ Score
             </span>
-            <PriorityBar score={theme.aggregatedPriorityScore} />
+            {/* M2 fix: use canonical ciqScore (7-factor formula, same as ranking pages) */}
+            {/* aggregatedPriorityScore was mean of feedback impactScores — a different, weaker formula */}
+            <PriorityBar score={ciqScore?.priorityScore ?? theme.ciqScore ?? theme.priorityScore ?? 0} />
           </div>
           <div>
             <span style={{ fontSize: '0.75rem', color: '#adb5bd', display: 'block', marginBottom: '0.25rem' }}>

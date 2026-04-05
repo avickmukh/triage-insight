@@ -454,9 +454,19 @@ function FeedbackRow({
 
       {/* RIGHT: CIQ score + priority + ARR */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.35rem', flexShrink: 0 }}>
-        {ciqScore != null && (
-          <span style={{ fontSize: '0.75rem', fontWeight: 800, padding: '0.2rem 0.6rem', borderRadius: '1rem', background: '#e8f7f7', color: TEAL, border: `1px solid #b2dfdb`, whiteSpace: 'nowrap' }}>
+        {ciqScore != null ? (
+          <span
+            title="CIQ Score: composite signal intelligence score (0–100). Sourced from the theme linked to this feedback item."
+            style={{ fontSize: '0.75rem', fontWeight: 800, padding: '0.2rem 0.6rem', borderRadius: '1rem', background: '#e8f7f7', color: TEAL, border: `1px solid #b2dfdb`, whiteSpace: 'nowrap', cursor: 'help' }}
+          >
             CIQ {ciqScore}
+          </span>
+        ) : (
+          <span
+            title="CIQ not yet computed — score will appear after the AI pipeline processes this feedback item."
+            style={{ fontSize: '0.7rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: '1rem', background: '#f8f9fa', color: '#adb5bd', border: '1px solid #dee2e6', whiteSpace: 'nowrap', cursor: 'help' }}
+          >
+            CIQ —
           </span>
         )}
         <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '1rem', background: priority.bg, color: priority.color }}>

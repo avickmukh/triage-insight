@@ -996,9 +996,173 @@ export class CiqEngineService {
     }
   }
 
+  // ─── 5b. Single-theme scorer for persistence (M1 fix) ───────────────────
+
+  /**
+   * Score a single theme using the canonical 7-factor formula (same as
+   * getThemeRanking) and return the result for persistence.
+   *
+   * This replaces CiqService.scoreTheme for the THEME_SCORED pipeline path,
+   * ensuring the persisted ciqScore always matches what the ranking pages show.
+   * Fixes M1 (formula mismatch) and M5 (live vs persisted mismatch).
+   */
+  async scoreThemeForPersistence(themeId: string): Promise<{
+    ciqScore: number;
+    breakdown: Record<string, CiqScoreBreakdown>;
+    feedbackCount: number;
+    uniqueCustomerCount: number;
+    voiceCount: number;
+    supportCount: number;
+    surveyCount: number;
+    totalSignalCount: number;
+    revenueInfluence: number;
+    dealInfluenceValue: number;
+  }> {
+    const EMPTY = {
+      ciqScore: 0, breakdown: {} as Record<string, CiqScoreBreakdown>,
+      feedbackCount: 0, uniqueCustomerCount: 0,
+      voiceCount: 0, supportCount: 0, surveyCount: 0, totalSignalCount: 0,
+      revenueInfluence: 0, dealInfluenceValue: 0,
+    };
+    const theme = await this.prisma.theme.findUnique({
+      where: { id: themeId },
+      select: {
+        id: true,
+        feedbackCount: true, voiceCount: true, supportCount: true,
+        surveyCount: true, totalSignalCount: true, revenueInfluence: true,
+        autoMergeCandidate: true,
+        feedbacks: {
+          select: {
+            feedback: {
+              select: {
+                customerId: true, sentiment: true, ciqScore: true, metadata: true,
+                customer: { select: { arrValue: true, accountPriority: true } },
+              },
+            },
+          },
+        },
+        dealLinks: {
+          select: { deal: { select: { annualValue: true, stage: true, status: true } } },
+        },
+        customerSignals: { select: { signalType: true, strength: true } },
+      },
+    });
+    if (!theme) return EMPTY;
+
+    const activeFeedback = theme.feedbacks.filter((tf) => tf.feedback != null);
+    const feedbackCount = activeFeedback.length;
+    const uniqueCustomerIds = new Set(
+      activeFeedback.map((tf) => tf.feedback.customerId).filter(Boolean),
+    );
+    const uniqueCustomerCount = uniqueCustomerIds.size;
+    const arrValue = activeFeedback.reduce(
+      (s, tf) => s + (tf.feedback.customer?.arrValue ?? 0), 0,
+    );
+    const dealInfluenceValue = theme.dealLinks.reduce((s, dl) => {
+      const sw = DEAL_STAGE_WEIGHT[dl.deal.stage] ?? 0;
+      return s + dl.deal.annualValue * sw;
+    }, 0);
+
+    let voiceUrgencySum = 0;
+    let voiceComplaintCount = 0;
+    for (const tf of activeFeedback) {
+      const meta = tf.feedback.metadata as Record<string, unknown> | null;
+      const intel = meta?.intelligence as Record<string, unknown> | null;
+      if (intel) {
+        const urgency = typeof intel.urgencySignal === 'number' ? intel.urgencySignal : 0;
+        const churn = typeof intel.churnSignal === 'number' ? intel.churnSignal : 0;
+        voiceUrgencySum += urgency;
+        if (urgency > 0.5 || churn > 0.5) voiceComplaintCount++;
+      }
+    }
+    const voiceSignalScore = clamp100(
+      countNorm(voiceComplaintCount, 5) * 0.5 + logNorm(voiceUrgencySum, 2) * 0.5,
+    );
+    const surveySignals = theme.customerSignals.filter((s) =>
+      s.signalType.toLowerCase().includes('survey'),
+    );
+    const surveySignalScore = clamp100(
+      surveySignals.reduce((s, sig) => s + sig.strength, 0) * 20,
+    );
+    const supportSignals = theme.customerSignals.filter((s) =>
+      s.signalType.toLowerCase().includes('support') ||
+      s.signalType.toLowerCase().includes('spike'),
+    );
+    const supportSignalScore = clamp100(
+      supportSignals.reduce((s, sig) => s + sig.strength, 0) * 20,
+    );
+
+    const normFreq = countNorm(feedbackCount, 50);
+    const normCustomers = countNorm(uniqueCustomerCount, 20);
+    const normArr = logNorm(arrValue, 7);
+    const normDeal = logNorm(dealInfluenceValue, 7);
+
+    const breakdown: Record<string, CiqScoreBreakdown> = {
+      feedbackFrequency: { value: normFreq, weight: 0.2, contribution: normFreq * 0.2, label: 'Feedback frequency' },
+      uniqueCustomers: { value: normCustomers, weight: 0.15, contribution: normCustomers * 0.15, label: 'Unique customers' },
+      arrRevenue: { value: normArr, weight: 0.25, contribution: normArr * 0.25, label: 'Customer ARR' },
+      dealInfluence: { value: normDeal, weight: 0.2, contribution: normDeal * 0.2, label: 'Deal pipeline influence' },
+      voiceSignal: { value: voiceSignalScore, weight: 0.1, contribution: voiceSignalScore * 0.1, label: 'Voice complaint / urgency' },
+      surveySignal: { value: surveySignalScore, weight: 0.05, contribution: surveySignalScore * 0.05, label: 'Survey demand validation' },
+      supportSignal: { value: supportSignalScore, weight: 0.05, contribution: supportSignalScore * 0.05, label: 'Support spike signal' },
+    };
+    const rawCiq = clamp100(Object.values(breakdown).reduce((s, c) => s + c.contribution, 0));
+    const isNearDuplicate = theme.autoMergeCandidate ?? false;
+    const ciqScore = isNearDuplicate
+      ? parseFloat((rawCiq * 0.8).toFixed(2))
+      : parseFloat(rawCiq.toFixed(2));
+    const liveSignalCount = feedbackCount + (theme.voiceCount ?? 0) + (theme.supportCount ?? 0);
+    return {
+      ciqScore,
+      breakdown,
+      feedbackCount,
+      uniqueCustomerCount,
+      voiceCount: theme.voiceCount ?? 0,
+      supportCount: theme.supportCount ?? 0,
+      surveyCount: theme.surveyCount ?? 0,
+      totalSignalCount: theme.totalSignalCount ?? liveSignalCount,
+      revenueInfluence: arrValue,
+      dealInfluenceValue,
+    };
+  }
+
+  /**
+   * Persist canonical CIQ score to the Theme row in a single atomic write.
+   * Replaces the two separate writes (CiqService.persistThemeScore +
+   * CiqEngineService.persistThemeCiqScore) with one call (M8 fix).
+   * Both ciqScore and priorityScore are set to the same value so that
+   * all pages reading either field see a consistent number.
+   */
+  async persistCanonicalThemeScore(
+    themeId: string,
+    score: Awaited<ReturnType<CiqEngineService['scoreThemeForPersistence']>>,
+  ): Promise<void> {
+    try {
+      await this.prisma.theme.update({
+        where: { id: themeId },
+        data: {
+          ciqScore: score.ciqScore,
+          priorityScore: score.ciqScore,   // keep both in sync (M8)
+          lastScoredAt: new Date(),
+          revenueInfluence: score.revenueInfluence,
+          signalBreakdown: score.breakdown as object,
+          feedbackCount: score.feedbackCount,
+          voiceCount: score.voiceCount,
+          supportCount: score.supportCount,
+          surveyCount: score.surveyCount,
+          totalSignalCount: score.totalSignalCount,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Failed to persist canonical theme CIQ score: ${(err as Error).message}`,
+      );
+    }
+  }
+
   /**
    * Persist ciqScore back to a Theme row (mirrors priorityScore).
-   * Called by CiqScoringProcessor after THEME_SCORED jobs.
+   * @deprecated Use persistCanonicalThemeScore instead (M8 fix).
    */
   async persistThemeCiqScore(themeId: string, ciqScore: number): Promise<void> {
     try {

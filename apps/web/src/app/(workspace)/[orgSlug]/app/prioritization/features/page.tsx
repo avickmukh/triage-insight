@@ -1,8 +1,9 @@
 'use client';
 /**
- * Feature Priority Ranking — /:orgSlug/app/prioritization/features
+ * Feedback Priority Ranking — /:orgSlug/app/prioritization/features
  *
  * Full table of feedback items ranked by 4-dimension CIQ priority score.
+ * NOTE: This page ranks individual feedback items (not features). Renamed from "Feature Priority Ranking".
  * Columns: Rank, Title, Priority Score (bar), Urgency, Revenue Opp, Votes, Sentiment, Customer ARR, Theme Count
  */
 import Link from 'next/link';
@@ -58,15 +59,15 @@ export default function FeaturesPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
             <Link href={routes.prioritization} style={{ color: '#6C757D', textDecoration: 'none', fontSize: '0.875rem' }}>Prioritization</Link>
             <span style={{ color: '#6C757D' }}>›</span>
-            <span style={{ fontSize: '0.875rem', color: '#0a2540', fontWeight: 500 }}>Feature Ranking</span>
+            <span style={{ fontSize: '0.875rem', color: '#0a2540', fontWeight: 500 }}>Feedback Ranking</span>
           </div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0a2540', margin: 0 }}>Feature Priority Ranking</h1>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0a2540', margin: 0 }}>Feedback Priority Ranking</h1>
           <p style={{ color: '#6C757D', margin: '0.25rem 0 0', fontSize: '0.875rem' }}>
             <strong>Priority Score = business decision score.</strong> Ranked by Demand Strength · Revenue Impact · Strategic Importance · Urgency.
           </p>
           <p style={{ fontSize: '0.8rem', color: '#6C757D', margin: '0.2rem 0 0' }}>
             For signal-intelligence scoring (CIQ), see{' '}
-            <a href="../../intelligence/features" style={{ color: '#20A4A4', textDecoration: 'underline', fontWeight: 600 }}>Feature CIQ Ranking</a>.
+            <a href="../../intelligence/features" style={{ color: '#20A4A4', textDecoration: 'underline', fontWeight: 600 }}>Feedback CIQ Ranking</a>.
           </p>
         </div>
         {data && (

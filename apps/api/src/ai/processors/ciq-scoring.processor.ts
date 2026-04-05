@@ -145,25 +145,28 @@ export class CiqScoringProcessor {
             return;
           }
 
-          const score = await this.ciqService.scoreTheme(workspaceId, themeId);
-
-          // ── Always persist theme CIQ — no overwrite guard ───────────────
-          // Theme scores MUST reflect the current cluster state at all times.
-          // After a merge or batch finalization, the target theme's membership
-          // changes and the score must be recomputed from scratch. Keeping the
-          // old score would surface stale data on the dashboard.
-          await this.ciqService.persistThemeScore(themeId, score);
+          // ── M1+M5+M8 fix: use canonical 7-factor formula (same as ranking pages) ──
+          // scoreThemeForPersistence uses the identical formula as getThemeRanking,
+          // so the persisted ciqScore always matches what ranking pages display.
+          // persistCanonicalThemeScore writes both ciqScore and priorityScore in
+          // one atomic update, eliminating the dual-write divergence.
+          const canonicalScore = await this.ciqEngineService.scoreThemeForPersistence(themeId);
+          await this.ciqEngineService.persistCanonicalThemeScore(themeId, canonicalScore);
           await this.ciqService.persistThemeScoreToRoadmap(
             workspaceId,
             themeId,
-            score,
+            {
+              priorityScore: canonicalScore.ciqScore,
+              confidenceScore: 0,
+              revenueImpactScore: 0,
+              revenueImpactValue: canonicalScore.revenueInfluence,
+              dealInfluenceValue: canonicalScore.dealInfluenceValue,
+              signalCount: canonicalScore.totalSignalCount,
+              uniqueCustomerCount: canonicalScore.uniqueCustomerCount,
+            } as Parameters<typeof this.ciqService.persistThemeScoreToRoadmap>[2],
           );
-          await this.ciqEngineService.persistThemeCiqScore(
-            themeId,
-            score.priorityScore,
-          );
-          this.logger.debug(ctx, 'Score persisted', {
-            priorityScore: score.priorityScore,
+          this.logger.debug(ctx, 'Score persisted (canonical)', {
+            ciqScore: canonicalScore.ciqScore,
           });
 
           // ── Stage-2: AI Narration ─────────────────────────────────────────

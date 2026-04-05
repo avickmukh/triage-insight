@@ -155,8 +155,9 @@ function AuthenticatedShell({ slug, pathname, children }: { slug: string; pathna
             <NavGroup label="Prioritization" open={sidebarOpen}>
               <SideNavItem href={r.ciq}                        pathname={pathname} open={sidebarOpen} icon={<IconIntelligence/>}>CIQ Scoring</SideNavItem>
               <SideNavItem href={r.intelligenceThemes}         pathname={pathname} open={sidebarOpen} icon={<IconThemeRank/>}>Theme Ranking</SideNavItem>
-              <SideNavItem href={r.intelligenceFeatures}       pathname={pathname} open={sidebarOpen} icon={<IconFeatureRank/>}>Feature CIQ Ranking</SideNavItem>
-              <SideNavItem href={r.prioritizationFeatures}     pathname={pathname} open={sidebarOpen} icon={<IconFeaturePriority/>}>Feature Priority</SideNavItem>
+              {/* M3+M4 fix: these pages rank feedback items, not features — renamed to reflect actual entity */}
+              <SideNavItem href={r.intelligenceFeatures}       pathname={pathname} open={sidebarOpen} icon={<IconFeatureRank/>}>Feedback CIQ Ranking</SideNavItem>
+              <SideNavItem href={r.prioritizationFeatures}     pathname={pathname} open={sidebarOpen} icon={<IconFeaturePriority/>}>Feedback Priority</SideNavItem>
               <SideNavItem href={r.prioritizationOpportunities} pathname={pathname} open={sidebarOpen} icon={<IconOpportunity/>}>Revenue Opps</SideNavItem>
             </NavGroup>
 
@@ -234,8 +235,8 @@ function AuthenticatedShell({ slug, pathname, children }: { slug: string; pathna
               <NavGroupDrawer label="Prioritization">
                 <DrawerNavItem href={r.ciq}                        pathname={pathname} icon={<IconIntelligence/>}>CIQ Scoring</DrawerNavItem>
                 <DrawerNavItem href={r.intelligenceThemes}         pathname={pathname} icon={<IconThemeRank/>}>Theme Ranking</DrawerNavItem>
-                <DrawerNavItem href={r.intelligenceFeatures}       pathname={pathname} icon={<IconFeatureRank/>}>Feature CIQ Ranking</DrawerNavItem>
-                <DrawerNavItem href={r.prioritizationFeatures}     pathname={pathname} icon={<IconFeaturePriority/>}>Feature Priority</DrawerNavItem>
+                <DrawerNavItem href={r.intelligenceFeatures}       pathname={pathname} icon={<IconFeatureRank/>}>Feedback CIQ Ranking</DrawerNavItem>
+                <DrawerNavItem href={r.prioritizationFeatures}     pathname={pathname} icon={<IconFeaturePriority/>}>Feedback Priority</DrawerNavItem>
                 <DrawerNavItem href={r.prioritizationOpportunities} pathname={pathname} icon={<IconOpportunity/>}>Revenue Opps</DrawerNavItem>
               </NavGroupDrawer>
               <NavGroupDrawer label="Decisions">

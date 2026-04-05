@@ -1,9 +1,10 @@
 'use client';
 /**
- * CIQ Feature Ranking — /:orgSlug/app/intelligence/features
+ * Feedback CIQ Ranking — /:orgSlug/app/intelligence/features
  *
  * Shows feedback items ranked by 6-dimension CIQ score.
  * Each row links to the feedback detail and shows the customer ARR, vote count, and sentiment.
+ * NOTE: This page ranks individual feedback items (not features). Renamed from "Feature CIQ Ranking".
  */
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -48,13 +49,13 @@ export default function IntelligenceFeaturesPage() {
   return (
     <div style={{ padding: '2rem', maxWidth: 1400, margin: '0 auto' }}>
       <div style={{ marginBottom: '1.5rem' }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0a2540', margin: '0 0 0.25rem' }}>Feature CIQ Ranking</h1>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0a2540', margin: '0 0 0.25rem' }}>Feedback CIQ Ranking</h1>
         <p style={{ color: '#6C757D', margin: 0, fontSize: '0.875rem' }}>
           <strong>CIQ Score = signal intelligence.</strong> Feedback items ranked by composite CIQ score — ARR weight, vote count, sentiment, recency, and deal influence.
         </p>
         <p style={{ fontSize: '0.8rem', color: '#6C757D', margin: '0.3rem 0 0' }}>
           For business-decision scoring (Demand · Revenue Impact · Urgency), see{' '}
-          <a href="../prioritization/features" style={{ color: '#20A4A4', textDecoration: 'underline', fontWeight: 600 }}>Feature Priority Ranking</a>.
+          <a href="../prioritization/features" style={{ color: '#20A4A4', textDecoration: 'underline', fontWeight: 600 }}>Feedback Priority Ranking</a>.
         </p>
       </div>
 
@@ -64,7 +65,7 @@ export default function IntelligenceFeaturesPage() {
         <div style={{ textAlign: 'center', padding: '4rem', color: '#c62828' }}>Failed to load feature rankings.</div>
       ) : !features || features.length === 0 ? (
         <div style={{ ...CARD, textAlign: 'center', padding: '4rem', color: '#6C757D' }}>
-          No feature ranking data yet. CIQ scores are computed asynchronously as feedback accumulates.
+          No feedback ranking data yet. CIQ scores are computed asynchronously as feedback accumulates.
         </div>
       ) : (
         <div style={CARD}>
