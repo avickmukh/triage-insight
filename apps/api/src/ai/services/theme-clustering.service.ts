@@ -601,7 +601,11 @@ export class ThemeClusteringService {
     for (const { id } of activeThemes) {
       try {
         await this.ciqQueue.add(
-          { type: 'THEME_SCORED', workspaceId, themeId: id },
+          // bypassIdempotency: true — finalization must always run even if an
+          // incremental THEME_SCORED job completed within the 10-min TTL window.
+          // The incremental job scored the theme with 1 feedback; this job scores
+          // it with the full merged membership.
+          { type: 'THEME_SCORED', workspaceId, themeId: id, bypassIdempotency: true },
           {
             attempts: 2,
             backoff: { type: 'exponential', delay: 3000 },
@@ -864,26 +868,15 @@ export class ThemeClusteringService {
           `${logPrefix} Batch merge: "${mergeSource.title}" → "${mergeTarget.title}" [sim=${sim.toFixed(3)}]`,
         );
 
-        await this.prisma.$executeRaw`
-          INSERT INTO "ThemeFeedback" ("themeId", "feedbackId", "assignedBy", "confidence", "assignedAt")
-          SELECT
-            ${mergeTarget.id}::text,
-            tf."feedbackId",
-            tf."assignedBy",
-            tf."confidence",
-            NOW()
-          FROM "ThemeFeedback" tf
-          WHERE tf."themeId" = ${mergeSource.id}
-          ON CONFLICT ("themeId", "feedbackId") DO NOTHING;
-        `;
-
-        await this.prisma.themeFeedback.deleteMany({
-          where: { themeId: mergeSource.id },
-        });
-        await this.prisma.theme.update({
-          where: { id: mergeSource.id },
-          data: { status: 'ARCHIVED' },
-        });
+        // Use _executeBatchMerge which re-points ALL related entities
+        // (ThemeFeedback, RoadmapItem, CustomerSignal, SupportIssueCluster)
+        // and updates feedbackCount on the target. Previous inline code only
+        // moved ThemeFeedback rows, leaving signals/roadmap orphaned.
+        await this._executeBatchMerge(
+          mergeSource.id,
+          mergeTarget.id,
+          `batch_merge_pass sim=${sim.toFixed(3)}`,
+        );
 
         absorbed.add(mergeSource.id);
         mergedCount++;
@@ -1024,26 +1017,14 @@ export class ThemeClusteringService {
         const nearest = neighbours[0];
 
         if (nearest && nearest.sim >= this.WEAK_CLUSTER_MERGE_THRESHOLD) {
-          // Merge into nearest neighbour
-          await this.prisma.$executeRaw`
-            INSERT INTO "ThemeFeedback" ("themeId", "feedbackId", "assignedBy", "confidence", "assignedAt")
-            SELECT
-              ${nearest.id}::text,
-              tf."feedbackId",
-              tf."assignedBy",
-              tf."confidence",
-              NOW()
-            FROM "ThemeFeedback" tf
-            WHERE tf."themeId" = ${weak.id}
-            ON CONFLICT ("themeId", "feedbackId") DO NOTHING;
-          `;
-          await this.prisma.themeFeedback.deleteMany({
-            where: { themeId: weak.id },
-          });
-          await this.prisma.theme.update({
-            where: { id: weak.id },
-            data: { status: 'ARCHIVED' },
-          });
+          // Use _executeBatchMerge which re-points ALL related entities
+          // (ThemeFeedback, RoadmapItem, CustomerSignal, SupportIssueCluster)
+          // and updates feedbackCount on the target.
+          await this._executeBatchMerge(
+            weak.id,
+            nearest.id,
+            `suppress_weak sim=${nearest.sim.toFixed(3)}`,
+          );
           this.logger.log(
             `${logPrefix} Suppressed weak cluster "${weak.title}" (${weak.id}, size=${weak.liveCount}) ` +
               `→ merged into "${nearest.title}" (${nearest.id}, sim=${nearest.sim.toFixed(3)})`,
@@ -1074,9 +1055,87 @@ export class ThemeClusteringService {
     return suppressed;
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────────
+  // PRIVATE: BATCH MERGE HELPER
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Full merge execution used by both _runBatchMergePass and _suppressWeakClusters.
+   *
+   * Mirrors auto-merge.service.ts executeMerge() but without the CIQ enqueue
+   * (callers handle that separately after all merges complete).
+   *
+   * FIX (2026-04-05): Previous batch merge paths only moved ThemeFeedback rows
+   * and archived the source. They missed:
+   *   - Re-pointing RoadmapItem rows (source → target)
+   *   - Re-pointing CustomerSignal rows (source → target)
+   *   - Re-pointing SupportIssueCluster rows (source → target)
+   *   - Updating feedbackCount on the target theme
+   * This caused the CIQ scorer to read stale counts and the roadmap/signals
+   * panels to show the wrong theme after a merge.
+   */
+  private async _executeBatchMerge(
+    sourceId: string,
+    targetId: string,
+    logLabel: string,
+  ): Promise<number> {
+    let affectedFeedbackCount = 0;
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Re-link all ThemeFeedback rows from source → target
+      await tx.$executeRaw`
+        INSERT INTO "ThemeFeedback" ("themeId", "feedbackId", "assignedBy", "confidence", "assignedAt")
+        SELECT
+          ${targetId}::text,
+          tf."feedbackId",
+          tf."assignedBy",
+          tf."confidence",
+          NOW()
+        FROM "ThemeFeedback" tf
+        WHERE tf."themeId" = ${sourceId}
+        ON CONFLICT ("themeId", "feedbackId") DO NOTHING;
+      `;
+      const countResult = await tx.$queryRaw<Array<{ n: number }>>`
+        SELECT COUNT(*)::int AS n FROM "ThemeFeedback" WHERE "themeId" = ${sourceId};
+      `;
+      affectedFeedbackCount = countResult[0]?.n ?? 0;
+      await tx.themeFeedback.deleteMany({ where: { themeId: sourceId } });
+
+      // 2. Re-point related entities from source → target
+      await tx.roadmapItem.updateMany({
+        where: { themeId: sourceId },
+        data: { themeId: targetId },
+      });
+      await tx.customerSignal.updateMany({
+        where: { themeId: sourceId },
+        data: { themeId: targetId },
+      });
+      await tx.supportIssueCluster.updateMany({
+        where: { themeId: sourceId },
+        data: { themeId: targetId },
+      });
+
+      // 3. Archive source
+      await tx.theme.update({
+        where: { id: sourceId },
+        data: { status: 'ARCHIVED', autoMergeTargetId: targetId },
+      });
+
+      // 4. Update feedbackCount on target
+      await tx.theme.update({
+        where: { id: targetId },
+        data: { feedbackCount: { increment: affectedFeedbackCount } },
+      });
+    });
+    this.logger.log(
+      `[BATCH_MERGE] ${logLabel} source=${sourceId} → target=${targetId} ` +
+        `feedback_moved=${affectedFeedbackCount}`,
+    );
+    return affectedFeedbackCount;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
   // PRIVATE: CORE ASSIGNMENT LOGIC
-  // ─────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────────
 
   private async _assignFeedbackToThemeInTx(
     prisma: PrismaService,

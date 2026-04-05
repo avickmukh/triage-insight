@@ -433,7 +433,7 @@ function FeedbackRow({
           {/* Theme badges */}
           {themes.slice(0, 2).map((tf) => (
             <span key={tf.themeId} style={{ fontSize: '0.7rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: '1rem', background: '#e8f7f7', color: TEAL, border: `1px solid #b2dfdb` }}>
-              {(tf as ThemeFeedback & { theme?: { name?: string } }).theme?.name ?? 'Theme'}
+              {(tf as ThemeFeedback & { theme?: { title?: string } }).theme?.title ?? 'Theme'}
             </span>
           ))}
           {/* Source badge */}

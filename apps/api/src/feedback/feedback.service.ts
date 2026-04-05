@@ -132,19 +132,11 @@ export class FeedbackService {
       );
     }
 
-    // Dispatch CIQ scoring job — wrapped so Redis unavailability doesn't 500
-    try {
-      await this.ciqQueue.add({
-        type: 'FEEDBACK_SCORED',
-        workspaceId,
-        feedbackId: newFeedback.id,
-      });
-    } catch (e) {
-      console.warn(
-        '[FeedbackService] ciqQueue unavailable — skipping',
-        (e as Error).message,
-      );
-    }
+    // NOTE: FEEDBACK_SCORED is intentionally NOT enqueued here.
+    // It is enqueued by analysis.processor.ts AFTER sentiment + embedding + theme
+    // assignment have all been written, so scoreFeedback() reads correct data.
+    // Enqueueing here would race against analysis and produce impactScore ≈ 30
+    // (neutral fallback) because sentiment=null and ThemeFeedback rows don't exist yet.
 
     return newFeedback;
   }

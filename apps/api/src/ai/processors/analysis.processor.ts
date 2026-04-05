@@ -10,12 +10,19 @@
  * 6. Re-throw on fatal failure so Bull marks job as failed and retries
  *
  * Pipeline order (Stage-1):
- *   Feedback → Embedding → Sentiment → Summary → Persist → Dedup → Clustering → CIQ enqueue
+ *   Feedback → Embedding → Sentiment → Summary → Persist → Dedup → Clustering → FEEDBACK_SCORED enqueue
+ *
+ * RACE CONDITION FIX (2026-04-05):
+ *   FEEDBACK_SCORED is now enqueued HERE (after analysis) instead of in feedback.service.ts
+ *   (at creation time). This ensures scoreFeedback() reads correct sentiment, embedding,
+ *   and ThemeFeedback rows. The old pattern produced impactScore ≈ 30 (neutral fallback)
+ *   because sentiment=null and themes=[] at creation time.
  */
 import { Processor, Process, OnQueueFailed } from '@nestjs/bull';
-import type { Job } from 'bull';
+import type { Job, Queue } from 'bull';
 import { PrismaService } from '../../prisma/prisma.service';
 import { Injectable } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bull';
 import { EmbeddingService } from '../services/embedding.service';
 import { SummarizationService } from '../services/summarization.service';
 import { SentimentService } from '../services/sentiment.service';
@@ -28,6 +35,7 @@ import { handleDlq } from '../../common/queue/dlq-handler';
 import { RetryPolicy } from '../../common/queue/retry-policy';
 import { ProblemTypeClassifierService } from '../services/problem-type-classifier.service';
 import { NegativeClauseExtractorService } from '../services/negative-clause-extractor.service';
+import { CIQ_SCORING_QUEUE } from './ciq-scoring.processor';
 
 export const AI_ANALYSIS_QUEUE = 'ai-analysis';
 
@@ -54,6 +62,7 @@ export class AiAnalysisProcessor {
     private readonly idempotencyService: JobIdempotencyService,
     private readonly problemTypeClassifier: ProblemTypeClassifierService,
     private readonly negativeClauseExtractor: NegativeClauseExtractorService,
+    @InjectQueue(CIQ_SCORING_QUEUE) private readonly ciqQueue: Queue,
   ) {}
 
   /**
@@ -353,6 +362,23 @@ export class AiAnalysisProcessor {
       embedding.length > 0 ? embedding : undefined,
     );
     this.logger.debug(ctx, `[STEP] CLUSTERING ${Date.now() - t6}ms`);
+
+    // ── 6.5. Enqueue FEEDBACK_SCORED (now that sentiment + ThemeFeedback exist) ────
+    // This is the correct time to score feedback-level urgency:
+    //   ✓ sentiment has been computed and written
+    //   ✓ ThemeFeedback rows exist (theme assignment done)
+    //   ✓ embedding is written
+    // Previously enqueued in feedback.service.ts at creation time (race condition).
+    try {
+      await this.ciqQueue.add(
+        { type: 'FEEDBACK_SCORED', workspaceId, feedbackId },
+        { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
+      );
+      this.logger.debug(ctx, '[STEP] FEEDBACK_SCORED enqueued (post-analysis)');
+    } catch (e) {
+      this.logger.stepWarn(ctx, 'FEEDBACK_SCORED_ENQUEUE', (e as Error).message);
+      // Non-fatal: feedback urgency score will be missing but pipeline continues
+    }
 
     const durationMs = Date.now() - startedAt;
     await this.idempotencyService.markCompleted(logId, durationMs);

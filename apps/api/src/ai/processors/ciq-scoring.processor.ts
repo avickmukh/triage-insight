@@ -23,6 +23,7 @@ import { Injectable } from '@nestjs/common';
 import { CiqService } from '../services/ciq.service';
 import { CiqEngineService } from '../../ciq/ciq-engine.service';
 import { ThemeNarrationService } from '../services/theme-narration.service';
+import { ThemeLabelService } from '../services/theme-label.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AiJobType } from '@prisma/client';
 import { JobLogger } from '../../common/queue/job-logger';
@@ -43,6 +44,13 @@ export interface CiqJobPayload {
   themeId?: string;
   roadmapItemId?: string;
   dealId?: string;
+  /**
+   * When true, skip the 10-minute idempotency TTL guard.
+   * Used by post-finalization THEME_SCORED jobs so they always run even if
+   * an incremental THEME_SCORED job already completed within the TTL window.
+   * Without this, merged themes never get their final CIQ score.
+   */
+  bypassIdempotency?: boolean;
   /** Injected by idempotency service */
   __logId?: string;
   [key: string]: unknown;
@@ -57,6 +65,7 @@ export class CiqScoringProcessor {
     private readonly ciqService: CiqService,
     private readonly ciqEngineService: CiqEngineService,
     private readonly themeNarrationService: ThemeNarrationService,
+    private readonly themeLabelService: ThemeLabelService,
     private readonly prisma: PrismaService,
     private readonly idempotencyService: JobIdempotencyService,
   ) {}
@@ -80,14 +89,19 @@ export class CiqScoringProcessor {
 
     // ── Map job type to AiJobType enum ───────────────────────────────────────
     const aiJobType = this.toAiJobType(type);
-
-    // ── Idempotency guard ────────────────────────────────────────────────────
-    const isDup = await this.idempotencyService.isDuplicate(
-      aiJobType,
-      entityId,
-      workspaceId,
-    );
-    if (isDup) return;
+    // bypassIdempotency=true is set by post-finalization THEME_SCORED jobs so they
+    // always run even if an incremental job already completed within the 10-min TTL.
+    // Without this, merged themes never get their final CIQ score (the incremental
+    // job ran when the theme had 1 feedback; the finalization job would be the first
+    // time the scorer sees the full merged membership).
+    if (!job.data.bypassIdempotency) {
+      const isDup = await this.idempotencyService.isDuplicate(
+        aiJobType,
+        entityId,
+        workspaceId,
+      );
+      if (isDup) return;
+    }
 
     const logId = await this.idempotencyService.markStarted(
       aiJobType,
@@ -421,6 +435,34 @@ export class CiqScoringProcessor {
       this.logger.debug(ctx, 'Narration persisted', {
         confidence: narration.confidence,
       });
+
+      // ── Refresh shortLabel + upgrade title if still raw ──────────────────
+      // ThemeLabelService.generateLabel produces a 3-6 word actionable label.
+      // We also upgrade theme.title if it is still the initial 4-word truncated
+      // value (shortLabelAt was null before this run), so the Inbox and CIQ Hub
+      // show a meaningful name instead of a raw feedback title fragment.
+      try {
+        const themeBeforeLabel = await this.prisma.theme.findUnique({
+          where: { id: themeId },
+          select: { shortLabelAt: true, title: true },
+        });
+        const wasUnlabelled = !themeBeforeLabel?.shortLabelAt;
+        const newLabel = await this.themeLabelService.generateLabel(themeId);
+        if (newLabel && wasUnlabelled) {
+          // Title was still the raw initial value — upgrade it to the LLM label.
+          await this.prisma.theme.update({
+            where: { id: themeId },
+            data: { title: newLabel },
+          });
+          this.logger.debug(ctx, 'Theme title upgraded from raw to LLM label', {
+            oldTitle: themeBeforeLabel?.title,
+            newTitle: newLabel,
+          });
+        }
+      } catch (labelErr) {
+        // Non-fatal — shortLabel refresh failure must not block CIQ scoring
+        this.logger.stepWarn(ctx, 'LABEL_REFRESH', (labelErr as Error).message);
+      }
     } catch (err) {
       // Non-fatal — log and continue; the scoring job is already complete
       this.logger.stepWarn(ctx, 'NARRATION', (err as Error).message);
