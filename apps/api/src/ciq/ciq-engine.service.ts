@@ -551,11 +551,42 @@ export class CiqEngineService {
         ? sentiments.reduce((s, v) => s + Math.pow(v - sentimentMean, 2), 0) / sentiments.length
         : 0;
 
+      // ── Step 7 (early): WEAK theme guard — MUST come before recency to avoid null crash ──
+      if (feedbackCount === 0) {
+        return {
+          themeId: theme.id,
+          title: theme.title,
+          status: theme.status,
+          ciqScore: 0,
+          priorityScore: theme.priorityScore,
+          revenueInfluence: theme.revenueInfluence ?? 0,
+          feedbackCount: 0,
+          uniqueCustomerCount: 0,
+          dealInfluenceValue: 0,
+          voiceSignalScore: 0,
+          surveySignalScore: 0,
+          supportSignalScore: 0,
+          voiceCount: 0,
+          supportCount: 0,
+          totalSignalCount: 0,
+          lastScoredAt: theme.lastScoredAt,
+          aiConfidence: theme.aiConfidence ?? null,
+          isNearDuplicate: theme.autoMergeCandidate ?? false,
+          drs: 0,
+          signalLabels: ['No signals'],
+          eligibility: 'INELIGIBLE' as const,
+          breakdown: {},
+        };
+      }
+
       // ── Recency: days since most recent feedback ───────────────────────────
+      // NOTE: feedbackCount > 0 is guaranteed here, so reduce will always find a date.
+      // The ?? fallbacks guard against edge cases where createdAt may be null.
       const lastFeedbackAt = activeFeedback.reduce<Date | null>((latest, tf) => {
         const d = tf.feedback.createdAt;
+        if (!d) return latest;
         return !latest || d > latest ? d : latest;
-      }, null) ?? theme.lastEvidenceAt ?? theme.createdAt;
+      }, null) ?? theme.lastEvidenceAt ?? theme.createdAt ?? new Date();
       const daysSinceLast = (Date.now() - lastFeedbackAt.getTime()) / (1000 * 60 * 60 * 24);
 
       // ── Resurfacing ────────────────────────────────────────────────────────
@@ -586,33 +617,6 @@ export class CiqEngineService {
         resurfaceCount: resurfaceCountVal,
       }));
 
-      // ── Step 7: WEAK theme guard ───────────────────────────────────────────
-      if (feedbackCount === 0) {
-        return {
-          themeId: theme.id,
-          title: theme.title,
-          status: theme.status,
-          ciqScore: 0,
-          priorityScore: theme.priorityScore,
-          revenueInfluence: theme.revenueInfluence ?? 0,
-          feedbackCount: 0,
-          uniqueCustomerCount: 0,
-          dealInfluenceValue: 0,
-          voiceSignalScore: 0,
-          surveySignalScore: 0,
-          supportSignalScore: 0,
-          voiceCount: 0,
-          supportCount: 0,
-          totalSignalCount: 0,
-          lastScoredAt: theme.lastScoredAt,
-          aiConfidence: theme.aiConfidence ?? null,
-          isNearDuplicate: theme.autoMergeCandidate ?? false,
-          drs: 0,
-          signalLabels: ['No signals'],
-          eligibility: 'INELIGIBLE' as const,
-          breakdown: {},
-        };
-      }
 
       // ── 6-factor business-grade CIQ ───────────────────────────────────────
       const { score: rawCiq, factors, multiplier } = computeBusinessCiq({
