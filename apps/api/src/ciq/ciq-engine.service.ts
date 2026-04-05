@@ -31,6 +31,7 @@ import {
   AccountPriority,
   DealStage,
   DealStatus,
+  FeedbackStatus,
   ThemeStatus,
 } from '@prisma/client';
 
@@ -50,6 +51,111 @@ function countNorm(value: number, cap = 50): number {
 /** Clamp a value to [0, 100] */
 function clamp100(v: number): number {
   return Math.max(0, Math.min(100, v));
+}
+
+// ─── Business-grade CIQ helpers (6-factor formula) ───────────────────────────
+
+/** Velocity: how quickly is feedback accumulating? cap at 20 signals */
+function velocityScore(feedbackCount: number): number {
+  return Math.min(1, feedbackCount / 20);
+}
+
+/** Recency: how fresh is the most recent signal? decays over 30 days */
+function recencyScore(daysSinceLast: number): number {
+  return Math.max(0, 1 - daysSinceLast / 30);
+}
+
+/** Sentiment: negative sentiment ratio (0 = all positive, 1 = all negative) */
+function sentimentScore(negativeCount: number, total: number): number {
+  if (total === 0) return 0;
+  return Math.min(1, negativeCount / total);
+}
+
+/** Source diversity: how many distinct primary sources? cap at 4 */
+function sourceMixScore(distinctSources: number): number {
+  return Math.min(1, distinctSources / 4);
+}
+
+/** Resurfacing: repeated evidence after a shipped roadmap item */
+function resurfacingScore(resurfaceCount: number): number {
+  return Math.min(1, resurfaceCount / 5);
+}
+
+/** Confidence: log-based certainty from signal volume */
+function confidenceScore(feedbackCount: number): number {
+  return Math.min(1, Math.log(feedbackCount + 1) / Math.log(50));
+}
+
+/**
+ * Compute the 6-factor CIQ score (0–100) and apply impact multipliers.
+ *
+ * Formula:
+ *   raw = 0.30*velocity + 0.20*sentiment + 0.15*recency
+ *       + 0.15*resurfacing + 0.10*sourceMix + 0.10*confidence
+ *   finalCIQ = clamp(raw * 100 * impactMultiplier, 0, 100)
+ */
+function computeBusinessCiq(params: {
+  feedbackCount: number;
+  daysSinceLastFeedback: number;
+  negativeCount: number;
+  distinctSources: number;
+  resurfaceCount: number;
+  hasEnterpriseSignal: boolean;
+  hasPaymentOrSecuritySignal: boolean;
+  highNegativeSentiment: boolean;
+  highVelocity: boolean;
+}): { score: number; factors: Record<string, number>; multiplier: number } {
+  const v = velocityScore(params.feedbackCount);
+  const s = sentimentScore(params.negativeCount, params.feedbackCount);
+  const r = recencyScore(params.daysSinceLastFeedback);
+  const rs = resurfacingScore(params.resurfaceCount);
+  const sm = sourceMixScore(params.distinctSources);
+  const c = confidenceScore(params.feedbackCount);
+
+  const raw = 0.30 * v + 0.20 * s + 0.15 * r + 0.15 * rs + 0.10 * sm + 0.10 * c;
+
+  // Impact multipliers
+  let multiplier = 1.0;
+  if (params.hasEnterpriseSignal) multiplier += 0.15;
+  if (params.hasPaymentOrSecuritySignal) multiplier += 0.20;
+  if (params.highNegativeSentiment && params.highVelocity) multiplier += 0.10;
+
+  const score = Math.min(100, Math.round(raw * 100 * multiplier));
+
+  return {
+    score,
+    factors: { velocity: v, sentiment: s, recency: r, resurfacing: rs, sourceMix: sm, confidence: c },
+    multiplier,
+  };
+}
+
+/** Derive priority label from CIQ score */
+function priorityLabel(ciqScore: number, negativeRatio: number, velocity: number): 'HIGH' | 'MEDIUM' | 'LOW' {
+  // Override: very negative AND high velocity → force HIGH
+  if (negativeRatio >= 0.7 && velocity >= 0.5) return 'HIGH';
+  if (ciqScore >= 75) return 'HIGH';
+  if (ciqScore >= 50) return 'MEDIUM';
+  return 'LOW';
+}
+
+/** Narration confidence: never 0 if feedback exists */
+function narrationConfidence(feedbackCount: number, distinctSources: number, sentimentVariance: number): number {
+  if (feedbackCount === 0) return 0;
+  const base = Math.min(1,
+    (feedbackCount / 20) * 0.5 +
+    (distinctSources / 4) * 0.3 +
+    sentimentVariance * 0.2,
+  );
+  // Ensure at least 0.05 if any feedback exists
+  return Math.max(0.05, base);
+}
+
+const ENTERPRISE_KEYWORDS = ['enterprise', 'sales', 'escalation', 'vip', 'strategic'];
+const PAYMENT_SECURITY_KEYWORDS = ['payment', 'billing', 'security', 'breach', 'fraud', 'pci', 'gdpr'];
+
+function hasKeyword(text: string, keywords: string[]): boolean {
+  const lower = text.toLowerCase();
+  return keywords.some((k) => lower.includes(k));
 }
 
 const ACCOUNT_PRIORITY_MAP: Record<AccountPriority, number> = {
@@ -364,14 +470,28 @@ export class CiqEngineService {
         totalSignalCount: true,
         aiConfidence: true,
         autoMergeCandidate: true,
+        resurfaceCount: true,
+        recentSignalCount: true,
+        lastEvidenceAt: true,
+        createdAt: true,
         feedbacks: {
+          where: {
+            feedback: {
+              status: { notIn: [FeedbackStatus.ARCHIVED, FeedbackStatus.MERGED] },
+            },
+          },
           select: {
             feedback: {
               select: {
+                id: true,
                 customerId: true,
                 sentiment: true,
                 ciqScore: true,
                 metadata: true,
+                primarySource: true,
+                sourceType: true,
+                title: true,
+                createdAt: true,
                 customer: { select: { arrValue: true, accountPriority: true } },
               },
             },
@@ -398,135 +518,211 @@ export class CiqEngineService {
         (tf) => tf.feedback != null,
       );
 
-      // ── Feedback signals ──────────────────────────────────────────────────
+      // ── Signal extraction (Step 1: exclude ARCHIVED + MERGED feedback) ──────
       const feedbackCount = activeFeedback.length;
+      const feedbackIds = activeFeedback.map((tf) => tf.feedback.id);
+
+      // ── Source distribution ────────────────────────────────────────────────
+      const sourceSet = new Set<string>();
+      const sourceDist: Record<string, number> = {};
+      for (const tf of activeFeedback) {
+        const src = (tf.feedback.primarySource ?? tf.feedback.sourceType ?? 'FEEDBACK').toUpperCase();
+        sourceSet.add(src);
+        sourceDist[src] = (sourceDist[src] ?? 0) + 1;
+      }
+      const distinctSources = sourceSet.size;
+
+      // ── Sentiment distribution ─────────────────────────────────────────────
+      let negativeCount = 0;
+      let positiveCount = 0;
+      let neutralCount = 0;
+      const sentiments: number[] = [];
+      for (const tf of activeFeedback) {
+        const s = tf.feedback.sentiment ?? 0;
+        sentiments.push(s);
+        if (s < -0.1) negativeCount++;
+        else if (s > 0.1) positiveCount++;
+        else neutralCount++;
+      }
+      const sentimentMean = sentiments.length > 0
+        ? sentiments.reduce((a, b) => a + b, 0) / sentiments.length
+        : 0;
+      const sentimentVariance = sentiments.length > 0
+        ? sentiments.reduce((s, v) => s + Math.pow(v - sentimentMean, 2), 0) / sentiments.length
+        : 0;
+
+      // ── Recency: days since most recent feedback ───────────────────────────
+      const lastFeedbackAt = activeFeedback.reduce<Date | null>((latest, tf) => {
+        const d = tf.feedback.createdAt;
+        return !latest || d > latest ? d : latest;
+      }, null) ?? theme.lastEvidenceAt ?? theme.createdAt;
+      const daysSinceLast = (Date.now() - lastFeedbackAt.getTime()) / (1000 * 60 * 60 * 24);
+
+      // ── Resurfacing ────────────────────────────────────────────────────────
+      const resurfaceCountVal = theme.resurfaceCount ?? 0;
+
+      // ── Impact keyword detection ───────────────────────────────────────────
+      const allText = activeFeedback
+        .map((tf) => tf.feedback.title ?? '')
+        .join(' ');
+      const hasEnterpriseSignal =
+        sourceSet.has('SUPPORT') ||
+        hasKeyword(allText, ENTERPRISE_KEYWORDS);
+      const hasPaymentOrSecuritySignal = hasKeyword(allText, PAYMENT_SECURITY_KEYWORDS);
+      const negativeRatio = feedbackCount > 0 ? negativeCount / feedbackCount : 0;
+      const velScore = velocityScore(feedbackCount);
+      const highNegativeSentiment = negativeRatio >= 0.7;
+      const highVelocityFlag = velScore >= 0.5;
+
+      // ── CIQ_SIGNAL_SNAPSHOT debug log ──────────────────────────────────────
+      this.logger.debug(JSON.stringify({
+        event: 'CIQ_SIGNAL_SNAPSHOT',
+        themeId: theme.id,
+        feedbackCount,
+        feedbackIds,
+        sourceDistribution: sourceDist,
+        sentimentDistribution: { positive: positiveCount, neutral: neutralCount, negative: negativeCount },
+        daysSinceLast: parseFloat(daysSinceLast.toFixed(1)),
+        resurfaceCount: resurfaceCountVal,
+      }));
+
+      // ── Step 7: WEAK theme guard ───────────────────────────────────────────
+      if (feedbackCount === 0) {
+        return {
+          themeId: theme.id,
+          title: theme.title,
+          status: theme.status,
+          ciqScore: 0,
+          priorityScore: theme.priorityScore,
+          revenueInfluence: theme.revenueInfluence ?? 0,
+          feedbackCount: 0,
+          uniqueCustomerCount: 0,
+          dealInfluenceValue: 0,
+          voiceSignalScore: 0,
+          surveySignalScore: 0,
+          supportSignalScore: 0,
+          voiceCount: 0,
+          supportCount: 0,
+          totalSignalCount: 0,
+          lastScoredAt: theme.lastScoredAt,
+          aiConfidence: theme.aiConfidence ?? null,
+          isNearDuplicate: theme.autoMergeCandidate ?? false,
+          drs: 0,
+          signalLabels: ['No signals'],
+          eligibility: 'INELIGIBLE' as const,
+          breakdown: {},
+        };
+      }
+
+      // ── 6-factor business-grade CIQ ───────────────────────────────────────
+      const { score: rawCiq, factors, multiplier } = computeBusinessCiq({
+        feedbackCount,
+        daysSinceLastFeedback: daysSinceLast,
+        negativeCount,
+        distinctSources,
+        resurfaceCount: resurfaceCountVal,
+        hasEnterpriseSignal,
+        hasPaymentOrSecuritySignal,
+        highNegativeSentiment,
+        highVelocity: highVelocityFlag,
+      });
+
+      const breakdown: Record<string, CiqScoreBreakdown> = {
+        velocity: {
+          value: parseFloat((factors.velocity * 100).toFixed(1)),
+          weight: 0.30,
+          contribution: parseFloat((factors.velocity * 0.30 * 100).toFixed(2)),
+          label: 'Feedback velocity',
+        },
+        sentiment: {
+          value: parseFloat((factors.sentiment * 100).toFixed(1)),
+          weight: 0.20,
+          contribution: parseFloat((factors.sentiment * 0.20 * 100).toFixed(2)),
+          label: 'Negative sentiment pressure',
+        },
+        recency: {
+          value: parseFloat((factors.recency * 100).toFixed(1)),
+          weight: 0.15,
+          contribution: parseFloat((factors.recency * 0.15 * 100).toFixed(2)),
+          label: 'Signal recency',
+        },
+        resurfacing: {
+          value: parseFloat((factors.resurfacing * 100).toFixed(1)),
+          weight: 0.15,
+          contribution: parseFloat((factors.resurfacing * 0.15 * 100).toFixed(2)),
+          label: 'Post-ship resurfacing',
+        },
+        sourceMix: {
+          value: parseFloat((factors.sourceMix * 100).toFixed(1)),
+          weight: 0.10,
+          contribution: parseFloat((factors.sourceMix * 0.10 * 100).toFixed(2)),
+          label: 'Source diversity',
+        },
+        confidence: {
+          value: parseFloat((factors.confidence * 100).toFixed(1)),
+          weight: 0.10,
+          contribution: parseFloat((factors.confidence * 0.10 * 100).toFixed(2)),
+          label: 'Signal confidence',
+        },
+      };
+
+      // ── CIQ_FACTOR_BREAKDOWN debug log ─────────────────────────────────────
+      this.logger.debug(JSON.stringify({
+        event: 'CIQ_FACTOR_BREAKDOWN',
+        themeId: theme.id,
+        factors,
+        multiplier,
+        rawCiq,
+      }));
+
+      // ── Near-duplicate penalty (20% reduction for merge candidates) ────────
+      const isNearDuplicate = theme.autoMergeCandidate ?? false;
+      const effectiveCiqScore = isNearDuplicate
+        ? Math.max(0, Math.round(rawCiq * 0.8))
+        : rawCiq;
+
+      // ── CIQ_FINAL_SCORE debug log ──────────────────────────────────────────
+      this.logger.debug(JSON.stringify({
+        event: 'CIQ_FINAL_SCORE',
+        themeId: theme.id,
+        title: theme.title,
+        rawCiq,
+        effectiveCiqScore,
+        isNearDuplicate,
+        priority: priorityLabel(effectiveCiqScore, negativeRatio, velScore),
+      }));
+
+      // ── Live source counts from active feedback rows ───────────────────────
+      const liveVoiceCount = activeFeedback.filter(
+        (tf) => (tf.feedback.primarySource ?? '').toUpperCase() === 'VOICE' ||
+                 (tf.feedback.sourceType ?? '').toUpperCase() === 'VOICE',
+      ).length;
+      const liveSupportCount = activeFeedback.filter(
+        (tf) => (tf.feedback.primarySource ?? '').toUpperCase() === 'SUPPORT' ||
+                 (tf.feedback.sourceType ?? '').toUpperCase() === 'SUPPORT',
+      ).length;
+
+      // ── Narration confidence (Step 8) ──────────────────────────────────────
+      const aiConf = narrationConfidence(feedbackCount, distinctSources, sentimentVariance);
+
+      // ── Deal signals (kept for revenue intelligence display) ──────────────
+      const dealInfluenceValue = theme.dealLinks.reduce((s, dl) => {
+        if (dl.deal.status === DealStatus.LOST) return s;
+        return s + dl.deal.annualValue * (DEAL_STAGE_WEIGHT[dl.deal.stage] ?? 0);
+      }, 0);
+
+      // ── Signal labels for UI explainability chips ─────────────────────────
+      const signalLabels: string[] = [];
+      if (isNearDuplicate) signalLabels.push('Near-duplicate');
+      if (hasEnterpriseSignal) signalLabels.push('Enterprise signal');
+      if (hasPaymentOrSecuritySignal) signalLabels.push('Payment/Security');
+      if (highNegativeSentiment) signalLabels.push('High negativity');
+      if (multiplier > 1.0) signalLabels.push(`+${Math.round((multiplier - 1) * 100)}% impact boost`);
+
       const uniqueCustomerIds = new Set(
         activeFeedback.map((tf) => tf.feedback.customerId).filter(Boolean),
       );
       const uniqueCustomerCount = uniqueCustomerIds.size;
-      const arrValue = activeFeedback.reduce(
-        (s, tf) => s + (tf.feedback.customer?.arrValue ?? 0),
-        0,
-      );
-
-      // ── Deal signals ──────────────────────────────────────────────────────
-      const dealInfluenceValue = theme.dealLinks.reduce((s, dl) => {
-        if (dl.deal.status === DealStatus.LOST) return s;
-        return (
-          s + dl.deal.annualValue * (DEAL_STAGE_WEIGHT[dl.deal.stage] ?? 0)
-        );
-      }, 0);
-
-      // ── Voice signals (from feedback metadata.intelligence) ───────────────
-      let voiceUrgencySum = 0;
-      let voiceComplaintCount = 0;
-      for (const tf of activeFeedback) {
-        const meta = tf.feedback.metadata as Record<string, unknown> | null;
-        const intel = meta?.intelligence as Record<string, unknown> | null;
-        if (intel) {
-          const urgency =
-            typeof intel.urgencySignal === 'number' ? intel.urgencySignal : 0;
-          const churn =
-            typeof intel.churnSignal === 'number' ? intel.churnSignal : 0;
-          voiceUrgencySum += urgency;
-          if (urgency > 0.5 || churn > 0.5) voiceComplaintCount++;
-        }
-      }
-      const voiceSignalScore = clamp100(
-        countNorm(voiceComplaintCount, 5) * 0.5 +
-          logNorm(voiceUrgencySum, 2) * 0.5,
-      );
-
-      // ── Survey signals (SurveyResponse.ciqWeight for linked surveys) ──────
-      // We approximate via CustomerSignal rows with signalType containing 'survey'
-      const surveySignals = theme.customerSignals.filter((s) =>
-        s.signalType.toLowerCase().includes('survey'),
-      );
-      const surveySignalScore = clamp100(
-        surveySignals.reduce((s, sig) => s + sig.strength, 0) * 20,
-      );
-
-      // ── Support signals ───────────────────────────────────────────────────
-      const supportSignals = theme.customerSignals.filter(
-        (s) =>
-          s.signalType.toLowerCase().includes('support') ||
-          s.signalType.toLowerCase().includes('spike'),
-      );
-      const supportSignalScore = clamp100(
-        supportSignals.reduce((s, sig) => s + sig.strength, 0) * 20,
-      );
-
-      // ── Composite CIQ score ───────────────────────────────────────────────
-      const normFreq = countNorm(feedbackCount, 50);
-      const normCustomers = countNorm(uniqueCustomerCount, 20);
-      const normArr = logNorm(arrValue, 7);
-      const normDeal = logNorm(dealInfluenceValue, 7);
-
-      const breakdown: Record<string, CiqScoreBreakdown> = {
-        feedbackFrequency: {
-          value: normFreq,
-          weight: 0.2,
-          contribution: normFreq * 0.2,
-          label: 'Feedback frequency',
-        },
-        uniqueCustomers: {
-          value: normCustomers,
-          weight: 0.15,
-          contribution: normCustomers * 0.15,
-          label: 'Unique customers',
-        },
-        arrRevenue: {
-          value: normArr,
-          weight: 0.25,
-          contribution: normArr * 0.25,
-          label: 'Customer ARR',
-        },
-        dealInfluence: {
-          value: normDeal,
-          weight: 0.2,
-          contribution: normDeal * 0.2,
-          label: 'Deal pipeline influence',
-        },
-        voiceSignal: {
-          value: voiceSignalScore,
-          weight: 0.1,
-          contribution: voiceSignalScore * 0.1,
-          label: 'Voice complaint / urgency',
-        },
-        surveySignal: {
-          value: surveySignalScore,
-          weight: 0.05,
-          contribution: surveySignalScore * 0.05,
-          label: 'Survey demand validation',
-        },
-        supportSignal: {
-          value: supportSignalScore,
-          weight: 0.05,
-          contribution: supportSignalScore * 0.05,
-          label: 'Support spike signal',
-        },
-      };
-
-      const ciqScore = clamp100(
-        Object.values(breakdown).reduce((s, c) => s + c.contribution, 0),
-      );
-
-      // Use persisted counts from Theme row when available (set by unified CIQ scorer),
-      // otherwise fall back to live-computed counts from the feedback join.
-      const persistedFeedbackCount = theme.feedbackCount ?? feedbackCount;
-      const persistedVoiceCount = theme.voiceCount ?? 0;
-      const persistedSupportCount = theme.supportCount ?? 0;
-      // Use live feedbackCount (from join) as primary fallback — persisted totalSignalCount may be null
-      // before CIQ scoring has run. This ensures themes always appear in the ranking.
-      const liveSignalCount =
-        feedbackCount + (theme.voiceCount ?? 0) + (theme.supportCount ?? 0);
-      const persistedTotalSignals = theme.totalSignalCount ?? liveSignalCount;
-
-      // ── Near-duplicate penalty (20% CIQ reduction for merge candidates) ────
-      const isNearDuplicate = theme.autoMergeCandidate ?? false;
-      const effectiveCiqScore = isNearDuplicate
-        ? parseFloat((ciqScore * 0.8).toFixed(2))
-        : parseFloat(ciqScore.toFixed(2));
 
       return {
         themeId: theme.id,
@@ -535,29 +731,21 @@ export class CiqEngineService {
         ciqScore: effectiveCiqScore,
         priorityScore: theme.priorityScore,
         revenueInfluence: theme.revenueInfluence ?? 0,
-        feedbackCount: persistedFeedbackCount,
+        feedbackCount,
         uniqueCustomerCount,
         dealInfluenceValue,
-        voiceSignalScore: parseFloat(voiceSignalScore.toFixed(2)),
-        surveySignalScore: parseFloat(surveySignalScore.toFixed(2)),
-        supportSignalScore: parseFloat(supportSignalScore.toFixed(2)),
-        voiceCount: persistedVoiceCount,
-        supportCount: persistedSupportCount,
-        totalSignalCount: persistedTotalSignals,
+        voiceSignalScore: parseFloat((factors.velocity * 100).toFixed(2)),
+        surveySignalScore: parseFloat((factors.sourceMix * 100).toFixed(2)),
+        supportSignalScore: parseFloat((liveSupportCount > 0 ? Math.min(100, liveSupportCount * 20) : 0).toFixed(2)),
+        voiceCount: liveVoiceCount,
+        supportCount: liveSupportCount,
+        totalSignalCount: feedbackCount,
         lastScoredAt: theme.lastScoredAt,
-        aiConfidence: theme.aiConfidence ?? null,
+        aiConfidence: aiConf,
         isNearDuplicate,
-        // drs / signalLabels / eligibility are not computed here (CIQ engine is
-        // the live-scoring path; DRS is computed by ThemeRankingEngine).
-        // Provide sensible defaults so the interface is satisfied.
         drs: effectiveCiqScore,
-        signalLabels: isNearDuplicate ? ['Near-duplicate'] : [],
-        eligibility:
-          persistedTotalSignals < 1
-            ? 'INELIGIBLE'
-            : isNearDuplicate
-              ? 'PENALISED'
-              : 'ELIGIBLE',
+        signalLabels,
+        eligibility: isNearDuplicate ? 'PENALISED' : 'ELIGIBLE',
         breakdown,
       };
     });
@@ -1017,12 +1205,13 @@ export class CiqEngineService {
     totalSignalCount: number;
     revenueInfluence: number;
     dealInfluenceValue: number;
+    aiConfidence?: number;
   }> {
     const EMPTY = {
       ciqScore: 0, breakdown: {} as Record<string, CiqScoreBreakdown>,
       feedbackCount: 0, uniqueCustomerCount: 0,
       voiceCount: 0, supportCount: 0, surveyCount: 0, totalSignalCount: 0,
-      revenueInfluence: 0, dealInfluenceValue: 0,
+      revenueInfluence: 0, dealInfluenceValue: 0, aiConfidence: 0,
     };
     const theme = await this.prisma.theme.findUnique({
       where: { id: themeId },
@@ -1031,13 +1220,29 @@ export class CiqEngineService {
         feedbackCount: true, voiceCount: true, supportCount: true,
         surveyCount: true, totalSignalCount: true, revenueInfluence: true,
         autoMergeCandidate: true,
+        resurfaceCount: true,
+        recentSignalCount: true,
+        lastEvidenceAt: true,
+        createdAt: true,
         feedbacks: {
+          where: {
+            feedback: {
+              status: { notIn: [FeedbackStatus.ARCHIVED, FeedbackStatus.MERGED] },
+            },
+          },
           select: {
             feedback: {
               select: {
-                customerId: true, sentiment: true, ciqScore: true, metadata: true,
+                id: true,
+                customerId: true,
+                sentiment: true,
+                ciqScore: true,
+                metadata: true,
                 sourceType: true,
                 primarySource: true,
+                title: true,
+                createdAt: true,
+                status: true,
                 customer: { select: { arrValue: true, accountPriority: true } },
               },
             },
@@ -1052,73 +1257,149 @@ export class CiqEngineService {
     if (!theme) return EMPTY;
 
     const activeFeedback = theme.feedbacks.filter((tf) => tf.feedback != null);
+    // ── Signal extraction (Step 1: exclude ARCHIVED + MERGED feedback) ──────
     const feedbackCount = activeFeedback.length;
-    const uniqueCustomerIds = new Set(
-      activeFeedback.map((tf) => tf.feedback.customerId).filter(Boolean),
-    );
-    const uniqueCustomerCount = uniqueCustomerIds.size;
-    const arrValue = activeFeedback.reduce(
-      (s, tf) => s + (tf.feedback.customer?.arrValue ?? 0), 0,
-    );
-    const dealInfluenceValue = theme.dealLinks.reduce((s, dl) => {
-      const sw = DEAL_STAGE_WEIGHT[dl.deal.stage] ?? 0;
-      return s + dl.deal.annualValue * sw;
-    }, 0);
+    const feedbackIds = activeFeedback.map((tf) => tf.feedback.id);
 
-    let voiceUrgencySum = 0;
-    let voiceComplaintCount = 0;
+    // ── Source distribution ────────────────────────────────────────────────
+    const sourceSet = new Set<string>();
+    const sourceDist: Record<string, number> = {};
+    for (const tf of activeFeedback) {
+      const src = (tf.feedback.primarySource ?? tf.feedback.sourceType ?? 'FEEDBACK').toUpperCase();
+      sourceSet.add(src);
+      sourceDist[src] = (sourceDist[src] ?? 0) + 1;
+    }
+    const distinctSources = sourceSet.size;
+
+    // ── Sentiment distribution ─────────────────────────────────────────────
+    let negativeCount = 0;
+    let positiveCount = 0;
+    let neutralCount = 0;
+    const sentiments: number[] = [];
+    for (const tf of activeFeedback) {
+      const s = tf.feedback.sentiment ?? 0;
+      sentiments.push(s);
+      if (s < -0.1) negativeCount++;
+      else if (s > 0.1) positiveCount++;
+      else neutralCount++;
+    }
+    const sentimentMean = sentiments.length > 0
+      ? sentiments.reduce((a, b) => a + b, 0) / sentiments.length
+      : 0;
+    const sentimentVariance = sentiments.length > 0
+      ? sentiments.reduce((s, v) => s + Math.pow(v - sentimentMean, 2), 0) / sentiments.length
+      : 0;
+
+    // ── Recency: days since most recent feedback ───────────────────────────
+    const lastFeedbackAt: Date | null = activeFeedback.reduce<Date | null>((latest, tf) => {
+      const d = tf.feedback.createdAt;
+      if (!d) return latest;
+      return !latest || d > latest ? d : latest;
+    }, null) ?? theme.lastEvidenceAt ?? theme.createdAt ?? null;
+    const daysSinceLast = lastFeedbackAt
+      ? (Date.now() - lastFeedbackAt.getTime()) / (1000 * 60 * 60 * 24)
+      : 0; // treat unknown recency as fresh (0 days) — conservative
+    const resurfaceCountVal = theme.resurfaceCount ?? 0;
+    // ── Voice metadata intelligence (urgency/churn signals from metadata.intelligence) ──
+    let voiceUrgencyCount = 0;
+    let voiceChurnCount = 0;
     for (const tf of activeFeedback) {
       const meta = tf.feedback.metadata as Record<string, unknown> | null;
       const intel = meta?.intelligence as Record<string, unknown> | null;
       if (intel) {
-        const urgency = typeof intel.urgencySignal === 'number' ? intel.urgencySignal : 0;
-        const churn = typeof intel.churnSignal === 'number' ? intel.churnSignal : 0;
-        voiceUrgencySum += urgency;
-        if (urgency > 0.5 || churn > 0.5) voiceComplaintCount++;
+        if (typeof intel.urgencySignal === 'number' && intel.urgencySignal > 0.5) voiceUrgencyCount++;
+        if (typeof intel.churnSignal === 'number' && intel.churnSignal > 0.5) voiceChurnCount++;
       }
     }
-    const voiceSignalScore = clamp100(
-      countNorm(voiceComplaintCount, 5) * 0.5 + logNorm(voiceUrgencySum, 2) * 0.5,
-    );
-    const surveySignals = theme.customerSignals.filter((s) =>
-      s.signalType.toLowerCase().includes('survey'),
-    );
-    const surveySignalScore = clamp100(
-      surveySignals.reduce((s, sig) => s + sig.strength, 0) * 20,
-    );
-    const supportSignals = theme.customerSignals.filter((s) =>
-      s.signalType.toLowerCase().includes('support') ||
-      s.signalType.toLowerCase().includes('spike'),
-    );
-    const supportSignalScore = clamp100(
-      supportSignals.reduce((s, sig) => s + sig.strength, 0) * 20,
-    );
+    // ── Support signal score from live CustomerSignal rows ───────────────────────
+    const liveSupportSignalCount = theme.customerSignals.filter(
+      (s) => s.signalType.toLowerCase().includes('support'),
+    ).length;
+    // ── Impact keyword detection ────────────────────────────────────────────────────
+    const allText = activeFeedback.map((tf) => tf.feedback.title ?? '').join(' ');
+    const hasEnterpriseSignal =
+      sourceSet.has('SUPPORT') || liveSupportSignalCount > 0 || hasKeyword(allText, ENTERPRISE_KEYWORDS);
+    const hasPaymentOrSecuritySignal = hasKeyword(allText, PAYMENT_SECURITY_KEYWORDS);
+    const negativeRatio = feedbackCount > 0 ? negativeCount / feedbackCount : 0;
+    const velScore = velocityScore(feedbackCount);
+    const highNegativeSentiment = negativeRatio >= 0.7;
+    const highVelocityFlag = velScore >= 0.5;
 
-    const normFreq = countNorm(feedbackCount, 50);
-    const normCustomers = countNorm(uniqueCustomerCount, 20);
-    const normArr = logNorm(arrValue, 7);
-    const normDeal = logNorm(dealInfluenceValue, 7);
+    // ── CIQ_SIGNAL_SNAPSHOT debug log ──────────────────────────────────────
+    this.logger.debug(JSON.stringify({
+      event: 'CIQ_SIGNAL_SNAPSHOT',
+      themeId,
+      feedbackCount,
+      feedbackIds,
+      sourceDistribution: sourceDist,
+      sentimentDistribution: { positive: positiveCount, neutral: neutralCount, negative: negativeCount },
+      daysSinceLast: parseFloat(daysSinceLast.toFixed(1)),
+      resurfaceCount: resurfaceCountVal,
+    }));
+
+    // ── Step 7: WEAK theme guard ───────────────────────────────────────────
+    if (feedbackCount === 0) {
+      return {
+        ciqScore: 0,
+        breakdown: {},
+        feedbackCount: 0,
+        uniqueCustomerCount: 0,
+        voiceCount: 0,
+        supportCount: 0,
+        surveyCount: 0,
+        totalSignalCount: 0,
+        revenueInfluence: 0,
+        dealInfluenceValue: 0,
+      };
+    }
+
+    // ── 6-factor business-grade CIQ ───────────────────────────────────────
+    const { score: rawCiqScore, factors, multiplier } = computeBusinessCiq({
+      feedbackCount,
+      daysSinceLastFeedback: daysSinceLast,
+      negativeCount,
+      distinctSources,
+      resurfaceCount: resurfaceCountVal,
+      hasEnterpriseSignal,
+      hasPaymentOrSecuritySignal,
+      highNegativeSentiment,
+      highVelocity: highVelocityFlag,
+    });
 
     const breakdown: Record<string, CiqScoreBreakdown> = {
-      feedbackFrequency: { value: normFreq, weight: 0.2, contribution: normFreq * 0.2, label: 'Feedback frequency' },
-      uniqueCustomers: { value: normCustomers, weight: 0.15, contribution: normCustomers * 0.15, label: 'Unique customers' },
-      arrRevenue: { value: normArr, weight: 0.25, contribution: normArr * 0.25, label: 'Customer ARR' },
-      dealInfluence: { value: normDeal, weight: 0.2, contribution: normDeal * 0.2, label: 'Deal pipeline influence' },
-      voiceSignal: { value: voiceSignalScore, weight: 0.1, contribution: voiceSignalScore * 0.1, label: 'Voice complaint / urgency' },
-      surveySignal: { value: surveySignalScore, weight: 0.05, contribution: surveySignalScore * 0.05, label: 'Survey demand validation' },
-      supportSignal: { value: supportSignalScore, weight: 0.05, contribution: supportSignalScore * 0.05, label: 'Support spike signal' },
+      velocity: { value: parseFloat((factors.velocity * 100).toFixed(1)), weight: 0.30, contribution: parseFloat((factors.velocity * 0.30 * 100).toFixed(2)), label: 'Feedback velocity' },
+      sentiment: { value: parseFloat((factors.sentiment * 100).toFixed(1)), weight: 0.20, contribution: parseFloat((factors.sentiment * 0.20 * 100).toFixed(2)), label: 'Negative sentiment pressure' },
+      recency: { value: parseFloat((factors.recency * 100).toFixed(1)), weight: 0.15, contribution: parseFloat((factors.recency * 0.15 * 100).toFixed(2)), label: 'Signal recency' },
+      resurfacing: { value: parseFloat((factors.resurfacing * 100).toFixed(1)), weight: 0.15, contribution: parseFloat((factors.resurfacing * 0.15 * 100).toFixed(2)), label: 'Post-ship resurfacing' },
+      sourceMix: { value: parseFloat((factors.sourceMix * 100).toFixed(1)), weight: 0.10, contribution: parseFloat((factors.sourceMix * 0.10 * 100).toFixed(2)), label: 'Source diversity' },
+      confidence: { value: parseFloat((factors.confidence * 100).toFixed(1)), weight: 0.10, contribution: parseFloat((factors.confidence * 0.10 * 100).toFixed(2)), label: 'Signal confidence' },
     };
-    const rawCiq = clamp100(Object.values(breakdown).reduce((s, c) => s + c.contribution, 0));
+
+    // ── CIQ_FACTOR_BREAKDOWN debug log ─────────────────────────────────────
+    this.logger.debug(JSON.stringify({
+      event: 'CIQ_FACTOR_BREAKDOWN',
+      themeId,
+      factors,
+      multiplier,
+      rawCiqScore,
+    }));
+
     const isNearDuplicate = theme.autoMergeCandidate ?? false;
     const ciqScore = isNearDuplicate
-      ? parseFloat((rawCiq * 0.8).toFixed(2))
-      : parseFloat(rawCiq.toFixed(2));
-    // ── FIX (bugs 5 & 6): compute source counts from live ThemeFeedback rows ──
-    // Do NOT read theme.voiceCount / theme.supportCount / theme.totalSignalCount
-    // from the DB row — those fields may be stale (0) if aggregation has not
-    // run yet (e.g. immediately after a merge). Also, theme.totalSignalCount
-    // defaults to 0 (not null) so the previous "?? liveSignalCount" fallback
-    // never fired. We compute everything from the live activeFeedback array.
+      ? Math.max(0, Math.round(rawCiqScore * 0.8))
+      : rawCiqScore;
+
+    // ── CIQ_FINAL_SCORE debug log ──────────────────────────────────────────
+    this.logger.debug(JSON.stringify({
+      event: 'CIQ_FINAL_SCORE',
+      themeId,
+      rawCiqScore,
+      ciqScore,
+      isNearDuplicate,
+      priority: priorityLabel(ciqScore, negativeRatio, velScore),
+    }));
+
+    // ── Live source counts from active feedback rows ───────────────────────
     const liveVoiceCount = activeFeedback.filter(
       (tf) => (tf.feedback.sourceType ?? '').toUpperCase() === 'VOICE' ||
                (tf.feedback.primarySource ?? '').toUpperCase() === 'VOICE',
@@ -1131,8 +1412,25 @@ export class CiqEngineService {
       (tf) => (tf.feedback.sourceType ?? '').toUpperCase() === 'SURVEY' ||
                (tf.feedback.primarySource ?? '').toUpperCase() === 'SURVEY',
     ).length;
-    // totalSignalCount = total ThemeFeedback rows (single source of truth)
     const liveTotalSignalCount = feedbackCount;
+
+    // ── Revenue signals (kept for revenue intelligence display) ───────────
+    const arrValue = activeFeedback.reduce(
+      (s, tf) => s + (tf.feedback.customer?.arrValue ?? 0), 0,
+    );
+    const dealInfluenceValue = theme.dealLinks.reduce((s, dl) => {
+      const sw = DEAL_STAGE_WEIGHT[dl.deal.stage] ?? 0;
+      return s + dl.deal.annualValue * sw;
+    }, 0);
+
+    const uniqueCustomerIds = new Set(
+      activeFeedback.map((tf) => tf.feedback.customerId).filter(Boolean),
+    );
+    const uniqueCustomerCount = uniqueCustomerIds.size;
+
+    // ── Narration confidence ───────────────────────────────────────────────
+    const aiConf = narrationConfidence(feedbackCount, distinctSources, sentimentVariance);
+
     return {
       ciqScore,
       breakdown,
@@ -1144,6 +1442,7 @@ export class CiqEngineService {
       totalSignalCount: liveTotalSignalCount,
       revenueInfluence: arrValue,
       dealInfluenceValue,
+      aiConfidence: aiConf,
     };
   }
 
@@ -1172,6 +1471,7 @@ export class CiqEngineService {
           supportCount: score.supportCount,
           surveyCount: score.surveyCount,
           totalSignalCount: score.totalSignalCount,
+          ...(score.aiConfidence != null ? { aiConfidence: score.aiConfidence } : {}),
         },
       });
     } catch (err) {

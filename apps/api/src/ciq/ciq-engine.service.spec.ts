@@ -35,6 +35,10 @@ function makePrismaMock(themeOverrides: Record<string, unknown> = {}) {
     totalSignalCount: 0,
     aiConfidence: null,
     autoMergeCandidate: false,
+    resurfaceCount: 0,
+    recentSignalCount: 0,
+    lastEvidenceAt: new Date(),
+    createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // 7 days ago
     feedbacks: [],
     dealLinks: [],
     customerSignals: [],
@@ -57,6 +61,9 @@ function makeFeedback(arrValue: number, customerId = 'cust-1') {
       sentiment: -0.5,
       ciqScore: 0,
       metadata: null,
+      sourceType: 'FEEDBACK',
+      primarySource: 'FEEDBACK',
+      createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
       customer: { arrValue, accountPriority: 'HIGH' },
     },
   };
@@ -93,19 +100,21 @@ describe('CiqEngineService — canonical 7-factor scorer', () => {
     expect(result.ciqScore).toBeLessThanOrEqual(100);
   });
 
-  // ── Test 3: High-ARR theme scores higher than low-ARR theme ─────────────────
-  it('ranks a high-ARR theme higher than a low-ARR theme', async () => {
-    const highArrPrisma = makePrismaMock({
-      feedbacks: [makeFeedback(1_000_000)],
+   // ── Test 3: High-velocity theme scores higher than low-velocity theme ───────
+  it('ranks a high-velocity theme higher than a low-velocity theme', async () => {
+    const highVelPrisma = makePrismaMock({
+      feedbacks: Array.from({ length: 15 }, (_, i) => makeFeedback(50_000, `cust-${i}`)),
+      resurfaceCount: 3,
     });
-    const lowArrPrisma = makePrismaMock({
-      feedbacks: [makeFeedback(1_000)],
+    const lowVelPrisma = makePrismaMock({
+      feedbacks: [makeFeedback(50_000)],
+      resurfaceCount: 0,
     });
-    const highArrService = new CiqEngineService(highArrPrisma);
-    const lowArrService = new CiqEngineService(lowArrPrisma);
+    const highVelService = new CiqEngineService(highVelPrisma);
+    const lowVelService = new CiqEngineService(lowVelPrisma);
 
-    const highResult = await highArrService.scoreThemeForPersistence('theme-1');
-    const lowResult = await lowArrService.scoreThemeForPersistence('theme-1');
+    const highResult = await highVelService.scoreThemeForPersistence('theme-1');
+    const lowResult = await lowVelService.scoreThemeForPersistence('theme-1');
 
     expect(highResult.ciqScore).toBeGreaterThan(lowResult.ciqScore);
   });

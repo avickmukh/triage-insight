@@ -111,20 +111,19 @@ export class PrioritizationController {
   ) {
     const canonical = await this.ciqEngineService.scoreThemeForPersistence(themeId);
     // Map canonical output to the CiqScoreOutput shape the frontend expects.
-    // The canonical scorer uses 7 factors; we expose them via scoreExplanation.
+    // The canonical scorer uses the 6-factor business-grade formula.
     const dominantDriver = Object.entries(canonical.breakdown).reduce(
       (best, [key, v]) =>
         v.contribution > (canonical.breakdown[best]?.contribution ?? -1) ? key : best,
-      Object.keys(canonical.breakdown)[0] ?? 'feedbackFrequency',
+      Object.keys(canonical.breakdown)[0] ?? 'velocity',
     );
     return {
       // ── Core score ─────────────────────────────────────────────────────────
       priorityScore: canonical.ciqScore,
-      confidenceScore: Math.min(
+      // narrationConfidence: never 0 when feedback exists (Step 8 fix)
+      confidenceScore: canonical.aiConfidence ?? Math.min(
         1,
-        (canonical.feedbackCount / 10) * 0.5 +
-          (canonical.uniqueCustomerCount / 5) * 0.3 +
-          (canonical.totalSignalCount > 0 ? 0.2 : 0),
+        Math.max(0.05, Math.log(canonical.feedbackCount + 1) / Math.log(50)),
       ),
       // ── Revenue / deal ─────────────────────────────────────────────────────
       revenueImpactScore: Math.min(
@@ -148,7 +147,7 @@ export class PrioritizationController {
         ? 'full' as const
         : 'signal-only' as const,
       // ── Metadata ───────────────────────────────────────────────────────────
-      scoreVersion: '7-factor-canonical',
+      scoreVersion: '6-factor-business-grade',
     };
   }
 
