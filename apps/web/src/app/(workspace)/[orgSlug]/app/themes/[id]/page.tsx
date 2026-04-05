@@ -1356,8 +1356,12 @@ export default function ThemeDetailPage() {
             {/* ── Why this score? — percentage-based CIQ breakdown (Step 1 Gap Fix) ── */}
             {Object.keys(ciqScore.scoreExplanation).length > 0 && (() => {
               // Group raw scoreExplanation factors into 4 canonical buckets
-              const REVENUE_KEYS   = new Set(['arrValue', 'dealInfluence', 'accountPriority']);
-              const FREQ_KEYS      = new Set(['feedbackFrequency', 'voiceSignal', 'supportSignal', 'customerCount', 'signalStrength', 'voteSignal', 'surveySignal']);
+              // Keys match the canonical 7-factor scorer output in CiqEngineService:
+              // feedbackFrequency (0.20), uniqueCustomers (0.15), arrRevenue (0.25),
+              // dealInfluence (0.20), voiceSignal (0.10), surveySignal (0.05), supportSignal (0.05)
+              // Legacy keys kept for backward compat with old persisted breakdowns.
+              const REVENUE_KEYS   = new Set(['arrRevenue', 'arrValue', 'dealInfluence', 'accountPriority']);
+              const FREQ_KEYS      = new Set(['feedbackFrequency', 'uniqueCustomers', 'voiceSignal', 'supportSignal', 'surveySignal', 'customerCount', 'signalStrength', 'voteSignal']);
               const SENTIMENT_KEYS = new Set(['sentimentSignal']);
               const VELOCITY_KEYS  = new Set(['velocitySignal', 'sourceDiversitySignal', 'recencySignal', 'resurfacingSignal']);
               const bucket = (keys: Set<string>) =>

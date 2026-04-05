@@ -19,6 +19,7 @@ import { ActionPlanService } from './services/action-plan.service';
 import { ExecutiveDashboardService } from './services/executive-dashboard.service';
 import { TrendAlertService } from './services/trend-alert.service';
 import { CiqService } from '../ai/services/ciq.service';
+import { CiqEngineService } from '../ciq/ciq-engine.service';
 import { UpdateSettingsDto } from './dto/update-settings.dto';
 import { QueryPrioritizationDto } from './dto/query-prioritization.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -63,6 +64,7 @@ export class PrioritizationController {
     private readonly actionPlanService: ActionPlanService,
     private readonly trendAlertService: TrendAlertService,
     private readonly ciqService: CiqService,
+    private readonly ciqEngineService: CiqEngineService,
     private readonly executiveDashboardService: ExecutiveDashboardService,
   ) {}
 
@@ -89,13 +91,65 @@ export class PrioritizationController {
     );
   }
 
+  /**
+   * GET /workspaces/:workspaceId/prioritization/themes/:themeId/ciq
+   *
+   * Returns the canonical Theme CIQ score using the same 7-factor formula
+   * as the Theme Ranking page (CiqEngineService.scoreThemeForPersistence).
+   *
+   * This endpoint was previously calling CiqService.scoreTheme (5-factor formula),
+   * which produced different numbers than the ranking pages.
+   * It now uses the canonical scorer so Theme Detail always matches Theme Ranking.
+   *
+   * Output is mapped to the CiqScoreOutput shape expected by the frontend.
+   */
   @Get('themes/:themeId/ciq')
   @Roles(WorkspaceRole.ADMIN, WorkspaceRole.EDITOR, WorkspaceRole.VIEWER)
-  getThemeCiqScore(
-    @Param('workspaceId') workspaceId: string,
+  async getThemeCiqScore(
+    @Param('workspaceId') _workspaceId: string,
     @Param('themeId') themeId: string,
   ) {
-    return this.ciqService.scoreTheme(workspaceId, themeId);
+    const canonical = await this.ciqEngineService.scoreThemeForPersistence(themeId);
+    // Map canonical output to the CiqScoreOutput shape the frontend expects.
+    // The canonical scorer uses 7 factors; we expose them via scoreExplanation.
+    const dominantDriver = Object.entries(canonical.breakdown).reduce(
+      (best, [key, v]) =>
+        v.contribution > (canonical.breakdown[best]?.contribution ?? -1) ? key : best,
+      Object.keys(canonical.breakdown)[0] ?? 'feedbackFrequency',
+    );
+    return {
+      // ── Core score ─────────────────────────────────────────────────────────
+      priorityScore: canonical.ciqScore,
+      confidenceScore: Math.min(
+        1,
+        (canonical.feedbackCount / 10) * 0.5 +
+          (canonical.uniqueCustomerCount / 5) * 0.3 +
+          (canonical.totalSignalCount > 0 ? 0.2 : 0),
+      ),
+      // ── Revenue / deal ─────────────────────────────────────────────────────
+      revenueImpactScore: Math.min(
+        100,
+        (Math.log10(canonical.revenueInfluence + 1) / 7) * 100,
+      ),
+      revenueImpactValue: canonical.revenueInfluence,
+      dealInfluenceValue: canonical.dealInfluenceValue,
+      // ── Signal counts ──────────────────────────────────────────────────────
+      feedbackCount: canonical.feedbackCount,
+      voiceCount: canonical.voiceCount,
+      supportCount: canonical.supportCount,
+      surveyCount: canonical.surveyCount,
+      totalSignalCount: canonical.totalSignalCount,
+      signalCount: canonical.totalSignalCount,
+      uniqueCustomerCount: canonical.uniqueCustomerCount,
+      // ── Explainability ─────────────────────────────────────────────────────
+      scoreExplanation: canonical.breakdown,
+      dominantDriver,
+      scoringMode: (canonical.revenueInfluence > 0 || canonical.dealInfluenceValue > 0)
+        ? 'full' as const
+        : 'signal-only' as const,
+      // ── Metadata ───────────────────────────────────────────────────────────
+      scoreVersion: '7-factor-canonical',
+    };
   }
 
   @Post('themes/:themeId/recalculate')

@@ -378,9 +378,14 @@ function FeedbackRow({
 }) {
   const statusColor  = STATUS_COLORS[item.status] ?? { bg: '#f0f4f8', color: GREY };
   const primaryColor = item.primarySource ? PRIMARY_SOURCE_COLORS[item.primarySource] : undefined;
-  const priority     = getPriority((item as Feedback & { ciqScore?: number }).ciqScore);
   const themes       = (item.themes as ThemeFeedback[] | undefined) ?? [];
-  const ciqScore     = (item as Feedback & { ciqScore?: number }).ciqScore;
+  // Use the linked theme's canonical CIQ score for the badge.
+  // This is the same score shown on Theme Ranking / Theme Detail pages.
+  // Feedback.ciqScore is a feedback-level urgency signal — it is intentionally
+  // different from Theme CIQ and should not be shown as "CIQ" in the Inbox.
+  const linkedThemeCiqScore = themes[0]?.theme?.ciqScore ?? null;
+  const priority     = getPriority(linkedThemeCiqScore);
+  const ciqScore     = linkedThemeCiqScore != null ? Math.round(linkedThemeCiqScore) : null;
   const arr          = (item as Feedback & { revenueInfluence?: number }).revenueInfluence;
 
   return (
@@ -456,14 +461,14 @@ function FeedbackRow({
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.35rem', flexShrink: 0 }}>
         {ciqScore != null ? (
           <span
-            title="CIQ Score: composite signal intelligence score (0–100). Sourced from the theme linked to this feedback item."
+            title="Theme CIQ: canonical signal intelligence score for the linked theme (0–100). Same value shown on Theme Ranking and Theme Detail pages."
             style={{ fontSize: '0.75rem', fontWeight: 800, padding: '0.2rem 0.6rem', borderRadius: '1rem', background: '#e8f7f7', color: TEAL, border: `1px solid #b2dfdb`, whiteSpace: 'nowrap', cursor: 'help' }}
           >
             CIQ {ciqScore}
           </span>
         ) : (
           <span
-            title="CIQ not yet computed — score will appear after the AI pipeline processes this feedback item."
+            title="Theme CIQ not yet computed — score will appear once this feedback is assigned to a theme and the AI pipeline has run."
             style={{ fontSize: '0.7rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: '1rem', background: '#f8f9fa', color: '#adb5bd', border: '1px solid #dee2e6', whiteSpace: 'nowrap', cursor: 'help' }}
           >
             CIQ —

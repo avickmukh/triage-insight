@@ -1201,17 +1201,21 @@ export class AggregationService {
     workspaceId: string,
     items: ThemePriorityItem[],
   ): Promise<void> {
+    // Both ciqScore and priorityScore are written at the same 0–100 scale.
+    // The legacy `priorityScore / 100` write was a bug that caused a 100×
+    // discrepancy between the two fields. The canonical scorer
+    // (CiqEngineService.persistCanonicalThemeScore) always writes both at
+    // the same scale; this path must do the same for consistency.
     await Promise.all(
       items.map((item) =>
         this.prisma.theme.update({
           where: { id: item.themeId },
           data: {
-            priorityScore: item.priorityScore / 100,
-            ciqScore: item.priorityScore,
+            priorityScore: item.priorityScore,   // 0–100 (fixed: was / 100)
+            ciqScore: item.priorityScore,         // 0–100 (unchanged)
             revenueScore: item.revenueScore,
             urgencyScore: item.urgencyScore,
             lastScoredAt: new Date(),
-
             signalBreakdown: item.breakdown as any,
           },
         }),
